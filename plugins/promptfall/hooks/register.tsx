@@ -1,10 +1,13 @@
 import type { Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import type { Mode } from '../types'
-import { type EnginePublish, GameEngine } from './engine'
+import { COMMAND, registerCommand } from './command'
+import { type EnginePublish, GameEngine, type GameHandle } from './engine'
 import { acquire } from './lease'
+import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
+import { registerDialog } from './ui/dialog'
 import { LocalServer } from './vendor/protocol.js'
 import { content, type Effect } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
@@ -22,6 +25,7 @@ type Io = {
   toast: (text: string) => void
   leaseOwner: () => Promise<string | null>
   mode: () => Promise<Mode>
+  paneNotice: (text: string | null) => Promise<void>
 }
 
 const TURN_CADENCE_MS = 2000
@@ -57,7 +61,7 @@ function effectToast(effect: Effect): string | null {
  * One session's game: the engine, the lease, and the timers. Module state, so
  * a hot reload starts it over; the session's atoms and the store carry on.
  */
-class GameSession {
+class GameSession implements GameHandle {
   readonly engine: GameEngine
   private readonly kv: StoreKeyValue
   private readonly server: LocalServer
@@ -67,6 +71,7 @@ class GameSession {
   private cadence = 0
   private tickTimer: Timer | null = null
   private timers: Timer[] = []
+  private pending: Promise<void> = Promise.resolve()
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
@@ -130,6 +135,12 @@ class GameSession {
     return this.cadence
   }
 
+  /** Resolves once the view and any pane notice from the last events have landed. */
+  async settled(): Promise<void> {
+    await this.engine.settled()
+    await this.pending
+  }
+
   private async tick(): Promise<void> {
     if (!this.canApply()) return
     this.engine.apply({ t: 'tick' }, await this.io.now())
@@ -164,6 +175,12 @@ class GameSession {
 
   private onEffects(effects: Effect[]): void {
     for (const effect of effects) {
+      if (effect.k === 'rejected') {
+        const reason = effect.reason
+        this.pending = this.pending.then(() => this.io.paneNotice(reason)).catch(() => undefined)
+        this.io.after(5000, () => void this.io.paneNotice(null))
+        continue
+      }
       const text = effectToast(effect)
       if (text) this.io.toast(text)
     }
@@ -175,14 +192,18 @@ const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const, null)
+const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 
 let game: GameSession | null = null
 
 export const register: Register = (on) => {
   registerBand(on)
+  registerDialog(on, () => game)
+  registerCommand(on, () => game)
 
   on('session.start', async ($, e, next) => {
     game = null
+    await $.command.register(COMMAND)
     if (e.isInteractive && e.surface === 'terminal') {
       const session = new GameSession({
         now: () => $.clock.now(),
@@ -204,6 +225,9 @@ export const register: Register = (on) => {
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
+        paneNotice: async (text) => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
+        },
       })
       game = session
       await session.start()
@@ -233,6 +257,9 @@ export const register: Register = (on) => {
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
+        paneNotice: async (text) => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
+        },
       })
       game = session
       await session.start()
