@@ -261,13 +261,13 @@ Server rules every `ServerClient` must satisfy, applied in this order (the contr
 
 **Boundaries:** Do not add turbo, nx, changesets or husky. Do not create the plugin's manifest yet. Do not touch `docs/`. Do not create a `main` branch.
 
-- [ ] `git init -b ai-staging`, commit `docs/`, create and check out `feat/phase-1`
-- [ ] create the GitHub repo and push, or note why not
-- [ ] root `package.json`, workspace file, base tsconfig, biome with ignores, gitignore, npmrc
-- [ ] CI workflow and marketplace manifest
-- [ ] both package skeletons with empty `index.ts`
-- [ ] README
-- [ ] run the check, commit
+- [x] `git init -b ai-staging`, commit `docs/`, create and check out `feat/phase-1`
+- [x] create the GitHub repo and push, or note why not
+- [x] root `package.json`, workspace file, base tsconfig, biome with ignores, gitignore, npmrc
+- [x] CI workflow and marketplace manifest
+- [x] both package skeletons with empty `index.ts`
+- [x] README
+- [x] run the check, commit
 
 ### Task 2: Sim foundation
 

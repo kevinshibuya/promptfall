@@ -1,0 +1,13 @@
+{
+  "name": "promptfall",
+  "owner": {
+    "name": "Kevin Shibuya"
+  },
+  "plugins": [
+    {
+      "name": "promptfall",
+      "source": "./plugins/promptfall",
+      "description": "An idle fantasy RPG that plays above the Claude Code prompt while Claude works."
+    }
+  ]
+}

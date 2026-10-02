@@ -1,0 +1,23 @@
+{
+  "name": "promptfall",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -b packages/sim packages/protocol",
+    "test": "pnpm -r --filter './packages/*' test",
+    "vendor": "node -e \"process.exit(0)\"",
+    "vendor:check": "node -e \"process.exit(0)\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^22.0.0",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
