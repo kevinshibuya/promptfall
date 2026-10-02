@@ -4,6 +4,7 @@ import type { Mode } from '../types'
 import { type EnginePublish, GameEngine } from './engine'
 import { acquire } from './lease'
 import { type StoreCalls, StoreKeyValue } from './storage'
+import { registerBand } from './ui/band'
 import { LocalServer } from './vendor/protocol.js'
 import { content, type Effect } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
@@ -178,6 +179,8 @@ const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const
 let game: GameSession | null = null
 
 export const register: Register = (on) => {
+  registerBand(on)
+
   on('session.start', async ($, e, next) => {
     game = null
     if (e.isInteractive && e.surface === 'terminal') {
