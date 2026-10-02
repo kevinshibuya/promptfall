@@ -32,5 +32,5 @@ export const content: Content = {
   rarity,
   tavern,
   expansions,
-  xpToNext: (level: number) => 10 * level * level,
+  xpToNext: (level: number) => 110 * level * level,
 }

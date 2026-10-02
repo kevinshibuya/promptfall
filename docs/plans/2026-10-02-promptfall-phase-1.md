@@ -446,11 +446,11 @@ export const GOLDEN_HASH: string
 
 **Boundaries:** No rule changes in `combat.ts`, `progression.ts`, `loot.ts`, `heroes.ts`, `commands.ts`; if a target cannot be met by numbers alone, stop and report `blocked: <which target and why>`.
 
-- [ ] determinism property test
-- [ ] scenario runner and CLI
-- [ ] tune content until targets hold
-- [ ] golden script and literal, last
-- [ ] run the check, commit
+- [x] determinism property test
+- [x] scenario runner and CLI
+- [x] tune content until targets hold
+- [x] golden script and literal, last
+- [x] run the check, commit
 
 ### Task 7: Protocol, in-process fake server and contract suite
 

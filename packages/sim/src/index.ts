@@ -9,6 +9,7 @@ export type {
   ZoneDef,
 } from './content'
 export { content } from './content'
+export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
 export { heroStats } from './progression'
 export { createInitialState } from './state'

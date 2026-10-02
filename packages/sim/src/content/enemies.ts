@@ -9,25 +9,35 @@ const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number
   swift: { hpBp: 8000, atkBp: 10000, defBp: 7000, spd: 8 },
   tank: { hpBp: 14000, atkBp: 8000, defBp: 13000, spd: 2 },
   caster: { hpBp: 9000, atkBp: 12500, defBp: 8000, spd: 6 },
-  boss: { hpBp: 60000, atkBp: 14000, defBp: 12000, spd: 5 },
+  boss: { hpBp: 70000, atkBp: 20000, defBp: 12000, spd: 5 },
   turn_boss: { hpBp: 30000, atkBp: 12000, defBp: 11000, spd: 5 },
 }
 
+// Zone 1 baseline, and how each stat grows per zone in basis points.
+const ZONE1 = { hp: 90, atk: 7, def: 4, xp: 4, goldMin: 1, goldMax: 3 }
+const GROWTH_BP = { hp: 14500, atk: 15000, def: 14500, xp: 14000, gold: 14000 }
+
+function grow(value: number, bp: number, steps: number): number {
+  let v = value
+  for (let i = 0; i < steps; i++) v = Math.floor((v * bp) / 10000)
+  return Math.max(1, v)
+}
+
+// Per-zone difficulty on top of the growth curve, in basis points on hp and atk.
+const ZONE_BP = [10000, 10000, 13000, 12000, 11000, 11000, 11000, 11000, 11000, 11000, 11000, 11000]
+
 // Zone baselines: hp, atk, def, xp, gold min, gold max.
-const BASELINES: [number, number, number, number, number, number][] = [
-  [24, 7, 2, 4, 1, 3],
-  [38, 10, 4, 6, 2, 5],
-  [58, 14, 7, 9, 3, 7],
-  [88, 19, 11, 13, 5, 10],
-  [130, 25, 16, 18, 7, 14],
-  [190, 33, 22, 25, 10, 19],
-  [275, 43, 30, 34, 14, 26],
-  [395, 55, 40, 46, 19, 35],
-  [560, 70, 52, 62, 26, 47],
-  [790, 88, 67, 83, 35, 63],
-  [1110, 110, 85, 110, 47, 84],
-  [1550, 137, 107, 145, 63, 112],
-]
+const BASELINES: [number, number, number, number, number, number][] = Array.from(
+  { length: 12 },
+  (_, z) => [
+    Math.floor((grow(ZONE1.hp, GROWTH_BP.hp, z) * (ZONE_BP[z] ?? 10000)) / 10000),
+    Math.floor((grow(ZONE1.atk, GROWTH_BP.atk, z) * (ZONE_BP[z] ?? 10000)) / 10000),
+    grow(ZONE1.def, GROWTH_BP.def, z),
+    grow(ZONE1.xp, GROWTH_BP.xp, z),
+    grow(ZONE1.goldMin, GROWTH_BP.gold, z),
+    grow(ZONE1.goldMax, GROWTH_BP.gold, z),
+  ],
+)
 
 // Per zone: four wave enemies (brute, swift, tank, caster), the zone boss, the turn boss.
 const ROSTERS: [string, string, Archetype][][] = [

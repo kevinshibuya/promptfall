@@ -22,11 +22,11 @@ function weights(zone: number, boss: boolean): Record<Rarity, number> {
   const z = zone - 1
   if (boss) {
     return {
-      common: Math.max(1000, 4000 - z * 250),
+      common: Math.max(1500, 5200 - z * 300),
       uncommon: 3500,
-      rare: 1800 + z * 120,
-      epic: 550 + z * 90,
-      legendary: 150 + z * 40,
+      rare: 1000 + z * 150,
+      epic: 250 + z * 90,
+      legendary: 50 + z * 40,
     }
   }
   return {
