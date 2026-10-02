@@ -1,14 +1,7 @@
+import { content } from './content'
 import { nextId } from './ids'
-import type { GameState, Hero, HeroClass } from './types'
+import type { GameState, Hero } from './types'
 import { SIM_VERSION } from './types'
-
-// Placeholder until the content tables land; same (template, cls) pairs as content.heroTemplates.
-const STARTERS: { template: string; cls: HeroClass; hp: number }[] = [
-  { template: 'knight_1', cls: 'knight', hp: 60 },
-  { template: 'black_mage_1', cls: 'black_mage', hp: 36 },
-  { template: 'white_mage_1', cls: 'white_mage', hp: 40 },
-  { template: 'archer_1', cls: 'archer', hp: 44 },
-]
 
 export function createInitialState(seed: number): GameState {
   let state: GameState = {
@@ -36,19 +29,22 @@ export function createInitialState(seed: number): GameState {
     stats: { kills: 0, bosses: 0, wipes: 0 },
   }
   const roster: Hero[] = []
-  for (const starter of STARTERS) {
+  const starters = ['knight_1', 'black_mage_1', 'white_mage_1', 'archer_1']
+  for (const templateId of starters) {
+    const template = content.heroTemplates[templateId]
+    if (!template) throw new Error(`missing hero template ${templateId}`)
     const r = nextId(state, 'h')
     state = r.state
     roster.push({
       id: r.id,
-      template: starter.template,
-      cls: starter.cls,
+      template: template.id,
+      cls: template.cls,
       epithet: '',
       rarity: 'common',
       traits: [],
       level: 1,
       xp: 0,
-      hp: starter.hp,
+      hp: template.base.hp,
       equipment: { weapon: null, armour: null, accessory: null },
     })
   }
