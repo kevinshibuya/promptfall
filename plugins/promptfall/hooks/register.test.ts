@@ -1,9 +1,10 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import { createInitialState, type GameState } from './vendor/sim.js'
 
 /** Answers $.store from a map and records every write. */
-function store(on: On) {
-  const data = new Map<string, unknown>()
+function store(on: On, seed: Record<string, unknown> = {}) {
+  const data = new Map<string, unknown>(Object.entries(seed))
   const writes: { key: string; value: unknown }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {
@@ -196,4 +197,61 @@ test('a /clear flushes but keeps playing and keeps the lease', async ($, on) => 
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   expect(writes.some((w) => seqOf(w) === 1)).toBe(true)
   expect(data.has(LEASE)).toBe(true)
+})
+
+/** A store holding an account whose state the test chose. */
+function account(state: GameState): Record<string, unknown> {
+  const t = 1_000_000
+  return {
+    'promptfall:deviceToken': 'token-1',
+    'promptfall:pf:token:token-1': 'acct-1',
+    'promptfall:pf:acct:acct-1:record': {
+      account: {
+        accountId: 'acct-1',
+        seed: state.seed,
+        createdAt: 0,
+        displayName: null,
+        linked: null,
+      },
+      state,
+      seq: 0,
+      refillAt: { tick: t, tool_call: t, rest: t, turn_end: t },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      committed: [],
+    },
+  }
+}
+
+test('a hot reload restarts the game in a session that had one, Desktop included', async ($, on) => {
+  const time = clock(on)
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('session.attach', (_$, e) => ({ clientId: e.clientId }))
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  expect(time.periods).toHaveLength(0)
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  expect(last.get('view')).toBeTruthy()
+  const before = time.periods.length
+  // The reload: register runs again and session.start fires with surface null.
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  expect(time.periods.length).toBeGreaterThan(before)
+})
+
+test('a prompt from the Remote Control bridge is a rest', async ($, on) => {
+  const s0 = createInitialState(7)
+  const state: GameState = {
+    ...s0,
+    roster: s0.roster.map((h, i) => (i === 0 ? { ...h, hp: 10 } : h)),
+  }
+  mock.clock(on, { now: 1_000_000 })
+  store(on, account(state))
+  const last = states(on)
+  engineBottom(on)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const hp = () => (last.get('view') as { heroes: { hp: number }[] }).heroes[0]?.hp
+  expect(hp()).toBe(10)
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'bridge' } })
+  expect(hp()).toBeGreaterThan(10)
 })
