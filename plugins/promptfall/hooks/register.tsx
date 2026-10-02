@@ -76,6 +76,7 @@ class GameSession implements GameHandle {
   private timers: Timer[] = []
   private pending: Promise<void> = Promise.resolve()
   private firstRun = false
+  private paneNoticeGen = 0
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
@@ -184,8 +185,8 @@ class GameSession implements GameHandle {
     if (this.firstRun) {
       this.firstRun = false
       this.io.toast(WELCOME)
-      await this.io.publish({ notice: WELCOME })
-      this.io.after(WELCOME_MS, () => void this.io.publish({ notice: null }))
+      this.engine.notice(WELCOME, WELCOME_MS)
+      await this.engine.settled()
     }
   }
 
@@ -214,8 +215,11 @@ class GameSession implements GameHandle {
     for (const effect of effects) {
       if (effect.k === 'rejected') {
         const reason = effect.reason
+        const gen = ++this.paneNoticeGen
         this.pending = this.pending.then(() => this.io.paneNotice(reason)).catch(() => undefined)
-        this.io.after(5000, () => void this.io.paneNotice(null))
+        this.io.after(5000, () => {
+          if (gen === this.paneNoticeGen) void this.io.paneNotice(null)
+        })
         continue
       }
       const text = effectToast(effect)

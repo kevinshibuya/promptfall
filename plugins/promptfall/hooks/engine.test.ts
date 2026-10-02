@@ -36,7 +36,7 @@ class Recorder implements ServerClient {
   }
 }
 
-function setup(kv = new MemoryKeyValue()) {
+function setup(kv = new MemoryKeyValue(), timers: { ms: number; fn: () => void }[] = []) {
   let t = 1_000_000
   const now = async () => t
   const server = new LocalServer({
@@ -57,6 +57,9 @@ function setup(kv = new MemoryKeyValue()) {
       patches.push(patch)
     },
     onEffects: () => undefined,
+    after: (ms, fn) => {
+      timers.push({ ms, fn })
+    },
   })
   return { kv, client, engine, patches, advance: (ms: number) => (t += ms), at: () => t }
 }
@@ -115,4 +118,29 @@ test('a seq mismatch adopts the server and the next flush succeeds', async () =>
   engine.apply({ t: 'tool_call' }, at())
   await engine.flush()
   expect(client.acks[1]).toMatchObject({ ok: true, seq: 1 })
+})
+
+test('a notice timer clears only its own notice', async () => {
+  const timers: { ms: number; fn: () => void }[] = []
+  const { engine, patches } = setup(new MemoryKeyValue(), timers)
+  await engine.start()
+  engine.notice('a', 10_000)
+  engine.notice('b', 10_000)
+  const notices = () => patches.filter((p) => 'notice' in p).map((p) => p.notice)
+  timers[0]?.fn()
+  await engine.settled()
+  expect(notices().at(-1)).toBe('b')
+  timers[1]?.fn()
+  await engine.settled()
+  expect(notices().at(-1)).toBeNull()
+})
+
+test('a fractional timestamp is stored as whole milliseconds', async () => {
+  const { engine, client } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, 1000.5)
+  await engine.flush()
+  expect(engine.isPaused()).toBe(false)
+  expect(client.acks[0]).toMatchObject({ ok: true })
+  expect(client.batches[0]?.events[0]?.at).toBe(1000)
 })
