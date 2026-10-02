@@ -75,6 +75,8 @@ export class GameEngine {
     this.buffer = null
     this.paused = null
     await this.publish({ view: this.view() })
+    // Only the minted account's first view says firstRun; every later view says no.
+    this.firstRun = false
   }
 
   /** Steps locally, buffers the event, publishes the view and hands the effects on. */
