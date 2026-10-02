@@ -74,6 +74,7 @@ function engineBottom(on: On) {
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('ui.toast', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
 }
 
 test('an interactive terminal session plays and commits a batch', async ($, on) => {

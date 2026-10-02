@@ -654,10 +654,10 @@ Rows 1 to 3 are hero rows; the right third of row 1 lists living enemies with hp
 
 **Boundaries:** No market, orders or chat tabs; no `$.http`. Do not add sim rules to the plugin.
 
-- [ ] command registration and run handling
-- [ ] pane shell and tabs
-- [ ] inventory, heroes, account, odds
-- [ ] tests on both surfaces, run the check, commit
+- [x] command registration and run handling
+- [x] pane shell and tabs
+- [x] inventory, heroes, account, odds
+- [x] tests on both surfaces, run the check, commit
 
 ### Task 12: Manners, first run, golden in the mod runtime, docs and the PR
 

@@ -28,6 +28,14 @@ export type EngineDeps = {
   after?: (ms: number, fn: () => void) => void
 }
 
+/** What the command and the dialog hold of a running game. */
+export type GameHandle = {
+  apply: (event: Event, at: number) => void
+  canApply: () => boolean
+  setOff: (off: boolean) => void
+  settled: () => Promise<void>
+}
+
 type Buffer = { events: TimedEvent[]; baseHash: string }
 
 const UPDATE_NOTICE = 'Update Promptfall: /plugin update promptfall'
@@ -108,6 +116,11 @@ export class GameEngine {
     } finally {
       this.inFlight = false
     }
+  }
+
+  /** Resolves once every publish queued so far has landed. */
+  settled(): Promise<void> {
+    return this.queue
   }
 
   state(): GameState | null {

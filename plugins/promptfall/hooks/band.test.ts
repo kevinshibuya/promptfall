@@ -23,6 +23,7 @@ function harness(on: On) {
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.toast', () => ({ value: undefined }))
+  on('command.register', (_$, e) => ({ value: { command: e.name } }))
   // The engine's own band, drawn when the plugin passes.
   on('ui.render', { component: 'AbovePrompt' }, ($, e) => {
     const { Box } = $.ui.resolve(e)
