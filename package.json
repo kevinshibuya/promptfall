@@ -11,12 +11,13 @@
     "format": "biome format --write .",
     "typecheck": "tsc -b packages/sim packages/protocol",
     "test": "pnpm -r --filter './packages/*' test",
-    "vendor": "node -e \"process.exit(0)\"",
-    "vendor:check": "node -e \"process.exit(0)\""
+    "vendor": "node scripts/vendor.mjs",
+    "vendor:check": "node scripts/vendor.mjs && git diff --exit-code plugins/promptfall/hooks/vendor plugins/promptfall/hooks/version.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/node": "^22.0.0",
+    "tsup": "8.5.1",
     "typescript": "5.9.3",
     "vitest": "^5.0.3"
   }
