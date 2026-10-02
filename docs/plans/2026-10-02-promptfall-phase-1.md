@@ -596,11 +596,11 @@ Effects to toasts in `register`: `drop` of `rare` or better, `level_up`, `zone_c
 
 **Boundaries:** No rendering here. No `$.http`. Do not change the vendor bundles by hand.
 
-- [ ] atoms and `toGameView`
-- [ ] lease with test
-- [ ] engine: start, token, apply, single-flight flush, acks, pause
-- [ ] register wiring: gating, attach, cadence, filters, timers, toasts
-- [ ] three test files, run the check, commit
+- [x] atoms and `toGameView`
+- [x] lease with test
+- [x] engine: start, token, apply, single-flight flush, acks, pause
+- [x] register wiring: gating, attach, cadence, filters, timers, toasts
+- [x] three test files, run the check, commit
 
 ### Task 10: The band
 
