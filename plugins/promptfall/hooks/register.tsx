@@ -241,7 +241,9 @@ export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
     game = null
     await $.command.register(COMMAND)
-    if (e.isInteractive && e.surface === 'terminal') {
+    // A set lease owner means this session ran a game before a hot reload, on any surface.
+    const hadGame = (await read($, leaseOwnerAtom)) !== null
+    if ((e.isInteractive && e.surface === 'terminal') || hadGame) {
       const session = new GameSession({
         now: () => $.clock.now(),
         every: (ms, fn) => $.clock.every(ms, fn),
@@ -334,7 +336,8 @@ export const register: Register = (on) => {
 
   on('prompt.submit', async ($, e, next) => {
     const at = await $.clock.now()
-    if (e.origin.kind === 'composer') game?.apply({ t: 'rest' }, at)
+    // The player's own prompts rest the party: typed here, or sent through the Remote Control bridge.
+    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') game?.apply({ t: 'rest' }, at)
     return next(e)
   })
 }
