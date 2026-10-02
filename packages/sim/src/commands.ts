@@ -36,7 +36,7 @@ export function equip(state: GameState, event: Of<'equip'>): StepResult {
   const item = state.inventory.find((i) => i.id === event.itemId)
   if (!item) return reject(state, event, 'unknown_item')
   const base = content.itemBases[item.base]
-  if (!base || !base.classes.includes(hero.cls)) return reject(state, event, 'class_mismatch')
+  if (!base?.classes.includes(hero.cls)) return reject(state, event, 'class_mismatch')
   if (item.equippedBy !== null && item.equippedBy !== hero.id) {
     return reject(state, event, 'already_equipped')
   }

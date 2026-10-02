@@ -29,7 +29,7 @@ describe('rollDrops', () => {
       const s = createInitialState(seed)
       const r = dropMany(s, forced('goblin_scout'), 1)
       const drop = r.effects.find((e) => e.k === 'drop')
-      if (!drop || drop.k !== 'drop') throw new Error('no drop')
+      if (drop?.k !== 'drop') throw new Error('no drop')
       const { item } = drop
       expect(item.affixes).toHaveLength(content.rarity[item.rarity].affixCount)
       expect(new Set(item.affixes.map((a) => a.id)).size).toBe(item.affixes.length)
