@@ -1,3 +1,12 @@
+import { resolveRound } from './combat'
+import {
+  clone,
+  onRest,
+  onToolCall,
+  onTurnEnd,
+  refillFromQueue,
+  spawnOnEmptyTick,
+} from './progression'
 import type { Effect, Event, EventKind, GameState, StepResult } from './types'
 
 export type Handler<K extends EventKind> = (
@@ -14,11 +23,27 @@ export function reject(state: GameState, event: Event, reason: string): StepResu
 const notImplemented = (state: GameState, event: Event): StepResult =>
   reject(state, event, 'not_implemented')
 
+/** Runs `mutate` on a deep copy of the state. */
+export function draft(
+  state: GameState,
+  mutate: (s: GameState, effects: Effect[]) => void,
+): StepResult {
+  const s = clone(state)
+  const effects: Effect[] = []
+  mutate(s, effects)
+  return { state: s, effects }
+}
+
 const handlers: Handlers = {
-  tick: notImplemented,
-  tool_call: notImplemented,
-  turn_end: notImplemented,
-  rest: notImplemented,
+  tick: (state) =>
+    draft(state, (s, effects) => {
+      refillFromQueue(s)
+      if (s.encounter && s.encounter.enemies.length > 0) resolveRound(s, effects)
+      else spawnOnEmptyTick(s, effects)
+    }),
+  tool_call: (state) => draft(state, (s) => onToolCall(s)),
+  turn_end: (state) => draft(state, (s) => onTurnEnd(s)),
+  rest: (state) => draft(state, (s) => onRest(s)),
   equip: notImplemented,
   unequip: notImplemented,
   vendor: notImplemented,
