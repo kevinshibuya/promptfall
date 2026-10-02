@@ -38,7 +38,7 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[]): void {
       const atk = Math.floor((stats.atk * 6000) / 10000)
       for (const target of [...encounter.enemies]) {
         // A kill earlier in the sweep may have closed the encounter (zone boss).
-        if (!s.encounter || !s.encounter.enemies.includes(target)) continue
+        if (!s.encounter?.enemies.includes(target)) continue
         hitEnemy(s, target, damage(s, atk, enemyStats(target).def), effects)
       }
       return
