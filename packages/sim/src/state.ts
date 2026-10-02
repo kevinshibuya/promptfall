@@ -1,4 +1,3 @@
-import { content } from './content'
 import { generateHero } from './heroes'
 import type { GameState } from './types'
 import { SIM_VERSION } from './types'
