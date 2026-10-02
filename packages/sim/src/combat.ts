@@ -44,9 +44,11 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[]): void {
       return
     }
     case 'white_mage': {
+      // Alone, she fights: healing only herself could outlast the enemy forever.
+      const living = livingParty(s)
       let lowest: Hero | undefined
       let lowestMax = 1
-      for (const h of livingParty(s)) {
+      for (const h of living.length > 1 ? living : []) {
         const max = heroStats(s, h).hp
         if (!lowest || h.hp < lowest.hp) {
           lowest = h

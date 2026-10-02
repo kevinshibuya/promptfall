@@ -1018,9 +1018,10 @@ function heroAct(s, hero, effects) {
       return;
     }
     case "white_mage": {
+      const living = livingParty(s);
       let lowest;
       let lowestMax = 1;
-      for (const h of livingParty(s)) {
+      for (const h of living.length > 1 ? living : []) {
         const max = heroStats(s, h).hp;
         if (!lowest || h.hp < lowest.hp) {
           lowest = h;

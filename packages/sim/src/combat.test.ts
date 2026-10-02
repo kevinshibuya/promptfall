@@ -38,6 +38,50 @@ describe('combat', () => {
     }
   })
 
+  it('a white mage left alone attacks instead of healing herself', () => {
+    // Seen live: Knight and Black Mage down, two Goblin Scouts, the White Mage
+    // in a Healer's Mace healing herself as fast as they hurt her. Nobody
+    // attacked, and the fight never ended.
+    const s0 = createInitialState(12)
+    const mage = s0.roster.find((h) => h.cls === 'white_mage')
+    if (!mage) throw new Error('mage')
+    const roster = s0.roster.map((h) =>
+      h.cls === 'knight' || h.cls === 'black_mage'
+        ? { ...h, hp: 0 }
+        : h.id === mage.id
+          ? { ...h, hp: 14, equipment: { ...h.equipment, weapon: 'imace' } }
+          : h,
+    )
+    const mace: Item = {
+      id: 'imace',
+      base: 'healers_mace',
+      rarity: 'common',
+      affixes: [],
+      equippedBy: mage.id,
+    }
+    let s: GameState = injectEnemy(
+      injectEnemy({ ...s0, roster, inventory: [mace] }, 'goblin_scout'),
+      'goblin_scout',
+    )
+    const enc = s.encounter
+    const [a, b] = enc?.enemies ?? []
+    if (!enc || !a || !b) throw new Error('enc')
+    s = {
+      ...s,
+      encounter: {
+        ...enc,
+        enemies: [
+          { ...a, hp: 61 },
+          { ...b, hp: 65 },
+        ],
+      },
+    }
+    const r = run(s, times(30, { t: 'tick' } as const))
+    const wiped = r.effects.some((e) => e.k === 'wipe')
+    const hurt = r.effects.length > 0 && (r.state.encounter?.enemies ?? []).some((e) => e.hp < 61)
+    expect(wiped || hurt || r.state.stats.kills > 0).toBe(true)
+  })
+
   it('heroStats adds a rare weapon at 12000 bp plus its affixes', () => {
     const s0 = createInitialState(1)
     const knight = s0.roster[0]
