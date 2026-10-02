@@ -11,6 +11,7 @@
       "**",
       "!plugins/promptfall/hooks/vendor",
       "!plugins/promptfall/.claude-plugin/types",
+      "!plugins/promptfall/tsconfig.json",
       "!**/dist",
       "!docs",
       "!HANDOFF*.md"

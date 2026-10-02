@@ -537,11 +537,11 @@ declare module 'claude-code' {
 
 **Boundaries:** No game logic in the plugin yet. No UI.
 
-- [ ] manifest, hooks.json, minimal register, types contract
-- [ ] vendor script and generated files, specifier rewrite, vitest assertion
-- [ ] `StoreKeyValue`
-- [ ] load once, commit the engine-laid tsconfig and types
-- [ ] run the checks, commit
+- [x] manifest, hooks.json, minimal register, types contract
+- [x] vendor script and generated files, specifier rewrite, vitest assertion
+- [x] `StoreKeyValue`
+- [x] load once, commit the engine-laid tsconfig and types
+- [x] run the checks, commit
 
 ### Task 9: Game engine inside the plugin
 
