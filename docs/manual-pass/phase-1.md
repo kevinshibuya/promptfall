@@ -31,6 +31,8 @@ should see. A step that shows something else is a red.
     `Promptfall band is off for this session`. Run `/promptfall on`. It comes back where it was.
 11. **Second session.** Open another terminal in the same folder and run the same command as
     step 1. Its band is one line starting `playing in another session`, and it does not fight.
+    Quit the first session: within about 40 seconds the second one takes over and its band
+    grows back to 4 rows.
 12. **Persistence.** Quit both sessions and start one again. The band comes back at the same zone,
     gold and levels, with no welcome toast. Progress made in the last 15 seconds before quitting
     may be lost: that is one flush interval.
@@ -38,4 +40,5 @@ should see. A step that shows something else is a red.
     loaded (`CLAUDE_CODE_PLUGIN_DIRS` pointing at `plugins/promptfall`). The band draws and HP
     moves. This checks `session.attach` with surface `desktop`, which no test covers live.
 
-To start over as a new player, delete the `promptfall:` keys from the Claude Code plugin store.
+To start over as a new player, move away the plugin's store file,
+`~/.claude/plugins/store/promptfall_inline-*.json`, while no session runs.
