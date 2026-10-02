@@ -140,51 +140,72 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         )
       for (const item of view.inventory) {
         const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
+        // Two rows per item, so a docked pane never truncates a button.
         body.push(
-          <Box key={`item-${item.id}`} flexDirection="row" gap={1}>
-            <Text
-              color={RARITY_COLOR[item.rarity]}
-              dimColor={item.rarity === 'common'}
-              wrap="truncate"
-            >
-              {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
-            </Text>
-            {item.affixes.length > 0 ? (
-              <Text dimColor wrap="truncate">
-                {item.affixes.join(', ')}
+          <Box key={`item-${item.id}`} flexDirection="column">
+            <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
+              <Text
+                color={RARITY_COLOR[item.rarity]}
+                dimColor={item.rarity === 'common'}
+                wrap="truncate"
+              >
+                {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
               </Text>
-            ) : null}
-            {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
-            {readOnly ? null : (
-              <Button
-                key={`equip-${item.id}`}
-                label="equip"
-                onPress={() =>
-                  setDialog({
-                    itemPick: dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
-                  })
-                }
-              />
-            )}
-            {readOnly || item.equippedBy ? null : (
-              <Button
-                key={`vendor-${item.id}`}
-                label={`vendor ${item.vendorValue}g`}
-                onPress={() => act({ t: 'vendor', itemId: item.id })}
-              />
-            )}
-            {readOnly || item.affixes.length === 0 ? null : (
-              <Button
-                key={`reforge-${item.id}`}
-                label={`reforge ${item.reforgeCost}g`}
-                onPress={() =>
-                  setDialog({
-                    itemPick:
-                      dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
-                  })
-                }
-              />
-            )}
+              {item.affixes.length > 0 ? (
+                <Text dimColor wrap="truncate">
+                  {item.affixes.join(', ')}
+                </Text>
+              ) : null}
+            </Box>
+            <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+              {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
+              {readOnly || item.equippedBy ? null : (
+                <Button
+                  key={`equip-${item.id}`}
+                  label="equip"
+                  onPress={() =>
+                    setDialog({
+                      itemPick: dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
+                    })
+                  }
+                />
+              )}
+              {readOnly || !item.equippedBy ? null : (
+                <Button
+                  key={`unequip-${item.id}`}
+                  label="unequip"
+                  onPress={() => {
+                    const heroId = item.equippedBy
+                    const slot = item.slot
+                    if (
+                      heroId &&
+                      (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
+                    ) {
+                      return act({ t: 'unequip', heroId, slot })
+                    }
+                  }}
+                />
+              )}
+              {readOnly || item.equippedBy ? null : (
+                <Button
+                  key={`vendor-${item.id}`}
+                  label={`vendor ${item.vendorValue}g`}
+                  onPress={() => act({ t: 'vendor', itemId: item.id })}
+                />
+              )}
+              {readOnly || item.affixes.length === 0 ? null : (
+                <Button
+                  key={`reforge-${item.id}`}
+                  label={`reforge ${item.reforgeCost}g`}
+                  onPress={() =>
+                    setDialog({
+                      itemPick:
+                        dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
+                    })
+                  }
+                />
+              )}
+            </Box>
           </Box>,
         )
         if (!readOnly && dialog.itemPick === `equip:${item.id}`) {

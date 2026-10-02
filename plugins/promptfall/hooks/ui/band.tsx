@@ -17,7 +17,7 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
   const wave = view.wave >= 11 ? 'boss' : `w${view.wave}`
   const hp = view.heroes.map((h) => `${CLASS_INITIAL[h.cls] ?? '?'}${h.hp}`).join(' ')
   const parts = ['Promptfall', `Z${view.zone} ${wave}`, hp, formatGold(view.gold)]
-  if (mode === 'paused' && notice) parts.push(notice)
+  if (notice) parts.push(notice)
   const line = parts.join(' · ')
   return mode === 'secondary' ? `playing in another session · ${line}` : line
 }

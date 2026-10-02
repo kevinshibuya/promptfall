@@ -81,6 +81,8 @@ test('narrow terminals get one row', async ($, on) => {
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(80) })
     expect(await rows(ui)).toHaveLength(1)
+    // A notice (here the first-run welcome) shows on the one line too.
+    expect(await ui.find({ text: /Welcome to Promptfall/ })).toBeDefined()
     await ui.unmount()
   }
 })

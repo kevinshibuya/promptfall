@@ -114,4 +114,29 @@ for (const surface of SURFACES) {
     expect(after.roster.find((h) => h.id === archer.id)?.inParty).toBe(true)
     await ui.unmount()
   })
+
+  test(`unequip frees a worn item so it can be sold on ${surface}`, async ($, on) => {
+    const s0 = createInitialState(99)
+    const knight = s0.roster[0]
+    if (!knight) throw new Error('knight')
+    const state: GameState = {
+      ...s0,
+      roster: s0.roster.map((h) =>
+        h.id === knight.id ? { ...h, equipment: { ...h.equipment, weapon: 'iseed' } } : h,
+      ),
+      inventory: [
+        { id: 'iseed', base: 'iron_sword', rarity: 'common', affixes: [], equippedBy: knight.id },
+      ],
+    }
+    const { states } = harness(on, state)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    expect(await ui.find({ key: 'vendor-iseed' })).toBeUndefined()
+    expect(await ui.find({ key: 'unequip-iseed' })).toBeDefined()
+    await ui.press({ key: 'unequip-iseed' })
+    const view = states.get('view') as GameView
+    expect(view.inventory[0]?.equippedBy).toBeNull()
+    expect(await ui.find({ key: 'vendor-iseed' })).toBeDefined()
+    await ui.unmount()
+  })
 }
