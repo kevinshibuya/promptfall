@@ -10,6 +10,7 @@ export type {
 } from './content'
 export { content } from './content'
 export { hashState } from './hash'
+export { heroStats } from './progression'
 export { createInitialState } from './state'
 export { replay, step } from './step'
 export type {

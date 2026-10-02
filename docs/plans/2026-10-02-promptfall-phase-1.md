@@ -377,11 +377,11 @@ Internal structure of the files is your choice.
 
 **Boundaries:** No item or hero creation here beyond the `rollDrops` stub. Do not edit content tables.
 
-- [ ] `heroStats`
-- [ ] spawning for `tool_call`, `turn_end`, `tick`
-- [ ] round resolution and class behaviours
-- [ ] wave, zone, boss, wipe, rest, xp, pending party
-- [ ] tests, run the check, commit
+- [x] `heroStats`
+- [x] spawning for `tool_call`, `turn_end`, `tick`
+- [x] round resolution and class behaviours
+- [x] wave, zone, boss, wipe, rest, xp, pending party
+- [x] tests, run the check, commit
 
 ### Task 5: Loot, heroes and player commands
 
