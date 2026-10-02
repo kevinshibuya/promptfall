@@ -69,11 +69,14 @@ function clock(on: On) {
   }
 }
 
-function engineBottom(on: On) {
+function engineBottom(on: On, toasts: string[] = []) {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
 }
 
@@ -93,6 +96,17 @@ test('an interactive terminal session plays and commits a batch', async ($, on) 
     (w) => w.key.startsWith('promptfall:pf:acct:') && (w.value as { seq?: number }).seq === 1,
   )
   expect(commit).toBeDefined()
+})
+
+test('a first run welcomes the player', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  const toasts: string[] = []
+  engineBottom(on, toasts)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(toasts).toContain('Welcome to Promptfall. /promptfall heroes to meet your party')
+  expect(last.get('notice')).toBe('Welcome to Promptfall. /promptfall heroes to meet your party')
 })
 
 test('a non-interactive session starts no timer', async ($, on) => {

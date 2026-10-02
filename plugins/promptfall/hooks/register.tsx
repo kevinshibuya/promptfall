@@ -33,6 +33,9 @@ const IDLE_CADENCE_MS = 5000
 const FLUSH_MS = 15_000
 const LEASE_RENEW_MS = 10_000
 
+const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
+const WELCOME_MS = 20_000
+
 const TOAST_RARITIES = new Set(['rare', 'epic', 'legendary'])
 
 function effectToast(effect: Effect): string | null {
@@ -72,6 +75,7 @@ class GameSession implements GameHandle {
   private tickTimer: Timer | null = null
   private timers: Timer[] = []
   private pending: Promise<void> = Promise.resolve()
+  private firstRun = false
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
@@ -87,7 +91,10 @@ class GameSession implements GameHandle {
       kv: this.kv,
       now: io.now,
       newBatchId: () => crypto.randomUUID(),
-      publish: io.publish,
+      publish: (patch) => {
+        if (patch.view?.firstRun) this.firstRun = true
+        return io.publish(patch)
+      },
       onEffects: (effects) => this.onEffects(effects),
       toast: io.toast,
       after: (ms, fn) => {
@@ -150,6 +157,12 @@ class GameSession implements GameHandle {
     this.role = 'primary'
     await this.engine.start()
     if (!this.off) await this.io.publish({ mode: 'primary' })
+    if (this.firstRun) {
+      this.firstRun = false
+      this.io.toast(WELCOME)
+      await this.io.publish({ notice: WELCOME })
+      this.io.after(WELCOME_MS, () => void this.io.publish({ notice: null }))
+    }
   }
 
   private async becomeSecondary(): Promise<void> {
