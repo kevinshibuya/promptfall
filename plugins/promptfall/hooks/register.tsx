@@ -93,7 +93,8 @@ class GameSession implements GameHandle {
       newBatchId: () => crypto.randomUUID(),
       publish: (patch) => {
         if (patch.view?.firstRun) this.firstRun = true
-        return io.publish(patch)
+        // The session owns the mode: the engine's pause becomes the derived value.
+        return io.publish(patch.mode === undefined ? patch : { ...patch, mode: this.mode() })
       },
       onEffects: (effects) => this.onEffects(effects),
       toast: io.toast,
@@ -114,17 +115,23 @@ class GameSession implements GameHandle {
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
   }
 
-  /** Events apply only in the primary session, unpaused and switched on. */
+  /** Events apply while this session holds the lease and the engine is not paused. Off only hides the band. */
   canApply(): boolean {
-    return this.role === 'primary' && !this.off && !this.engine.isPaused()
+    return this.role === 'primary' && !this.engine.isPaused()
+  }
+
+  /** What the band and the dialog show: off, then paused, then the lease role. */
+  mode(): Mode {
+    return this.off ? 'off' : this.engine.isPaused() ? 'paused' : this.role
   }
 
   isPrimary(): boolean {
     return this.role === 'primary'
   }
 
-  setOff(off: boolean): void {
+  async setOff(off: boolean): Promise<void> {
     this.off = off
+    await this.io.publish({ mode: this.mode() })
   }
 
   apply(event: Parameters<GameEngine['apply']>[0], at: number): void {
@@ -156,7 +163,7 @@ class GameSession implements GameHandle {
   private async becomePrimary(): Promise<void> {
     this.role = 'primary'
     await this.engine.start()
-    if (!this.off) await this.io.publish({ mode: 'primary' })
+    await this.io.publish({ mode: this.mode() })
     if (this.firstRun) {
       this.firstRun = false
       this.io.toast(WELCOME)
@@ -167,7 +174,7 @@ class GameSession implements GameHandle {
 
   private async becomeSecondary(): Promise<void> {
     this.role = 'secondary'
-    if (!this.off) await this.io.publish({ mode: 'secondary' })
+    await this.io.publish({ mode: this.mode() })
     await this.refresh()
   }
 

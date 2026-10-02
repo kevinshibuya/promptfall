@@ -72,7 +72,6 @@ declare module 'claude-code' {
       view: GameView | null
       prefs: Prefs
       mode: Mode
-      previousMode: Mode | null
       dialogTab: DialogTab
       notice: string | null
       dialog: DialogState
