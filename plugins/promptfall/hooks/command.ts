@@ -15,29 +15,18 @@ const TABS: readonly DialogTab[] = ['inventory', 'heroes', 'account', 'odds']
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
-const previousModeAtom = atom({ plugin: 'promptfall', key: 'previousMode' } as const, null)
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
 
 export function registerCommand(on: On, game: () => GameHandle | null): void {
   on('command.run', { command: 'promptfall' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
 
-    if (arg === 'off') {
-      const mode: Mode = (await read($, modeAtom)) ?? 'primary'
-      if (mode !== 'off') {
-        await update($, previousModeAtom, () => mode)
-        await update($, modeAtom, () => 'off' as Mode)
-      }
-      game()?.setOff(true)
-      return { text: 'Promptfall band is off for this session' }
-    }
-
-    if (arg === 'on') {
-      const previous = await read($, previousModeAtom)
-      await update($, modeAtom, () => previous ?? ('primary' as Mode))
-      await update($, previousModeAtom, () => null)
-      game()?.setOff(false)
-      return { text: 'Promptfall band is on' }
+    if (arg === 'off' || arg === 'on') {
+      const off = arg === 'off'
+      const running = game()
+      if (running) await running.setOff(off)
+      else await update($, modeAtom, () => (off ? 'off' : 'primary') as Mode)
+      return { text: off ? 'Promptfall band is off for this session' : 'Promptfall band is on' }
     }
 
     if (arg === 'farm') {

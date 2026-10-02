@@ -32,7 +32,7 @@ export type EngineDeps = {
 export type GameHandle = {
   apply: (event: Event, at: number) => void
   canApply: () => boolean
-  setOff: (off: boolean) => void
+  setOff: (off: boolean) => Promise<void>
   settled: () => Promise<void>
 }
 

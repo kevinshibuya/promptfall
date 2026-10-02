@@ -9,7 +9,6 @@ import { RARITY_COLOR } from './parts'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
-const previousModeAtom = atom({ plugin: 'promptfall', key: 'previousMode' } as const, null)
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
 const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -99,9 +98,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           ? 'Playing in another session: this view is read-only.'
           : mode === 'paused'
             ? (notice ?? 'Promptfall is paused.')
-            : mode === 'off'
-              ? 'Promptfall is off for this session: /promptfall on'
-              : 'Promptfall is not playing in this session.'
+            : 'Promptfall is not playing in this session.'
       header.push(
         <Text key="read-only" color="yellow" wrap="truncate">
           {why}
@@ -321,17 +318,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
               }))
             }
           />
-          <Button
-            key="band-off"
-            label="band off"
-            onPress={async () => {
-              if (mode !== 'off') {
-                await update($, previousModeAtom, () => mode)
-                await update($, modeAtom, () => 'off' as Mode)
-              }
-              game()?.setOff(true)
-            }}
-          />
+          <Button key="band-off" label="band off" onPress={() => game()?.setOff(true)} />
         </Box>,
       )
     } else {

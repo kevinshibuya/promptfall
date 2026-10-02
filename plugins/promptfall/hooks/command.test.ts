@@ -6,8 +6,8 @@ const RUN = {
   presentation: { isFullscreen: false, columns: 120 },
 } as const
 
-function harness(on: On) {
-  const data = new Map<string, unknown>()
+function harness(on: On, seed: Record<string, unknown> = {}) {
+  const data = new Map<string, unknown>(Object.entries(seed))
   const states = new Map<string, unknown>()
   const opened: { id: string; title?: string }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
@@ -31,21 +31,38 @@ function harness(on: On) {
     opened.push({ id: e.id, ...(e.title ? { title: e.title } : {}) })
     return { value: { isPlaced: true } }
   })
-  mock.clock(on, { now: 1_000_000 })
-  return { states, opened }
+  const clock = mock.clock(on, { now: 1_000_000 })
+  return { states, opened, clock }
 }
 
-test('/promptfall off switches the band off and on restores it', async ($, on) => {
-  const { states } = harness(on)
+test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
+  const { states, clock } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(states.get('mode')).toBe('primary')
   const off = await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
   expect(off.text).toBe('Promptfall band is off for this session')
   expect(states.get('mode')).toBe('off')
-  expect(states.get('previousMode')).toBe('primary')
+  const before = JSON.stringify(states.get('view'))
+  await clock.advance(30_000)
+  expect(JSON.stringify(states.get('view'))).not.toBe(before)
+  expect(states.get('mode')).toBe('off')
   const back = await $.command.run({ ...RUN, command: 'promptfall', args: 'on' })
   expect(back.text).toBe('Promptfall band is on')
   expect(states.get('mode')).toBe('primary')
+})
+
+test('off and on leave a secondary session secondary', async ($, on) => {
+  const { states } = harness(on, {
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('secondary')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'on' })
+  expect(states.get('mode')).toBe('secondary')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
+  expect(states.get('mode')).toBe('off')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'on' })
+  expect(states.get('mode')).toBe('secondary')
 })
 
 test('/promptfall heroes opens the pane on the heroes tab', async ($, on) => {
