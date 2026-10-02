@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { content } from './content'
+import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
 import type { Effect, Enemy, EnemyKind, Event, GameState } from './types'
@@ -98,6 +99,28 @@ describe('zone boss and pending party', () => {
     expect(r.state.wave).toBe(1)
     expect(r.state.encounter).toBeNull()
     expect(r.state.stats.bosses).toBe(1)
+  })
+
+  it('the party that takes the field in the next zone is revived like after a wave', () => {
+    const s0 = createInitialState(5)
+    const [k, b, w, a] = s0.roster
+    if (!k || !b || !w || !a) throw new Error('roster')
+    const roster = s0.roster.map((h) => (h.id === a.id || h.id === w.id ? { ...h, hp: 0 } : h))
+    for (const pending of [[k.id, b.id, a.id] as [string, string, string], null]) {
+      let s: GameState = { ...s0, roster, wave: 11, pendingParty: pending }
+      s = injectEnemy(s, 'bandit_captain')
+      const enc = s.encounter
+      const boss = enc?.enemies[0]
+      if (!enc || !boss) throw new Error('enc')
+      s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+      const r = run(s, [tick])
+      expect(r.state.zone).toBe(2)
+      const fallen = pending ? a : w
+      const hero = r.state.roster.find((h) => h.id === fallen.id)
+      if (!hero) throw new Error('hero')
+      expect(r.state.party.includes(fallen.id)).toBe(true)
+      expect(hero.hp).toBe(Math.max(1, Math.floor((heroStats(r.state, hero).hp * 1500) / 10000)))
+    }
   })
 
   it('farm restarts the zone instead of advancing', () => {
