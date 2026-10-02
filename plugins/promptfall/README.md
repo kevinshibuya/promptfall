@@ -26,7 +26,7 @@ one zone at full health and costs nothing else.
 | --- | --- |
 | `/promptfall` | Opens the dialog on the Inventory tab |
 | `/promptfall heroes` | Opens it on Heroes (also `inventory`, `account`, `odds`) |
-| `/promptfall off` | Hides the band and pauses the game for this session |
+| `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
 
@@ -50,7 +50,7 @@ Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendori
 a tavern, hero contracts from bosses, party swaps that apply at the next zone change, inventory
 and roster expansions, and published odds. Progress lives in the Claude Code store on this
 machine. One session at a time plays: another session shows `playing in another session` and
-takes over when the first one's lease lapses.
+takes over within about 10 seconds of the first one quitting.
 
 ### What it lacks
 
@@ -65,10 +65,6 @@ import only files inside its own folder, so `pnpm vendor` bundles them into `hoo
 Run it after changing `packages/sim` or `packages/protocol` and commit the result. CI fails when
 the bundles are stale (`pnpm vendor:check`).
 
-The engine lays `.claude-plugin/types/` and `tsconfig.json` on load. They are committed so
-`tsc -p plugins/promptfall` works without a session, and a newer Claude Code rewrites them on
-its next load.
-
 Two rules of the mods runtime shape the code. A hook may not pass `$` or `$.store` on, so
 `register.tsx` hands the rest of the code closures written at the hook. And `claude plugin
 validate` reads an atom only where the calling module declares it, so each module declares the
@@ -79,3 +75,7 @@ claude plugin validate plugins/promptfall
 claude plugin test plugins/promptfall
 pnpm exec tsc -p plugins/promptfall
 ```
+
+`tsc -p plugins/promptfall` needs the engine's declarations, which an interactive
+`claude --plugin-dir plugins/promptfall` lays under `.claude-plugin/types/` on first load. They
+are generated per Claude Code version and stay uncommitted.

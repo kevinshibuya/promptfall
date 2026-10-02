@@ -17,7 +17,8 @@ should see. A step that shows something else is a red.
    `Inventory Heroes Account Odds`. Esc closes it.
 5. **Equip an item.** Once an item has dropped (the status row says `last: ...`), open
    `/promptfall`, press `equip` on it and pick a hero in the list. The item shows `[hero name]`.
-   An item no party class can wear says so instead.
+   An item no hero can wear says so instead. Press `unequip` on it: the `[hero name]` goes and
+   `vendor` comes back.
 6. **Vendor one.** Press `vendor Ng` on an unequipped item. It leaves the list and gold rises by N.
 7. **Recruit once.** On the Heroes tab (`h`), press `Recruit 200g`. With less than 200 gold a red
    line reads `Refused: not_enough_gold` and clears after 5 seconds. With enough, a new hero joins
@@ -28,17 +29,20 @@ should see. A step that shows something else is a red.
 9. **Narrow the terminal.** Resize the window under 100 columns. The band drops to its one-line
    form on its own and comes back when you widen it.
 10. **Switch it off and on.** Run `/promptfall off`. The band disappears and the reply reads
-    `Promptfall band is off for this session`. Run `/promptfall on`. It comes back where it was.
+    `Promptfall band is off for this session`. The game keeps playing out of sight, and
+    `/promptfall` still opens the dialog. Run `/promptfall on`. The band comes back with the
+    progress made meanwhile.
 11. **Second session.** Open another terminal in the same folder and run the same command as
     step 1. Its band is one line starting `playing in another session`, and it does not fight.
-    Quit the first session: within about 40 seconds the second one takes over and its band
-    grows back to 4 rows.
+    Quit the first session: quitting releases the lease, so within about 10 seconds the second
+    one takes over and its band grows back to 4 rows.
 12. **Persistence.** Quit both sessions and start one again. The band comes back at the same zone,
-    gold and levels, with no welcome toast. Progress made in the last 15 seconds before quitting
-    may be lost: that is one flush interval.
+    gold and levels, with no welcome toast. Quitting flushes the last batch, so nothing is lost;
+    only a crash loses the last 15 seconds.
 13. **Desktop, if available.** Open this repository in the Claude Desktop app with the plugin
     loaded (`CLAUDE_CODE_PLUGIN_DIRS` pointing at `plugins/promptfall`). The band draws and HP
     moves. This checks `session.attach` with surface `desktop`, which no test covers live.
 
 To start over as a new player, move away the plugin's store file,
-`~/.claude/plugins/store/promptfall_inline-*.json`, while no session runs.
+`~/.claude/plugins/store/promptfall_inline-*.json`, while no session runs. A store written
+before the 2026-10-02 fix pass carries the old budget record and must be deleted.
