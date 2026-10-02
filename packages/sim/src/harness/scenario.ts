@@ -133,4 +133,3 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
   report.roundsPerKillZone1 = zone1Kills > 0 ? Math.floor(zone1Rounds / zone1Kills) : 0
   return report
 }
-
