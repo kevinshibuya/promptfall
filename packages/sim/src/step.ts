@@ -1,5 +1,17 @@
 import { resolveRound } from './combat'
 import {
+  dismiss,
+  equip,
+  expandInventory,
+  expandRoster,
+  recruit,
+  reforge,
+  setFarm,
+  setParty,
+  unequip,
+  vendor,
+} from './commands'
+import {
   clone,
   onRest,
   onToolCall,
@@ -19,9 +31,6 @@ export type Handlers = { [K in EventKind]: Handler<K> }
 export function reject(state: GameState, event: Event, reason: string): StepResult {
   return { state, effects: [{ k: 'rejected', event, reason }] }
 }
-
-const notImplemented = (state: GameState, event: Event): StepResult =>
-  reject(state, event, 'not_implemented')
 
 /** Runs `mutate` on a deep copy of the state. */
 export function draft(
@@ -44,16 +53,16 @@ const handlers: Handlers = {
   tool_call: (state) => draft(state, (s) => onToolCall(s)),
   turn_end: (state) => draft(state, (s) => onTurnEnd(s)),
   rest: (state) => draft(state, (s) => onRest(s)),
-  equip: notImplemented,
-  unequip: notImplemented,
-  vendor: notImplemented,
-  reforge: notImplemented,
-  set_party: notImplemented,
-  recruit: notImplemented,
-  dismiss: notImplemented,
-  set_farm: notImplemented,
-  expand_inventory: notImplemented,
-  expand_roster: notImplemented,
+  equip,
+  unequip,
+  vendor,
+  reforge,
+  set_party: setParty,
+  recruit,
+  dismiss,
+  set_farm: setFarm,
+  expand_inventory: expandInventory,
+  expand_roster: expandRoster,
 }
 
 export function step(state: GameState, event: Event): StepResult {

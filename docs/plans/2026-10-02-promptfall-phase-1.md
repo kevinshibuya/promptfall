@@ -409,11 +409,11 @@ Internal structure of the files is your choice.
 
 **Boundaries:** Do not change combat numbers. Do not change content except through Task 6.
 
-- [ ] loot generation and inventory overflow
-- [ ] hero generation, contracts, tavern
-- [ ] the ten commands with their rejections
-- [ ] starting heroes get epithets
-- [ ] tests, run the check, commit
+- [x] loot generation and inventory overflow
+- [x] hero generation, contracts, tavern
+- [x] the ten commands with their rejections
+- [x] starting heroes get epithets
+- [x] tests, run the check, commit
 
 ### Task 6: Determinism, balance harness and golden hash
 
