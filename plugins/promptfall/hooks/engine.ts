@@ -55,6 +55,7 @@ export class GameEngine {
   private paused: string | null = null
   private firstRun = false
   private queue: Promise<void> = Promise.resolve()
+  private noticeGen = 0
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -86,7 +87,7 @@ export class GameEngine {
     if (!this.buffer) this.buffer = { events: [], baseHash: hashState(local) }
     const r = step(local, event)
     this.local = r.state
-    this.buffer.events.push({ ...event, at } as TimedEvent)
+    this.buffer.events.push({ ...event, at: Math.floor(at) } as TimedEvent)
     void this.publish({ view: this.view() })
     if (r.effects.length > 0) this.deps.onEffects(r.effects)
   }
@@ -138,6 +139,7 @@ export class GameEngine {
   }
 
   setPaused(reason: string | null): void {
+    this.noticeGen += 1
     this.paused = reason
     void this.publish(
       reason === null ? { mode: 'primary', notice: null } : { mode: 'paused', notice: reason },
@@ -183,10 +185,12 @@ export class GameEngine {
     void this.publish({ view: this.view() })
   }
 
-  private notice(text: string, ms: number): void {
+  /** Shows `text` for `ms`. Its timer clears it only if no later notice and no pause replaced it. */
+  notice(text: string, ms: number): void {
+    const gen = ++this.noticeGen
     void this.publish({ notice: text })
     this.deps.after?.(ms, () => {
-      if (this.paused === null) void this.publish({ notice: null })
+      if (gen === this.noticeGen && this.paused === null) void this.publish({ notice: null })
     })
   }
 
