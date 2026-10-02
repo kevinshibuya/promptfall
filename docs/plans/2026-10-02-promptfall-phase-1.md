@@ -678,11 +678,11 @@ Rows 1 to 3 are hero rows; the right third of row 1 lists living enemies with hp
 
 **Boundaries:** No merging. No new features.
 
-- [ ] first-run notice and toast
-- [ ] golden test in the mod runtime
-- [ ] READMEs and the manual pass script
-- [ ] full verification line, manual pass
-- [ ] open the PR, report, stop
+- [x] first-run notice and toast
+- [x] golden test in the mod runtime
+- [x] READMEs and the manual pass script
+- [x] full verification line, manual pass
+- [x] open the PR, report, stop
 
 ## Out of scope for this plan
 
