@@ -262,6 +262,8 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
     effects.push({ k: 'zone_cleared', zone, advancedTo })
     changeZone(s, advancedTo)
     applyPendingParty(s, effects)
+    // The boss is wave 11: the party taking the field heals and revives as after any wave.
+    healParty(s, 1500)
     return
   }
 

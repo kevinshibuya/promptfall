@@ -912,6 +912,7 @@ function onEnemyKilled(s, enemy, effects) {
     effects.push({ k: "zone_cleared", zone, advancedTo });
     changeZone(s, advancedTo);
     applyPendingParty(s, effects);
+    healParty(s, 1500);
     return;
   }
   const current = s.encounter;
