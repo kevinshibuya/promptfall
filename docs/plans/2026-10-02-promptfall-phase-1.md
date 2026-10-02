@@ -337,10 +337,10 @@ export type Content = {
 
 **Boundaries:** No rules code in this task beyond validation. Do not change `step.ts`.
 
-- [ ] content types and the ten tables
-- [ ] validator and test
-- [ ] starting heroes from content
-- [ ] run the check, commit
+- [x] content types and the ten tables
+- [x] validator and test
+- [x] starting heroes from content
+- [x] run the check, commit
 
 ### Task 4: Combat and progression
 
