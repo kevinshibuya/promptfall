@@ -62,7 +62,7 @@ export function registerBand(on: On): void {
 
     const enemyWidth = Math.floor(width / 3)
     const leftWidth = width - enemyWidth
-    const nameWidth = Math.max(6, leftWidth - 33)
+    const nameWidth = Math.max(6, Math.min(30, leftWidth - 33))
 
     const rows = []
     if (prefs.bandTab === 'party') {
