@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { acquire, LEASE_TTL_MS } from './lease'
+import { acquire, LEASE_TTL_MS, release } from './lease'
 import { MemoryKeyValue } from './vendor/protocol.js'
 
 test('a second owner waits until the lease expires', async () => {
@@ -17,4 +17,13 @@ test('the holder renews', async () => {
   expect(await acquire(kv, 'a', 20_000)).toBe(true)
   expect(await acquire(kv, 'b', LEASE_TTL_MS)).toBe(false)
   expect(await acquire(kv, 'b', 20_000 + LEASE_TTL_MS)).toBe(true)
+})
+
+test('release frees the lease only for its owner', async () => {
+  const kv = new MemoryKeyValue()
+  expect(await acquire(kv, 'a', 0)).toBe(true)
+  await release(kv, 'b')
+  expect(await acquire(kv, 'b', 1)).toBe(false)
+  await release(kv, 'a')
+  expect(await acquire(kv, 'b', 1)).toBe(true)
 })

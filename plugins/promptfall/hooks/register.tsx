@@ -3,7 +3,7 @@ import { atom, read, update } from 'claude-code'
 import type { Mode } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle } from './engine'
-import { acquire } from './lease'
+import { acquire, release } from './lease'
 import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
@@ -111,7 +111,12 @@ class GameSession implements GameHandle {
     if (await acquire(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
     else await this.becomeSecondary()
     this.setCadence(IDLE_CADENCE_MS)
-    this.timers.push(this.io.every(FLUSH_MS, () => void this.engine.flush()))
+    // A demoted primary keeps its buffer but never submits it: start() clears it on promotion.
+    this.timers.push(
+      this.io.every(FLUSH_MS, () => {
+        if (this.role === 'primary') void this.engine.flush()
+      }),
+    )
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
   }
 
@@ -147,6 +152,18 @@ class GameSession implements GameHandle {
 
   cadenceMs(): number {
     return this.cadence
+  }
+
+  /**
+   * The session is ending. Flush what is buffered while the hook's budget
+   * allows; when the process ends too, stop the timers and give the lease up.
+   */
+  async end(processEnds: boolean, remainingMs: () => number): Promise<void> {
+    if (this.role === 'primary' && remainingMs() > 200) await this.engine.flush()
+    if (!processEnds) return
+    this.tickTimer?.cancel()
+    for (const timer of this.timers) timer.cancel()
+    if (this.role === 'primary') await release(this.kv, this.owner)
   }
 
   /** Resolves once the view and any pane notice from the last events have landed. */
@@ -284,6 +301,13 @@ export const register: Register = (on) => {
       game = session
       await session.start()
     }
+    return next(e)
+  })
+
+  on('session.end', async (_$, e, next) => {
+    // A /clear or a resume goes on in this process with no session.start, so the game keeps running.
+    const processEnds = e.reason !== 'clear' && e.reason !== 'resume'
+    await game?.end(processEnds, () => next.budget.remainingMs)
     return next(e)
   })
 

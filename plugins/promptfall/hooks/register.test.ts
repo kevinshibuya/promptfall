@@ -141,3 +141,59 @@ test('a subagent turn.complete leaves the turn cadence', async ($, on) => {
   await $.turn.complete(done)
   expect(time.periods.slice(afterSubagent)).toContain(5000)
 })
+
+const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
+const LEASE = 'promptfall:lease'
+const seqOf = (w: { key: string; value: unknown }) =>
+  w.key.startsWith('promptfall:pf:acct:') ? (w.value as { seq?: number }).seq : undefined
+
+test('a demoted primary stops flushing, and the welcome shows once', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data, writes } = store(on)
+  const last = states(on)
+  const toasts: string[] = []
+  engineBottom(on, toasts)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  // Another session takes over while this one's renewal is due.
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(6_000)
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
+  // The other session leaves; this one takes the lease back.
+  data.delete(LEASE)
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(toasts.filter((t) => t === WELCOME)).toHaveLength(1)
+})
+
+test('quitting flushes the last batch and releases the lease', async ($, on) => {
+  clock(on)
+  const { data, writes } = store(on)
+  states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(data.has(LEASE)).toBe(true)
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(true)
+  expect(data.has(LEASE)).toBe(false)
+})
+
+test('a /clear flushes but keeps playing and keeps the lease', async ($, on) => {
+  clock(on)
+  const { data, writes } = store(on)
+  states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(true)
+  expect(data.has(LEASE)).toBe(true)
+})

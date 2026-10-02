@@ -26,3 +26,9 @@ export async function acquire(kv: KeyValue, owner: string, now: number): Promise
   const after = await kv.get(LEASE_KEY)
   return isLease(after) && after.owner === owner
 }
+
+/** Gives the lease up at once, if `owner` holds it, so the next session need not wait out the TTL. */
+export async function release(kv: KeyValue, owner: string): Promise<void> {
+  const held = await kv.get(LEASE_KEY)
+  if (isLease(held) && held.owner === owner) await kv.delete(LEASE_KEY)
+}
