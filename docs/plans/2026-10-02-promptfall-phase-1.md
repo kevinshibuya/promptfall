@@ -291,12 +291,12 @@ Server rules every `ServerClient` must satisfy, applied in this order (the contr
 
 **Boundaries:** No combat, no loot, no content tables. Do not export anything not listed in the contract.
 
-- [ ] types
-- [ ] rng with tests
-- [ ] hash with tests
-- [ ] ids, state, step dispatcher, replay
-- [ ] index exports
-- [ ] run the check, commit
+- [x] types
+- [x] rng with tests
+- [x] hash with tests
+- [x] ids, state, step dispatcher, replay
+- [x] index exports
+- [x] run the check, commit
 
 ### Task 3: Content tables and validation
 
