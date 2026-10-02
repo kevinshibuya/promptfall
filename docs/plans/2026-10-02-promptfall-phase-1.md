@@ -476,11 +476,11 @@ export const GOLDEN_HASH: string
 
 **Boundaries:** No HTTP in this task. No plugin code. Do not modify `@promptfall/sim`.
 
-- [ ] schemas and semver compare with tests
-- [ ] client types, `BUDGETS`, `KeyValue`
-- [ ] `LocalServer` with the single-record commit
-- [ ] contract suite and its run against the fake
-- [ ] run the check, commit
+- [x] schemas and semver compare with tests
+- [x] client types, `BUDGETS`, `KeyValue`
+- [x] `LocalServer` with the single-record commit
+- [x] contract suite and its run against the fake
+- [x] run the check, commit
 
 ### Task 8: Plugin scaffold, vendor build and store-backed storage
 
