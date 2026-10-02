@@ -22,7 +22,7 @@ function harness(on: On, state: GameState) {
         },
         state,
         seq: 0,
-        t0: 1_000_000,
+        refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
         buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
         committed: [],
       },

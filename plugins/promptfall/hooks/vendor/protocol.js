@@ -4111,6 +4111,11 @@ var RING = 200;
 var KINDS = Object.keys(BUDGETS);
 var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
+function everyKind(value) {
+  const out = {};
+  for (const kind of KINDS) out[kind] = value;
+  return out;
+}
 function fullBuckets() {
   const out = {};
   for (const kind of KINDS) out[kind] = BUDGETS[kind].capacity;
@@ -4156,7 +4161,7 @@ var LocalServer = class {
       account: { accountId, seed, createdAt: now, displayName: null, linked: null },
       state,
       seq: 0,
-      t0: now,
+      refillAt: everyKind(now),
       buckets: fullBuckets(),
       committed: []
     };
@@ -4206,11 +4211,13 @@ var LocalServer = class {
       };
     }
     const now = await this.options.now();
-    const elapsed = Math.max(0, now - record.t0);
     const buckets = {};
+    const refillAt = {};
     for (const kind of KINDS) {
       const { refillMs, capacity } = BUDGETS[kind];
-      buckets[kind] = Math.min(capacity, record.buckets[kind] + Math.floor(elapsed / refillMs));
+      const n = Math.floor(Math.max(0, now - record.refillAt[kind]) / refillMs);
+      buckets[kind] = Math.min(capacity, record.buckets[kind] + n);
+      refillAt[kind] = record.refillAt[kind] + n * refillMs;
     }
     const counts = {};
     for (const kind of KINDS) counts[kind] = 0;
@@ -4236,7 +4243,7 @@ var LocalServer = class {
       ...record,
       state: result,
       seq: nextSeq,
-      t0: now,
+      refillAt,
       buckets,
       committed: [...record.committed, { batchId: batch.batchId, hash, seq: nextSeq }].slice(-RING)
     };

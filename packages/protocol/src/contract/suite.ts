@@ -252,6 +252,17 @@ export function runServerContract(
       })
     })
 
+    it('rule 8: a steady 7 to 8 ticks per 15 s for an hour never caps', async () => {
+      const { client, clock, mirror } = await setup()
+      for (let i = 0; i < 240; i++) {
+        clock.advance(15_000)
+        const events = Array.from({ length: i % 2 === 0 ? 8 : 7 }, () => tick)
+        const ack = await client.submit(mirror.batch(events), mirror.auth())
+        expect({ batch: i, ok: ack.ok }).toEqual({ batch: i, ok: true })
+        mirror.commit(events)
+      }
+    }, 60_000)
+
     it('rule 8: a capped batch consumes nothing', async () => {
       const { client, mirror } = await setup()
       const over = Array.from({ length: 71 }, () => tick)

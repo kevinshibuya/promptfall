@@ -35,7 +35,8 @@ type AccountRecord = {
   account: Account
   state: GameState
   seq: number
-  t0: number
+  /** Per bucket, the time its refill has been counted up to. */
+  refillAt: Record<BudgetKind, number>
   buckets: Record<BudgetKind, number>
   committed: Committed[]
 }
@@ -45,6 +46,12 @@ const KINDS = Object.keys(BUDGETS) as BudgetKind[]
 
 const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 const tokenKey = (token: string) => `pf:token:${token}`
+
+function everyKind(value: number): Record<BudgetKind, number> {
+  const out = {} as Record<BudgetKind, number>
+  for (const kind of KINDS) out[kind] = value
+  return out
+}
 
 function fullBuckets(): Record<BudgetKind, number> {
   const out = {} as Record<BudgetKind, number>
@@ -96,7 +103,7 @@ export class LocalServer implements ServerClient {
       account: { accountId, seed, createdAt: now, displayName: null, linked: null },
       state,
       seq: 0,
-      t0: now,
+      refillAt: everyKind(now),
       buckets: fullBuckets(),
       committed: [],
     }
@@ -161,11 +168,15 @@ export class LocalServer implements ServerClient {
 
     // 8. Budgets on the server's clock.
     const now = await this.options.now()
-    const elapsed = Math.max(0, now - record.t0)
+    // Each bucket's clock advances by whole refill periods only, so the
+    // remainder carries over and a steady honest cadence never drains it.
     const buckets = {} as Record<BudgetKind, number>
+    const refillAt = {} as Record<BudgetKind, number>
     for (const kind of KINDS) {
       const { refillMs, capacity } = BUDGETS[kind]
-      buckets[kind] = Math.min(capacity, record.buckets[kind] + Math.floor(elapsed / refillMs))
+      const n = Math.floor(Math.max(0, now - record.refillAt[kind]) / refillMs)
+      buckets[kind] = Math.min(capacity, record.buckets[kind] + n)
+      refillAt[kind] = record.refillAt[kind] + n * refillMs
     }
     const counts = {} as Record<BudgetKind, number>
     for (const kind of KINDS) counts[kind] = 0
@@ -193,7 +204,7 @@ export class LocalServer implements ServerClient {
       ...record,
       state: result,
       seq: nextSeq,
-      t0: now,
+      refillAt,
       buckets,
       committed: [...record.committed, { batchId: batch.batchId, hash, seq: nextSeq }].slice(-RING),
     }
