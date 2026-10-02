@@ -82,6 +82,34 @@ describe('combat', () => {
     expect(wiped || hurt || r.state.stats.kills > 0).toBe(true)
   })
 
+  it('two or three White Mages still fight: one heal lands per round', () => {
+    // Before the rule, three level 5 White Mages on seed 1 went 1155 rounds without a kill.
+    for (const n of [2, 3]) {
+      const s0 = createInitialState(1)
+      const wm = s0.roster.find((h) => h.cls === 'white_mage')
+      const knight = s0.roster.find((h) => h.cls === 'knight')
+      if (!wm || !knight) throw new Error('roster')
+      const extra = ['hw2', 'hw3'].map((id) => ({ ...wm, id, level: 5 }))
+      const roster = [
+        ...s0.roster.map((h) => ({ ...h, level: 5, hp: h.id === knight.id && n === 2 ? 0 : h.hp })),
+        ...extra,
+      ]
+      const party: [string, string, string] =
+        n === 3 ? [wm.id, 'hw2', 'hw3'] : [wm.id, 'hw2', knight.id]
+      let s: GameState = { ...s0, roster, party }
+      let since = 0
+      let worst = 0
+      for (let i = 0; i < 2000; i++) {
+        const r = step(s, { t: 'tick' })
+        s = r.state
+        const progress = r.effects.some((e) => e.k === 'gold' || e.k === 'wipe') || !s.encounter
+        since = progress ? 0 : since + 1
+        worst = Math.max(worst, since)
+      }
+      expect({ n, worst: worst < 200 }).toEqual({ n, worst: true })
+    }
+  })
+
   it('heroStats adds a rare weapon at 12000 bp plus its affixes', () => {
     const s0 = createInitialState(1)
     const knight = s0.roster[0]

@@ -24,7 +24,9 @@ function hitEnemy(s: GameState, enemy: Enemy, amount: number, effects: Effect[])
   if (enemy.hp === 0) onEnemyKilled(s, enemy, effects)
 }
 
-function heroAct(s: GameState, hero: Hero, effects: Effect[]): void {
+type Round = { healed: boolean }
+
+function heroAct(s: GameState, hero: Hero, effects: Effect[], round: Round): void {
   const encounter = s.encounter
   if (!encounter || encounter.enemies.length === 0) return
   const stats = heroStats(s, hero)
@@ -55,7 +57,9 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[]): void {
           lowestMax = max
         }
       }
-      if (lowest && lowest.hp * 10000 < lowestMax * 7000) {
+      // One heal per round: a second healer attacks, or healers could stall forever.
+      if (!round.healed && lowest && lowest.hp * 10000 < lowestMax * 7000) {
+        round.healed = true
         lowest.hp = Math.min(lowestMax, lowest.hp + Math.floor((stats.atk * 8000) / 10000))
         return
       }
@@ -101,6 +105,7 @@ export function resolveRound(s: GameState, effects: Effect[]): void {
     actors.push({ side: 'enemy', id: enemy.id, spd: enemyStats(enemy).spd })
   }
   actors.sort((a, b) => b.spd - a.spd)
+  const round: Round = { healed: false }
 
   for (const actor of actors) {
     const current = s.encounter
@@ -108,7 +113,7 @@ export function resolveRound(s: GameState, effects: Effect[]): void {
     if (actor.side === 'hero') {
       const hero = s.roster.find((h) => h.id === actor.id)
       if (!hero || hero.hp <= 0 || !s.party.includes(hero.id)) continue
-      heroAct(s, hero, effects)
+      heroAct(s, hero, effects, round)
     } else {
       const enemy = current.enemies.find((e) => e.id === actor.id)
       if (!enemy || enemy.hp <= 0) continue
