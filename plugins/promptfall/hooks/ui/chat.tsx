@@ -101,7 +101,7 @@ export function chatBody(
       : GATE_UNLINKED
   if (gate) {
     body.push(
-      <Text key="chat-gate" color="yellow" wrap="truncate">
+      <Text key="chat-gate" color="yellow" wrap="wrap">
         {gate}
       </Text>,
     )
