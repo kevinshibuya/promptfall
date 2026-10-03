@@ -223,9 +223,12 @@ presence in memory (reversible: a store move any time) or for bots over HTTP (re
 
 ## 5. Open items
 
-- **HANDOFF.md** is not in the clone or in any commit on `feat/phase-3`. Its "Questions
-  the grill must settle" and "Dead ends and facts" were not read. Settled by: Kevin
-  checking those sections against this record in the local session before the plan prompt.
+- **HANDOFF.md** (local only, excluded from git) was checked against this record in the
+  local session on 2026-10-03. Its five questions (stream timing, long-poll against the
+  fetch, boss damage through batches, presence on the fakes, bots on public methods) are
+  settled by 1.1, 1.2, 1.3 and 1.9 with no conflict. 1.9 narrows the bots' host calls to
+  `mint` and `credit`. Its dev facts (fast-forwarding the fake, driving a real session for
+  the manual pass) are carried into the plan prompt. Closed.
 - **Timer behaviour in an idle or backgrounded session**: not documented in the engine
   facts. Affects whether a backgrounded terminal keeps polling and so stays online.
   Settled by: a manual check with two terminals, one backgrounded for 2 minutes, watching

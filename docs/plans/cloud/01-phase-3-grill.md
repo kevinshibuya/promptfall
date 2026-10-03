@@ -24,7 +24,7 @@ All in this clone. Read them before the first round:
 
 ## What this clone lacks, and the rules those files would have given you
 
-Kevin's global instructions, his user-level skills (`grill-with-docs`, `grilling`, `domain-modeling`), his agents and codex are missing. So are the Claude Code plugin engine's type definitions and the `plugin-authoring` skill; their facts are below. There is no browser, and the egress policy blocks vendor pages.
+Kevin's global instructions, user-level skills (`grill-with-docs`, `grilling`, `domain-modeling`), agents and codex are missing. So are the Claude Code plugin engine's type definitions and the `plugin-authoring` skill; their facts are below. There is no browser, and the egress policy blocks vendor pages.
 
 ### The plugin engine, from sources outside the repo
 
@@ -73,7 +73,7 @@ Gathered locally on 2026-10-03 from the engine's d.ts at `plugins/promptfall/.cl
   ---
   ```
 
-- Kevin types his answers. `AskUserQuestion` is only for approving a finished design or draft, never for the design questions themselves.
+- Kevin types the answers. `AskUserQuestion` is only for approving a finished design or draft, never for the design questions themselves.
 - Facts are your job, decisions are Kevin's. Never ask Kevin something the repo can answer. When a frontier question needs a fact, look it up (a subagent is fine) and ask the rest of the frontier meanwhile; only the questions downstream of the lookup wait. When a fact is out of reach from the clone, say so, mark it open, and name what would settle it.
 - The grill ends when the frontier is empty: every branch visited, nothing silently assumed. Don't write the closing record until Kevin confirms you share the same understanding.
 
