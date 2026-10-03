@@ -1,5 +1,5 @@
 import type { AccountRecord } from '@promptfall/ledger'
-import { HttpClient, type Listing, MemoryKeyValue } from '@promptfall/protocol'
+import { BOSS_BASE_HP, HttpClient, type Listing, MemoryKeyValue } from '@promptfall/protocol'
 import { RARITIES, type Rarity } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { BOT_NAMES, BOT_TICK_MS } from './bot-config'
@@ -12,9 +12,9 @@ const rarePlus = (r: Rarity) => RARITIES.indexOf(r) >= RARITIES.indexOf('rare')
 const COUNT = 12
 
 /** A fake listening on port 0 with a manual clock, and bots that act only when the test ticks them. */
-async function run(seed: number, ticks: number) {
+async function run(seed: number, ticks: number, start = 1_700_000_000_000) {
   const kv = new MemoryKeyValue()
-  let t = 1_700_000_000_000
+  let t = start
   let n = 0
   const server = createFakeServer({
     kv,
@@ -57,6 +57,8 @@ async function run(seed: number, ticks: number) {
     const auth = { deviceToken: viewer.deviceToken }
     const world = await client.world(auth, 0)
     if ('reason' in world) throw new Error('unauthorized')
+    const boards = await client.leaderboards(auth)
+    if ('reason' in boards) throw new Error('unauthorized')
     const all: Listing[] = []
     for (const kind of ['item', 'hero'] as const) {
       for (let page = 0; ; page++) {
@@ -74,7 +76,7 @@ async function run(seed: number, ticks: number) {
       if (!('reason' in mine)) orders += mine.orders.length
       records.push((await kv.get(`pf:acct:${saved.accountId}:record`)) as AccountRecord)
     }
-    return { all, world, orders, records, lines, calls }
+    return { all, world, boards, orders, records, lines, calls }
   } finally {
     await listening.close()
   }
@@ -131,6 +133,19 @@ describe('bots over HTTP', () => {
     expect(trades.some((e) => e.what === 'sold')).toBe(true)
     expect(lines.some((l) => / fill ok$/.test(l))).toBe(true)
     expect(calls).toEqual([])
+  }, 120_000)
+
+  it('bots engaged at a grid point fight the boss through their batches', async () => {
+    const grid = 1_700_006_400_000
+    // One round to stamp everyone present, then two more across the grid point.
+    const { world, boards } = await run(1, 3 * COUNT, grid - BOT_TICK_MS - 1)
+    const boss = world.boss
+    if (!boss) throw new Error('no boss')
+    expect(boss.spawnedAt).toBe(grid)
+    expect(boss.maxHp).toBe(COUNT * BOSS_BASE_HP)
+    expect(boss.hp).toBeLessThan(boss.maxHp)
+    const bots = boards.damage.filter((r) => (BOT_NAMES as readonly string[]).includes(r.name))
+    expect(bots.length).toBeGreaterThan(0)
   }, 120_000)
 
   it('two runs with the same seed list the same ids at the same prices', async () => {

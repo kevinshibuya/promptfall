@@ -574,9 +574,9 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No plugin. No new route (the snapshot carries the boss). No change to the market rules.
 
-- [ ] `boss-config.ts`, `boss.ts`, `boss.test.ts` red then green, the six lifecycle cases included
-- [ ] Wire `advanceBoss` in `world` and `sweep`, engage on poll, the contribution read, `settleBoss`; the two runners' `kv`; rules 33 to 40 green over the in-process host, then over HTTP
-- [ ] `boss-in.ts`, its test, `--boss-in` in the CLI; the bots' case; run the acceptance check; commit `feat(ledger): world boss on the 3 hour grid, contribution from committed batches, rewards; --boss-in`
+- [x] `boss-config.ts`, `boss.ts`, `boss.test.ts` red then green, the six lifecycle cases included
+- [x] Wire `advanceBoss` in `world` and `sweep`, engage on poll, the contribution read, `settleBoss`; the two runners' `kv`; rules 33 to 40 green over the in-process host, then over HTTP
+- [x] `boss-in.ts`, its test, `--boss-in` in the CLI; the bots' case; run the acceptance check; commit `feat(ledger): world boss on the 3 hour grid, contribution from committed batches, rewards; --boss-in`
 
 ### Task 11: Plugin: the boss in the band, the toasts, the reward
 
