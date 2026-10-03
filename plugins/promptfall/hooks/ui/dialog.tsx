@@ -2,7 +2,7 @@ import { atom, type On, read, update } from 'claude-code'
 import type { DialogState, DialogTab, GameView, Mode, Prefs } from '../../types'
 import type { GameHandle } from '../engine'
 import { DIALOG_DEFAULT, PREFS_DEFAULT } from '../state'
-import { content, type Event, RARITIES, SIM_VERSION } from '../vendor/sim.js'
+import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
 import { CLASS_LABEL, formatGold } from './format'
 import { RARITY_COLOR } from './parts'
@@ -67,7 +67,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const notice = await read($, noticeAtom)
 
     const readOnly = mode === 'secondary' || mode === 'paused' || !game()?.canApply()
-    const act = async (event: Event) => {
+    const act = async (event: PlayerEvent) => {
       const running = game()
       if (!running?.canApply()) return
       running.apply(event, await $.clock.now())

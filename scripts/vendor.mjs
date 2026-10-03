@@ -1,4 +1,4 @@
-// Bundles @promptfall/sim and @promptfall/protocol into the plugin folder.
+// Bundles @promptfall/sim, @promptfall/protocol and @promptfall/ledger into the plugin folder.
 // A mod imports only files inside its own folder, so the bundles are committed.
 import { readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -61,20 +61,37 @@ const ZOD_STANDIN = `declare namespace z {
   writeFileSync(path, text.replace(`import { z } from 'zod';`, ZOD_STANDIN))
 }
 
-for (const file of ['protocol.js', 'protocol.d.ts']) {
+// The in-process host: the plugin runs the ledger itself when no server URL is set.
+await build({
+  ...common,
+  entry: { ledger: join(root, 'packages/ledger/src/index.ts') },
+  external: ['@promptfall/sim', '@promptfall/protocol'],
+  dts: true,
+})
+
+for (const file of ['protocol.js', 'protocol.d.ts', 'ledger.js', 'ledger.d.ts']) {
   const path = join(vendor, file)
   const text = readFileSync(path, 'utf8')
     .replaceAll(`'@promptfall/sim'`, `'./sim.js'`)
     .replaceAll(`"@promptfall/sim"`, `'./sim.js'`)
+    .replaceAll(`'@promptfall/protocol'`, `'./protocol.js'`)
+    .replaceAll(`"@promptfall/protocol"`, `'./protocol.js'`)
   writeFileSync(path, text)
 }
 
-for (const file of ['sim.js', 'sim.d.ts', 'protocol.js', 'protocol.d.ts']) {
+const BUNDLES = ['sim', 'protocol', 'ledger'].flatMap((name) => [`${name}.js`, `${name}.d.ts`])
+for (const file of BUNDLES) {
   const text = readFileSync(join(vendor, file), 'utf8')
   if (text.includes('vitest'))
     throw new Error(`${file} mentions vitest: the contract suite leaked into the bundle`)
   if (text.includes('@promptfall/')) throw new Error(`${file} still imports a workspace package`)
   if (/from ['"]zod['"]/.test(text)) throw new Error(`${file} still imports zod`)
+}
+
+// The mod runtime has no platform globals; the query strings are built by hand.
+for (const file of ['protocol.js', 'ledger.js']) {
+  const text = readFileSync(join(vendor, file), 'utf8')
+  if (text.includes('URLSearchParams')) throw new Error(`${file} uses URLSearchParams`)
 }
 
 const manifest = JSON.parse(readFileSync(join(plugin, '.claude-plugin/plugin.json'), 'utf8'))

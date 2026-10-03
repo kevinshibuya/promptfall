@@ -2,14 +2,15 @@ import type { Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import type { Mode } from '../types'
 import { COMMAND, registerCommand } from './command'
-import { type EnginePublish, GameEngine, type GameHandle } from './engine'
+import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, release } from './lease'
 import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
-import { LocalServer } from './vendor/protocol.js'
-import { content, type Effect } from './vendor/sim.js'
+import { Ledger } from './vendor/ledger.js'
+import type { MarketResult } from './vendor/protocol.js'
+import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { heroName, toGameView } from './view'
 
@@ -67,7 +68,7 @@ function effectToast(effect: Effect): string | null {
 class GameSession implements GameHandle {
   readonly engine: GameEngine
   private readonly kv: StoreKeyValue
-  private readonly server: LocalServer
+  private readonly server: Ledger
   private role: 'primary' | 'secondary' = 'secondary'
   private off = false
   private owner = ''
@@ -80,12 +81,14 @@ class GameSession implements GameHandle {
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
-    this.server = new LocalServer({
+    this.server = new Ledger({
       kv: this.kv,
       now: io.now,
+      speed: 1,
       minClientVersion: CLIENT_VERSION,
       seedSource: () => Number.parseInt(crypto.randomUUID().slice(0, 8), 16),
       tokenSource: () => crypto.randomUUID(),
+      linkApprover: async () => ({ login: 'player' }),
     })
     this.engine = new GameEngine({
       client: this.server,
@@ -102,6 +105,7 @@ class GameSession implements GameHandle {
       after: (ms, fn) => {
         io.after(ms, fn)
       },
+      random: Math.random,
     })
   }
 
@@ -119,7 +123,7 @@ class GameSession implements GameHandle {
 
   /** Events apply while this session holds the lease and the engine is not paused. Off only hides the band. */
   canApply(): boolean {
-    return this.role === 'primary' && !this.engine.isPaused()
+    return this.role === 'primary' && this.engine.accepting()
   }
 
   /** What the band and the dialog show: off, then paused, then the lease role. */
@@ -136,8 +140,18 @@ class GameSession implements GameHandle {
     await this.io.publish({ mode: this.mode() })
   }
 
-  apply(event: Parameters<GameEngine['apply']>[0], at: number): void {
+  apply(event: PlayerEvent, at: number): void {
     if (this.canApply()) this.engine.apply(event, at)
+  }
+
+  trade<R extends MarketResult>(fn: TradeCall<R>): Promise<R> {
+    if (this.role !== 'primary') return Promise.reject(new Error('not_primary'))
+    return this.engine.trade(fn)
+  }
+
+  sync(): Promise<void> {
+    if (this.role !== 'primary') return this.refresh()
+    return this.engine.sync()
   }
 
   setCadence(ms: number): void {
@@ -180,8 +194,13 @@ class GameSession implements GameHandle {
    */
   private async flushIfOwner(): Promise<void> {
     if (this.role !== 'primary') return
-    if (await holds(this.kv, this.owner)) await this.engine.flush()
-    else await this.becomeSecondary()
+    if (!(await holds(this.kv, this.owner))) {
+      await this.becomeSecondary()
+      return
+    }
+    // The in-process ledger's only sweep: expiries and returns before each timed flush.
+    await this.server.host.sweep()
+    await this.engine.flushIfIdle()
   }
 
   private async tick(): Promise<void> {
@@ -214,12 +233,28 @@ class GameSession implements GameHandle {
     else if (!ok) await this.refresh()
   }
 
-  /** A secondary's read-only view: bootstrap with the stored token, which writes nothing. */
+  /**
+   * A secondary's read-only view: bootstrap with the stored token, which writes
+   * nothing, and the delivery applied on top of the committed state.
+   */
   private async refresh(): Promise<void> {
     const token = await this.kv.get('deviceToken')
     if (typeof token !== 'string') return
-    const boot = await this.server.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
-    await this.io.publish({ view: toGameView(boot.state, boot.account.accountId, false) })
+    let boot: Awaited<ReturnType<Ledger['bootstrap']>>
+    try {
+      boot = await this.server.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
+    } catch {
+      return
+    }
+    if (boot.state.v !== SIM_VERSION) {
+      await this.io.publish({ view: null })
+      return
+    }
+    const state = replay(
+      boot.state,
+      boot.delivery.events.map((e) => e.event),
+    ).state
+    await this.io.publish({ view: toGameView(state, boot.account.accountId, false) })
   }
 
   private onEffects(effects: Effect[]): void {
