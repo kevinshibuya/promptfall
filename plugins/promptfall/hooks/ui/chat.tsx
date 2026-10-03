@@ -1,5 +1,6 @@
 import type { ChatState, GameView, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
+import { CHAT_MAX_CHARS } from '../vendor/protocol.js'
 import { gates } from '../view'
 import {
   type After,
@@ -28,8 +29,14 @@ export async function postChat(
   upd: Updater<ChatState>,
   after: After,
 ): Promise<void> {
-  if (text.trim() === '') {
+  // Judged here as the server judges it, so a paste past the wire limit is not a 400 read as an outage.
+  const cleaned = text.replace(/\p{Cc}/gu, '').trim()
+  if (cleaned === '') {
     await flash(upd, after, chatRefusalText('empty'))
+    return
+  }
+  if (cleaned.length > CHAT_MAX_CHARS) {
+    await flash(upd, after, chatRefusalText('too_long'))
     return
   }
   await upd((s) => ({ ...s, draft: text, busy: true }))

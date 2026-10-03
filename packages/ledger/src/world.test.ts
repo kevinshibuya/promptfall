@@ -53,6 +53,14 @@ describe('refillChat', () => {
     expect(full.refillAt).toBe(1000 + 100 * CHAT_REFILL_MS)
   })
 
+  it('stores no credit while full: an idle account gets the capacity in a burst, no more', () => {
+    const idle = refillChat({ tokens: CHAT_BUCKET_CAPACITY - 1, refillAt: 0 }, 95_000)
+    expect(idle).toEqual({ tokens: CHAT_BUCKET_CAPACITY, refillAt: 95_000 })
+    const spent = { tokens: 0, refillAt: idle.refillAt }
+    expect(refillChat(spent, 95_000 + CHAT_REFILL_MS - 1).tokens).toBe(0)
+    expect(refillChat(spent, 95_000 + CHAT_REFILL_MS).tokens).toBe(1)
+  })
+
   it('treats a missing bucket as full', () => {
     expect(refillChat(undefined, 5)).toEqual({ tokens: CHAT_BUCKET_CAPACITY, refillAt: 5 })
   })
@@ -123,5 +131,30 @@ describe('names on the market', () => {
     const page = await ledger.browse(auth, { kind: 'item', sort: 'newest', page: 0 })
     if ('reason' in page) throw new Error('unauthorized')
     expect(page.listings[0]?.sellerName).toBe('adventurer')
+  })
+})
+
+describe('presence on a fast clock', () => {
+  it('scales the default TTL by the speed: heartbeats arrive at real cadence', async () => {
+    let t = 1_700_000_000_000
+    let n = 0
+    const ledger = new Ledger({
+      kv: new MemoryKeyValue(),
+      now: async () => t,
+      speed: 10,
+      minClientVersion: '0.1.0',
+      seedSource: () => 7,
+      tokenSource: () => `token-${n++}`,
+      linkApprover: async () => ({ login: 'player' }),
+    })
+    const state = createInitialState(7)
+    const a = await ledger.host.mint({ state, name: 'Ann', linked: true })
+    const b = await ledger.host.mint({ state, name: 'Bo', linked: true })
+    await ledger.world({ deviceToken: a.deviceToken }, 0)
+    // One slow poll at speed 10 is 150 virtual seconds: still online.
+    t += 150_000
+    const w = await ledger.world({ deviceToken: b.deviceToken }, 0)
+    if ('reason' in w) throw new Error('unauthorized')
+    expect(w.online).toBe(2)
   })
 })

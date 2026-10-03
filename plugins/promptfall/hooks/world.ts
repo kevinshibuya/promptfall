@@ -122,14 +122,18 @@ export class WorldPoller {
     if (this.inFlight || !this.started) return
     this.inFlight = true
     const epoch = this.epoch
-    let answer: WorldSnapshot | Unauthorized
     try {
-      answer = await this.deps.fetch(this.state.chatMark)
+      await this.pollOnce(epoch)
     } catch {
-      return
+      // A thrown poll is ignored: the next one runs on the same cadence.
     } finally {
+      // Held until the answer is applied, so a newer poll can never be overtaken by this one.
       if (epoch === this.epoch) this.inFlight = false
     }
+  }
+
+  private async pollOnce(epoch: number): Promise<void> {
+    const answer: WorldSnapshot | Unauthorized = await this.deps.fetch(this.state.chatMark)
     if (epoch !== this.epoch || 'reason' in answer) return
     const now = await this.deps.now()
     if (epoch !== this.epoch) return
