@@ -14,19 +14,6 @@ import type {
   Stats,
 } from './types'
 
-// ---------------------------------------------------------------------------
-// Draft helpers: handlers clone the state once, then mutate the clone.
-
-export function clone<T>(value: T): T {
-  if (Array.isArray(value)) return value.map((v) => clone(v)) as T
-  if (value !== null && typeof value === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const key of Object.keys(value)) out[key] = clone((value as Record<string, unknown>)[key])
-    return out as T
-  }
-  return value
-}
-
 /** A value in [0, n), advancing the draft's rng in place. Same stream as `roll`. */
 export function draw(s: GameState, n: number): number {
   const { s: next, u } = nextU32(s.rng)

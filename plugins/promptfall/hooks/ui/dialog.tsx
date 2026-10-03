@@ -2,7 +2,7 @@ import { atom, type On, read, update } from 'claude-code'
 import type { DialogState, DialogTab, GameView, Mode, Prefs } from '../../types'
 import type { GameHandle } from '../engine'
 import { DIALOG_DEFAULT, PREFS_DEFAULT } from '../state'
-import { content, type Event, RARITIES, SIM_VERSION } from '../vendor/sim.js'
+import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
 import { CLASS_LABEL, formatGold } from './format'
 import { RARITY_COLOR } from './parts'
@@ -14,6 +14,7 @@ const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
 const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const, null)
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
+const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 
 const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
   { tab: 'inventory', label: 'Inventory', hotkey: 'i' },
@@ -36,7 +37,7 @@ function oddsLine(weights: Record<string, number>): string {
 export function registerDialog(on: On, game: () => GameHandle | null): void {
   on('ui.render', { component: 'Pane', requestId: 'promptfall' }, async ($, e) => {
     const table = $.ui.resolve(e)
-    const { Box, Text, Button } = table
+    const { Box, Text, Button, Link } = table
     const Select = 'Select' in table ? table.Select : undefined
     /** A Select where the surface has one; one Button per option elsewhere (mobile). */
     const pick = (
@@ -67,7 +68,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const notice = await read($, noticeAtom)
 
     const readOnly = mode === 'secondary' || mode === 'paused' || !game()?.canApply()
-    const act = async (event: Event) => {
+    const act = async (event: PlayerEvent) => {
       const running = game()
       if (!running?.canApply()) return
       running.apply(event, await $.clock.now())
@@ -98,7 +99,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           ? 'Playing in another session: this view is read-only.'
           : mode === 'paused'
             ? (notice ?? 'Promptfall is paused.')
-            : 'Promptfall is not playing in this session.'
+            : (notice ?? 'Promptfall is not playing in this session.')
       header.push(
         <Box key="read-only" flexDirection="row" gap={1}>
           <Text color="yellow" wrap="truncate">
@@ -118,12 +119,36 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     }
 
+    const server: string = (await read($, serverAtom)) ?? 'in-process'
+    const resetRow = (
+      <Box key="account-reset" flexDirection="row" gap={2}>
+        <Button key="reset" label="Reset this machine's data" onPress={() => game()?.reset()} />
+      </Box>
+    )
+
     if (!view) {
+      // The Account tab works without a game view: a state from an older version is reset here.
+      const body =
+        tab === 'account' && game()
+          ? [
+              <Text key="account-server" wrap="truncate">
+                {`Server: ${server}`}
+              </Text>,
+              <Text key="account-client" wrap="truncate">
+                {`Client ${CLIENT_VERSION} · sim v${SIM_VERSION}`}
+              </Text>,
+              resetRow,
+            ]
+          : [
+              <Text key="not-started" dimColor>
+                Promptfall has not started in this session.
+              </Text>,
+            ]
       return (
         <Box key="dialog" flexDirection="column">
           {tabs}
           {header}
-          <Text dimColor>Promptfall has not started in this session.</Text>
+          {body}
         </Box>
       )
     }
@@ -317,6 +342,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const leaseOwner = await read($, leaseOwnerAtom)
       const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
       for (const [k, line] of [
+        ['server', `Server: ${server}`],
         ['account', `Account ${view.accountId}`],
         ['client', `Client ${CLIENT_VERSION} · sim v${SIM_VERSION}`],
         ['mode', `Mode ${mode}`],
@@ -347,6 +373,27 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           <Button key="band-off" label="band off" onPress={() => game()?.setOff(true)} />
         </Box>,
       )
+      if (view.account.linked) {
+        body.push(
+          <Text key="account-linked" color="green" wrap="truncate">
+            {`Linked as ${view.account.linked}`}
+          </Text>,
+        )
+      } else if (dialog.link) {
+        body.push(
+          <Box key="account-link" flexDirection="row" gap={1}>
+            <Text wrap="truncate">{`Enter ${dialog.link.code} at`}</Text>
+            <Link key="link-url" href={dialog.link.url} label={dialog.link.url} />
+          </Box>,
+        )
+      } else if (!readOnly) {
+        body.push(
+          <Box key="account-link" flexDirection="row" gap={2}>
+            <Button key="link-github" label="Link GitHub" onPress={() => game()?.link()} />
+          </Box>,
+        )
+      }
+      body.push(resetRow)
     } else {
       const zone = content.zones[view.zone - 1]
       const tavernTotal = RARITIES.reduce((sum, r) => sum + content.tavern.odds[r], 0)

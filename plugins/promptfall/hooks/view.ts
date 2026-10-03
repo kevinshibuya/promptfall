@@ -1,4 +1,13 @@
-import type { EnemyView, GameView, HeroView, ItemView, LootView, RosterHeroView } from '../types'
+import type {
+  AccountView,
+  EnemyView,
+  GameView,
+  HeroView,
+  ItemView,
+  LootView,
+  RosterHeroView,
+} from '../types'
+import type { Account, ServerConfig } from './vendor/protocol.js'
 import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
 
 const LOOT_LINES = 12
@@ -33,6 +42,13 @@ function lootLine(entry: LootEntry): LootView {
     const name = content.heroTemplates[entry.template]?.name ?? entry.template
     return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
   }
+  if (entry.k === 'trade') {
+    const name =
+      entry.kind === 'hero'
+        ? (content.heroTemplates[entry.base]?.name ?? entry.base)
+        : (content.itemBases[entry.base]?.name ?? entry.base)
+    return { text: `${entry.what} ${name}`, rarity: entry.rarity }
+  }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
   if (entry.vendoredFor !== null) {
@@ -61,7 +77,27 @@ function itemView(item: Item): ItemView {
 }
 
 /** Everything the band and the dialog draw, derived from the state alone. */
-export function toGameView(state: GameState, accountId: string, firstRun: boolean): GameView {
+/** The dialog's account line: the GitHub login, the server, whether the market is open, returns waiting. */
+export function toAccountView(
+  account: Account | null,
+  config: ServerConfig | null,
+  server: string,
+  returns: number,
+): AccountView {
+  return {
+    linked: account?.linked?.login ?? null,
+    server,
+    marketOpen: config?.flags['market.enabled'] ?? true,
+    returns,
+  }
+}
+
+export function toGameView(
+  state: GameState,
+  accountId: string,
+  firstRun: boolean,
+  account: AccountView,
+): GameView {
   const heroes: HeroView[] = []
   for (const id of state.party) {
     const hero = state.roster.find((h) => h.id === id)
@@ -124,5 +160,6 @@ export function toGameView(state: GameState, accountId: string, firstRun: boolea
     nextRosterCost: expansionCost(state.rosterCap, 24, content.expansions.roster),
     accountId,
     firstRun,
+    account,
   }
 }

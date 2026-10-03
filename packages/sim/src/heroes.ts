@@ -32,6 +32,7 @@ export function generateHero(s: GameState, rarity: Rarity, templateId?: string):
     xp: 0,
     hp: 1,
     equipment: { weapon: null, armour: null, accessory: null },
+    tradeableAt: null,
   }
   hero.hp = heroStats(s, hero).hp
   return hero

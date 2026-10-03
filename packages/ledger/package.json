@@ -1,0 +1,17 @@
+{
+  "name": "@promptfall/ledger",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@promptfall/protocol": "workspace:*",
+    "@promptfall/sim": "workspace:*",
+    "vitest": "^5.0.3"
+  }
+}

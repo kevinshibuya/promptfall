@@ -7,6 +7,7 @@ export type StoreCalls = {
   get: (key: string) => Promise<unknown>
   set: (key: string, value: unknown) => Promise<void>
   delete: (key: string) => Promise<void>
+  keys: () => Promise<string[]>
 }
 
 /**
@@ -26,5 +27,11 @@ export class StoreKeyValue implements KeyValue {
 
   delete(key: string): Promise<void> {
     return this.store.delete(PREFIX + key)
+  }
+
+  /** The keys under `promptfall:`, the prefix stripped. */
+  async keys(): Promise<string[]> {
+    const all = await this.store.keys()
+    return all.filter((k) => k.startsWith(PREFIX)).map((k) => k.slice(PREFIX.length))
   }
 }

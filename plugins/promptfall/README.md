@@ -1,7 +1,9 @@
 # Promptfall plugin
 
 The Claude Code mod half of Promptfall. It runs the sim locally, sends the events in batches to
-an in-process fake server that persists through `$.store`, and draws a band above the prompt.
+a ledger, and draws a band above the prompt. By default the ledger runs inside the plugin and
+persists through `$.store`; `/promptfall server <url>` points it at an HTTP server instead, such as
+the fake in `servers/fake`.
 
 ## Play
 
@@ -29,6 +31,27 @@ one zone at full health and costs nothing else.
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
+| `/promptfall server <url>` | Plays on the HTTP server at `<url>`, for every session on this machine |
+| `/promptfall server local` | Goes back to the in-process ledger |
+
+### Servers
+
+Each server keeps its own account: nothing moves between them, so the first switch to a server
+starts a fresh one there. The setting is machine-wide and a session that is not playing follows
+it within 10 seconds. When the server stops answering, the status row reads
+`Promptfall: server unreachable, retrying`, the band keeps ticking and buffering for two minutes,
+then it reads `Promptfall: server unreachable` and progress stops until the server is back. A
+switch during an outage drops what could not be sent, and the reply says how many events.
+
+### Account tab
+
+`Link GitHub` shows a code and a link, and polls until the server approves it, then reads
+`Linked as <login>`. The fakes approve on the first poll: the in-process ledger links you as
+`player`, the HTTP fake as its `--player-name`. The polling belongs to the session, so closing the
+dialog does not stop it. `Reset this machine's data` deletes every Promptfall key in the store but
+the lease and starts a fresh account on the same server. It is how a state from an older version
+of the game is cleared: the band then reads the older-version notice and the Account tab is the
+one tab that still works.
 
 ### Hotkeys
 
@@ -56,15 +79,15 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No server yet, so no market, trading, chat, presence, leaderboards or world bosses. No sprites
-or sound. The fake server runs inside the plugin and cannot go offline, so the outage behaviour
-in spec section 7 is not built.
+No market UI yet, and no chat, presence, leaderboards or world bosses. No sprites or sound. The
+GitHub link is approved by the fakes, not by GitHub.
 
 ## Develop
 
 A `--plugin-dir` folder reloads on save. The game packages live in `packages/`, and a mod can
 import only files inside its own folder, so `pnpm vendor` bundles them into `hooks/vendor/`.
-Run it after changing `packages/sim` or `packages/protocol` and commit the result. CI fails when
+Run it after changing `packages/sim`, `packages/protocol` or `packages/ledger` and commit the
+result. CI fails when
 the bundles are stale (`pnpm vendor:check`).
 
 Two rules of the mods runtime shape the code. A hook may not pass `$` or `$.store` on, so
