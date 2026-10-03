@@ -1,6 +1,12 @@
 import type { PluginState } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
-import { GameEngine, OLD_VERSION_NOTICE, RETRYING_NOTICE, UNREACHABLE_NOTICE } from './engine'
+import {
+  GameEngine,
+  OLD_VERSION_NOTICE,
+  RETRYING_NOTICE,
+  UNREACHABLE_NOTICE,
+  UPDATE_NOTICE,
+} from './engine'
 import { Ledger } from './vendor/ledger.js'
 import {
   type Auth,
@@ -27,6 +33,7 @@ class Recorder implements ServerClient {
   corruptNextSeq = false
   corruptNextCursor = false
   failSubmits = 0
+  refuseNextSubmit: number | null = null
   failBootstraps = 0
   fakeNextAck: BatchAck | null = null
   hold: Promise<void> | null = null
@@ -56,6 +63,14 @@ class Recorder implements ServerClient {
     if (this.failSubmits > 0) {
       this.failSubmits -= 1
       throw new Error('unreachable')
+    }
+    if (this.refuseNextSubmit !== null) {
+      const error = Object.assign(new Error(`status ${this.refuseNextSubmit}`), {
+        name: 'ServerError',
+        status: this.refuseNextSubmit,
+      })
+      this.refuseNextSubmit = null
+      throw error
     }
     if (this.fakeNextAck) {
       const fake = this.fakeNextAck
@@ -500,4 +515,28 @@ test('a server event that invalidates a buffered event re-steps it as rejected',
   expect(effects.filter((k) => k === 'rejected')).toHaveLength(1)
   // The resubmit at cursor 1 meets a ledger still at cursor 0: the fake delivery's doing.
   expect(client.acks.at(-1)).toMatchObject({ ok: false, reason: 'cursor_mismatch' })
+})
+
+test('a submit the server refuses with a 4xx pauses with the update notice, not an outage', async () => {
+  const { engine, client, at, notices, timers } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.refuseNextSubmit = 400
+  await engine.flush()
+  await engine.settled()
+  expect(engine.isPaused()).toBe(true)
+  expect(engine.isUnreachable()).toBe(false)
+  expect(notices().at(-1)).toBe(UPDATE_NOTICE)
+  expect(timers).toHaveLength(0)
+})
+
+test('a 5xx on submit stays an outage', async () => {
+  const { engine, client, at, notices } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.refuseNextSubmit = 503
+  await engine.flush()
+  expect(engine.isPaused()).toBe(false)
+  expect(engine.isUnreachable()).toBe(true)
+  expect(notices().at(-1)).toBe(RETRYING_NOTICE)
 })

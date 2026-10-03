@@ -59,9 +59,15 @@ export const ROUTES = {
 
 type Route = keyof typeof ROUTES
 
-function failure(name: 'ServerUnreachable' | 'ServerError', message: string): Error {
-  const error = new Error(message)
+/** A transport failure; a non-200 carries its `status`, so a 4xx (never going to succeed) can be told from a 5xx. */
+function failure(
+  name: 'ServerUnreachable' | 'ServerError',
+  message: string,
+  status?: number,
+): Error & { status?: number } {
+  const error: Error & { status?: number } = new Error(message)
   error.name = name
+  if (status !== undefined) error.status = status
   return error
 }
 
@@ -120,7 +126,11 @@ export class HttpClient implements ServerClient {
       throw failure('ServerUnreachable', `${method} ${resolved}: ${String(error)}`)
     }
     if (response.status !== 200) {
-      throw failure('ServerError', `${method} ${resolved}: status ${response.status}`)
+      throw failure(
+        'ServerError',
+        `${method} ${resolved}: status ${response.status}`,
+        response.status,
+      )
     }
     let body: unknown
     try {
