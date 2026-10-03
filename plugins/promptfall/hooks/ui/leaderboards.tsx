@@ -34,7 +34,7 @@ export function boardsBody(els: Els, view: GameView, world: WorldState, boards: 
   const body = []
   if (!gates(world, view.account).leaderboardsOpen) {
     body.push(
-      <Text key="boards-gate" color="yellow" wrap="truncate">
+      <Text key="boards-gate" color="yellow" wrap="wrap">
         {GATE_BOARDS_CLOSED}
       </Text>,
     )
