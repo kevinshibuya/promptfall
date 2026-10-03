@@ -33,6 +33,13 @@ function lootLine(entry: LootEntry): LootView {
     const name = content.heroTemplates[entry.template]?.name ?? entry.template
     return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
   }
+  if (entry.k === 'trade') {
+    const name =
+      entry.kind === 'hero'
+        ? (content.heroTemplates[entry.base]?.name ?? entry.base)
+        : (content.itemBases[entry.base]?.name ?? entry.base)
+    return { text: `${entry.what} ${name}`, rarity: entry.rarity }
+  }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
   if (entry.vendoredFor !== null) {

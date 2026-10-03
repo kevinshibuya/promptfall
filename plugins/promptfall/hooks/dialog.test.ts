@@ -1,7 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView } from '../types'
-import { createInitialState, type GameState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState } from './vendor/sim.js'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -24,7 +24,13 @@ function harness(on: On, state: GameState) {
         seq: 0,
         refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
         buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
-        committed: [],
+        batches: [],
+        cursor: 0,
+        committedCursor: 0,
+        committedState: state,
+        committedHash: hashState(state),
+        log: [],
+        returns: [],
       },
     ],
   ])
@@ -68,7 +74,14 @@ function seeded(): GameState {
   return {
     ...s,
     inventory: [
-      { id: 'iseed', base: 'iron_sword', rarity: 'common', affixes: [], equippedBy: null },
+      {
+        id: 'iseed',
+        base: 'iron_sword',
+        rarity: 'common',
+        affixes: [],
+        equippedBy: null,
+        tradeableAt: null,
+      },
     ],
   }
 }
@@ -125,7 +138,14 @@ for (const surface of SURFACES) {
         h.id === knight.id ? { ...h, equipment: { ...h.equipment, weapon: 'iseed' } } : h,
       ),
       inventory: [
-        { id: 'iseed', base: 'iron_sword', rarity: 'common', affixes: [], equippedBy: knight.id },
+        {
+          id: 'iseed',
+          base: 'iron_sword',
+          rarity: 'common',
+          affixes: [],
+          equippedBy: knight.id,
+          tradeableAt: null,
+        },
       ],
     }
     const { states } = harness(on, state)

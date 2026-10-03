@@ -12,14 +12,6 @@ var BUDGETS = {
   turn_end: { refillMs: 5e3, capacity: 30 }
 };
 
-// packages/protocol/src/fake/local.ts
-import {
-  createInitialState,
-  hashState,
-  replay,
-  SIM_VERSION
-} from './sim.js';
-
 // node_modules/.pnpm/zod@3.25.76/node_modules/zod/v3/external.js
 var external_exports = {};
 __export(external_exports, {
@@ -4065,8 +4057,19 @@ var NEVER = INVALID;
 var HEX16 = external_exports.string().regex(/^[0-9a-f]{16}$/);
 var id = external_exports.string().min(1).max(64);
 var at = external_exports.number().int().nonnegative();
+var int = external_exports.number().int();
+var count = external_exports.number().int().nonnegative();
 var slot = external_exports.enum(["weapon", "armour", "accessory"]);
-var EventSchema = external_exports.discriminatedUnion("t", [
+var RaritySchema = external_exports.enum([
+  "common",
+  "uncommon",
+  "rare",
+  "epic",
+  "legendary"
+]);
+var HeroClassSchema = external_exports.enum(["knight", "black_mage", "white_mage", "archer"]);
+var TradeKindSchema = external_exports.enum(["item", "hero"]);
+var PlayerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("tick"), at }),
   external_exports.object({ t: external_exports.literal("tool_call"), at }),
   external_exports.object({ t: external_exports.literal("turn_end"), at }),
@@ -4074,7 +4077,7 @@ var EventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("equip"), heroId: id, itemId: id, at }),
   external_exports.object({ t: external_exports.literal("unequip"), heroId: id, slot, at }),
   external_exports.object({ t: external_exports.literal("vendor"), itemId: id, at }),
-  external_exports.object({ t: external_exports.literal("reforge"), itemId: id, affixIndex: external_exports.number().int(), at }),
+  external_exports.object({ t: external_exports.literal("reforge"), itemId: id, affixIndex: int, at }),
   external_exports.object({ t: external_exports.literal("set_party"), heroIds: external_exports.tuple([id, id, id]), at }),
   external_exports.object({ t: external_exports.literal("recruit"), at }),
   external_exports.object({ t: external_exports.literal("dismiss"), heroId: id, at }),
@@ -4082,14 +4085,97 @@ var EventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("expand_inventory"), at }),
   external_exports.object({ t: external_exports.literal("expand_roster"), at })
 ]);
-var TimedEventSchema = EventSchema;
+var TimedEventSchema = PlayerEventSchema;
+var PLAYER_EVENT_KINDS = [
+  "tick",
+  "tool_call",
+  "turn_end",
+  "rest",
+  "equip",
+  "unequip",
+  "vendor",
+  "reforge",
+  "set_party",
+  "recruit",
+  "dismiss",
+  "set_farm",
+  "expand_inventory",
+  "expand_roster"
+];
+var PlayerEventKindSchema = external_exports.enum(PLAYER_EVENT_KINDS);
+var ItemSchema = external_exports.object({
+  id,
+  base: id,
+  rarity: RaritySchema,
+  affixes: external_exports.array(external_exports.object({ id, value: int })),
+  equippedBy: id.nullable(),
+  tradeableAt: count.nullable()
+});
+var HeroSchema = external_exports.object({
+  id,
+  template: id,
+  cls: HeroClassSchema,
+  epithet: external_exports.string(),
+  rarity: RaritySchema,
+  traits: external_exports.array(external_exports.object({ id, valueBp: int })),
+  level: int,
+  xp: count,
+  hp: count,
+  equipment: external_exports.object({ weapon: id.nullable(), armour: id.nullable(), accessory: id.nullable() }),
+  tradeableAt: count.nullable()
+});
+var GoodsSchema = external_exports.discriminatedUnion("kind", [
+  external_exports.object({ kind: external_exports.literal("item"), item: ItemSchema }),
+  external_exports.object({ kind: external_exports.literal("hero"), hero: HeroSchema })
+]);
+var ServerEventSchema = external_exports.discriminatedUnion("t", [
+  external_exports.object({
+    t: external_exports.literal("listed"),
+    listingId: id,
+    kind: TradeKindSchema,
+    id,
+    fee: count
+  }),
+  external_exports.object({ t: external_exports.literal("returned"), listingId: id, goods: GoodsSchema }),
+  external_exports.object({
+    t: external_exports.literal("sold"),
+    listingId: id,
+    kind: TradeKindSchema,
+    base: id,
+    rarity: RaritySchema,
+    price: count,
+    net: count
+  }),
+  external_exports.object({ t: external_exports.literal("bought"), listingId: id, goods: GoodsSchema, price: count }),
+  external_exports.object({ t: external_exports.literal("order_placed"), orderId: id, escrow: count }),
+  external_exports.object({ t: external_exports.literal("order_refunded"), orderId: id, escrow: count }),
+  external_exports.object({ t: external_exports.literal("order_filled"), orderId: id, item: ItemSchema, price: count }),
+  external_exports.object({
+    t: external_exports.literal("order_sold"),
+    orderId: id,
+    itemId: id,
+    base: id,
+    rarity: RaritySchema,
+    price: count,
+    net: count
+  }),
+  external_exports.object({ t: external_exports.literal("credited"), gold: count, reason: external_exports.string().max(64) })
+]);
+var GameStateSchema = external_exports.object({
+  v: count,
+  seed: count,
+  gold: count,
+  inventory: external_exports.array(external_exports.unknown()),
+  roster: external_exports.array(external_exports.unknown())
+}).passthrough();
 var SEMVER = /^\d+\.\d+\.\d+$/;
 var BatchSchema = external_exports.object({
   batchId: external_exports.string().min(16).max(64),
   accountId: external_exports.string().min(1).max(128),
-  seq: external_exports.number().int().nonnegative(),
+  seq: count,
   clientVersion: external_exports.string().regex(SEMVER),
-  simVersion: external_exports.number().int().nonnegative(),
+  simVersion: count,
+  cursor: count,
   baseHash: HEX16,
   resultHash: HEX16,
   events: external_exports.array(TimedEventSchema).min(1).max(2e3)
@@ -4106,157 +4192,294 @@ function compareSemver(a, b) {
   return 0;
 }
 
-// packages/protocol/src/fake/local.ts
-var RING = 200;
-var KINDS = Object.keys(BUDGETS);
-var recordKey = (accountId) => `pf:acct:${accountId}:record`;
-var tokenKey = (token) => `pf:token:${token}`;
-function everyKind(value) {
-  const out = {};
-  for (const kind of KINDS) out[kind] = value;
-  return out;
+// packages/protocol/src/market.ts
+var LISTINGS_PER_PAGE = 10;
+var id2 = external_exports.string().min(1).max(64);
+var count2 = external_exports.number().int().nonnegative();
+var price = external_exports.number().int();
+var DeliverySchema = external_exports.object({
+  cursor: count2,
+  events: external_exports.array(external_exports.object({ n: external_exports.number().int().positive(), event: ServerEventSchema }))
+});
+var ListingSchema = external_exports.object({
+  id: id2,
+  sellerId: external_exports.string().min(1).max(128),
+  sellerName: external_exports.string().max(128),
+  goods: GoodsSchema,
+  price: count2,
+  createdAt: count2,
+  expiresAt: count2
+});
+var OrderSchema = external_exports.object({
+  id: id2,
+  buyerId: external_exports.string().min(1).max(128),
+  base: id2,
+  minRarity: RaritySchema,
+  affixId: id2.nullable(),
+  maxPrice: count2,
+  createdAt: count2,
+  expiresAt: count2
+});
+var ListingQuerySchema = external_exports.object({
+  kind: TradeKindSchema,
+  base: id2.optional(),
+  cls: HeroClassSchema.optional(),
+  minRarity: RaritySchema.optional(),
+  sort: external_exports.enum(["price", "newest"]),
+  page: external_exports.number().int().nonnegative().max(1e5)
+}).strict();
+var ListingPageSchema = external_exports.object({
+  listings: external_exports.array(ListingSchema),
+  page: count2,
+  total: count2
+});
+var MARKET_REFUSALS = [
+  "market_closed",
+  "not_linked",
+  "unknown_goods",
+  "not_tradeable_rarity",
+  "in_cooldown",
+  "in_party",
+  "equipped",
+  "bad_price",
+  "not_enough_gold",
+  "no_space",
+  "self_trade",
+  "gone",
+  "not_owner",
+  "no_match",
+  "unauthorized"
+];
+var MarketResultSchema = external_exports.union([
+  external_exports.object({ ok: external_exports.literal(true), delivery: DeliverySchema }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) })
+]);
+var NewOrderSchema = external_exports.object({
+  base: id2,
+  minRarity: RaritySchema,
+  affixId: id2.nullable(),
+  maxPrice: price
+});
+var MyOrdersSchema = external_exports.object({
+  listings: external_exports.array(ListingSchema),
+  orders: external_exports.array(OrderSchema),
+  returns: count2
+});
+var UnauthorizedSchema = external_exports.object({
+  reason: external_exports.literal("unauthorized")
+});
+var NewListingSchema = external_exports.object({ kind: TradeKindSchema, id: id2, price });
+
+// packages/protocol/src/responses.ts
+var count3 = external_exports.number().int().nonnegative();
+var AccountSchema = external_exports.object({
+  accountId: external_exports.string().min(1).max(128),
+  seed: count3,
+  createdAt: count3,
+  displayName: external_exports.string().max(128).nullable(),
+  linked: external_exports.object({ provider: external_exports.literal("github"), login: external_exports.string().min(1).max(64) }).nullable()
+});
+var ServerConfigSchema = external_exports.object({
+  minClientVersion: external_exports.string(),
+  simVersion: count3,
+  flags: external_exports.record(external_exports.boolean()),
+  serverNow: count3,
+  speed: external_exports.number().positive()
+});
+var BootstrapSchema = external_exports.object({
+  deviceToken: external_exports.string().min(1).max(128),
+  account: AccountSchema,
+  config: ServerConfigSchema,
+  state: GameStateSchema,
+  seq: count3,
+  hash: HEX16,
+  cursor: count3,
+  delivery: DeliverySchema
+});
+var adopt = {
+  ok: external_exports.literal(false),
+  seq: count3,
+  state: GameStateSchema,
+  hash: HEX16,
+  cursor: count3
+};
+var BatchAckSchema = external_exports.union([
+  external_exports.object({
+    ok: external_exports.literal(true),
+    seq: count3,
+    hash: HEX16,
+    duplicate: external_exports.boolean(),
+    delivery: DeliverySchema
+  }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("unauthorized") }),
+  external_exports.object({
+    ok: external_exports.literal(false),
+    reason: external_exports.literal("version_gate"),
+    minClientVersion: external_exports.string()
+  }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count3 }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("cursor_behind"), delivery: DeliverySchema }),
+  external_exports.object({ ...adopt, reason: external_exports.enum(["seq_mismatch", "cursor_mismatch"]) }),
+  external_exports.object({ ...adopt, reason: external_exports.literal("hash_mismatch"), revokedItemIds: external_exports.array(external_exports.string()) }),
+  external_exports.object({ ...adopt, reason: external_exports.literal("rate_capped"), kind: PlayerEventKindSchema })
+]);
+function orUnauthorized(schema) {
+  return external_exports.union([UnauthorizedSchema, schema]);
 }
-function fullBuckets() {
-  const out = {};
-  for (const kind of KINDS) out[kind] = BUDGETS[kind].capacity;
-  return out;
+var AccountInfoSchema = external_exports.object({
+  account: AccountSchema,
+  returns: count3,
+  config: ServerConfigSchema,
+  delivery: DeliverySchema
+});
+var LinkStartSchema = external_exports.object({
+  code: external_exports.string().min(1).max(32),
+  url: external_exports.string().min(1),
+  intervalMs: count3
+});
+var LinkPollSchema = external_exports.union([
+  external_exports.object({ status: external_exports.literal("pending") }),
+  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema })
+]);
+var HealthSchema = external_exports.object({
+  ok: external_exports.literal(true),
+  simVersion: count3,
+  seed: count3,
+  speed: external_exports.number().positive(),
+  now: count3
+});
+var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
+var LinkStartResponseSchema = orUnauthorized(LinkStartSchema);
+var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
+var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
+var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
+var MatchingOrdersResponseSchema = orUnauthorized(
+  external_exports.array(OrderSchema)
+);
+var ErrorBodySchema = external_exports.union([
+  external_exports.object({ error: external_exports.literal("schema"), issues: external_exports.array(external_exports.unknown()) }),
+  external_exports.object({ error: external_exports.literal("route") }),
+  external_exports.object({ error: external_exports.literal("internal") })
+]);
+
+// packages/protocol/src/http.ts
+var ROUTES = {
+  health: { method: "GET", path: "/v1/health" },
+  bootstrap: { method: "POST", path: "/v1/bootstrap" },
+  submit: { method: "POST", path: "/v1/batches" },
+  account: { method: "GET", path: "/v1/account" },
+  linkStart: { method: "POST", path: "/v1/link/github" },
+  linkPoll: { method: "POST", path: "/v1/link/github/poll" },
+  browse: { method: "GET", path: "/v1/listings" },
+  list: { method: "POST", path: "/v1/listings" },
+  cancelListing: { method: "DELETE", path: "/v1/listings/:id" },
+  buy: { method: "POST", path: "/v1/listings/:id/buy" },
+  myOrders: { method: "GET", path: "/v1/orders" },
+  placeOrder: { method: "POST", path: "/v1/orders" },
+  cancelOrder: { method: "DELETE", path: "/v1/orders/:id" },
+  matchingOrders: { method: "GET", path: "/v1/orders/matching" },
+  fillOrder: { method: "POST", path: "/v1/orders/:id/fill" }
+};
+function failure(name, message) {
+  const error = new Error(message);
+  error.name = name;
+  return error;
 }
-var LocalServer = class {
+function queryString(params) {
+  const parts = [];
+  for (const [key, value] of Object.entries(params)) {
+    if (value === void 0) continue;
+    parts.push(`${key}=${encodeURIComponent(String(value))}`);
+  }
+  return parts.length > 0 ? `?${parts.join("&")}` : "";
+}
+var HttpClient = class {
+  baseUrl;
+  fetch;
   constructor(options) {
-    this.options = options;
+    this.baseUrl = options.baseUrl.replace(/\/$/, "");
+    this.fetch = options.fetch;
   }
-  options;
-  config() {
-    return { minClientVersion: this.options.minClientVersion, simVersion: SIM_VERSION, flags: {} };
-  }
-  async load(accountId) {
-    const raw = await this.options.kv.get(recordKey(accountId));
-    return raw ? raw : null;
-  }
-  async accountFor(token) {
-    const raw = await this.options.kv.get(tokenKey(token));
-    return typeof raw === "string" ? raw : null;
-  }
-  async bootstrap(input) {
-    if (input.deviceToken) {
-      const accountId2 = await this.accountFor(input.deviceToken);
-      const record2 = accountId2 ? await this.load(accountId2) : null;
-      if (record2) {
-        return {
-          deviceToken: input.deviceToken,
-          account: record2.account,
-          config: this.config(),
-          state: record2.state,
-          seq: record2.seq,
-          hash: hashState(record2.state)
-        };
-      }
-    }
-    const now = await this.options.now();
-    const seed = this.options.seedSource() >>> 0;
-    const deviceToken = this.options.tokenSource();
-    const accountId = this.options.tokenSource();
-    const state = createInitialState(seed);
-    const record = {
-      account: { accountId, seed, createdAt: now, displayName: null, linked: null },
-      state,
-      seq: 0,
-      refillAt: everyKind(now),
-      buckets: fullBuckets(),
-      committed: []
+  async call(route, schema, options = {}) {
+    const { method, path } = ROUTES[route];
+    const resolved = options.id === void 0 ? path : path.replace(":id", encodeURIComponent(options.id));
+    const url = this.baseUrl + resolved + (options.query ? queryString(options.query) : "");
+    const headers = {};
+    const init = {
+      method,
+      headers
     };
-    await this.options.kv.set(recordKey(accountId), record);
-    await this.options.kv.set(tokenKey(deviceToken), accountId);
-    return {
-      deviceToken,
-      account: record.account,
-      config: this.config(),
-      state,
-      seq: 0,
-      hash: hashState(state)
-    };
+    if (options.body !== void 0) {
+      headers["content-type"] = "application/json";
+      init.body = JSON.stringify(options.body);
+    }
+    if (options.auth) headers.authorization = `Bearer ${options.auth.deviceToken}`;
+    let response;
+    try {
+      response = await this.fetch(url, init);
+    } catch (error) {
+      throw failure("ServerUnreachable", `${method} ${resolved}: ${String(error)}`);
+    }
+    if (response.status !== 200) {
+      throw failure("ServerError", `${method} ${resolved}: status ${response.status}`);
+    }
+    let body;
+    try {
+      body = JSON.parse(response.text);
+    } catch {
+      throw failure("ServerError", `${method} ${resolved}: body is not JSON`);
+    }
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      throw failure("ServerError", `${method} ${resolved}: unexpected body`);
+    }
+    return parsed.data;
   }
-  async submit(input, auth) {
-    const batch = BatchSchema.parse(input);
-    const owner = await this.accountFor(auth.deviceToken);
-    if (!owner || owner !== batch.accountId) return { ok: false, reason: "unauthorized" };
-    const record = await this.load(owner);
-    if (!record) return { ok: false, reason: "unauthorized" };
-    if (compareSemver(batch.clientVersion, this.options.minClientVersion) < 0) {
-      return { ok: false, reason: "version_gate", minClientVersion: this.options.minClientVersion };
-    }
-    if (batch.simVersion !== SIM_VERSION) {
-      return { ok: false, reason: "sim_version", simVersion: SIM_VERSION };
-    }
-    const seen = record.committed.find((c) => c.batchId === batch.batchId);
-    if (seen) return { ok: true, duplicate: true, seq: seen.seq, hash: seen.hash };
-    const currentHash = hashState(record.state);
-    if (batch.seq !== record.seq) {
-      return {
-        ok: false,
-        reason: "seq_mismatch",
-        seq: record.seq,
-        state: record.state,
-        hash: currentHash
-      };
-    }
-    if (batch.baseHash !== currentHash) {
-      return {
-        ok: false,
-        reason: "hash_mismatch",
-        seq: record.seq,
-        state: record.state,
-        hash: currentHash,
-        revokedItemIds: []
-      };
-    }
-    const now = await this.options.now();
-    const buckets = {};
-    const refillAt = {};
-    for (const kind of KINDS) {
-      const { refillMs, capacity } = BUDGETS[kind];
-      const n = Math.floor(Math.max(0, now - record.refillAt[kind]) / refillMs);
-      buckets[kind] = Math.min(capacity, record.buckets[kind] + n);
-      refillAt[kind] = record.refillAt[kind] + n * refillMs;
-    }
-    const counts = {};
-    for (const kind of KINDS) counts[kind] = 0;
-    for (const e of batch.events) if (e.t in counts) counts[e.t] += 1;
-    for (const kind of KINDS) {
-      if (counts[kind] > buckets[kind]) {
-        return {
-          ok: false,
-          reason: "rate_capped",
-          seq: record.seq,
-          state: record.state,
-          hash: currentHash,
-          kind
-        };
-      }
-    }
-    const events = batch.events.map(({ at: _at, ...event }) => event);
-    const result = replay(record.state, events).state;
-    const hash = hashState(result);
-    const nextSeq = record.seq + 1;
-    for (const kind of KINDS) buckets[kind] -= counts[kind];
-    const next = {
-      ...record,
-      state: result,
-      seq: nextSeq,
-      refillAt,
-      buckets,
-      committed: [...record.committed, { batchId: batch.batchId, hash, seq: nextSeq }].slice(-RING)
-    };
-    await this.options.kv.set(recordKey(owner), next);
-    if (hash === batch.resultHash) return { ok: true, duplicate: false, seq: nextSeq, hash };
-    return {
-      ok: false,
-      reason: "hash_mismatch",
-      seq: nextSeq,
-      state: result,
-      hash,
-      revokedItemIds: []
-    };
+  bootstrap(input) {
+    return this.call("bootstrap", BootstrapSchema, { body: input });
+  }
+  submit(batch, auth) {
+    return this.call("submit", BatchAckSchema, { auth, body: batch });
+  }
+  account(auth) {
+    return this.call("account", AccountResponseSchema, { auth });
+  }
+  linkStart(auth) {
+    return this.call("linkStart", LinkStartResponseSchema, { auth });
+  }
+  linkPoll(auth, code) {
+    return this.call("linkPoll", LinkPollResponseSchema, { auth, body: { code } });
+  }
+  browse(auth, query) {
+    const { kind, base, cls, minRarity, sort, page } = query;
+    return this.call("browse", ListingPageResponseSchema, {
+      auth,
+      query: { kind, base, cls, minRarity, sort, page }
+    });
+  }
+  list(auth, input) {
+    return this.call("list", MarketResultSchema, { auth, body: input });
+  }
+  cancelListing(auth, listingId) {
+    return this.call("cancelListing", MarketResultSchema, { auth, id: listingId });
+  }
+  buy(auth, listingId) {
+    return this.call("buy", MarketResultSchema, { auth, id: listingId });
+  }
+  myOrders(auth) {
+    return this.call("myOrders", MyOrdersResponseSchema, { auth });
+  }
+  placeOrder(auth, input) {
+    return this.call("placeOrder", MarketResultSchema, { auth, body: input });
+  }
+  cancelOrder(auth, orderId) {
+    return this.call("cancelOrder", MarketResultSchema, { auth, id: orderId });
+  }
+  matchingOrders(auth, itemId) {
+    return this.call("matchingOrders", MatchingOrdersResponseSchema, { auth, query: { itemId } });
+  }
+  fillOrder(auth, orderId, itemId) {
+    return this.call("fillOrder", MarketResultSchema, { auth, id: orderId, body: { itemId } });
   }
 };
 
@@ -4281,12 +4504,46 @@ var MemoryKeyValue = class {
 // packages/protocol/src/index.ts
 var PROTOCOL_VERSION = 1;
 export {
+  AccountInfoSchema,
+  AccountResponseSchema,
+  AccountSchema,
   BUDGETS,
+  BatchAckSchema,
   BatchSchema,
+  BootstrapSchema,
+  DeliverySchema,
+  ErrorBodySchema,
+  GameStateSchema,
+  GoodsSchema,
   HEX16,
-  LocalServer,
+  HealthSchema,
+  HeroSchema,
+  HttpClient,
+  ItemSchema,
+  LISTINGS_PER_PAGE,
+  LinkPollResponseSchema,
+  LinkPollSchema,
+  LinkStartResponseSchema,
+  LinkStartSchema,
+  ListingPageResponseSchema,
+  ListingPageSchema,
+  ListingQuerySchema,
+  ListingSchema,
+  MARKET_REFUSALS,
+  MarketResultSchema,
+  MatchingOrdersResponseSchema,
   MemoryKeyValue,
+  MyOrdersResponseSchema,
+  MyOrdersSchema,
+  NewListingSchema,
+  NewOrderSchema,
+  OrderSchema,
+  PLAYER_EVENT_KINDS,
   PROTOCOL_VERSION,
+  ROUTES,
+  ServerConfigSchema,
+  ServerEventSchema,
   TimedEventSchema,
+  UnauthorizedSchema,
   compareSemver
 };

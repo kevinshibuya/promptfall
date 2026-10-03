@@ -455,9 +455,9 @@ Contract suite additions:
 
 **Boundaries:** No dialog, command or view changes beyond what the type-check forces. No `$.http` yet. Do not change the band or the lease.
 
-- [ ] Vendor the ledger; make the plugin type-check (mechanical fixes only)
-- [ ] Engine: lock, committed/pending/sent/buffer, `receive`, `start`, `resync`, `trade`, `sync`; `engine.test.ts` red then green
-- [ ] Outage rules with their tests; run the acceptance check; commit `feat(plugin): ledger in-process, cursor-aware engine, outages`
+- [x] Vendor the ledger; make the plugin type-check (mechanical fixes only)
+- [x] Engine: lock, committed/pending/sent/buffer, `receive`, `start`, `resync`, `trade`, `sync`; `engine.test.ts` red then green
+- [x] Outage rules with their tests; run the acceptance check; commit `feat(plugin): ledger in-process, cursor-aware engine, outages`
 
 ### Task 5b: Plugin: HTTP client, server switching, Account tab link flow and reset
 

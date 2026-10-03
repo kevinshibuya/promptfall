@@ -1,6 +1,6 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import { createInitialState, type GameState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState } from './vendor/sim.js'
 
 /** Answers $.store from a map and records every write. */
 function store(on: On, seed: Record<string, unknown> = {}) {
@@ -217,7 +217,13 @@ function account(state: GameState): Record<string, unknown> {
       seq: 0,
       refillAt: { tick: t, tool_call: t, rest: t, turn_end: t },
       buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
-      committed: [],
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
     },
   }
 }

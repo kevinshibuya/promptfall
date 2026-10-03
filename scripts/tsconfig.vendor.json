@@ -9,7 +9,7 @@
     "types": [],
     "paths": { "zod": ["../packages/protocol/node_modules/zod/index.d.ts"] }
   },
-  "include": ["../packages/sim/src", "../packages/protocol/src"],
+  "include": ["../packages/sim/src", "../packages/protocol/src", "../packages/ledger/src"],
   "exclude": [
     "../packages/*/src/**/*.test.ts",
     "../packages/*/src/contract",
