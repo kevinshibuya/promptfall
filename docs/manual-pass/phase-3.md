@@ -116,8 +116,10 @@ contract rule 35 instead.
    `pnpm fake --port 7777 --speed 10 --bots 12 --player-name <you> --data .promptfall/fake-p3.json --boss-in 60`
    (same `--data`: your account and the window's boss history carry over).
    - Start the `sleep 5` loop again about 20 seconds before the spawn.
-   - It appears as in step 4, with `52,000/52,000` (13 online × 4,000: you and the bots, who poll
-     every 2 real seconds).
+   - It appears as in step 4, out of `52,000` (13 online × 4,000: you and the bots, who poll every
+     2 real seconds). The bots start hitting it at once, so the first reading is already below
+     full (the driven pass saw `boss 89%` on the toast's poll, `39,208/52,000` once the party
+     joined at the next flush).
    - Within 2 minutes a toast reads `<name> is down`, expected at about 75 to 95 seconds; the bar
      on the Party tab falls steadily between polls.
    - Within 20 seconds after that: one `Boss reward: ...` toast and loot line if `you` passed 200
@@ -131,7 +133,7 @@ contract rule 35 instead.
    15 seconds the boss line is back with the HP it had (the bots keep hitting it) and the fight
    resumes; the online count rebuilds from the polls.
 10. **In-process.** Run `/promptfall server local` (the reset was done in step 1). No boss ever
-    appears there; the World tab reads `1 online` and `chat is closed`.
+    appears there; the World tab reads `1 online` and `chat needs a server`.
 11. **Validate.** `claude plugin validate plugins/promptfall` lists the same namespaces as phase 2.
 
 ## Findings
