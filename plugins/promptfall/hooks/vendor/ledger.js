@@ -761,21 +761,31 @@ var Ledger = class {
   // Market
   marketRead(auth, expire, fn) {
     return this.run(async () => {
-      const ctx = await this.marketContext();
-      if (expire) await expireDue(ctx);
-      const record = await this.books.authenticate(auth);
-      if (!record || !isCurrent(record)) return unauthorized;
-      return fn(ctx, record);
+      const record = await this.authenticated(auth, expire);
+      if (!record) return unauthorized;
+      return fn(record.ctx, record.record);
     });
   }
   marketWrite(auth, expire, fn) {
     return this.run(async () => {
-      const ctx = await this.marketContext();
-      if (expire) await expireDue(ctx);
-      const record = await this.books.authenticate(auth);
-      if (!record || !isCurrent(record)) return refusedUnauthorized;
-      return fn(ctx, record);
+      const record = await this.authenticated(auth, expire);
+      if (!record) return refusedUnauthorized;
+      return fn(record.ctx, record.record);
     });
+  }
+  /**
+   * The caller's current record, after expiring what is due. Expiry runs only
+   * for an authenticated caller, and the record is read after it, since
+   * expiring the caller's own listing changes the caller's record.
+   */
+  async authenticated(auth, expire) {
+    const ctx = await this.marketContext();
+    const caller = await this.books.authenticate(auth);
+    if (!caller || !isCurrent(caller)) return null;
+    if (!expire) return { ctx, record: caller };
+    await expireDue(ctx);
+    const record = await this.books.load(caller.account.accountId);
+    return record ? { ctx, record } : null;
   }
   browse(auth, query) {
     return this.marketRead(auth, true, (ctx, record) => browse(ctx, record, query));
@@ -815,6 +825,7 @@ var Ledger = class {
   // ---------------------------------------------------------------------------
   // Host privileges
   async mint(input) {
+    if (input.name.length > 128) throw new Error("mint: name over 128 characters");
     const now = await this.options.now();
     const accountId = this.options.tokenSource();
     const deviceToken = this.options.tokenSource();
@@ -839,6 +850,8 @@ var Ledger = class {
     return record;
   }
   async credit(accountId, gold, reason) {
+    if (!Number.isInteger(gold) || gold < 0) throw new Error(`credit: bad gold ${gold}`);
+    if (reason.length > 64) throw new Error("credit: reason over 64 characters");
     const record = await this.currentRecord(accountId);
     author(record, { t: "credited", gold, reason });
     await this.books.save(record);

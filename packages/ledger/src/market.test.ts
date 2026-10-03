@@ -112,6 +112,31 @@ describe('expiry', () => {
   })
 })
 
+describe('expiry and authentication', () => {
+  it('an unauthenticated call expires nothing', async () => {
+    const w = world()
+    const a = await mint(w.ledger, 'Ann', { inventory: [rare('iA')] })
+    listingId(await w.ledger.list(a.auth, { kind: 'item', id: 'iA', price: 100 }))
+    w.advance(EXPIRY_MS)
+    expect(await w.ledger.buy({ deviceToken: 'forged' }, 'L0')).toEqual({
+      ok: false,
+      reason: 'unauthorized',
+    })
+    expect(((await w.kv.get('pf:listings')) as string[]).length).toBe(1)
+  })
+
+  it("the seller's own call expires their listing and sees the goods back", async () => {
+    const w = world()
+    const a = await mint(w.ledger, 'Ann', { inventory: [rare('iA')] })
+    listingId(await w.ledger.list(a.auth, { kind: 'item', id: 'iA', price: 100 }))
+    w.advance(EXPIRY_MS)
+    const mine = await w.ledger.myOrders(a.auth)
+    expect(mine).toMatchObject({ listings: [], returns: 0 })
+    const r = await record(w.kv, a.accountId)
+    expect(r.state.inventory.map((i) => i.id)).toEqual(['iA'])
+  })
+})
+
 describe('returns', () => {
   it('waiting returns survive a ledger reload and arrive per kind when a slot frees', async () => {
     const w = world()

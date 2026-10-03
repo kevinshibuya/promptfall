@@ -128,6 +128,12 @@ declare class Ledger implements ServerClient {
     private linkCode;
     private marketRead;
     private marketWrite;
+    /**
+     * The caller's current record, after expiring what is due. Expiry runs only
+     * for an authenticated caller, and the record is read after it, since
+     * expiring the caller's own listing changes the caller's record.
+     */
+    private authenticated;
     browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
     list(auth: Auth, input: {
         kind: TradeKind;
