@@ -21,6 +21,13 @@ import {
   UnauthorizedSchema,
 } from './market'
 import { GameStateSchema, HEX16, PlayerEventKindSchema } from './schemas'
+import {
+  type Boards,
+  BoardsSchema,
+  ChatResultSchema,
+  type WorldSnapshot,
+  WorldSnapshotSchema,
+} from './world'
 
 // Every response body, as the HTTP fake sends it and HttpClient checks it.
 
@@ -123,7 +130,10 @@ export const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized> =
 export const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized> = orUnauthorized(
   z.array(OrderSchema),
 )
-export { MarketResultSchema }
+export const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized> =
+  orUnauthorized(WorldSnapshotSchema)
+export const BoardsResponseSchema: z.ZodType<Boards | Unauthorized> = orUnauthorized(BoardsSchema)
+export { ChatResultSchema, MarketResultSchema }
 
 /** The error bodies of non-200 answers. */
 export const ErrorBodySchema = z.union([

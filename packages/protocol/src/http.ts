@@ -21,6 +21,7 @@ import type {
 import {
   AccountResponseSchema,
   BatchAckSchema,
+  BoardsResponseSchema,
   BootstrapSchema,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
@@ -28,8 +29,10 @@ import {
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MyOrdersResponseSchema,
+  WorldResponseSchema,
 } from './responses'
 import type { Batch } from './schemas'
+import { type Boards, type ChatResult, ChatResultSchema, type WorldSnapshot } from './world'
 
 export type FetchLike = (
   url: string,
@@ -38,7 +41,7 @@ export type FetchLike = (
 
 type Method = 'GET' | 'POST' | 'DELETE'
 
-/** The phase 2 route table, base path included. `:id` marks a path segment. */
+/** The route table, base path included. `:id` marks a path segment. */
 export const ROUTES = {
   health: { method: 'GET', path: '/v1/health' },
   bootstrap: { method: 'POST', path: '/v1/bootstrap' },
@@ -55,6 +58,9 @@ export const ROUTES = {
   cancelOrder: { method: 'DELETE', path: '/v1/orders/:id' },
   matchingOrders: { method: 'GET', path: '/v1/orders/matching' },
   fillOrder: { method: 'POST', path: '/v1/orders/:id/fill' },
+  world: { method: 'GET', path: '/v1/world' },
+  chat: { method: 'POST', path: '/v1/chat' },
+  leaderboards: { method: 'GET', path: '/v1/leaderboards' },
 } as const satisfies Record<string, { method: Method; path: string }>
 
 type Route = keyof typeof ROUTES
@@ -203,5 +209,17 @@ export class HttpClient implements ServerClient {
 
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult> {
     return this.call('fillOrder', MarketResultSchema, { auth, id: orderId, body: { itemId } })
+  }
+
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+    return this.call('world', WorldResponseSchema, { auth, query: { since } })
+  }
+
+  chat(auth: Auth, text: string): Promise<ChatResult> {
+    return this.call('chat', ChatResultSchema, { auth, body: { text } })
+  }
+
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+    return this.call('leaderboards', BoardsResponseSchema, { auth })
   }
 }

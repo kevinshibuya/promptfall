@@ -43,6 +43,7 @@ export {
   AccountResponseSchema,
   AccountSchema,
   BatchAckSchema,
+  BoardsResponseSchema,
   BootstrapSchema,
   ErrorBodySchema,
   type Health,
@@ -55,6 +56,7 @@ export {
   MatchingOrdersResponseSchema,
   MyOrdersResponseSchema,
   ServerConfigSchema,
+  WorldResponseSchema,
 } from './responses'
 export {
   type Batch,
@@ -70,5 +72,30 @@ export {
   type TimedEvent,
   TimedEventSchema,
 } from './schemas'
+export {
+  BOARD_ROWS,
+  type BoardRow,
+  BoardRowSchema,
+  type Boards,
+  BoardsSchema,
+  type BossView,
+  BossViewSchema,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  ChatBodySchema,
+  type ChatMessage,
+  ChatMessageSchema,
+  type ChatRefusal,
+  type ChatResult,
+  ChatResultSchema,
+  HERE_MAX,
+  PRESENCE_TTL_MS,
+  type WorldSnapshot,
+  WorldSnapshotSchema,
+  weekStartOf,
+} from './world'
 
 export const PROTOCOL_VERSION = 1 as const
