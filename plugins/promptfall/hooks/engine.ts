@@ -545,6 +545,12 @@ export class GameEngine {
     return this.clockSeen
   }
 
+  /** What the committed state has dealt to the boss it is engaged with: the baseline of the predicted bar. */
+  committedBoss(): { bossId: string; dealt: number } | null {
+    const boss = this.committed?.boss
+    return boss ? { bossId: boss.bossId, dealt: boss.dealt } : null
+  }
+
   serverConfig(): ServerConfig | null {
     return this.config
   }

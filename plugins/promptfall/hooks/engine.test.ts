@@ -549,3 +549,21 @@ test('a 5xx on submit stays an outage', async () => {
   expect(engine.isUnreachable()).toBe(true)
   expect(notices().at(-1)).toBe(RETRYING_NOTICE)
 })
+
+test('committedBoss follows the committed state, not the local one', async () => {
+  const { engine, ledger, kv, advance, at } = setup()
+  await engine.start()
+  const auth = { deviceToken: String(await kv.get('deviceToken')) }
+  advance(10_800_000 - at() - 1_000)
+  await ledger.world(auth, 0)
+  advance(2_000)
+  await ledger.world(auth, 0)
+  expect(engine.committedBoss()).toBeNull()
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  const committed = engine.committedBoss()
+  expect(committed?.bossId).toMatch(/^wb/)
+  for (let i = 0; i < 3; i++) engine.apply({ t: 'tick' }, at())
+  expect(engine.state()?.boss?.dealt).toBeGreaterThan(committed?.dealt ?? 0)
+  expect(engine.committedBoss()).toEqual(committed)
+})

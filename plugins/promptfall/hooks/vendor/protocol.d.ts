@@ -1,4 +1,4 @@
-import { TradeKind, HeroClass, Rarity, Goods, PlayerEvent, GameState, Hero, Item, ServerEvent, PlayerEventKind } from './sim.js';
+import { TradeKind, HeroClass, Rarity, Goods, PlayerEvent, GameState, Hero, Item, ServerEvent, Stats, PlayerEventKind } from './sim.js';
 declare namespace z {
   type SafeParse<T> = { success: true; data: T } | { success: false; error: Error }
   interface ZodType<T> {
@@ -100,6 +100,7 @@ declare const PLAYER_EVENT_KINDS: readonly ["tick", "tool_call", "turn_end", "re
 declare const ItemSchema: z.ZodType<Item>;
 declare const HeroSchema: z.ZodType<Hero>;
 declare const GoodsSchema: z.ZodType<Goods>;
+declare const StatsSchema: z.ZodType<Stats>;
 declare const ServerEventSchema: z.ZodType<ServerEvent>;
 /** Structural check of a sim state: the fields every version has; the rest passes through. */
 declare const GameStateSchema: z.ZodType<GameState>;
@@ -184,6 +185,16 @@ declare const CHAT_REFILL_MS = 10000;
 declare const CHAT_KEEP = 200;
 declare const CHAT_SERVE = 50;
 declare const BOARD_ROWS = 20;
+/** Bosses spawn on this grid of the server clock, from epoch zero. */
+declare const BOSS_GRID_MS = 10800000;
+/** A boss lives this long, or until dead. */
+declare const BOSS_WINDOW_MS = 1200000;
+/** HP per account online at the spawn. */
+declare const BOSS_BASE_HP = 4000;
+/** A contribution at or above this share of BOSS_BASE_HP, in basis points, earns the guaranteed drop. */
+declare const BOSS_THRESHOLD_BP = 500;
+/** The top contributors of a killed boss each get one bonus roll. */
+declare const BOSS_TOP_BONUS = 3;
 /** Monday 00:00 UTC of the week holding `now` (day 0 was a Thursday). */
 declare function weekStartOf(now: number): number;
 declare const ChatMessageSchema: z.ZodType<ChatMessage>;
@@ -531,4 +542,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };
+export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };

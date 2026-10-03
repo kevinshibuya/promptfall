@@ -1,9 +1,10 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { GameView, Mode, Prefs, WorldState } from '../../types'
+import type { BossView, GameView, Mode, Prefs, WorldState } from '../../types'
 import { PREFS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { gates } from '../view'
-import { CLASS_INITIAL, clip, formatGold, padEnd, padStart, waveLabel } from './format'
+import { CLASS_INITIAL, clip, formatCount, formatGold, padEnd, padStart, waveLabel } from './format'
 import { ClassGlyph, HpBar, RarityText } from './parts'
+import { formatRemaining, remainingRealMs } from './time'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -24,8 +25,57 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
   return mode === 'secondary' ? `playing in another session · ${line}` : line
 }
 
-/** The World tab's three rows: who is around, the account's records, the chat ticker. */
-export function worldRows(view: GameView, world: WorldState): { text: string; dim: boolean }[] {
+/** The snapshot's boss as this session shows it, or null when there is none. */
+export type ShownBoss = {
+  boss: BossView
+  /** The server's HP less what this party dealt locally beyond its committed tally. */
+  shownHp: number
+  /** This party's tally: the view's when engaged with this boss, else the server's `yours`. */
+  dealt: number
+  /** True when the view is in boss mode for this boss. */
+  engaged: boolean
+}
+
+/**
+ * The predicted bar (R5): the server's HP wins at each poll; between polls a
+ * primary subtracts what it dealt past the committed tally it reported then.
+ * A null or foreign `committedDealt` subtracts nothing.
+ */
+export function shownBoss(view: GameView, world: WorldState): ShownBoss | null {
+  const boss = world.snapshot?.boss
+  if (!boss) return null
+  const mine = view.boss?.bossId === boss.bossId ? view.boss : null
+  if (!mine) return { boss, shownHp: boss.hp, dealt: boss.yours, engaged: false }
+  const baseline =
+    world.committedDealt?.bossId === boss.bossId ? world.committedDealt.dealt : mine.dealt
+  const shownHp = Math.max(0, boss.hp - Math.max(0, mine.dealt - baseline))
+  return { boss, shownHp, dealt: mine.dealt, engaged: true }
+}
+
+const BOSS_BAR_CELLS = 8
+
+function pctOf(shown: ShownBoss): number {
+  return shown.boss.maxHp > 0 ? Math.floor((shown.shownHp * 100) / shown.boss.maxHp) : 0
+}
+
+function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
+  if (!world.clock) return ''
+  return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
+}
+
+/** The status row's boss segment while the boss is live: `boss 62% · 11m`. */
+export function bossSegment(view: GameView, world: WorldState, now: number): string | null {
+  const shown = shownBoss(view, world)
+  if (!shown || shown.boss.hp <= 0) return null
+  return `boss ${pctOf(shown)}% · ${remainingOf(shown, world, now)}`
+}
+
+/** The World tab's three rows: who is around, the account's records or the boss, the chat ticker. */
+export function worldRows(
+  view: GameView,
+  world: WorldState,
+  now = 0,
+): { text: string; dim: boolean }[] {
   const open = gates(world, view.account)
   const snapshot = world.snapshot
   let presence: { text: string; dim: boolean }
@@ -35,7 +85,17 @@ export function worldRows(view: GameView, world: WorldState): { text: string; di
     const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
     presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
   }
-  const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  const shown = shownBoss(view, world)
+  let records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  if (shown && shown.boss.hp > 0) {
+    const max = shown.boss.maxHp
+    const filled =
+      max > 0 ? Math.min(BOSS_BAR_CELLS, Math.ceil((shown.shownHp * BOSS_BAR_CELLS) / max)) : 0
+    const bar = '█'.repeat(filled) + '░'.repeat(BOSS_BAR_CELLS - filled)
+    records = `World boss ${shown.boss.name} ${bar} ${pctOf(shown)}% · ${remainingOf(shown, world, now)} left · you ${formatCount(shown.dealt)}`
+  } else if (shown) {
+    records = `${shown.boss.name} is down · you ${formatCount(shown.dealt)}`
+  }
   const last = world.messages.at(-1)
   const chat = !open.chatOpen
     ? { text: 'chat is closed', dim: true }
@@ -67,6 +127,7 @@ export function registerBand(on: On): void {
     }
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
     const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
+    const now = await $.clock.now()
     const { Box, Text, Button } = $.ui.resolve(e)
     const els = { Text }
     const width = Math.max(20, e.props.bodyColumns)
@@ -110,6 +171,31 @@ export function registerBand(on: On): void {
         const enemyText = enemy
           ? `${i === 0 ? '⚔' : ' '} ${enemy.glyph} ${enemy.name} ${enemy.hp}/${enemy.maxHp}`
           : ''
+        const shown = view.boss ? shownBoss(view, world) : null
+        let enemySlot = (
+          <Text wrap="truncate">{padEnd(` ${clip(enemyText, enemyWidth - 2)}`, enemyWidth)}</Text>
+        )
+        if (view.boss) {
+          // Boss mode: the first slot is the world boss, the other two empty.
+          const label = `⚔ ${view.boss.glyph} ${view.boss.name}`
+          if (i > 0) enemySlot = <Text>{padEnd('', enemyWidth)}</Text>
+          else if (shown?.engaged) {
+            const hpText = `${formatCount(shown.shownHp)}/${formatCount(shown.boss.maxHp)}`
+            const labelWidth = Math.max(4, enemyWidth - hpText.length - 13)
+            enemySlot = (
+              <Box key="boss-slot" flexDirection="row">
+                <Text wrap="truncate">{` ${padEnd(label, labelWidth)} `}</Text>
+                {HpBar(els, shown.shownHp, shown.boss.maxHp)}
+                <Text wrap="truncate">{` ${hpText}`}</Text>
+              </Box>
+            )
+          } else {
+            const text = `${label} you ${formatCount(view.boss.dealt)}`
+            enemySlot = (
+              <Text wrap="truncate">{padEnd(` ${clip(text, enemyWidth - 2)}`, enemyWidth)}</Text>
+            )
+          }
+        }
         rows.push(
           <Box key={`row-${i}`} flexDirection="row">
             {hero ? ClassGlyph(els, hero.cls) : <Text>{padEnd('', 7)}</Text>}
@@ -119,7 +205,7 @@ export function registerBand(on: On): void {
             <Text wrap="truncate">{hero ? ` L${padEnd(String(hero.level), 3)}` : ''}</Text>
             {hero ? HpBar(els, hero.hp, hero.maxHp) : <Text> </Text>}
             <Text wrap="truncate">{hero ? padStart(`${hero.hp}/${hero.maxHp}`, 9) : ''}</Text>
-            <Text wrap="truncate">{padEnd(` ${clip(enemyText, enemyWidth - 2)}`, enemyWidth)}</Text>
+            {enemySlot}
           </Box>,
         )
       }
@@ -138,7 +224,7 @@ export function registerBand(on: On): void {
         )
       }
     } else {
-      worldRows(view, world).forEach((row, i) => {
+      worldRows(view, world, now).forEach((row, i) => {
         rows.push(
           <Box key={`row-${i}`} flexDirection="row">
             <Text key={`world-${i}`} dimColor={row.dim} wrap="truncate">
@@ -149,7 +235,10 @@ export function registerBand(on: On): void {
       })
     }
 
-    const tail = notice ?? (view.lastDrop ? `last: ${view.lastDrop.text}` : 'no drops yet')
+    const tail =
+      notice ??
+      bossSegment(view, world, now) ??
+      (view.lastDrop ? `last: ${view.lastDrop.text}` : 'no drops yet')
     const status = `Zone ${view.zone} ${view.zoneName} · ${waveLabel(view.wave)} · ${formatGold(view.gold)} · ${tail}`
     const tabsWidth = 36
     rows.push(
