@@ -365,10 +365,10 @@ PR 1: Tasks 1 to 6. PR 2: Tasks 7 to 10.
 
 **Boundaries:** No ledger logic here. Do not touch the plugin. The Mirror's new behaviour is Task 3's.
 
-- [ ] Split the schemas; add `cursor`; write the market and response schemas; `KeyValue.flush?`
-- [ ] Widen `ServerClient`, `BatchAck`, `Bootstrap`, `ServerConfig`; delete `fake/local.ts` and its test; mechanical fix of `suite.ts`
-- [ ] Write `http.test.ts` (red), then `http.ts`
-- [ ] Run the acceptance check; commit `feat(protocol): cursor, market types, HttpClient`
+- [x] Split the schemas; add `cursor`; write the market and response schemas; `KeyValue.flush?`
+- [x] Widen `ServerClient`, `BatchAck`, `Bootstrap`, `ServerConfig`; delete `fake/local.ts` and its test; mechanical fix of `suite.ts`
+- [x] Write `http.test.ts` (red), then `http.ts`
+- [x] Run the acceptance check; commit `feat(protocol): cursor, market types, HttpClient`
 
 ### Task 3: Ledger package and the contract suite over it
 

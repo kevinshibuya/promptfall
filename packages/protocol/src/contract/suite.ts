@@ -1,4 +1,10 @@
-import { createInitialState, type Event, hashState, replay, SIM_VERSION } from '@promptfall/sim'
+import {
+  createInitialState,
+  hashState,
+  type PlayerEvent,
+  replay,
+  SIM_VERSION,
+} from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import type { Bootstrap, ServerClient } from '../client'
 import { type Batch, compareSemver, type TimedEvent } from '../schemas'
@@ -15,7 +21,7 @@ function makeClock(start = 1_700_000_000_000): ContractClock {
   }
 }
 
-const tick: Event = { t: 'tick' }
+const tick: PlayerEvent = { t: 'tick' }
 
 /** A client-side mirror: tracks state, seq and hash the way a real client would. */
 class Mirror {
@@ -26,7 +32,7 @@ class Mirror {
     this.seq = boot.seq
   }
 
-  batch(events: Event[], overrides: Partial<Batch> = {}): Batch {
+  batch(events: PlayerEvent[], overrides: Partial<Batch> = {}): Batch {
     const timed: TimedEvent[] = events.map((e, i) => ({ ...e, at: 1000 + i }))
     const result = replay(this.state, events).state
     return {
@@ -35,6 +41,7 @@ class Mirror {
       seq: this.seq,
       clientVersion: this.boot.config.minClientVersion,
       simVersion: SIM_VERSION,
+      cursor: 0,
       baseHash: hashState(this.state),
       resultHash: hashState(result),
       events: timed,
@@ -43,7 +50,7 @@ class Mirror {
   }
 
   /** Advances the mirror as if the batch committed. */
-  commit(events: Event[]): void {
+  commit(events: PlayerEvent[]): void {
     this.state = replay(this.state, events).state
     this.seq += 1
   }
@@ -97,7 +104,7 @@ export function runServerContract(
 
     it('rule 2: a known token returns the same account and its progress; an unknown one mints', async () => {
       const { client, boot, mirror } = await setup()
-      const events = [tick, tick, { t: 'tool_call' } as Event]
+      const events = [tick, tick, { t: 'tool_call' } as PlayerEvent]
       const ack = await client.submit(mirror.batch(events), mirror.auth())
       expect(ack.ok).toBe(true)
       mirror.commit(events)
@@ -273,7 +280,13 @@ export function runServerContract(
 
     it('rule 9: a matching batch commits', async () => {
       const { client, mirror } = await setup()
-      const events: Event[] = [{ t: 'tool_call' }, tick, tick, { t: 'turn_end' }, { t: 'rest' }]
+      const events: PlayerEvent[] = [
+        { t: 'tool_call' },
+        tick,
+        tick,
+        { t: 'turn_end' },
+        { t: 'rest' },
+      ]
       const batch = mirror.batch(events)
       const ack = await client.submit(batch, mirror.auth())
       expect(ack).toEqual({ ok: true, duplicate: false, seq: 1, hash: batch.resultHash })
