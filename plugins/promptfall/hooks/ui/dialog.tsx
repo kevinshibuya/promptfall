@@ -269,8 +269,11 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           setForm: (patch) =>
             updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
           submit: async () => {
-            const form = ((await read($, ordersAtom)) ?? orders).form
-            if (!form || !/^\d+$/.test(form.maxPrice)) return
+            const current = (await read($, ordersAtom)) ?? orders
+            const form = current.form
+            // Enter and `place` both submit: one order at a time.
+            if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
+            await updOrders((o) => ({ ...o, busy: true }))
             const input = {
               base: form.base,
               minRarity: form.minRarity,

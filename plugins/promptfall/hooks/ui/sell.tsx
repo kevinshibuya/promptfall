@@ -29,6 +29,8 @@ export async function openSell(
   await upd((d) => ({ ...d, sell: { kind, id, matching: [], price: '', error: null } }))
   if (kind !== 'item') return
   try {
+    // A fresh drop reaches the server with the next batch: flush it before asking what matches.
+    await game.sync().catch(() => undefined)
     const r = await game.market.matching(id)
     if ('reason' in r) return
     const matching = r.map(orderView)
