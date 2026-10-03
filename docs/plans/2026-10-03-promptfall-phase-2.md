@@ -430,10 +430,10 @@ Contract suite additions:
 
 **Boundaries:** No bots (Task 8). No market routes beyond what the stub answers. Nothing in the plugin.
 
-- [ ] Scaffold; `FileKeyValue` with its round-trip test; `VirtualClock` with its restart test
-- [ ] `server.ts` with the route table; `server.test.ts` (red), then green
-- [ ] `server.contract.test.ts` over port 0; make the suite pass over HTTP
-- [ ] `cli.ts`; the root scripts; run the acceptance check; commit `feat(fake-server): HTTP fake over the ledger`
+- [x] Scaffold; `FileKeyValue` with its round-trip test; `VirtualClock` with its restart test
+- [x] `server.ts` with the route table; `server.test.ts` (red), then green
+- [x] `server.contract.test.ts` over port 0; make the suite pass over HTTP
+- [x] `cli.ts`; the root scripts; run the acceptance check; commit `feat(fake-server): HTTP fake over the ledger`
 
 ### Task 5a: Plugin engine: vendor the ledger, lock, cursor, re-step, outages
 

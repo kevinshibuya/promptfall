@@ -1,0 +1,80 @@
+import { randomInt, randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
+import { parseArgs } from 'node:util'
+import { VirtualClock } from './clock'
+import { FileKeyValue } from './file-kv'
+import { createFakeServer } from './server'
+
+// `pnpm fake -- --port 7777` passes a leading `--`; `pnpm fake --port 7777` does not.
+const argv = process.argv.slice(2)
+if (argv[0] === '--') argv.shift()
+
+const { values } = parseArgs({
+  args: argv,
+  options: {
+    port: { type: 'string', default: '7777' },
+    seed: { type: 'string', default: '1' },
+    speed: { type: 'string', default: '1' },
+    'player-name': { type: 'string', default: 'player' },
+    data: { type: 'string', default: '.promptfall/fake.json' },
+  },
+  strict: true,
+})
+
+function positive(name: string, raw: string, integer: boolean): number {
+  const n = Number(raw)
+  if (!Number.isFinite(n) || n <= 0 || (integer && !Number.isInteger(n))) {
+    console.error(`promptfall fake: --${name} wants a positive ${integer ? 'integer' : 'number'}`)
+    process.exit(2)
+  }
+  return n
+}
+
+const port = Number(values.port)
+if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  console.error('promptfall fake: --port wants 0 to 65535')
+  process.exit(2)
+}
+const seed = positive('seed', values.seed, true)
+const speed = positive('speed', values.speed, false)
+const data = resolve(values.data)
+
+const kv = new FileKeyValue(data)
+const clock = new VirtualClock({ speed, persisted: kv.persistedClock })
+kv.attachClock(() => clock.snapshot())
+
+const server = createFakeServer({
+  kv,
+  now: () => clock.now(),
+  speed,
+  flags: { 'market.enabled': true },
+  seedSource: () => randomInt(0, 2 ** 32),
+  tokenSource: () => randomUUID(),
+  playerName: values['player-name'],
+  seed,
+})
+
+const listening = await server.listen(port)
+console.log(
+  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} data ${data}`,
+)
+// The clock is on disk from the start, so a restart never resumes behind it.
+kv.flushSync()
+
+const sweep = setInterval(() => {
+  server.ledger.host.sweep().catch((error) => console.error('promptfall fake: sweep', error))
+}, 60_000 / speed)
+
+let closing = false
+async function shutdown(): Promise<void> {
+  if (closing) return
+  closing = true
+  clearInterval(sweep)
+  await listening.close()
+  kv.flushSync()
+  console.log('promptfall fake stopped')
+  process.exit(0)
+}
+
+process.on('SIGINT', () => void shutdown())
+process.on('SIGTERM', () => void shutdown())

@@ -57,6 +57,27 @@ importers:
         specifier: ^5.0.3
         version: 5.0.3(@types/node@22.20.4)(vite@8.3.2(@types/node@22.20.4)(esbuild@0.28.2)(tsx@4.23.15))
 
+  servers/fake:
+    dependencies:
+      '@promptfall/ledger':
+        specifier: workspace:*
+        version: link:../../packages/ledger
+      '@promptfall/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+      '@promptfall/sim':
+        specifier: workspace:*
+        version: link:../../packages/sim
+      tsx:
+        specifier: ^4.23.15
+        version: 4.23.15
+      vitest:
+        specifier: ^5.0.3
+        version: 5.0.3(@types/node@22.20.4)(vite@8.3.2(@types/node@22.20.4)(esbuild@0.28.2)(tsx@4.23.15))
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
+
 packages:
 
   '@biomejs/biome@2.5.15':
