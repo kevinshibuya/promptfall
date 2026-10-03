@@ -1,4 +1,5 @@
 import {
+  content,
   createInitialState,
   type GameState,
   type Hero,
@@ -11,12 +12,17 @@ import {
   SIM_VERSION,
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
-import type { Auth, Delivery, ServerClient } from '../client'
+import type { Auth, BatchAck, Delivery, ServerClient } from '../client'
+import { type KeyValue, MemoryKeyValue } from '../kv'
 import type { MarketResult } from '../market'
 import { Mirror } from '../mirror'
 import { compareSemver } from '../schemas'
 import {
   BOARD_ROWS,
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_WINDOW_MS,
   CHAT_BUCKET_CAPACITY,
   CHAT_KEEP,
   CHAT_MAX_CHARS,
@@ -46,7 +52,8 @@ export type ContractHost = {
 
 export type ContractMake = (
   clock: ContractClock,
-  options: { flags: Record<string, boolean> },
+  /** `kv`: a store shared between two hosts (rule 40); a fresh one when absent. */
+  options: { flags: Record<string, boolean>; kv?: KeyValue },
 ) => Promise<{ client: ServerClient; host?: ContractHost }>
 
 function makeClock(start = 1_700_000_000_000): ContractClock {
@@ -124,6 +131,70 @@ async function boards(client: ServerClient, auth: Auth) {
   const b = await client.leaderboards(auth)
   if ('reason' in b) throw new Error('unauthorized')
   return b
+}
+
+const CLOCK_START = 1_700_000_000_000
+/** The first grid point after the suite's clock start, which is 73 minutes past one (and its window). */
+const NEXT_GRID = CLOCK_START + BOSS_GRID_MS - (CLOCK_START % BOSS_GRID_MS)
+const bossIdAt = (t: number) => `wb${Math.floor(t / BOSS_GRID_MS).toString(36)}`
+const ZONE1_BOSS = content.enemies[content.zones[0]?.boss ?? '']?.stats
+
+/** A minted trader whose party is level 40 at full HP: about 240 a tick on the zone 1 world boss. */
+function strongState(seed: number, patch: Partial<GameState> = {}): GameState {
+  const s = traderState(seed, { gold: 50_000, ...patch })
+  const leveled = {
+    ...s,
+    roster: s.roster.map((h) => (s.party.includes(h.id) ? { ...h, level: 40 } : h)),
+  }
+  return {
+    ...leveled,
+    roster: leveled.roster.map((h) =>
+      s.party.includes(h.id) ? { ...h, hp: heroStats(leveled, h).hp } : h,
+    ),
+  }
+}
+
+const kindsOf = (d: Delivery) => d.events.map((e) => e.event.t)
+const eventsOf = <K extends ServerEvent['t']>(d: Delivery, t: K) =>
+  d.events.map((e) => e.event).filter((e): e is Extract<ServerEvent, { t: K }> => e.t === t)
+
+type Trader = { auth: Auth; mirror: Mirror; accountId: string; refresh(): Promise<unknown> }
+
+/** Commits `n` ticks from the mirror; answers the ack and what the batch dealt to the boss. */
+async function commitTicks(
+  client: ServerClient,
+  t: Trader,
+  n: number,
+): Promise<{ ack: BatchAck; dealt: number }> {
+  const events = Array.from({ length: n }, () => tick)
+  const before = t.mirror.local.boss?.dealt ?? 0
+  const dealt = (replay(t.mirror.local, events).state.boss?.dealt ?? before) - before
+  const batch = t.mirror.batch(events)
+  const ack = await client.submit(batch, t.auth)
+  expect(ack).toMatchObject({ ok: true, hash: batch.resultHash })
+  if (ack.ok) {
+    t.mirror.commit(events)
+    t.mirror.receive(ack.delivery)
+  }
+  return { ack, dealt }
+}
+
+/** Stamps every trader present just before the grid point, crosses it, polls the first: the spawn. */
+async function spawn(client: ServerClient, clock: ContractClock, traders: Trader[]) {
+  clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+  for (const t of traders) await snapshot(client, t.auth)
+  clock.advance(10_000)
+  const first = traders[0]
+  if (!first) throw new Error('no trader')
+  const w = await snapshot(client, first.auth)
+  for (const t of traders) await t.refresh()
+  return w
+}
+
+async function infoOf(client: ServerClient, auth: Auth) {
+  const info = await client.account(auth)
+  if ('reason' in info) throw new Error('unauthorized')
+  return info
 }
 
 function lowerThan(version: string): string | null {
@@ -1129,6 +1200,206 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(w).toMatchObject({ online: 0, zones: [], here: [] })
       expect(w.flags['presence.enabled']).toBe(false)
       expect(await snapshot(client, b.auth)).toMatchObject({ online: 0, zones: [], here: [] })
+    })
+    it('rule 33: the boss spawns on the grid with HP for who is online, and engages them', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(80))
+      const b = await trader('Bo', traderState(81))
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect((await snapshot(client, b.auth)).boss).toBeNull()
+      clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+      await snapshot(client, a.auth)
+      await snapshot(client, b.auth)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      clock.advance(10_000)
+      const w = await snapshot(client, a.auth)
+      expect(w.boss).toEqual({
+        bossId: bossIdAt(NEXT_GRID),
+        name: expect.any(String),
+        glyph: expect.any(String),
+        maxHp: 2 * BOSS_BASE_HP,
+        hp: 2 * BOSS_BASE_HP,
+        spawnedAt: NEXT_GRID,
+        endsAt: NEXT_GRID + BOSS_WINDOW_MS,
+        yours: 0,
+      })
+      const engagedOf = async (auth: Auth) =>
+        eventsOf((await infoOf(client, auth)).delivery, 'boss_engaged')
+      const engaged = await engagedOf(a.auth)
+      expect(engaged).toHaveLength(1)
+      expect(engaged[0]?.stats).toEqual(ZONE1_BOSS)
+      expect(ZONE1_BOSS).toEqual({ hp: 630, atk: 14, def: 4, spd: 5 })
+      await snapshot(client, a.auth)
+      expect(await engagedOf(a.auth)).toHaveLength(1)
+      expect(await engagedOf(b.auth)).toHaveLength(1)
+      const c = await trader('Cy', traderState(82))
+      expect(await engagedOf(c.auth)).toHaveLength(0)
+      const late = await snapshot(client, c.auth)
+      expect(late.boss?.maxHp).toBe(2 * BOSS_BASE_HP)
+      expect(await engagedOf(c.auth)).toHaveLength(1)
+    })
+
+    it('rule 34: a committed batch contributes its dealt delta', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(83))
+      const b = await trader('Bo', traderState(84))
+      await spawn(client, clock, [a, b])
+      expect(a.mirror.local.boss?.bossId).toBe(bossIdAt(NEXT_GRID))
+      const { dealt } = await commitTicks(client, a, 20)
+      expect(dealt).toBeGreaterThan(0)
+      expect(dealt).toBe(a.mirror.local.boss?.dealt)
+      const w = await snapshot(client, a.auth)
+      expect(w.boss?.hp).toBe(2 * BOSS_BASE_HP - dealt)
+      expect(w.boss?.yours).toBe(dealt)
+      expect((await boards(client, a.auth)).damage).toEqual([
+        { accountId: a.accountId, name: 'Ann', value: dealt },
+      ])
+    })
+
+    it('rule 35: the killing commit rewards the contributors and disengages them', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(85))
+      const b = await trader('Bo', traderState(86))
+      await spawn(client, clock, [a, b])
+      const { dealt: small } = await commitTicks(client, b, 1)
+      expect(small).toBeGreaterThan(0)
+      let total = 0
+      let killing: Delivery | null = null
+      for (let i = 0; i < 5 && !killing; i++) {
+        if (i > 0) clock.advance(120_000)
+        const { ack, dealt } = await commitTicks(client, a, 60)
+        total += dealt
+        if (ack.ok && kindsOf(ack.delivery).includes('boss_disengaged')) killing = ack.delivery
+      }
+      if (!killing) throw new Error('the boss never died')
+      expect(kindsOf(killing)).toEqual(['rewarded', 'rewarded', 'boss_disengaged'])
+      for (const r of eventsOf(killing, 'rewarded')) {
+        expect(r.goods?.kind).toBe('item')
+        if (r.goods?.kind === 'item') expect(r.goods.item.id).toMatch(/^r/)
+        expect(r.gold).toBeGreaterThan(0)
+      }
+      expect(a.mirror.local.boss).toBeNull()
+      expect(kindsOf((await infoOf(client, b.auth)).delivery)).toEqual([
+        'rewarded',
+        'boss_disengaged',
+      ])
+      const dead = await snapshot(client, a.auth)
+      expect(dead.boss).toMatchObject({ bossId: bossIdAt(NEXT_GRID), hp: 0, yours: total })
+      expect(total).toBeGreaterThan(2 * BOSS_BASE_HP)
+      const board = (await boards(client, a.auth)).damage
+      // The mirror applied the rewards and the disengage: the next batch's hashes match.
+      await commitTicks(client, a, 1)
+      expect((await snapshot(client, a.auth)).boss?.yours).toBe(total)
+      expect((await boards(client, a.auth)).damage).toEqual(board)
+      clock.advance(BOSS_WINDOW_MS)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+    })
+
+    it('rule 36: past the threshold with no free slot, both rewards wait in returns', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(87))
+      const full = Array.from({ length: 30 }, (_, i) => commonItem(`ic${i}`))
+      const c = await trader('Cy', strongState(88, { inventory: full }))
+      const w = await spawn(client, clock, [a, c])
+      const { dealt } = await commitTicks(client, c, 3)
+      expect(dealt).toBeGreaterThanOrEqual(Math.floor((BOSS_BASE_HP * BOSS_THRESHOLD_BP) / 10000))
+      for (let i = 0; i < 5; i++) {
+        if (i > 0) clock.advance(120_000)
+        const { ack } = await commitTicks(client, a, 60)
+        if (ack.ok && kindsOf(ack.delivery).includes('boss_disengaged')) break
+      }
+      const info = await infoOf(client, c.auth)
+      const rewards = eventsOf(info.delivery, 'rewarded')
+      expect(rewards).toHaveLength(2)
+      for (const r of rewards) {
+        expect(r.goods).toBeNull()
+        expect(r.gold).toBeGreaterThan(0)
+      }
+      expect(info.returns).toBe(2)
+      c.mirror.receive(info.delivery)
+      const events: PlayerEvent[] = [{ t: 'vendor', itemId: 'ic0' }]
+      const batch = c.mirror.batch(events)
+      const ack = await client.submit(batch, c.auth)
+      if (!ack.ok) throw new Error(`refused: ${ack.reason}`)
+      const returned = eventsOf(ack.delivery, 'returned')
+      expect(returned).toHaveLength(1)
+      expect(returned[0]?.listingId).toBe(w.boss?.bossId)
+      expect((await infoOf(client, c.auth)).returns).toBe(1)
+    })
+
+    it('rule 37: an expired boss pays the threshold drop only', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(89))
+      const b = await trader('Bo', traderState(90))
+      await spawn(client, clock, [a, b])
+      await commitTicks(client, a, 3)
+      await commitTicks(client, b, 1)
+      clock.advance(BOSS_WINDOW_MS)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect(kindsOf((await infoOf(client, a.auth)).delivery)).toEqual([
+        'rewarded',
+        'boss_disengaged',
+      ])
+      expect(kindsOf((await infoOf(client, b.auth)).delivery)).toEqual(['boss_disengaged'])
+    })
+
+    it('rule 38: with the world boss off nothing spawns', async (ctx) => {
+      const { client, clock, trader } = await market(ctx, { 'worldboss.enabled': false })
+      const a = await trader('Ann', traderState(91))
+      clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+      await snapshot(client, a.auth)
+      clock.advance(10_000)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect(kindsOf((await infoOf(client, a.auth)).delivery)).not.toContain('boss_engaged')
+    })
+
+    it('rule 39: the damage board is weekly', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(92))
+      const b = await trader('Bo', traderState(93))
+      await spawn(client, clock, [a, b])
+      await commitTicks(client, a, 5)
+      const now = await clock.now()
+      const before = await boards(client, a.auth)
+      expect(before.weekStart).toBe(weekStartOf(now))
+      expect(before.damage).toHaveLength(1)
+      clock.advance(weekStartOf(now) + WEEK - now)
+      const after = await boards(client, a.auth)
+      expect(after.damage).toEqual([])
+      expect(after.weekStart).toBe(weekStartOf(now) + WEEK)
+      expect(await boards(client, a.auth)).toEqual(after)
+    })
+
+    it('rule 40: a restarted host resumes the live boss from the store', async (ctx) => {
+      const clock = makeClock()
+      const kv = new MemoryKeyValue()
+      const first = await make(clock, { flags: {}, kv })
+      if (!first.host) {
+        ctx.skip()
+        return
+      }
+      const m = await first.host.mint({ state: strongState(94), name: 'Ann', linked: true })
+      const auth = { deviceToken: m.deviceToken }
+      const boot = await first.client.bootstrap({
+        clientVersion: '0.1.0',
+        deviceToken: m.deviceToken,
+      })
+      const a: Trader = {
+        auth,
+        accountId: m.accountId,
+        mirror: new Mirror(boot),
+        async refresh() {
+          a.mirror.receive((await infoOf(first.client, auth)).delivery)
+        },
+      }
+      await spawn(first.client, clock, [a])
+      await commitTicks(first.client, a, 5)
+      const before = await snapshot(first.client, auth)
+      const second = await make(clock, { flags: {}, kv })
+      const after = await snapshot(second.client, auth)
+      expect(after.boss).toEqual(before.boss)
+      expect(after.boss?.hp).toBeLessThan(BOSS_BASE_HP)
+      expect(after.online).toBe(1)
     })
   })
 }
