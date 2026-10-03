@@ -544,7 +544,7 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No ledger code. No plugin.
 
-- [ ] Schemas and their test; commit `feat(protocol): boss and reward event schemas`
+- [x] Schemas and their test; commit `feat(protocol): boss and reward event schemas`
 - [ ] Rules 33 to 40 (red); `ContractMake.kv`; commit `test(contract): world boss rules 33 to 40`
 
 ### Task 10: Ledger: the boss record, schedule, contribution, rewards, weekly damage

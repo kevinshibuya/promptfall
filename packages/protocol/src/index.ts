@@ -69,6 +69,7 @@ export {
   ItemSchema,
   PLAYER_EVENT_KINDS,
   ServerEventSchema,
+  StatsSchema,
   type TimedEvent,
   TimedEventSchema,
 } from './schemas'
