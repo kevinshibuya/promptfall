@@ -3,7 +3,7 @@ import { atom, read, update } from 'claude-code'
 import type { Mode } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle } from './engine'
-import { acquire, release } from './lease'
+import { acquire, claim, holds, release } from './lease'
 import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
@@ -113,11 +113,7 @@ class GameSession implements GameHandle {
     else await this.becomeSecondary()
     this.setCadence(IDLE_CADENCE_MS)
     // A demoted primary keeps its buffer but never submits it: start() clears it on promotion.
-    this.timers.push(
-      this.io.every(FLUSH_MS, () => {
-        if (this.role === 'primary') void this.engine.flush()
-      }),
-    )
+    this.timers.push(this.io.every(FLUSH_MS, () => void this.flushIfOwner()))
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
   }
 
@@ -171,6 +167,21 @@ class GameSession implements GameHandle {
   async settled(): Promise<void> {
     await this.engine.settled()
     await this.pending
+  }
+
+  async claim(): Promise<void> {
+    if (this.role === 'primary') return
+    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+  }
+
+  /**
+   * Flush only while this session still holds the lease: another session may
+   * have claimed it since the last renewal, and its progress must not be undone.
+   */
+  private async flushIfOwner(): Promise<void> {
+    if (this.role !== 'primary') return
+    if (await holds(this.kv, this.owner)) await this.engine.flush()
+    else await this.becomeSecondary()
   }
 
   private async tick(): Promise<void> {
@@ -341,7 +352,11 @@ export const register: Register = (on) => {
   on('prompt.submit', async ($, e, next) => {
     const at = await $.clock.now()
     // The player's own prompts rest the party: typed here, or sent through the Remote Control bridge.
-    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') game?.apply({ t: 'rest' }, at)
+    if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
+      // The player is here: this session plays, even if another one took the lease.
+      await game?.claim()
+      game?.apply({ t: 'rest' }, at)
+    }
     return next(e)
   })
 }

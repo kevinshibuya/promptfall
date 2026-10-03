@@ -32,7 +32,8 @@ one zone at full health and costs nothing else.
 
 ### Hotkeys
 
-The band takes keys after `ctrl+x tab` or a click. Letters only: a bare digit at an empty prompt
+The band takes keys after a click, or after `ctrl+x` then Tab with Ctrl released (`ctrl+tab` does
+not focus it). Letters only: a bare digit at an empty prompt
 would answer a survey.
 
 | Key | Band | Dialog |
@@ -50,7 +51,8 @@ Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendori
 a tavern, hero contracts from bosses, party swaps that apply at the next zone change, inventory
 and roster expansions, and published odds. Progress lives in the Claude Code store on this
 machine. One session at a time plays: another session shows `playing in another session` and
-takes over within about 10 seconds of the first one quitting.
+takes over within about 10 seconds of the first one quitting. Typing a prompt or `/promptfall` in a
+session makes it the one that plays at once.
 
 ### What it lacks
 

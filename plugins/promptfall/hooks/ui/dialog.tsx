@@ -100,9 +100,14 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             ? (notice ?? 'Promptfall is paused.')
             : 'Promptfall is not playing in this session.'
       header.push(
-        <Text key="read-only" color="yellow" wrap="truncate">
-          {why}
-        </Text>,
+        <Box key="read-only" flexDirection="row" gap={1}>
+          <Text color="yellow" wrap="truncate">
+            {why}
+          </Text>
+          {mode === 'secondary' ? (
+            <Button key="play-here" label="play here" onPress={() => game()?.claim()} />
+          ) : null}
+        </Box>,
       )
     }
     if (dialog.paneNotice) {

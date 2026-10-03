@@ -20,6 +20,8 @@ const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 
 export function registerCommand(on: On, game: () => GameHandle | null): void {
   on('command.run', { command: 'promptfall' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
+    // Typing the command means the player is in this session: it takes the lease.
+    if (arg !== 'off') await game()?.claim()
 
     if (arg === 'off' || arg === 'on') {
       const off = arg === 'off'
