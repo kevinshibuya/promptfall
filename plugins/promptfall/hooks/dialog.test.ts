@@ -694,3 +694,15 @@ test('in-process the Chat tab says chat needs a server', async ($, on) => {
   expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
   await ui.unmount()
 })
+
+test('a padded paste goes out cleaned, and a server refusal flashes in its words', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'chat-compose', text: `${' '.repeat(2100)}hi` })
+  expect(chatPosts(sent).map((r) => r.body)).toEqual([{ text: 'hi' }])
+  expect(await ui.find({ text: 'Server unreachable' })).toBeUndefined()
+  await ui.input({ key: 'chat-compose', text: 'what the heck' })
+  expect(await ui.find({ text: 'That word is not allowed here' })).toBeDefined()
+  await ui.unmount()
+})

@@ -52,6 +52,8 @@ export type BotOptions = {
   schedule: (ms: number, fn: () => void) => { cancel(): void }
   /** Every act's outcome, one line each: `bot <name> <action> ok` or `bot <name> <action> <reason>`. */
   log?: (line: string) => void
+  /** A failure that leaves the bots idle: reported once, where an operator sees it. */
+  onError?: (line: string) => void
 }
 
 export type Bots = { stop(): void; tick(): Promise<void> }
@@ -172,7 +174,9 @@ export function startBots(options: BotOptions): Bots {
     }
   })()
   // Awaited in every tick; this keeps a failed start from being an unhandled rejection first.
-  ready.catch(() => undefined)
+  ready.catch((error) =>
+    options.onError?.(`promptfall fake: bots failed to start: ${String(error)}`),
+  )
 
   /** One batch of idle play: ticks, a tool call every few, a rest and a turn end now and then. */
   function playEvents(bot: Bot): PlayerEvent[] {
