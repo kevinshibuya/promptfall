@@ -22,7 +22,9 @@ const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall ser
 /** `server local` → null; `server <url>` → the URL; anything else → undefined. */
 function serverTarget(rest: string): string | null | undefined {
   if (rest.toLowerCase() === 'local') return null
-  return /^https?:\/\/\S+$/i.test(rest) ? rest : undefined
+  // One spelling per server: the URL is the setting, the token key and the label.
+  const url = rest.replace(/\/+$/, '')
+  return /^https?:\/\/\S+$/i.test(url) ? url : undefined
 }
 
 export function registerCommand(on: On, game: () => GameHandle | null): void {

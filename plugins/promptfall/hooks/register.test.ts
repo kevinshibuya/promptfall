@@ -334,12 +334,18 @@ function remote(on: On) {
     tokenSource: () => crypto.randomUUID(),
     linkApprover: async () => ({ login: 'remote-player' }),
   })
-  const net = { down: false, calls: 0 }
+  const net = {
+    down: false,
+    calls: 0,
+    requests: [] as { method: string; path: string }[],
+    ledger,
+  }
   on('http.fetch', async (_$, e) => {
     net.calls += 1
-    if (net.down) throw new Error('connect ECONNREFUSED')
-    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] ?? ''
     const method = e.init?.method ?? 'GET'
+    if (net.down) throw new Error('connect ECONNREFUSED')
+    net.requests.push({ method, path })
     const header = e.init?.headers?.authorization ?? ''
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
@@ -413,9 +419,12 @@ test('/promptfall server local during an outage drops the unsent events and says
   expect(last.get('notice')).toBe(RETRYING_NOTICE)
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
-  expect((r as { text: string }).text).toMatch(
-    /^Promptfall now plays on in-process; \d+ unsent events on http:\/\/127\.0\.0\.1:1 were dropped$/,
-  )
+  const m =
+    /^Promptfall now plays on in-process; (\d+) unsent events on http:\/\/127\.0\.0\.1:1 were dropped$/.exec(
+      (r as { text: string }).text,
+    )
+  // Three tool calls sat in the failed batch and one more in the buffer; ticks depend on cadence.
+  expect(Number(m?.[1])).toBeGreaterThanOrEqual(4)
   expect(data.has('promptfall:server')).toBe(false)
   expect(last.get('server')).toBeNull()
   expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
@@ -474,5 +483,157 @@ test('the reset on a v1 store starts a fresh account and keeps the lease', async
   expect(last.get('notice')).toBe('Welcome to Promptfall. /promptfall heroes to meet your party')
   expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
   expect(data.has('promptfall:lease')).toBe(true)
+  await ui.unmount()
+})
+
+const batches = (net: { requests: { path: string }[] }) =>
+  net.requests.filter((r) => r.path === '/v1/batches').length
+
+test('a primary demoted during an outage never submits the batch it held', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  const before = batches(net)
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  net.down = false
+  await time.advance(60_000)
+  expect(batches(net)).toBe(before)
+  expect(last.get('mode')).toBe('secondary')
+})
+
+test('a server that never answers is an outage after 15 s', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  on('http.fetch', () => new Promise(() => {}))
+  // The session's start waits on the bootstrap, so the clock moves while it is in flight.
+  const started = $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(14_000)
+  expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
+  await time.advance(2_000)
+  await started
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect((r as { text: string }).text).toMatch(/^Promptfall now plays on in-process/)
+})
+
+test("the player's claim follows a server switch made in another session", async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { [LEASE]: { owner: 'other', until: 9_999_999_999_999 } })
+  const last = states(on)
+  engineBottom(on)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  data.set('promptfall:server', URL_A)
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(true)
+})
+
+test('a secondary stops bootstrapping with a token the server does not know', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, {
+    'promptfall:server': URL_A,
+    [`promptfall:token:${URL_A}`]: 'stale',
+    [LEASE]: { owner: 'other', until: 9_999_999_999_999 },
+  })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(30_000)
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  expect(boots()).toBe(1)
+  const fresh = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+  data.set(`promptfall:token:${URL_A}`, fresh.deviceToken)
+  await time.advance(10_000)
+  expect(boots()).toBe(2)
+  expect(last.get('view')).toBeTruthy()
+})
+
+test('a trailing slash on the server URL is dropped', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  states(on)
+  engineBottom(on)
+  remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}/` })
+  expect(r).toMatchObject({ text: `Promptfall now plays on ${URL_A}` })
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(true)
+})
+
+test('a server switch clears a pending link code', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'link-github' })
+  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeDefined()
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect((last.get('dialog') as { link: unknown }).link).toBeNull()
+  await ui.unmount()
+})
+
+test('pressing Link GitHub during an outage does nothing', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'link-github' })
+  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeUndefined()
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  await ui.unmount()
+})
+
+test("past 120 s the dialog's read-only line is the outage notice", async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  engineBottom(on)
+  states(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  await time.advance(120_000)
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  expect(await ui.find({ text: /Promptfall: server unreachable/ })).toBeDefined()
+  expect(await ui.find({ text: /not playing in this session/ })).toBeUndefined()
   await ui.unmount()
 })

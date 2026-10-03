@@ -139,7 +139,7 @@ test('with no game view the band is the notice on one line', async ($, on) => {
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band() })
   expect(
     await ui.find({
-      text: /^Promptfall · Promptfall: this machine's data is from an older version/,
+      text: /^Promptfall: this machine's data is from an older version/,
     }),
   ).toBeDefined()
   await ui.unmount()
