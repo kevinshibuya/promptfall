@@ -150,7 +150,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           ? 'Playing in another session: this view is read-only.'
           : mode === 'paused'
             ? (notice ?? 'Promptfall is paused.')
-            : 'Promptfall is not playing in this session.'
+            : (notice ?? 'Promptfall is not playing in this session.')
       header.push(
         <Box key="read-only" flexDirection="row" gap={1}>
           <Text color="yellow" wrap="truncate">

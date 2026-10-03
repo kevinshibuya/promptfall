@@ -24,7 +24,7 @@ Each step says what you should see. A step that shows something else is a red.
 6. **Back to the in-process ledger.** Run `/promptfall server local`. The reply reads
    `Promptfall now plays on in-process`.
    - With a phase 1 store on this machine, the band is one line reading
-     `Promptfall · Promptfall: this machine's data is from an older version, reset it in
+     `Promptfall: this machine's data is from an older version, reset it in
      /promptfall account`. `/promptfall account` shows `Server: in-process` and a
      `Reset this machine's data` button. Pressing it starts a fresh account: the band comes back
      at zone 1 with the welcome line.
