@@ -488,7 +488,8 @@ var GOLDEN_REWARD = {
   tradeableAt: null
 };
 var GOLDEN_SEED = 20261002;
-function goldenEvents() {
+function goldenEvents(options = {}) {
+  const boss = options.boss ?? true;
   const events = [
     { t: "set_party", heroIds: ["h0", "h3", "h2"] },
     { t: "set_farm", on: false },
@@ -501,7 +502,7 @@ function goldenEvents() {
       if (i % 3 === 0) events.push({ t: "tool_call" });
     }
     events.push({ t: "turn_end" });
-    if (turn === 3) {
+    if (boss && turn === 3) {
       events.push({
         t: "boss_engaged",
         bossId: GOLDEN_BOSS,
@@ -510,8 +511,8 @@ function goldenEvents() {
         stats: { hp: 630, atk: 14, def: 4, spd: 5 }
       });
     }
-    if (turn === 6) events.push({ t: "boss_disengaged", bossId: GOLDEN_BOSS });
-    if (turn === 7) {
+    if (boss && turn === 6) events.push({ t: "boss_disengaged", bossId: GOLDEN_BOSS });
+    if (boss && turn === 7) {
       events.push({
         t: "rewarded",
         bossId: GOLDEN_BOSS,

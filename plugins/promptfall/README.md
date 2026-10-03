@@ -90,7 +90,8 @@ tab says so within one poll. The in-process ledger has chat off: its World tab r
 ### World boss
 
 A world boss spawns every 3 hours on the server's clock (00:00, 03:00, ... UTC) and lives 20
-minutes or until it dies. Its HP is 4,000 for each account online when it spawns. Every account
+minutes or until it dies. Its HP is 4,000 for each account online when it spawns (one share when the
+server turns presence off). Every account
 online is engaged at the spawn, and one that comes online later is engaged on its first poll.
 Engaged, the party fights the boss instead of waves: tool calls spawn nothing (they still count
 toward the turn boss), a wiped party is healed in place with no retreat, and nothing drops, since

@@ -18,7 +18,8 @@ export const GOLDEN_SEED = 20261002
  * turn 7). Ids are the ones the initial state mints (h0 to h3) plus guesses,
  * so some commands are rejected; rejections are part of the contract too.
  */
-export function goldenEvents(): Event[] {
+export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
+  const boss = options.boss ?? true
   const events: Event[] = [
     { t: 'set_party', heroIds: ['h0', 'h3', 'h2'] },
     { t: 'set_farm', on: false },
@@ -31,7 +32,7 @@ export function goldenEvents(): Event[] {
       if (i % 3 === 0) events.push({ t: 'tool_call' })
     }
     events.push({ t: 'turn_end' })
-    if (turn === 3) {
+    if (boss && turn === 3) {
       events.push({
         t: 'boss_engaged',
         bossId: GOLDEN_BOSS,
@@ -40,8 +41,8 @@ export function goldenEvents(): Event[] {
         stats: { hp: 630, atk: 14, def: 4, spd: 5 },
       })
     }
-    if (turn === 6) events.push({ t: 'boss_disengaged', bossId: GOLDEN_BOSS })
-    if (turn === 7) {
+    if (boss && turn === 6) events.push({ t: 'boss_disengaged', bossId: GOLDEN_BOSS })
+    if (boss && turn === 7) {
       events.push({
         t: 'rewarded',
         bossId: GOLDEN_BOSS,
@@ -66,6 +67,9 @@ export function goldenEvents(): Event[] {
   }
   return events.slice(0, 300)
 }
+
+/** The phase 2 golden hash (SIM_VERSION 2): the boss-free script must still reach it, boss field aside. */
+export const GOLDEN_HASH_V2 = '261e337c034123fa'
 
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
 export const GOLDEN_HASH = '21ecdbaf9e864e9d'
