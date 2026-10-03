@@ -1,0 +1,68 @@
+# Phase 3 manual pass
+
+Run from the repository root on terminals at least 100 columns wide, with three terminals open.
+Each step says what you should see. A step that shows something else is a red.
+
+Focus is shown in reverse video. In the dialog, Tab cycles the tabs, then the body's buttons,
+then close. A focused `Input` takes every printable key, so press Tab or click out of the chat
+compose box before typing a tab hotkey. The pane holds toasts until you press Esc.
+
+## Part A: presence, chat, leaderboards, bots over HTTP (PR 1)
+
+1. **Start the fake.** In the first terminal run `pnpm fake --port 7777 --player-name <your name>`.
+   One line appears: `promptfall fake on http://127.0.0.1:7777 seed 1 speed 1 data <path>`, with
+   no `flags` part at the end.
+2. **Play on it.** In the second terminal run `claude --plugin-dir plugins/promptfall`, then
+   `/promptfall server http://127.0.0.1:7777`, and link in the Account tab (`/promptfall account`,
+   `Link GitHub`), as in phase 2 part A steps 2 and 5.
+3. **World tab.** Press `w` on the band within 15 seconds. Row 1 reads
+   `13 online · zone 1: ...` with the names of bots in zone 1, or `nobody else here`. Row 2 reads
+   `highest zone 1 · kills ... · wipes ...`. Row 3 shows a bot's chat line within a minute, and
+   `chat is quiet` before that.
+4. **Chat.** Run `/promptfall chat`. The last messages show, newest at the bottom, with bot lines
+   arriving every few seconds, and the cursor is already in the compose box. Type `hello` and press
+   Enter: your line appears at once with your name, and the box is empty again.
+   - Paste a 201-character line: `Too long: 200 characters at most` in red for 5 seconds, and
+     nothing is posted.
+   - Send short lines quickly: the fifth or sixth (the `hello` spent one token) reads
+     `Slow down: 5 quick messages, then one every 10 seconds`.
+   - Send `what the heck`: `That word is not allowed here`.
+5. **Leaderboards.** Press Tab until the compose box loses focus, then `b`. The tab shows
+   `Online by zone` with counts summing to 13, then `Highest zone` with the bots' names at zone 1 or
+   2 (they start near zone 1 and climb as they play) and your row in cyan at zone 1, then
+   `Boss damage this week` reading `no boss damage yet this week`. `/promptfall leaderboards` opens
+   the same tab.
+6. **Kill the fake.** Press Ctrl-C in the first terminal. Within 15 seconds the band's status row
+   reads the retrying notice, as in phase 2. After 45 seconds the World tab's first row is dim
+   (stale). A chat post flashes `Server unreachable`. The band keeps ticking.
+7. **Bring it back.** Restart with the step 1 command and the same `--data`. Within 15 seconds the
+   World tab is bright again, and the chat tail resumes with no gap in what you can see.
+8. **Two sessions.** In a third terminal open a second `claude --plugin-dir plugins/promptfall`.
+   Its band reads `playing in another session`. `/promptfall chat` there still posts: a line from
+   the second session shows in the first within 15 seconds. The online count in both stays 13
+   (one entry per account).
+9. **Backgrounded terminal.** Both sessions are one account, so the online count cannot show
+   whether a hidden session's timers fire. Instead, hide or minimise the first terminal (the
+   primary) for 2 minutes and watch the third terminal's band:
+   - If it keeps reading `playing in another session`, the hidden primary kept renewing its 30 s
+     lease, so its timers fire while backgrounded.
+   - If within about 45 seconds it starts ticking as the primary, the lease lapsed and they do not.
+
+   Bring the first terminal back (it becomes the secondary if it lost the lease). Write which it
+   was under "Findings" below: it settles the open item on idle timers.
+10. **Snapshot size.** Run
+    `curl -s 'localhost:7777/v1/world' -H 'authorization: Bearer <a token from .promptfall/fake.json>' | wc -c`.
+    It prints under 16000 bytes with a full chat tail. Note the number under "Findings" (the open
+    item on response size).
+11. **A flag off.** Stop the fake and start it with `--flag chat.enabled=false` added. The startup
+    line ends in `flags chat.enabled=false`. Within 15 seconds the band's row 3 reads
+    `chat is closed`, and the Chat tab reads `Chat is closed.` with no compose box. The
+    Leaderboards tab still loads. Restart without the flag.
+12. **In-process.** Run `/promptfall server local`. The World tab reads
+    `1 online · zone N: nobody else here` and `chat is closed`, the Chat tab says
+    `Chat is closed.`, and the Leaderboards tab lists you alone.
+
+## Findings
+
+- Idle timers (step 9):
+- World snapshot size (step 10):
