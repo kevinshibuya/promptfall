@@ -1,5 +1,6 @@
 import { atom, type On, read, update } from 'claude-code'
 import type { BossView, GameView, Mode, Prefs, WorldState } from '../../types'
+import { IN_PROCESS } from '../server'
 import { PREFS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { gates } from '../view'
 import { CLASS_INITIAL, clip, formatCount, formatGold, padEnd, padStart, waveLabel } from './format'
@@ -98,7 +99,10 @@ export function worldRows(
   }
   const last = world.messages.at(-1)
   const chat = !open.chatOpen
-    ? { text: 'chat is closed', dim: true }
+    ? {
+        text: view.account.server === IN_PROCESS ? 'chat needs a server' : 'chat is closed',
+        dim: true,
+      }
     : last
       ? { text: `${last.name}: ${last.text}`, dim: false }
       : { text: 'chat is quiet', dim: true }

@@ -157,7 +157,8 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     }
 
     const tabs = (
-      <Box key="tabs" flexDirection="row" gap={2}>
+      // Eight tabs do not fit a pane docked beside the conversation: they wrap.
+      <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={2}>
         {TABS.map((t) => (
           <Button
             key={`tab-${t.tab}`}

@@ -195,7 +195,7 @@ const RUN = {
   presentation: { isFullscreen: false, columns: 120 },
 } as const
 
-test('the World tab reads the in-process world: one online, chat closed', async ($, on) => {
+test('the World tab reads the in-process world: one online, chat needs a server', async ($, on) => {
   const { states } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect((states.get('world') as WorldState).snapshot?.online).toBe(1)
@@ -204,7 +204,7 @@ test('the World tab reads the in-process world: one online, chat closed', async 
     await ui.press({ key: 'tab-world' })
     expect(await ui.find({ text: /^1 online · zone 1: nobody else here$/ })).toBeDefined()
     expect(await ui.find({ text: /^highest zone 1 · kills \d+ · wipes \d+/ })).toBeDefined()
-    expect(await ui.find({ text: 'chat is closed' })).toBeDefined()
+    expect(await ui.find({ text: 'chat needs a server' })).toBeDefined()
     expect(await ui.find({ text: /Multiplayer arrives/ })).toBeUndefined()
     await ui.unmount()
   }

@@ -85,7 +85,7 @@ week's world boss damage (the week starts Monday 00:00 UTC). Your row is cyan. N
 
 Each part sits behind a server flag: when the server turns chat, presence or the boards off, the
 tab says so within one poll. The in-process ledger has chat off: its World tab reads
-`1 online` and `chat is closed`.
+`1 online` and `chat needs a server`, and the Chat tab says how to reach one.
 
 ### World boss
 

@@ -31,6 +31,8 @@ export type After = (ms: number, fn: () => void) => void
 export const GATE_CLOSED = 'The market is closed.'
 export const GATE_UNLINKED = 'Link your GitHub account: press a for the Account tab'
 export const GATE_CHAT_CLOSED = 'Chat is closed.'
+/** The in-process ledger has nobody to talk to: say how to reach a server. */
+export const GATE_CHAT_LOCAL = 'Chat needs a server: /promptfall server <url>'
 export const GATE_BOARDS_CLOSED = 'Leaderboards are closed.'
 const ERROR_MS = 5000
 

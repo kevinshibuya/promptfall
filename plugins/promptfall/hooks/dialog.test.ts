@@ -684,3 +684,13 @@ test('/promptfall chat and /promptfall leaderboards open on those tabs', async (
   expect(sent.some((r) => r.method === 'GET' && r.path === '/v1/leaderboards')).toBe(true)
   await ui.unmount()
 })
+
+test('in-process the Chat tab says chat needs a server', async ($, on) => {
+  harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-chat' })
+  expect(await ui.find({ text: 'Chat needs a server: /promptfall server <url>' })).toBeDefined()
+  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
+  await ui.unmount()
+})
