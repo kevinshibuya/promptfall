@@ -48,6 +48,11 @@ export type AccountView = {
   /** The server's label: `in-process` or its URL. */
   server: string
   marketOpen: boolean
+  /** The bootstrap config's flags: what `gates` falls back to before the first world snapshot. */
+  chatOpen: boolean
+  presenceOpen: boolean
+  leaderboardsOpen: boolean
+  bossOpen: boolean
   returns: number
 }
 export type GameView = {
@@ -142,6 +147,47 @@ export type DialogState = {
   sell: SellState | null
 }
 
+// The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`):
+// the contract imports nothing.
+export type ChatMessage = { id: number; name: string; text: string; at: number }
+export type BossView = {
+  bossId: string
+  name: string
+  glyph: string
+  maxHp: number
+  hp: number
+  spawnedAt: number
+  endsAt: number
+  yours: number
+}
+export type WorldSnapshot = {
+  serverNow: number
+  speed: number
+  online: number
+  zones: { zone: number; count: number }[]
+  here: string[]
+  boss: BossView | null
+  chat: ChatMessage[]
+  flags: Record<string, boolean>
+}
+
+/** The world poll's result, published by the session's poller. */
+export type WorldState = {
+  snapshot: WorldSnapshot | null
+  /** Client clock of the last fresh snapshot. */
+  fetchedAt: number | null
+  /** True once WORLD_STALE_MS passed since `fetchedAt` without a fresh one. */
+  stale: boolean
+  /** The client's chat buffer: at most 200, ascending id. */
+  messages: ChatMessage[]
+  /** The id of the last message a poll delivered; sent as `since`; moves only on a poll. */
+  chatMark: number
+  /** From the snapshot's serverNow and speed. */
+  clock: { serverNow: number; clientNow: number; speed: number } | null
+  /** PR 2: what this party had committed for the live boss when the snapshot arrived. Null subtracts nothing. */
+  committedDealt: { bossId: string; dealt: number } | null
+}
+
 declare module 'claude-code' {
   interface PluginState {
     promptfall: {
@@ -156,6 +202,7 @@ declare module 'claude-code' {
       server: string | null
       market: MarketState
       orders: OrdersState
+      world: WorldState
     }
   }
 }

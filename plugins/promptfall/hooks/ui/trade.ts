@@ -1,6 +1,7 @@
 import type { Elements, RenderElement } from 'claude-code'
-import type { GameView } from '../../types'
+import type { GameView, WorldState } from '../../types'
 import type { MarketRefusal } from '../vendor/protocol.js'
+import { gates } from '../view'
 
 export type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & {
   /** Absent on mobile: presets stand in for typed prices. */
@@ -26,8 +27,8 @@ export const GATE_UNLINKED = 'Link your GitHub account: press a for the Account 
 const ERROR_MS = 5000
 
 /** Why this player cannot trade right now, or null: shown in place of the trade buttons. */
-export function gateLine(view: GameView): string | null {
-  if (!view.account.marketOpen) return GATE_CLOSED
+export function gateLine(view: GameView, world: WorldState | null): string | null {
+  if (!gates(world, view.account).marketOpen) return GATE_CLOSED
   if (!view.account.linked) return GATE_UNLINKED
   return null
 }

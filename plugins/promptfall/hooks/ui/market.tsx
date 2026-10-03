@@ -1,4 +1,4 @@
-import type { GameView, MarketQuery, MarketState } from '../../types'
+import type { GameView, MarketQuery, MarketState, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { content } from '../vendor/sim.js'
 import { listingView } from '../view'
@@ -81,6 +81,7 @@ export function marketBody(
   els: Els,
   pick: PickFn,
   view: GameView,
+  world: WorldState | null,
   market: MarketState,
   readOnly: boolean,
   actions: MarketActions,
@@ -88,7 +89,7 @@ export function marketBody(
   const { Box, Text, Button } = els
   const q = market.query
   const body = []
-  const gate = gateLine(view)
+  const gate = gateLine(view, world)
   body.push(
     <Box key="market-filters" flexDirection="row" gap={2}>
       <Button

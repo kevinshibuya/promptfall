@@ -1,6 +1,7 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { GameView, Mode, Prefs } from '../../types'
-import { PREFS_DEFAULT } from '../state'
+import type { GameView, Mode, Prefs, WorldState } from '../../types'
+import { PREFS_DEFAULT, WORLD_DEFAULT } from '../state'
+import { gates } from '../view'
 import { CLASS_INITIAL, clip, formatGold, padEnd, padStart, waveLabel } from './format'
 import { ClassGlyph, HpBar, RarityText } from './parts'
 
@@ -8,6 +9,7 @@ const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 
 const MIN_COLUMNS = 100
 const REST_ROWS = 4
@@ -20,6 +22,27 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
   if (notice) parts.push(notice)
   const line = parts.join(' · ')
   return mode === 'secondary' ? `playing in another session · ${line}` : line
+}
+
+/** The World tab's three rows: who is around, the account's records, the chat ticker. */
+export function worldRows(view: GameView, world: WorldState): { text: string; dim: boolean }[] {
+  const open = gates(world, view.account)
+  const snapshot = world.snapshot
+  let presence: { text: string; dim: boolean }
+  if (!open.presenceOpen) presence = { text: 'presence is off', dim: true }
+  else if (!snapshot) presence = { text: 'connecting to the world…', dim: true }
+  else {
+    const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
+    presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
+  }
+  const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  const last = world.messages.at(-1)
+  const chat = !open.chatOpen
+    ? { text: 'chat is closed', dim: true }
+    : last
+      ? { text: `${last.name}: ${last.text}`, dim: false }
+      : { text: 'chat is quiet', dim: true }
+  return [presence, { text: records, dim: false }, chat]
 }
 
 export function registerBand(on: On): void {
@@ -43,6 +66,7 @@ export function registerBand(on: On): void {
       )
     }
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
+    const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
     const { Box, Text, Button } = $.ui.resolve(e)
     const els = { Text }
     const width = Math.max(20, e.props.bodyColumns)
@@ -114,16 +138,11 @@ export function registerBand(on: On): void {
         )
       }
     } else {
-      const world = [
-        `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`,
-        'Multiplayer arrives in phase 2',
-        ' ',
-      ]
-      world.forEach((text, i) => {
+      worldRows(view, world).forEach((row, i) => {
         rows.push(
           <Box key={`row-${i}`} flexDirection="row">
-            <Text dimColor={i > 0} wrap="truncate">
-              {clip(text, width)}
+            <Text key={`world-${i}`} dimColor={row.dim} wrap="truncate">
+              {clip(row.text, width)}
             </Text>
           </Box>,
         )

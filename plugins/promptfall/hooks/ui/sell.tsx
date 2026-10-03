@@ -1,4 +1,4 @@
-import type { DialogState, GameView, SellState } from '../../types'
+import type { DialogState, GameView, SellState, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { listingFee, saleNet, validPrice } from '../vendor/ledger.js'
 import { orderView } from '../view'
@@ -74,6 +74,7 @@ export type SellActions = {
 export function sellBody(
   els: Els,
   view: GameView,
+  world: WorldState | null,
   sell: SellState,
   remainingMs: (deadline: number) => number,
   actions: SellActions,
@@ -107,7 +108,7 @@ export function sellBody(
       </Text>,
     )
   }
-  const gate = gateLine(view)
+  const gate = gateLine(view, world)
   if (gate) {
     body.push(
       <Text key="sell-gate" color="yellow">

@@ -8,9 +8,16 @@ import type {
   OrdersState,
   Prefs,
   SellState,
+  WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT, PREFS_DEFAULT } from '../state'
+import {
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  PREFS_DEFAULT,
+  WORLD_DEFAULT,
+} from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
 import { CLASS_LABEL, formatGold } from './format'
@@ -31,6 +38,7 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
@@ -88,6 +96,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
     const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
     const notice = await read($, noticeAtom)
+    const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
 
     const readOnly = mode === 'secondary' || mode === 'paused' || !game()?.canApply()
     const act = async (event: PlayerEvent) => {
@@ -218,7 +227,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const tradeableAt = goods?.tradeableAt ?? null
       const remaining = tradeableAt === null ? undefined : formatRemaining(remainingMs(tradeableAt))
       body.push(
-        ...sellBody(els, view, sell, remainingMs, {
+        ...sellBody(els, view, world, sell, remainingMs, {
           close,
           setPrice: (text) => updSell((s) => ({ ...s, price: text })),
           list: (price) =>
@@ -244,7 +253,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'market' && running) {
       body.push(
-        ...marketBody(els, pick, view, market, readOnly, {
+        ...marketBody(els, pick, view, world, market, readOnly, {
           setQuery: (q) => loadMarket(running, q, updMarket, after),
           ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
           confirm: async () =>
@@ -253,7 +262,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'orders' && running) {
       body.push(
-        ...ordersBody(els, pick, view, orders, readOnly, remainingMs, {
+        ...ordersBody(els, pick, view, world, orders, readOnly, remainingMs, {
           cancelListing: async (id) => {
             await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
           },

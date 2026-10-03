@@ -421,9 +421,9 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** No dialog tabs (Task 6). No boss display. No change to the lease, the flush path or the outage rules.
 
-- [ ] `pnpm vendor`; mechanical type fixes including the `Recorder` stubs; `server.ts` flags; `toAccountView` flags; `gates`; `gateText(view, world)`
-- [ ] `world.ts`, the `world` atom in both `Io` literals, `GameSession` wiring, the reset in `useServer`; `register.test.ts` red then green for cadence, the in-flight guard, failures, stale, secondary, the followed switch
-- [ ] World tab rows; `band.test.ts`; run the acceptance check; commit `feat(plugin): world poll, World tab presence and chat ticker, in-process flags`
+- [x] `pnpm vendor`; mechanical type fixes including the `Recorder` stubs; `server.ts` flags; `toAccountView` flags; `gates`; `gateText(view, world)`
+- [x] `world.ts`, the `world` atom in both `Io` literals, `GameSession` wiring, the reset in `useServer`; `register.test.ts` red then green for cadence, the in-flight guard, failures, stale, secondary, the followed switch
+- [x] World tab rows; `band.test.ts`; run the acceptance check; commit `feat(plugin): world poll, World tab presence and chat ticker, in-process flags`
 
 ### Task 6: Plugin: Chat and Leaderboards tabs, commands, README
 

@@ -4270,20 +4270,90 @@ var UnauthorizedSchema = external_exports.object({
 });
 var NewListingSchema = external_exports.object({ kind: TradeKindSchema, id: id2, price });
 
-// packages/protocol/src/responses.ts
+// packages/protocol/src/world.ts
+var PRESENCE_TTL_MS = 45e3;
+var HERE_MAX = 10;
+var CHAT_MAX_CHARS = 200;
+var CHAT_BUCKET_CAPACITY = 5;
+var CHAT_REFILL_MS = 1e4;
+var CHAT_KEEP = 200;
+var CHAT_SERVE = 50;
+var BOARD_ROWS = 20;
+var DAY_MS = 864e5;
+function weekStartOf(now) {
+  const days = Math.floor(now / DAY_MS);
+  return (days - (days + 3) % 7) * DAY_MS;
+}
 var count3 = external_exports.number().int().nonnegative();
+var ChatMessageSchema = external_exports.object({
+  id: external_exports.number().int().positive(),
+  name: external_exports.string().max(128),
+  text: external_exports.string().min(1).max(CHAT_MAX_CHARS),
+  at: count3
+});
+var ChatResultSchema = external_exports.union([
+  external_exports.object({ ok: external_exports.literal(true), message: ChatMessageSchema }),
+  external_exports.object({
+    ok: external_exports.literal(false),
+    reason: external_exports.enum([
+      "not_linked",
+      "chat_closed",
+      "empty",
+      "too_long",
+      "rate_limited",
+      "blocked",
+      "unauthorized"
+    ])
+  })
+]);
+var ChatBodySchema = external_exports.object({ text: external_exports.string().max(2e3) });
+var BossViewSchema = external_exports.object({
+  bossId: external_exports.string().min(1).max(64),
+  name: external_exports.string().max(128),
+  glyph: external_exports.string().max(8),
+  maxHp: count3,
+  hp: count3,
+  spawnedAt: count3,
+  endsAt: count3,
+  yours: count3
+});
+var WorldSnapshotSchema = external_exports.object({
+  serverNow: count3,
+  speed: external_exports.number().positive(),
+  online: count3,
+  zones: external_exports.array(
+    external_exports.object({ zone: external_exports.number().int().positive(), count: external_exports.number().int().positive() })
+  ),
+  here: external_exports.array(external_exports.string().max(128)).max(HERE_MAX),
+  boss: BossViewSchema.nullable(),
+  chat: external_exports.array(ChatMessageSchema),
+  flags: external_exports.record(external_exports.boolean())
+});
+var BoardRowSchema = external_exports.object({
+  accountId: external_exports.string().min(1).max(128),
+  name: external_exports.string().max(128),
+  value: count3
+});
+var BoardsSchema = external_exports.object({
+  highestZone: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
+  damage: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
+  weekStart: count3
+});
+
+// packages/protocol/src/responses.ts
+var count4 = external_exports.number().int().nonnegative();
 var AccountSchema = external_exports.object({
   accountId: external_exports.string().min(1).max(128),
-  seed: count3,
-  createdAt: count3,
+  seed: count4,
+  createdAt: count4,
   displayName: external_exports.string().max(128).nullable(),
   linked: external_exports.object({ provider: external_exports.literal("github"), login: external_exports.string().min(1).max(64) }).nullable()
 });
 var ServerConfigSchema = external_exports.object({
   minClientVersion: external_exports.string(),
-  simVersion: count3,
+  simVersion: count4,
   flags: external_exports.record(external_exports.boolean()),
-  serverNow: count3,
+  serverNow: count4,
   speed: external_exports.number().positive()
 });
 var BootstrapSchema = external_exports.object({
@@ -4291,22 +4361,22 @@ var BootstrapSchema = external_exports.object({
   account: AccountSchema,
   config: ServerConfigSchema,
   state: GameStateSchema,
-  seq: count3,
+  seq: count4,
   hash: HEX16,
-  cursor: count3,
+  cursor: count4,
   delivery: DeliverySchema
 });
 var adopt = {
   ok: external_exports.literal(false),
-  seq: count3,
+  seq: count4,
   state: GameStateSchema,
   hash: HEX16,
-  cursor: count3
+  cursor: count4
 };
 var BatchAckSchema = external_exports.union([
   external_exports.object({
     ok: external_exports.literal(true),
-    seq: count3,
+    seq: count4,
     hash: HEX16,
     duplicate: external_exports.boolean(),
     delivery: DeliverySchema
@@ -4317,7 +4387,7 @@ var BatchAckSchema = external_exports.union([
     reason: external_exports.literal("version_gate"),
     minClientVersion: external_exports.string()
   }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count3 }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count4 }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("cursor_behind"), delivery: DeliverySchema }),
   external_exports.object({ ...adopt, reason: external_exports.enum(["seq_mismatch", "cursor_mismatch"]) }),
   external_exports.object({ ...adopt, reason: external_exports.literal("hash_mismatch"), revokedItemIds: external_exports.array(external_exports.string()) }),
@@ -4328,14 +4398,14 @@ function orUnauthorized(schema) {
 }
 var AccountInfoSchema = external_exports.object({
   account: AccountSchema,
-  returns: count3,
+  returns: count4,
   config: ServerConfigSchema,
   delivery: DeliverySchema
 });
 var LinkStartSchema = external_exports.object({
   code: external_exports.string().min(1).max(32),
   url: external_exports.string().min(1),
-  intervalMs: count3
+  intervalMs: count4
 });
 var LinkPollSchema = external_exports.union([
   external_exports.object({ status: external_exports.literal("pending") }),
@@ -4343,10 +4413,10 @@ var LinkPollSchema = external_exports.union([
 ]);
 var HealthSchema = external_exports.object({
   ok: external_exports.literal(true),
-  simVersion: count3,
-  seed: count3,
+  simVersion: count4,
+  seed: count4,
   speed: external_exports.number().positive(),
-  now: count3
+  now: count4
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
 var LinkStartResponseSchema = orUnauthorized(LinkStartSchema);
@@ -4356,6 +4426,8 @@ var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
 var MatchingOrdersResponseSchema = orUnauthorized(
   external_exports.array(OrderSchema)
 );
+var WorldResponseSchema = orUnauthorized(WorldSnapshotSchema);
+var BoardsResponseSchema = orUnauthorized(BoardsSchema);
 var ErrorBodySchema = external_exports.union([
   external_exports.object({ error: external_exports.literal("schema"), issues: external_exports.array(external_exports.unknown()) }),
   external_exports.object({ error: external_exports.literal("route") }),
@@ -4378,7 +4450,10 @@ var ROUTES = {
   placeOrder: { method: "POST", path: "/v1/orders" },
   cancelOrder: { method: "DELETE", path: "/v1/orders/:id" },
   matchingOrders: { method: "GET", path: "/v1/orders/matching" },
-  fillOrder: { method: "POST", path: "/v1/orders/:id/fill" }
+  fillOrder: { method: "POST", path: "/v1/orders/:id/fill" },
+  world: { method: "GET", path: "/v1/world" },
+  chat: { method: "POST", path: "/v1/chat" },
+  leaderboards: { method: "GET", path: "/v1/leaderboards" }
 };
 function failure(name, message, status) {
   const error = new Error(message);
@@ -4486,6 +4561,15 @@ var HttpClient = class {
   fillOrder(auth, orderId, itemId) {
     return this.call("fillOrder", MarketResultSchema, { auth, id: orderId, body: { itemId } });
   }
+  world(auth, since) {
+    return this.call("world", WorldResponseSchema, { auth, query: { since } });
+  }
+  chat(auth, text) {
+    return this.call("chat", ChatResultSchema, { auth, body: { text } });
+  }
+  leaderboards(auth) {
+    return this.call("leaderboards", BoardsResponseSchema, { auth });
+  }
 };
 
 // packages/protocol/src/kv.ts
@@ -4512,14 +4596,28 @@ export {
   AccountInfoSchema,
   AccountResponseSchema,
   AccountSchema,
+  BOARD_ROWS,
   BUDGETS,
   BatchAckSchema,
   BatchSchema,
+  BoardRowSchema,
+  BoardsResponseSchema,
+  BoardsSchema,
   BootstrapSchema,
+  BossViewSchema,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  ChatBodySchema,
+  ChatMessageSchema,
+  ChatResultSchema,
   DeliverySchema,
   ErrorBodySchema,
   GameStateSchema,
   GoodsSchema,
+  HERE_MAX,
   HEX16,
   HealthSchema,
   HeroSchema,
@@ -4544,11 +4642,15 @@ export {
   NewOrderSchema,
   OrderSchema,
   PLAYER_EVENT_KINDS,
+  PRESENCE_TTL_MS,
   PROTOCOL_VERSION,
   ROUTES,
   ServerConfigSchema,
   ServerEventSchema,
   TimedEventSchema,
   UnauthorizedSchema,
-  compareSemver
+  WorldResponseSchema,
+  WorldSnapshotSchema,
+  compareSemver,
+  weekStartOf
 };
