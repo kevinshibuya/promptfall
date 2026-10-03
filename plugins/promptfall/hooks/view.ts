@@ -4,10 +4,12 @@ import type {
   GameView,
   HeroView,
   ItemView,
+  ListingView,
   LootView,
+  OrderView,
   RosterHeroView,
 } from '../types'
-import type { Account, ServerConfig } from './vendor/protocol.js'
+import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
 import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
 
 const LOOT_LINES = 12
@@ -36,6 +38,56 @@ function expansionCost(
   return rule.costs[Math.floor((cap - start) / rule.step)] ?? null
 }
 
+/** The name a trade shows: the item base's, or the hero template's. */
+export function tradeName(kind: 'item' | 'hero', base: string): string {
+  return kind === 'hero'
+    ? (content.heroTemplates[base]?.name ?? base)
+    : (content.itemBases[base]?.name ?? base)
+}
+
+function affixLine(item: Item): string {
+  return item.affixes.map((a) => `${content.affixes[a.id]?.name ?? a.id} +${a.value}`).join(', ')
+}
+
+export function listingView(listing: Listing): ListingView {
+  const g = listing.goods
+  const common = {
+    id: listing.id,
+    kind: g.kind,
+    sellerId: listing.sellerId,
+    sellerName: listing.sellerName,
+    price: listing.price,
+    expiresAt: listing.expiresAt,
+  }
+  if (g.kind === 'item') {
+    return {
+      ...common,
+      name: tradeName('item', g.item.base),
+      rarity: g.item.rarity,
+      detail: affixLine(g.item) || 'no affixes',
+    }
+  }
+  const traits = g.hero.traits.map((t) => content.traits[t.id]?.name ?? t.id).join(', ')
+  return {
+    ...common,
+    name: heroName(g.hero.template, g.hero.epithet),
+    rarity: g.hero.rarity,
+    detail: [g.hero.cls, traits].filter(Boolean).join(' · '),
+  }
+}
+
+export function orderView(order: Order): OrderView {
+  return {
+    id: order.id,
+    base: order.base,
+    name: tradeName('item', order.base),
+    minRarity: order.minRarity,
+    affix: order.affixId ? (content.affixes[order.affixId]?.name ?? order.affixId) : null,
+    maxPrice: order.maxPrice,
+    expiresAt: order.expiresAt,
+  }
+}
+
 function lootLine(entry: LootEntry): LootView {
   if (entry.k === 'hero') {
     const glyph = content.heroTemplates[entry.template]?.glyph ?? '@'
@@ -43,11 +95,10 @@ function lootLine(entry: LootEntry): LootView {
     return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
   }
   if (entry.k === 'trade') {
-    const name =
-      entry.kind === 'hero'
-        ? (content.heroTemplates[entry.base]?.name ?? entry.base)
-        : (content.itemBases[entry.base]?.name ?? entry.base)
-    return { text: `${entry.what} ${name}`, rarity: entry.rarity }
+    const name = tradeName(entry.kind, entry.base)
+    const text =
+      entry.what === 'returned' ? `${name} returned` : `${entry.what} ${name} for ${entry.gold}g`
+    return { text, rarity: entry.rarity }
   }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
@@ -73,6 +124,7 @@ function itemView(item: Item): ItemView {
     classes: base?.classes ?? [],
     vendorValue: vendorValue(item),
     reforgeCost: content.rarity[item.rarity].reforgeCost,
+    tradeableAt: item.tradeableAt,
   }
 }
 
@@ -137,6 +189,8 @@ export function toGameView(
     }),
     inParty: state.party.includes(hero.id),
     inPendingParty: state.pendingParty?.includes(hero.id) ?? false,
+    tradeableAt: hero.tradeableAt,
+    equipment: { ...hero.equipment },
   }))
   return {
     heroes,

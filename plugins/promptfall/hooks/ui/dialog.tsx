@@ -1,11 +1,25 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { DialogState, DialogTab, GameView, Mode, Prefs } from '../../types'
+import type {
+  DialogState,
+  DialogTab,
+  GameView,
+  MarketState,
+  Mode,
+  OrdersState,
+  Prefs,
+  SellState,
+} from '../../types'
 import type { GameHandle } from '../engine'
-import { DIALOG_DEFAULT, PREFS_DEFAULT } from '../state'
+import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT, PREFS_DEFAULT } from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
 import { CLASS_LABEL, formatGold } from './format'
+import { confirmBuy, loadMarket, marketBody } from './market'
+import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
+import { openSell, sellBody, sellTrade } from './sell'
+import { formatRemaining, remainingRealMs } from './time'
+import type { After, Els, Updater } from './trade'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
@@ -15,10 +29,16 @@ const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DE
 const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const, null)
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
+const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
+const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+
+const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
 const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
   { tab: 'inventory', label: 'Inventory', hotkey: 'i' },
   { tab: 'heroes', label: 'Heroes', hotkey: 'h' },
+  { tab: 'market', label: 'Market', hotkey: 'm' },
+  { tab: 'orders', label: 'Orders', hotkey: 'r' },
   { tab: 'account', label: 'Account', hotkey: 'a' },
   { tab: 'odds', label: 'Odds', hotkey: 'o' },
 ]
@@ -45,13 +65,15 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       label: string,
       options: { value: string; label: string }[],
       onPick: (value: string) => Promise<void>,
+      value?: string,
     ) =>
       Select ? (
         <Select
           key={key}
           label={label}
           options={options}
-          onSelect={(value: string) => void onPick(value)}
+          {...(value !== undefined ? { value } : {})}
+          onSelect={(picked: string) => void onPick(picked)}
         />
       ) : (
         <Box key={key} flexDirection="column">
@@ -76,6 +98,35 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     }
     const setDialog = (patch: Partial<DialogState>) =>
       update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), ...patch }))
+    const market: MarketState = (await read($, marketAtom)) ?? MARKET_DEFAULT
+    const orders: OrdersState = (await read($, ordersAtom)) ?? ORDERS_DEFAULT
+    const updMarket: Updater<MarketState> = async (fn) => {
+      await update($, marketAtom, (m) => fn(m ?? MARKET_DEFAULT))
+    }
+    const updOrders: Updater<OrdersState> = async (fn) => {
+      await update($, ordersAtom, (o) => fn(o ?? ORDERS_DEFAULT))
+    }
+    const updDialog: Updater<DialogState> = async (fn) => {
+      await update($, dialogAtom, (d) => fn(d ?? DIALOG_DEFAULT))
+    }
+    const updSell: Updater<SellState> = (fn) =>
+      updDialog((d) => (d.sell ? { ...d, sell: fn(d.sell) } : d))
+    const after: After = (ms, fn) => {
+      $.clock.after(ms, fn)
+    }
+    const els: Els = { Box, Text, Button, Input: 'Input' in table ? table.Input : undefined }
+    const clientNow = await $.clock.now()
+    const serverClock = game()?.clock() ?? null
+    const remainingMs = (deadline: number) =>
+      serverClock ? remainingRealMs(deadline, serverClock, clientNow) : deadline - clientNow
+    /** Opening the Market or Orders tab syncs and loads it. */
+    const openTab = async (next: DialogTab) => {
+      await update($, dialogTabAtom, () => next)
+      const running = game()
+      if (!running) return
+      if (next === 'market') await loadMarket(running, market.query, updMarket, after)
+      if (next === 'orders') await loadOrders(running, updOrders, after)
+    }
 
     const tabs = (
       <Box key="tabs" flexDirection="row" gap={2}>
@@ -86,7 +137,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             hotkey={t.hotkey}
             plain
             dimColor={t.tab !== tab}
-            onPress={() => update($, dialogTabAtom, () => t.tab)}
+            onPress={() => openTab(t.tab)}
           />
         ))}
       </Box>
@@ -156,7 +207,87 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const heroNameById = new Map(view.roster.map((h) => [h.id, h.name]))
     const body = []
 
-    if (tab === 'inventory') {
+    const running = game()
+    if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
+      const sell = dialog.sell
+      const close = () => updDialog((d) => ({ ...d, sell: null }))
+      const goods =
+        sell.kind === 'item'
+          ? view.inventory.find((i) => i.id === sell.id)
+          : view.roster.find((h) => h.id === sell.id)
+      const tradeableAt = goods?.tradeableAt ?? null
+      const remaining = tradeableAt === null ? undefined : formatRemaining(remainingMs(tradeableAt))
+      body.push(
+        ...sellBody(els, view, sell, remainingMs, {
+          close,
+          setPrice: (text) => updSell((s) => ({ ...s, price: text })),
+          list: (price) =>
+            sellTrade(
+              running,
+              (client, auth) => client.list(auth, { kind: sell.kind, id: sell.id, price }),
+              updSell,
+              close,
+              after,
+              remaining,
+            ),
+          accept: (orderId) =>
+            sellTrade(
+              running,
+              (client, auth) => client.fillOrder(auth, orderId, sell.id),
+              updSell,
+              close,
+              after,
+              remaining,
+            ),
+          unequip: (heroId, slot) => act({ t: 'unequip', heroId, slot }),
+        }),
+      )
+    } else if (tab === 'market' && running) {
+      body.push(
+        ...marketBody(els, pick, view, market, readOnly, {
+          setQuery: (q) => loadMarket(running, q, updMarket, after),
+          ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
+          confirm: async () =>
+            confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
+        }),
+      )
+    } else if (tab === 'orders' && running) {
+      body.push(
+        ...ordersBody(els, pick, view, orders, readOnly, remainingMs, {
+          cancelListing: async (id) => {
+            await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
+          },
+          cancelOrder: async (id) => {
+            await ordersTrade(running, (c, a) => c.cancelOrder(a, id), updOrders, after)
+          },
+          openForm: () =>
+            updOrders((o) => ({
+              ...o,
+              form: { base: 'steel_longsword', minRarity: 'rare', affixId: null, maxPrice: '' },
+            })),
+          closeForm: () => updOrders((o) => ({ ...o, form: null })),
+          setForm: (patch) =>
+            updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
+          submit: async () => {
+            const form = ((await read($, ordersAtom)) ?? orders).form
+            if (!form || !/^\d+$/.test(form.maxPrice)) return
+            const input = {
+              base: form.base,
+              minRarity: form.minRarity,
+              affixId: form.affixId,
+              maxPrice: Number(form.maxPrice),
+            }
+            const done = await ordersTrade(
+              running,
+              (c, a) => c.placeOrder(a, input),
+              updOrders,
+              after,
+            )
+            if (done) await updOrders((o) => ({ ...o, form: null }))
+          },
+        }),
+      )
+    } else if (tab === 'inventory') {
       body.push(
         <Text key="inv-head" bold>
           {`Inventory ${view.inventory.length}/${view.inventoryCap} · ${formatGold(view.gold)}`}
@@ -221,6 +352,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
                   key={`vendor-${item.id}`}
                   label={`vendor ${item.vendorValue}g`}
                   onPress={() => act({ t: 'vendor', itemId: item.id })}
+                />
+              )}
+              {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
+                <Button
+                  key={`sell-${item.id}`}
+                  label="sell"
+                  onPress={() => openSell(running, 'item', item.id, updDialog)}
                 />
               )}
               {readOnly || item.affixes.length === 0 ? null : (
@@ -305,6 +443,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
               </Text>
             ) : null}
             {marker ? <Text color="cyan">{marker}</Text> : null}
+            {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
+              <Button
+                key={`sell-${hero.id}`}
+                label="sell"
+                onPress={() => openSell(running, 'hero', hero.id, updDialog)}
+              />
+            )}
             {readOnly ? null : (
               <Button
                 key={`party-${hero.id}`}

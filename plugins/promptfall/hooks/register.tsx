@@ -12,7 +12,7 @@ import { registerDialog } from './ui/dialog'
 import type { FetchLike, LinkPoll, MarketResult, Unauthorized } from './vendor/protocol.js'
 import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
-import { heroName, toAccountView, toGameView } from './view'
+import { heroName, toAccountView, toGameView, tradeName } from './view'
 
 type Timer = { cancel: () => void }
 
@@ -64,6 +64,12 @@ function effectToast(effect: Effect): string | null {
       return `Party wiped, retreating to zone ${effect.retreatedTo}`
     case 'hero_recruited':
       return `${heroName(effect.hero.template, effect.hero.epithet)} joined (${effect.hero.rarity})`
+    case 'traded': {
+      const name = tradeName(effect.entry.kind, effect.entry.base)
+      if (effect.entry.what === 'sold') return `Sold ${name} for ${effect.entry.gold}g`
+      if (effect.entry.what === 'bought') return `Bought ${name} for ${effect.entry.gold}g`
+      return `${name} returned to you`
+    }
     default:
       return null
   }
@@ -241,6 +247,16 @@ class GameSession implements GameHandle {
       this.io.after(start.intervalMs, () => void poll())
     }
     this.io.after(start.intervalMs, () => void poll())
+  }
+
+  readonly market: GameHandle['market'] = {
+    browse: (query) => this.engine.call((client, auth) => client.browse(auth, query)),
+    myOrders: () => this.engine.call((client, auth) => client.myOrders(auth)),
+    matching: (itemId) => this.engine.call((client, auth) => client.matchingOrders(auth, itemId)),
+  }
+
+  clock(): ReturnType<GameHandle['clock']> {
+    return this.engine.clock()
   }
 
   /** Deletes every Promptfall key but the lease, then starts over on the same server. */
