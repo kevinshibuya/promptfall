@@ -37,6 +37,24 @@ type AccountRecord = {
 };
 declare const LOG_CAP = 500;
 
+declare const COOLDOWN_MS = 86400000;
+declare const EXPIRY_MS = 604800000;
+declare const MIN_PRICE = 1;
+declare const MAX_PRICE = 1000000;
+/** The listing fee, kept on cancel and expiry: 2%, at least 1 gold. */
+declare function listingFee(price: number): number;
+/** The sale fee on listings and order fills: 5%, rounded down. */
+declare function saleFee(price: number): number;
+/** What the seller receives. */
+declare function saleNet(price: number): number;
+declare function validPrice(price: number): boolean;
+/**
+ * Goods changing owner: a fresh `t` id unless they already carry one, the
+ * cooldown from `now`, and a hero reset to level 1, no XP, full level-1 HP,
+ * nothing worn. A returned listing never comes through here.
+ */
+declare function transfer(goods: Goods, now: number, nextId: () => Promise<string>, receiver: GameState): Promise<Goods>;
+
 /** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods), base 36 over one global counter. */
 declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't'): Promise<string>;
 
@@ -110,6 +128,12 @@ declare class Ledger implements ServerClient {
     private linkCode;
     private marketRead;
     private marketWrite;
+    /**
+     * The caller's current record, after expiring what is due. Expiry runs only
+     * for an authenticated caller, and the record is read after it, since
+     * expiring the caller's own listing changes the caller's record.
+     */
+    private authenticated;
     browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
     list(auth: Auth, input: {
         kind: TradeKind;
@@ -130,4 +154,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, type PendingReturn, nextLedgerId };
+export { type AccountRecord, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

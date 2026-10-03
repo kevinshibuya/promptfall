@@ -107,6 +107,26 @@ describe('Ledger host', () => {
   })
 })
 
+describe('Ledger host guards', () => {
+  it('credit refuses what the wire would refuse, and writes nothing', async () => {
+    const { ledger, kv } = makeLedger()
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const id = boot.account.accountId
+    await expect(ledger.host.credit(id, -1, 'x')).rejects.toThrow()
+    await expect(ledger.host.credit(id, 1.5, 'x')).rejects.toThrow()
+    await expect(ledger.host.credit(id, 1, 'r'.repeat(65))).rejects.toThrow()
+    const r = await record(kv as MemoryKeyValue, id)
+    expect(r.cursor).toBe(0)
+    expect(r.log).toEqual([])
+  })
+
+  it('mint refuses a name over 128 characters', async () => {
+    const { ledger } = makeLedger()
+    const state = createInitialState(1)
+    await expect(ledger.host.mint({ state, name: 'n'.repeat(129), linked: true })).rejects.toThrow()
+  })
+})
+
 describe('Ledger log', () => {
   it(`keeps at most ${LOG_CAP} entries, folding the oldest into the committed point`, async () => {
     const { ledger, kv } = makeLedger()
