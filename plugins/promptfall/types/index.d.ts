@@ -1,5 +1,5 @@
 export type BandTab = 'party' | 'loot' | 'world'
-export type DialogTab = 'inventory' | 'heroes' | 'account' | 'odds'
+export type DialogTab = 'inventory' | 'heroes' | 'market' | 'orders' | 'account' | 'odds'
 export type Mode = 'primary' | 'secondary' | 'paused' | 'off'
 export type HeroView = {
   id: string
@@ -24,6 +24,8 @@ export type ItemView = {
   classes: string[]
   vendorValue: number
   reforgeCost: number
+  /** Server epoch ms before which it cannot be listed; null when never traded. */
+  tradeableAt: number | null
 }
 export type RosterHeroView = {
   id: string
@@ -35,6 +37,10 @@ export type RosterHeroView = {
   traits: string[]
   inParty: boolean
   inPendingParty: boolean
+  /** Server epoch ms before which it cannot be listed; null when never traded. */
+  tradeableAt: number | null
+  /** Ids of the items it wears, by slot. */
+  equipment: { weapon: string | null; armour: string | null; accessory: string | null }
 }
 /** The account as the dialog shows it; `linked` is the GitHub login. */
 export type AccountView = {
@@ -69,12 +75,71 @@ export type GameView = {
   account: AccountView
 }
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
+
+export type TradeKindView = 'item' | 'hero'
+export type RarityName = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
+export type HeroClassName = 'knight' | 'black_mage' | 'white_mage' | 'archer'
+
+/** A listing as the Market and Orders tabs draw it. */
+export type ListingView = {
+  id: string
+  kind: TradeKindView
+  name: string
+  rarity: string
+  /** Affixes of an item, traits and class of a hero. */
+  detail: string
+  sellerId: string
+  sellerName: string
+  price: number
+  expiresAt: number
+}
+export type OrderView = {
+  id: string
+  base: string
+  name: string
+  minRarity: string
+  affix: string | null
+  maxPrice: number
+  expiresAt: number
+}
+/** The Market tab's query: what `browse` is asked. */
+export type MarketQuery = {
+  kind: TradeKindView
+  base?: string
+  cls?: HeroClassName
+  minRarity?: RarityName
+  sort: 'price' | 'newest'
+  page: number
+}
+export type MarketState = {
+  query: MarketQuery
+  page: { listings: ListingView[]; page: number; total: number } | null
+  busy: boolean
+  /** The listing id waiting for `y` to buy. */
+  confirm: string | null
+  error: string | null
+}
+export type OrdersState = {
+  mine: { listings: ListingView[]; orders: OrderView[]; returns: number } | null
+  form: { base: string; minRarity: RarityName; affixId: string | null; maxPrice: string } | null
+  busy: boolean
+  error: string | null
+}
+export type SellState = {
+  kind: TradeKindView
+  id: string
+  matching: OrderView[]
+  price: string
+  error: string | null
+}
 export type DialogState = {
   itemPick: string | null
   partyPick: string[]
   paneNotice: string | null
   /** The device-flow code while a GitHub link is polling. */
   link: { code: string; url: string } | null
+  /** The sell panel over Inventory or Heroes. */
+  sell: SellState | null
 }
 
 declare module 'claude-code' {
@@ -89,6 +154,8 @@ declare module 'claude-code' {
       leaseOwner: string | null
       /** The server URL this machine plays on; null for the in-process ledger. */
       server: string | null
+      market: MarketState
+      orders: OrdersState
     }
   }
 }

@@ -1,21 +1,27 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { DialogTab, Mode } from '../types'
+import type { DialogTab, MarketState, Mode, OrdersState } from '../types'
 import type { GameHandle } from './engine'
+import { MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import { loadMarket } from './ui/market'
+import { loadOrders } from './ui/orders'
 
 export const PANE_ID = 'promptfall'
 
 export const COMMAND = {
   name: 'promptfall',
   description: 'Promptfall: open the game, or off / on / farm / server',
-  argumentHint: '[inventory|heroes|account|odds|off|on|farm|server <url>|server local]',
+  argumentHint:
+    '[inventory|heroes|market|orders|account|odds|off|on|farm|server <url>|server local]',
   immediate: true,
 } as const
 
-const TABS: readonly DialogTab[] = ['inventory', 'heroes', 'account', 'odds']
+const TABS: readonly DialogTab[] = ['inventory', 'heroes', 'market', 'orders', 'account', 'odds']
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
+const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
+const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 
 const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
 
@@ -76,6 +82,30 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
       holdToasts: true,
       rows: 20,
     })
+    const running = game()
+    const after = (ms: number, fn: () => void) => {
+      $.clock.after(ms, fn)
+    }
+    if (running && tab === 'market') {
+      const market: MarketState = (await read($, marketAtom)) ?? MARKET_DEFAULT
+      await loadMarket(
+        running,
+        market.query,
+        async (fn) => {
+          await update($, marketAtom, (m) => fn(m ?? MARKET_DEFAULT))
+        },
+        after,
+      )
+    }
+    if (running && tab === 'orders') {
+      await loadOrders(
+        running,
+        async (fn) => {
+          await update($, ordersAtom, (o: OrdersState | undefined) => fn(o ?? ORDERS_DEFAULT))
+        },
+        after,
+      )
+    }
     return { text: 'Promptfall opened' }
   })
 }

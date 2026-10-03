@@ -451,6 +451,21 @@ test('a fractional timestamp is stored as whole milliseconds', async () => {
   expect(client.batches[0]?.events[0]?.at).toBe(1000)
 })
 
+test('a trade with a non-empty buffer flushes first: the batch arrives before the market call', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  engine.apply({ t: 'tool_call' }, at())
+  let batchesAtCall = -1
+  const r = await engine.trade(async (c, auth) => {
+    batchesAtCall = client.batches.length
+    return c.list(auth, { kind: 'item', id: 'inope', price: 10 })
+  })
+  expect(batchesAtCall).toBe(1)
+  expect(client.acks[0]).toMatchObject({ ok: true })
+  expect(r).toEqual({ ok: false, reason: 'not_linked' })
+})
+
 test('a flush that pauses the engine stops the trade', async () => {
   const { engine, client, at } = setup()
   await engine.start()

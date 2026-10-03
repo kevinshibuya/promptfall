@@ -27,7 +27,7 @@ one zone at full health and costs nothing else.
 | Command | What it does |
 | --- | --- |
 | `/promptfall` | Opens the dialog on the Inventory tab |
-| `/promptfall heroes` | Opens it on Heroes (also `inventory`, `account`, `odds`) |
+| `/promptfall heroes` | Opens it on Heroes (also `inventory`, `market`, `orders`, `account`, `odds`) |
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
@@ -42,6 +42,27 @@ it within 10 seconds. When the server stops answering, the status row reads
 `Promptfall: server unreachable, retrying`, the band keeps ticking and buffering for two minutes,
 then it reads `Promptfall: server unreachable` and progress stops until the server is back. A
 switch during an outage drops what could not be sent, and the reply says how many events.
+
+### Market
+
+Rare, epic and legendary items and heroes trade between players. The Market tab (`m`) browses
+listings ten at a time: toggle items or heroes and cheapest or newest, filter by base (items),
+class (heroes) and minimum rarity, page with `prev` and `next`. `buy` asks `Buy <name> for
+<price>g?`; `y` confirms, `n` cancels. The goods arrive with a 24-hour cooldown before they can
+be listed again, and a bought hero arrives at level 1.
+
+`sell` on a Rare+ item (Inventory) or hero (Heroes) opens the sell panel. An item shows the buy
+orders it matches first: `accept` sells it at once at the order's price. Then `List for` takes a
+price, with the listing fee (2%, at least 1 gold, kept on cancel) and what you get after the 5%
+sale fee. A hero must be out of the party and wear nothing; goods in cooldown say when they
+become tradeable. Listings and orders expire after 7 days.
+
+The Orders tab (`r`) lists your listings and buy orders, each with `cancel` and the time left,
+the count of returns waiting (cancelled goods that found no free slot; they arrive when one
+frees), and `New order`: a base, a minimum rarity, an optional affix and a maximum price, held
+in escrow until the order fills, is cancelled or expires. Trading needs a linked account and an
+open market; cancelling works either way. Sales, purchases and returns toast and show in the
+loot log.
 
 ### Account tab
 
@@ -63,7 +84,8 @@ would answer a survey.
 | --- | --- | --- |
 | `p` / `l` / `w` | Party, loot log, world tabs | |
 | `c` | Collapse to one row, or expand | |
-| `i` / `h` / `a` / `o` | | Inventory, Heroes, Account, Odds tabs |
+| `i` / `h` / `m` / `r` / `a` / `o` | | Inventory, Heroes, Market, Orders, Account, Odds tabs |
+| `y` / `n` | | Confirm or cancel a purchase |
 
 Esc closes the dialog. The band collapses to one row by itself under 100 columns or when fewer
 than 4 rows are free, and hides while Claude asks you a question.
@@ -79,8 +101,8 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No market UI yet, and no chat, presence, leaderboards or world bosses. No sprites or sound. The
-GitHub link is approved by the fakes, not by GitHub.
+No chat, presence, leaderboards or world bosses. No sprites or sound. The GitHub link is approved
+by the fakes, not by GitHub, and the in-process ledger has no bots, so its market is yours alone.
 
 ## Develop
 

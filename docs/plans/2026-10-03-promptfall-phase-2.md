@@ -544,9 +544,9 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No bots. No plugin changes. No new server event kinds beyond the nine.
 
-- [ ] `goods.ts` and the fee helpers with `market.test.ts` (red, then green)
-- [ ] Rules 14 to 24 in the suite (red); `market.ts` until green over the in-process ledger
-- [ ] Routes in the fake; the suite green over HTTP; commit `feat(ledger): market rules, orders, cooldowns, expiry and returns`
+- [x] `goods.ts` and the fee helpers with `market.test.ts` (red, then green)
+- [x] Rules 14 to 24 in the suite (red); `market.ts` until green over the in-process ledger
+- [x] Routes in the fake; the suite green over HTTP; commit `feat(ledger): market rules, orders, cooldowns, expiry and returns`
 
 ### Task 8: Bots
 
@@ -567,9 +567,9 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** Bots use only `host.mint`, `host.credit`, `host.settle` and public methods. No direct `kv` writes except `pf:bot:<i>`. No plugin changes.
 
-- [ ] `bot-seed.ts` and `bot-config.ts`; the population assertion in `bots.test.ts` (red, then green)
-- [ ] `bots.ts` with the rest of `bots.test.ts` (red, then green)
-- [ ] CLI flag; run the acceptance check; commit `feat(fake-server): seeded bots that list, buy, order and cancel`
+- [x] `bot-seed.ts` and `bot-config.ts`; the population assertion in `bots.test.ts` (red, then green)
+- [x] `bots.ts` with the rest of `bots.test.ts` (red, then green)
+- [x] CLI flag; run the acceptance check; commit `feat(fake-server): seeded bots that list, buy, order and cancel`
 
 ### Task 9: Plugin: Market and Orders tabs, sell flow, order form, toasts, loot lines
 
@@ -597,11 +597,11 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No band change. No new `$` namespace. No market rule evaluated on the client beyond the display arithmetic above.
 
-- [ ] Types, tabs, command args, `time.ts`; `dialog.test.ts` red for the Market tab
-- [ ] `market.tsx` with browse, filters, paging, buy with confirm
-- [ ] `sell.tsx` with matching orders, the price form and the cooldown line; `Sell` buttons
-- [ ] `orders.tsx` with listings, orders, returns, the order form
-- [ ] Toasts and loot lines; README; run the acceptance check; commit `feat(plugin): market and orders tabs, sell flow, trade toasts`
+- [x] Types, tabs, command args, `time.ts`; `dialog.test.ts` red for the Market tab
+- [x] `market.tsx` with browse, filters, paging, buy with confirm
+- [x] `sell.tsx` with matching orders, the price form and the cooldown line; `Sell` buttons
+- [x] `orders.tsx` with listings, orders, returns, the order form
+- [x] Toasts and loot lines; README; run the acceptance check; commit `feat(plugin): market and orders tabs, sell flow, trade toasts`
 
 ### Task 10: PR 2: manual pass part B, docs, pull request
 
@@ -630,7 +630,7 @@ PR from `feat/phase-2-market` into `ai-staging` titled `Promptfall phase 2, PR 2
 
 **Boundaries:** Docs only. Do not merge.
 
-- [ ] Write part B; update the README; run the check line; open the PR; stop
+- [x] Write part B; update the README; run the check line; open the PR; stop
 
 ## Out of scope
 
