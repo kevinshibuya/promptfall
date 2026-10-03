@@ -588,9 +588,10 @@ async function world(ctx, record, since) {
 function refillChat(bucket, now) {
   if (!bucket) return { tokens: CHAT_BUCKET_CAPACITY, refillAt: now };
   const n = Math.floor(Math.max(0, now - bucket.refillAt) / CHAT_REFILL_MS);
+  const tokens = Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n);
   return {
-    tokens: Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n),
-    refillAt: bucket.refillAt + n * CHAT_REFILL_MS
+    tokens,
+    refillAt: tokens === CHAT_BUCKET_CAPACITY ? now : bucket.refillAt + n * CHAT_REFILL_MS
   };
 }
 async function chat(ctx, record, text) {

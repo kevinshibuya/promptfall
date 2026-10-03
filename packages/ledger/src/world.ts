@@ -114,13 +114,18 @@ export async function world(
 // ---------------------------------------------------------------------------
 // Chat
 
-/** The bucket refilled by whole periods only, so the remainder carries over. Absent means full. */
+/**
+ * The bucket refilled by whole periods, the remainder carried while it is
+ * filling. A full bucket stores no credit: its clock restarts at `now`, so a
+ * burst after a long idle is the capacity and no more. Absent means full.
+ */
 export function refillChat(bucket: Bucket | undefined, now: number): Bucket {
   if (!bucket) return { tokens: CHAT_BUCKET_CAPACITY, refillAt: now }
   const n = Math.floor(Math.max(0, now - bucket.refillAt) / CHAT_REFILL_MS)
+  const tokens = Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n)
   return {
-    tokens: Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n),
-    refillAt: bucket.refillAt + n * CHAT_REFILL_MS,
+    tokens,
+    refillAt: tokens === CHAT_BUCKET_CAPACITY ? now : bucket.refillAt + n * CHAT_REFILL_MS,
   }
 }
 
