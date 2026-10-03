@@ -62,10 +62,11 @@ compose box before typing a tab hotkey. The pane holds toasts until you press Es
     `chat is closed`, and the Chat tab reads `Chat is closed.` with no compose box. The
     Leaderboards tab still loads. Restart without the flag.
 12. **In-process.** Run `/promptfall server local`. The World tab reads
-    `1 online · zone N: nobody else here` and `chat is closed`, the Chat tab says
-    `Chat is closed.`, and the Leaderboards tab lists you alone.
+    `1 online · zone N: nobody else here` and `chat needs a server`, the Chat tab says
+    `Chat needs a server: /promptfall server <url>` with no compose box, and the Leaderboards tab
+    lists you alone.
 
 ## Findings
 
-- Idle timers (step 9):
+- Idle timers (step 9): driven on 2026-10-03 through a pty, with the primary's terminal reported as unfocused (focus-out) for 2 minutes: the other session kept reading `playing in another session`, so Claude Code keeps the plugin's timers firing while its terminal is unfocused and the lease is renewed. Not covered: macOS throttling a hidden terminal application itself; worth one look on a real minimised window.
 - World snapshot size (step 10): 4,516 bytes with a full 50-message tail of bot lines, measured against the fake on 2026-10-03; 50 messages at the 200-character limit come to about 14 KB, under 16,000.
