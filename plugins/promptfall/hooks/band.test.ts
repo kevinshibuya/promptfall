@@ -1,6 +1,7 @@
 import type { On, RenderElement } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs } from '../types'
+import { createInitialState } from './vendor/sim.js'
 
 const SURFACES = ['terminal', 'desktop'] as const
 
@@ -119,4 +120,27 @@ test('a secondary session shows one row saying so', async ($, on) => {
     expect(await ui.find({ text: /^playing in another session/ })).toBeDefined()
     await ui.unmount()
   }
+})
+
+test('with no game view the band is the notice on one line', async ($, on) => {
+  const { data } = harness(on)
+  const old = { ...createInitialState(5), v: 1 }
+  data.set('promptfall:deviceToken', 'token-1')
+  data.set('promptfall:pf:token:token-1', 'acct-1')
+  data.set('promptfall:pf:acct:acct-1:record', {
+    account: { accountId: 'acct-1', seed: 5, createdAt: 0, displayName: null, linked: null },
+    state: old,
+    seq: 0,
+    refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
+    buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+    committed: [],
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band() })
+  expect(
+    await ui.find({
+      text: /^Promptfall · Promptfall: this machine's data is from an older version/,
+    }),
+  ).toBeDefined()
+  await ui.unmount()
 })
