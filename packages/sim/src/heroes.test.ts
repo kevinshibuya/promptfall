@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { content } from './content'
+import { clone } from './draft'
 import { generateHero } from './heroes'
-import { clone } from './progression'
 import { createInitialState } from './state'
 
 describe('generateHero', () => {

@@ -9,7 +9,7 @@ function rejectedReason(effects: Effect[]): string | undefined {
 }
 
 function item(id: string, base: string, equippedBy: string | null = null): Item {
-  return { id, base, rarity: 'common', affixes: [], equippedBy }
+  return { id, base, rarity: 'common', affixes: [], equippedBy, tradeableAt: null }
 }
 
 const s0 = createInitialState(1)

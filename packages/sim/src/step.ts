@@ -11,14 +11,19 @@ import {
   unequip,
   vendor,
 } from './commands'
+import { draft, reject } from './draft'
+import { onRest, onToolCall, onTurnEnd, refillFromQueue, spawnOnEmptyTick } from './progression'
 import {
-  clone,
-  onRest,
-  onToolCall,
-  onTurnEnd,
-  refillFromQueue,
-  spawnOnEmptyTick,
-} from './progression'
+  bought,
+  credited,
+  listed,
+  orderFilled,
+  orderPlaced,
+  orderRefunded,
+  orderSold,
+  returned,
+  sold,
+} from './server-events'
 import type { Effect, Event, EventKind, GameState, StepResult } from './types'
 
 export type Handler<K extends EventKind> = (
@@ -27,21 +32,6 @@ export type Handler<K extends EventKind> = (
 ) => StepResult
 
 export type Handlers = { [K in EventKind]: Handler<K> }
-
-export function reject(state: GameState, event: Event, reason: string): StepResult {
-  return { state, effects: [{ k: 'rejected', event, reason }] }
-}
-
-/** Runs `mutate` on a deep copy of the state. */
-export function draft(
-  state: GameState,
-  mutate: (s: GameState, effects: Effect[]) => void,
-): StepResult {
-  const s = clone(state)
-  const effects: Effect[] = []
-  mutate(s, effects)
-  return { state: s, effects }
-}
 
 const handlers: Handlers = {
   tick: (state) =>
@@ -63,6 +53,15 @@ const handlers: Handlers = {
   set_farm: setFarm,
   expand_inventory: expandInventory,
   expand_roster: expandRoster,
+  listed,
+  returned,
+  sold,
+  bought,
+  order_placed: orderPlaced,
+  order_refunded: orderRefunded,
+  order_filled: orderFilled,
+  order_sold: orderSold,
+  credited,
 }
 
 export function step(state: GameState, event: Event): StepResult {

@@ -35,7 +35,7 @@ function rollItem(s: GameState, boss: boolean): Item | null {
     const [min, max] = def.range
     affixes.push({ id, value: min + draw(s, max - min + 1) })
   }
-  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null }
+  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
 }
 
 /**

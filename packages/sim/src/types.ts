@@ -1,4 +1,4 @@
-export const SIM_VERSION = 1 as const
+export const SIM_VERSION = 2 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -14,6 +14,8 @@ export type Item = {
   rarity: Rarity
   affixes: Affix[]
   equippedBy: string | null
+  /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
+  tradeableAt: number | null
 }
 export type Trait = { id: string; valueBp: number }
 export type Hero = {
@@ -27,6 +29,8 @@ export type Hero = {
   xp: number
   hp: number
   equipment: Record<Slot, string | null>
+  /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
+  tradeableAt: number | null
 }
 export type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss'
 export type Enemy = { id: string; def: string; kind: EnemyKind; hp: number; maxHp: number }
@@ -36,11 +40,22 @@ export type Encounter = {
   waveSize: number
   spawnedInWave: number
 }
+export type TradeKind = 'item' | 'hero'
+export type Goods = { kind: 'item'; item: Item } | { kind: 'hero'; hero: Hero }
+
 export type LootEntry =
   | { k: 'item'; itemId: string; base: string; rarity: Rarity; vendoredFor: number | null }
   | { k: 'hero'; heroId: string; template: string; rarity: Rarity; via: 'contract' | 'tavern' }
+  | {
+      k: 'trade'
+      what: 'sold' | 'bought' | 'returned'
+      kind: TradeKind
+      base: string
+      rarity: Rarity
+      gold: number
+    }
 
-export type Event =
+export type PlayerEvent =
   | { t: 'tick' }
   | { t: 'tool_call' }
   | { t: 'turn_end' }
@@ -55,7 +70,50 @@ export type Event =
   | { t: 'set_farm'; on: boolean }
   | { t: 'expand_inventory' }
   | { t: 'expand_roster' }
+
+/** Authored only by the ledger. Each carries everything the sim needs; the sim judges nothing. */
+export type ServerEvent =
+  | { t: 'listed'; listingId: string; kind: TradeKind; id: string; fee: number }
+  | { t: 'returned'; listingId: string; goods: Goods }
+  | {
+      t: 'sold'
+      listingId: string
+      kind: TradeKind
+      base: string
+      rarity: Rarity
+      price: number
+      net: number
+    }
+  | { t: 'bought'; listingId: string; goods: Goods; price: number }
+  | { t: 'order_placed'; orderId: string; escrow: number }
+  | { t: 'order_refunded'; orderId: string; escrow: number }
+  | { t: 'order_filled'; orderId: string; item: Item; price: number }
+  | {
+      t: 'order_sold'
+      orderId: string
+      itemId: string
+      base: string
+      rarity: Rarity
+      price: number
+      net: number
+    }
+  | { t: 'credited'; gold: number; reason: string }
+
+export type Event = PlayerEvent | ServerEvent
 export type EventKind = Event['t']
+export type PlayerEventKind = PlayerEvent['t']
+export type ServerEventKind = ServerEvent['t']
+export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
+  'listed',
+  'returned',
+  'sold',
+  'bought',
+  'order_placed',
+  'order_refunded',
+  'order_filled',
+  'order_sold',
+  'credited',
+]
 
 export type Effect =
   | { k: 'drop'; item: Item }
@@ -70,6 +128,7 @@ export type Effect =
   | { k: 'party_applied'; heroIds: [string, string, string] }
   | { k: 'hero_recruited'; hero: Hero; via: 'contract' | 'tavern' }
   | { k: 'rejected'; event: Event; reason: string }
+  | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }
 
 export type GameState = {
   v: typeof SIM_VERSION
