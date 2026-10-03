@@ -95,6 +95,10 @@ function lootLine(entry: LootEntry): LootView {
     const name = content.heroTemplates[entry.template]?.name ?? entry.template
     return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
   }
+  if (entry.k === 'reward') {
+    const name = content.itemBases[entry.base]?.name ?? entry.base
+    return { text: `boss reward ${name} (+${entry.gold}g)`, rarity: entry.rarity }
+  }
   if (entry.k === 'trade') {
     const name = tradeName(entry.kind, entry.base)
     const text =
@@ -197,6 +201,16 @@ export function toGameView(
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {
+    // The world boss has no content entry: its name and glyph travel with boss_engaged.
+    if (e.kind === 'world_boss' && state.boss) {
+      return {
+        name: state.boss.name,
+        glyph: state.boss.glyph,
+        hp: e.hp,
+        maxHp: e.maxHp,
+        kind: e.kind,
+      }
+    }
     const def = content.enemies[e.def]
     return {
       name: def?.name ?? e.def,
@@ -246,5 +260,13 @@ export function toGameView(
     accountId,
     firstRun,
     account,
+    boss: state.boss
+      ? {
+          bossId: state.boss.bossId,
+          name: state.boss.name,
+          glyph: state.boss.glyph,
+          dealt: state.boss.dealt,
+        }
+      : null,
   }
 }

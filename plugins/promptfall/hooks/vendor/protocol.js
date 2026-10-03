@@ -4128,6 +4128,12 @@ var GoodsSchema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ kind: external_exports.literal("item"), item: ItemSchema }),
   external_exports.object({ kind: external_exports.literal("hero"), hero: HeroSchema })
 ]);
+var StatsSchema = external_exports.object({
+  hp: count,
+  atk: count,
+  def: count,
+  spd: count
+});
 var ServerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({
     t: external_exports.literal("listed"),
@@ -4159,7 +4165,21 @@ var ServerEventSchema = external_exports.discriminatedUnion("t", [
     price: count,
     net: count
   }),
-  external_exports.object({ t: external_exports.literal("credited"), gold: count, reason: external_exports.string().max(64) })
+  external_exports.object({ t: external_exports.literal("credited"), gold: count, reason: external_exports.string().max(64) }),
+  external_exports.object({
+    t: external_exports.literal("boss_engaged"),
+    bossId: id,
+    name: external_exports.string().max(128),
+    glyph: external_exports.string().max(8),
+    stats: StatsSchema
+  }),
+  external_exports.object({ t: external_exports.literal("boss_disengaged"), bossId: id }),
+  external_exports.object({
+    t: external_exports.literal("rewarded"),
+    bossId: id,
+    goods: GoodsSchema.nullable(),
+    gold: count
+  })
 ]);
 var GameStateSchema = external_exports.object({
   v: count,
@@ -4279,6 +4299,11 @@ var CHAT_REFILL_MS = 1e4;
 var CHAT_KEEP = 200;
 var CHAT_SERVE = 50;
 var BOARD_ROWS = 20;
+var BOSS_GRID_MS = 108e5;
+var BOSS_WINDOW_MS = 12e5;
+var BOSS_BASE_HP = 4e3;
+var BOSS_THRESHOLD_BP = 500;
+var BOSS_TOP_BONUS = 3;
 var DAY_MS = 864e5;
 function weekStartOf(now) {
   const days = Math.floor(now / DAY_MS);
@@ -4598,6 +4623,11 @@ export {
   AccountResponseSchema,
   AccountSchema,
   BOARD_ROWS,
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_TOP_BONUS,
+  BOSS_WINDOW_MS,
   BUDGETS,
   BatchAckSchema,
   BatchSchema,
@@ -4648,6 +4678,7 @@ export {
   ROUTES,
   ServerConfigSchema,
   ServerEventSchema,
+  StatsSchema,
   TimedEventSchema,
   UnauthorizedSchema,
   WorldResponseSchema,

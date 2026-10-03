@@ -14,6 +14,7 @@ import {
   WORLD_DEFAULT,
 } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
+import { effectToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -27,9 +28,9 @@ import type {
   ServerClient,
   Unauthorized,
 } from './vendor/protocol.js'
-import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
+import { type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
-import { heroName, toAccountView, toGameView, tradeName } from './view'
+import { toAccountView, toGameView } from './view'
 import { WorldPoller } from './world'
 
 type Timer = { cancel: () => void }
@@ -93,36 +94,6 @@ const LEASE_RENEW_MS = 10_000
 const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
 const WELCOME_MS = 20_000
 
-const TOAST_RARITIES = new Set(['rare', 'epic', 'legendary'])
-
-function effectToast(effect: Effect): string | null {
-  switch (effect.k) {
-    case 'drop': {
-      if (!TOAST_RARITIES.has(effect.item.rarity)) return null
-      const base = content.itemBases[effect.item.base]
-      return `${base?.glyph ?? '?'} ${base?.name ?? effect.item.base} (${effect.item.rarity})`
-    }
-    case 'level_up':
-      return `Level ${effect.level}`
-    case 'zone_cleared':
-      return effect.advancedTo > effect.zone
-        ? `Zone ${effect.zone} cleared, on to ${content.zones[effect.advancedTo - 1]?.name ?? effect.advancedTo}`
-        : `Zone ${effect.zone} cleared`
-    case 'wipe':
-      return `Party wiped, retreating to zone ${effect.retreatedTo}`
-    case 'hero_recruited':
-      return `${heroName(effect.hero.template, effect.hero.epithet)} joined (${effect.hero.rarity})`
-    case 'traded': {
-      const name = tradeName(effect.entry.kind, effect.entry.base)
-      if (effect.entry.what === 'sold') return `Sold ${name} for ${effect.entry.gold}g`
-      if (effect.entry.what === 'bought') return `Bought ${name} for ${effect.entry.gold}g`
-      return `${name} returned to you`
-    }
-    default:
-      return null
-  }
-}
-
 /**
  * One session's game: the engine, the lease, and the timers. Module state, so
  * a hot reload starts it over; the session's atoms and the store carry on.
@@ -157,6 +128,9 @@ class GameSession implements GameHandle {
       publish: (world) => io.publish({ world }),
       load: io.readWorld,
       fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
+      // A secondary's view is the committed state: nothing to subtract.
+      committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
+      toast: io.toast,
     })
   }
 

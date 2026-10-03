@@ -604,9 +604,9 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No `$.ui.status` (record D1). No new dialog tab. No sound. The outage, lease and flush rules are untouched.
 
-- [ ] `pnpm vendor`; the v3 golden; `toGameView.boss`, the `world_boss` enemy view, the loot line; `engine.committedBoss`
-- [ ] Band: enemy slot, status segment, World row; `band.test.ts` red then green
-- [ ] Toasts, `committedDealt`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): world boss in the band, boss toasts, rewards in the loot log`
+- [x] `pnpm vendor`; the v3 golden; `toGameView.boss`, the `world_boss` enemy view, the loot line; `engine.committedBoss`
+- [x] Band: enemy slot, status segment, World row; `band.test.ts` red then green
+- [x] Toasts, `committedDealt`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): world boss in the band, boss toasts, rewards in the loot log`
 
 ### Task 12: PR 2: manual pass part B, docs, pull request
 
