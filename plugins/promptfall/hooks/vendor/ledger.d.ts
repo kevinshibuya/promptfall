@@ -1,5 +1,10 @@
-import { Account, BudgetKind, KeyValue, ServerClient, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkStart, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkStart, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
 import { GameState, ServerEvent, Goods, TradeKind } from './sim.js';
+
+/** Placeholder content: the mechanism is phase 3's, the word list is not. */
+declare const BLOCKED_WORDS: readonly string[];
+/** Whole-word and case-insensitive: any word of the text, split on what is not a letter or digit, in the list. */
+declare function isBlocked(text: string): boolean;
 
 type BatchRecord = {
     batchId: string;
@@ -34,6 +39,11 @@ type AccountRecord = {
     /** Every event with `n > committedCursor`. */
     log: LogEntry[];
     returns: PendingReturn[];
+    /** The chat token bucket; absent means full. */
+    chat?: {
+        tokens: number;
+        refillAt: number;
+    };
 };
 declare const LOG_CAP = 500;
 
@@ -58,7 +68,7 @@ declare function transfer(goods: Goods, now: number, nextId: () => Promise<strin
 /** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods), base 36 over one global counter. */
 declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't'): Promise<string>;
 
-type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'maintenance';
+type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance';
 type LedgerOptions = {
     kv: KeyValue;
     now: () => Promise<number>;
@@ -73,6 +83,8 @@ type LedgerOptions = {
     linkApprover: (code: string) => Promise<{
         login: string;
     } | null>;
+    /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
+    presenceTtlMs?: number;
 };
 type LedgerHost = {
     /** Mints an account with a given state and name (bots, tests). */
@@ -104,6 +116,7 @@ declare class Ledger implements ServerClient {
     private readonly kv;
     private readonly books;
     private chain;
+    private readonly presence;
     constructor(options: LedgerOptions);
     /**
      * The flush runs even when `fn` threw, so an operation must validate before
@@ -113,6 +126,7 @@ declare class Ledger implements ServerClient {
     private flags;
     private config;
     private marketContext;
+    private worldContext;
     bootstrap(input: {
         clientVersion: string;
         deviceToken: string | null;
@@ -147,6 +161,9 @@ declare class Ledger implements ServerClient {
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
     matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
+    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    chat(auth: Auth, text: string): Promise<ChatResult>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
     private mint;
     private currentRecord;
     private credit;
@@ -154,4 +171,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
