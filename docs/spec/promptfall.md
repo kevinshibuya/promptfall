@@ -375,9 +375,27 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   status row (zone, wave, gold, last drop). One line when collapsed, when
   `bodyColumns` is under 100, or when `maxRows` is under 4. Hidden while
   `hasSurvey`.
+- World tab rows (phase 3): the count online and the names in your zone, you
+  excluded; the world boss line while one is live (name, global HP bar, time
+  left, your damage), else highest zone, kills and wipes; the latest chat
+  message as a ticker, or the closed state in place.
+- World boss display (phase 3): in boss mode the Party tab's enemy slot shows the
+  boss with the global HP bar, and the status row's last segment reads the boss
+  percentage and time left on every tab. Between polls the bar shows the last
+  polled HP less the damage this party dealt since. No other surface.
+- World poll failures (phase 3): a thrown poll is ignored and the World tab dims
+  as stale after 45 seconds without a fresh snapshot; only a thrown submit or
+  bootstrap is an outage. Chat posting during an outage answers the unreachable
+  text like a trade.
 - Dialog via `/promptfall [tab]`: Inventory, Heroes, Account, Odds in phase 1;
-  Market and Orders in phase 2; Chat in phase 3. Opened with focus,
-  closes on Escape, holds toasts.
+  Market and Orders in phase 2; Chat and Leaderboards in phase 3. Opened with
+  focus, closes on Escape, holds toasts.
+- Chat tab (`c`): the messages the pane fits, newest at the bottom, a compose
+  input with Enter to post, the gate said in place (unlinked, chat off), a 5
+  second flash on a refusal naming the rule, read-only on mobile. Any session
+  may post. Leaderboards tab (`b`): the per-zone presence counts, then highest
+  zone and boss damage this week, 20 rows each, your row highlighted, fetched on
+  open; a closed state said in place.
 - Market tab: listings filtered by kind (items or heroes), base type or class
   and minimum rarity, sorted by price or newest, 10 per page, Buy on a hotkey
   with a confirm step. Orders tab: my listings, my buy orders, a form for a
@@ -391,7 +409,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
   toggles the farm flag. `/promptfall server <url>|local` picks the server.
 - Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited,
-  listing sold, purchase complete, order filled, item returned.
+  listing sold, purchase complete, order filled, item returned, world boss
+  appeared, world boss down, boss reward. Chat messages never toast.
 - Sound (phase 4): off by default, toggle in Account; cues for drop, level up,
   boss spawn.
 
@@ -414,7 +433,11 @@ back to glyphs everywhere else.
 2. Market, buy orders, hero trading, against the HTTP fake with bots. Two PRs:
    the ledger, server events, `HttpClient`, the HTTP fake and the outage rules
    first, with the contract suite green against both fakes; the market second.
-3. Presence, chat, leaderboards, world bosses, against the same fake.
+3. Presence, chat, leaderboards, world bosses, against the same fake. Two PRs:
+   social first (presence, chat, leaderboards, flags, bots as HTTP clients that
+   batch, fill and chat, the World, Chat and Leaderboards tabs), no sim change;
+   the world boss second (`SIM_VERSION` 3 with boss mode, the boss record,
+   contribution and rewards, bots fighting, the boss display and toasts).
 4. Sprites and sound.
 5. Real server: accounts, authority, flags, admin CLI, Docker Compose, contract
    suite green against it.
