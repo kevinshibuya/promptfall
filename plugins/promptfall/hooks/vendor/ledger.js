@@ -154,6 +154,61 @@ var Books = class {
   }
 };
 
+// packages/ledger/src/goods.ts
+import {
+  heroStats,
+  RARITIES
+} from './sim.js';
+var DAY_MS = 864e5;
+var WEEK_MS = 6048e5;
+var COOLDOWN_MS = DAY_MS;
+var EXPIRY_MS = WEEK_MS;
+var MIN_PRICE = 1;
+var MAX_PRICE = 1e6;
+function listingFee(price) {
+  return Math.max(1, Math.floor(price * 200 / 1e4));
+}
+function saleFee(price) {
+  return Math.floor(price * 500 / 1e4);
+}
+function saleNet(price) {
+  return price - saleFee(price);
+}
+function validPrice(price) {
+  return Number.isInteger(price) && price >= MIN_PRICE && price <= MAX_PRICE;
+}
+function tradeableRarity(rarity) {
+  return RARITIES.indexOf(rarity) >= RARITIES.indexOf("rare");
+}
+function atLeast(rarity, min) {
+  return RARITIES.indexOf(rarity) >= RARITIES.indexOf(min);
+}
+function goodsBase(goods) {
+  return goods.kind === "item" ? goods.item.base : goods.hero.template;
+}
+function goodsRarity(goods) {
+  return goods.kind === "item" ? goods.item.rarity : goods.hero.rarity;
+}
+async function transfer(goods, now, nextId, receiver) {
+  const tradeableAt = now + COOLDOWN_MS;
+  if (goods.kind === "item") {
+    const id2 = goods.item.id.startsWith("t") ? goods.item.id : await nextId();
+    const item = { ...goods.item, id: id2, equippedBy: null, tradeableAt };
+    return { kind: "item", item };
+  }
+  const id = goods.hero.id.startsWith("t") ? goods.hero.id : await nextId();
+  const hero = {
+    ...goods.hero,
+    id,
+    level: 1,
+    xp: 0,
+    equipment: { weapon: null, armour: null, accessory: null },
+    tradeableAt
+  };
+  hero.hp = heroStats(receiver, hero).hp;
+  return { kind: "hero", hero };
+}
+
 // packages/ledger/src/ids.ts
 var COUNTER_KEY = "pf:counter";
 async function nextLedgerId(kv, prefix) {
@@ -177,35 +232,281 @@ import {
 } from './sim.js';
 
 // packages/ledger/src/market.ts
-var closed = { ok: false, reason: "market_closed" };
-async function expireDue(_ctx) {
+import {
+  LISTINGS_PER_PAGE
+} from './protocol.js';
+import { content } from './sim.js';
+var LISTINGS_KEY = "pf:listings";
+var ORDERS_KEY = "pf:orders";
+var listingKey = (id) => `pf:listing:${id}`;
+var orderKey = (id) => `pf:order:${id}`;
+function refuse(reason) {
+  return { ok: false, reason };
 }
-async function browse(_ctx, _record, query) {
-  return { listings: [], page: query.page, total: 0 };
+function open(ctx) {
+  return ctx.flags["market.enabled"] !== false;
 }
-async function list(_ctx, _record, _input) {
-  return closed;
+function nameOf(record) {
+  return record.account.displayName ?? record.account.linked?.login ?? "adventurer";
 }
-async function cancelListing(_ctx, _record, _listingId) {
-  return closed;
+async function ids(ctx, key) {
+  const raw = await ctx.books.kv.get(key);
+  return Array.isArray(raw) ? raw : [];
 }
-async function buy(_ctx, _record, _listingId) {
-  return closed;
+async function openListings(ctx) {
+  const out = [];
+  for (const id of await ids(ctx, LISTINGS_KEY)) {
+    const listing = await ctx.books.kv.get(listingKey(id));
+    if (listing) out.push(listing);
+  }
+  return out;
 }
-async function myOrders(_ctx, record) {
-  return { listings: [], orders: [], returns: record.returns.length };
+async function openOrders(ctx) {
+  const out = [];
+  for (const id of await ids(ctx, ORDERS_KEY)) {
+    const order = await ctx.books.kv.get(orderKey(id));
+    if (order) out.push(order);
+  }
+  return out;
 }
-async function placeOrder(_ctx, _record, _input) {
-  return closed;
+async function openListing(ctx, id) {
+  if (!(await ids(ctx, LISTINGS_KEY)).includes(id)) return null;
+  return await ctx.books.kv.get(listingKey(id)) ?? null;
 }
-async function cancelOrder(_ctx, _record, _orderId) {
-  return closed;
+async function openOrder(ctx, id) {
+  if (!(await ids(ctx, ORDERS_KEY)).includes(id)) return null;
+  return await ctx.books.kv.get(orderKey(id)) ?? null;
 }
-async function matchingOrders(_ctx, _record, _itemId) {
-  return [];
+async function closeListing(ctx, id) {
+  await ctx.books.kv.set(
+    LISTINGS_KEY,
+    (await ids(ctx, LISTINGS_KEY)).filter((x) => x !== id)
+  );
+  await ctx.books.kv.delete(listingKey(id));
 }
-async function fillOrder(_ctx, _record, _orderId, _itemId) {
-  return closed;
+async function closeOrder(ctx, id) {
+  await ctx.books.kv.set(
+    ORDERS_KEY,
+    (await ids(ctx, ORDERS_KEY)).filter((x) => x !== id)
+  );
+  await ctx.books.kv.delete(orderKey(id));
+}
+async function counterparty(ctx, accountId) {
+  const record = await ctx.books.load(accountId);
+  if (!record) throw new Error(`market: no account ${accountId}`);
+  return record;
+}
+async function giveBack(ctx, record, listing) {
+  if (hasRoom(record.state, listing.goods)) {
+    author(record, { t: "returned", listingId: listing.id, goods: listing.goods });
+  } else {
+    record.returns.push({ listingId: listing.id, goods: listing.goods });
+    await ctx.books.syncReturnsQueue(record);
+  }
+}
+function owned(state, kind, id) {
+  if (kind === "item") {
+    const item = state.inventory.find((i) => i.id === id);
+    return item ? { kind: "item", item } : null;
+  }
+  const hero = state.roster.find((h) => h.id === id);
+  return hero ? { kind: "hero", hero } : null;
+}
+function sellerRefusal(ctx, state, goods) {
+  if (!goods) return "unknown_goods";
+  if (!tradeableRarity(goodsRarity(goods))) return "not_tradeable_rarity";
+  const tradeableAt = goods.kind === "item" ? goods.item.tradeableAt : goods.hero.tradeableAt;
+  if (tradeableAt !== null && tradeableAt > ctx.now) return "in_cooldown";
+  if (goods.kind === "item") {
+    if (goods.item.equippedBy !== null) return "equipped";
+  } else {
+    if (Object.values(goods.hero.equipment).some((id2) => id2 !== null)) return "equipped";
+    const id = goods.hero.id;
+    if (state.party.includes(id) || state.pendingParty?.includes(id)) return "in_party";
+  }
+  return null;
+}
+function gateRefusal(ctx, record) {
+  if (!open(ctx)) return "market_closed";
+  if (!record.account.linked) return "not_linked";
+  return null;
+}
+function matches(order, item) {
+  return order.base === item.base && atLeast(item.rarity, order.minRarity) && (order.affixId === null || item.affixes.some((a) => a.id === order.affixId));
+}
+async function finish(ctx, records, caller) {
+  for (const record of records) {
+    await ctx.books.deliverReturns(record);
+    await ctx.books.save(record);
+  }
+  return { ok: true, delivery: deliveryOf(caller) };
+}
+async function expireDue(ctx) {
+  for (const listing of await openListings(ctx)) {
+    if (listing.expiresAt > ctx.now) continue;
+    const seller = await counterparty(ctx, listing.sellerId);
+    await giveBack(ctx, seller, listing);
+    await ctx.books.save(seller);
+    await closeListing(ctx, listing.id);
+  }
+  for (const order of await openOrders(ctx)) {
+    if (order.expiresAt > ctx.now) continue;
+    const buyer = await counterparty(ctx, order.buyerId);
+    author(buyer, { t: "order_refunded", orderId: order.id, escrow: order.maxPrice });
+    await ctx.books.save(buyer);
+    await closeOrder(ctx, order.id);
+  }
+}
+async function browse(ctx, _record, query) {
+  const rows = (await openListings(ctx)).filter((l) => {
+    if (l.goods.kind !== query.kind) return false;
+    if (query.base !== void 0 && goodsBase(l.goods) !== query.base) return false;
+    if (query.cls !== void 0 && (l.goods.kind !== "hero" || l.goods.hero.cls !== query.cls))
+      return false;
+    if (query.minRarity !== void 0 && !atLeast(goodsRarity(l.goods), query.minRarity))
+      return false;
+    return true;
+  });
+  const newest = (a, b) => b.createdAt - a.createdAt || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
+  rows.sort(query.sort === "price" ? (a, b) => a.price - b.price || newest(a, b) : newest);
+  const start = query.page * LISTINGS_PER_PAGE;
+  return {
+    listings: rows.slice(start, start + LISTINGS_PER_PAGE),
+    page: query.page,
+    total: rows.length
+  };
+}
+async function myOrders(ctx, record) {
+  const id = record.account.accountId;
+  return {
+    listings: (await openListings(ctx)).filter((l) => l.sellerId === id),
+    orders: (await openOrders(ctx)).filter((o) => o.buyerId === id),
+    returns: record.returns.length
+  };
+}
+async function matchingOrders(ctx, record, itemId) {
+  const item = record.state.inventory.find((i) => i.id === itemId);
+  if (!item) return [];
+  return (await openOrders(ctx)).filter((o) => o.buyerId !== record.account.accountId && matches(o, item)).sort((a, b) => b.maxPrice - a.maxPrice || a.createdAt - b.createdAt);
+}
+async function list(ctx, record, input) {
+  const gate = gateRefusal(ctx, record);
+  if (gate) return refuse(gate);
+  const goods = owned(record.state, input.kind, input.id);
+  const refusal = sellerRefusal(ctx, record.state, goods);
+  if (refusal || !goods) return refuse(refusal ?? "unknown_goods");
+  if (!validPrice(input.price)) return refuse("bad_price");
+  const fee = listingFee(input.price);
+  if (record.state.gold < fee) return refuse("not_enough_gold");
+  const id = await nextLedgerId(ctx.books.kv, "L");
+  author(record, { t: "listed", listingId: id, kind: input.kind, id: input.id, fee });
+  const listing = {
+    id,
+    sellerId: record.account.accountId,
+    sellerName: nameOf(record),
+    goods,
+    price: input.price,
+    createdAt: ctx.now,
+    expiresAt: ctx.now + EXPIRY_MS
+  };
+  await ctx.books.kv.set(listingKey(id), listing);
+  await ctx.books.kv.set(LISTINGS_KEY, [...await ids(ctx, LISTINGS_KEY), id]);
+  return finish(ctx, [record], record);
+}
+async function cancelListing(ctx, record, listingId) {
+  const listing = await openListing(ctx, listingId);
+  if (!listing) return refuse("gone");
+  if (listing.sellerId !== record.account.accountId) return refuse("not_owner");
+  await giveBack(ctx, record, listing);
+  await closeListing(ctx, listing.id);
+  return finish(ctx, [record], record);
+}
+async function buy(ctx, record, listingId) {
+  const listing = await openListing(ctx, listingId);
+  if (!listing) return refuse("gone");
+  if (listing.sellerId === record.account.accountId) return refuse("self_trade");
+  const gate = gateRefusal(ctx, record);
+  if (gate) return refuse(gate);
+  if (record.state.gold < listing.price) return refuse("not_enough_gold");
+  if (!hasRoom(record.state, listing.goods)) return refuse("no_space");
+  const seller = await counterparty(ctx, listing.sellerId);
+  const goods = await transfer(
+    listing.goods,
+    ctx.now,
+    () => nextLedgerId(ctx.books.kv, "t"),
+    record.state
+  );
+  author(record, { t: "bought", listingId, goods, price: listing.price });
+  author(seller, {
+    t: "sold",
+    listingId,
+    kind: listing.goods.kind,
+    base: goodsBase(listing.goods),
+    rarity: goodsRarity(listing.goods),
+    price: listing.price,
+    net: saleNet(listing.price)
+  });
+  await closeListing(ctx, listing.id);
+  return finish(ctx, [record, seller], record);
+}
+async function placeOrder(ctx, record, input) {
+  const gate = gateRefusal(ctx, record);
+  if (gate) return refuse(gate);
+  if (!validPrice(input.maxPrice)) return refuse("bad_price");
+  if (!tradeableRarity(input.minRarity)) return refuse("not_tradeable_rarity");
+  if (!content.itemBases[input.base]) return refuse("unknown_goods");
+  if (input.affixId !== null && !content.affixes[input.affixId]) return refuse("unknown_goods");
+  if (record.state.gold < input.maxPrice) return refuse("not_enough_gold");
+  const id = await nextLedgerId(ctx.books.kv, "O");
+  author(record, { t: "order_placed", orderId: id, escrow: input.maxPrice });
+  const order = {
+    id,
+    buyerId: record.account.accountId,
+    base: input.base,
+    minRarity: input.minRarity,
+    affixId: input.affixId,
+    maxPrice: input.maxPrice,
+    createdAt: ctx.now,
+    expiresAt: ctx.now + EXPIRY_MS
+  };
+  await ctx.books.kv.set(orderKey(id), order);
+  await ctx.books.kv.set(ORDERS_KEY, [...await ids(ctx, ORDERS_KEY), id]);
+  return finish(ctx, [record], record);
+}
+async function cancelOrder(ctx, record, orderId) {
+  const order = await openOrder(ctx, orderId);
+  if (!order) return refuse("gone");
+  if (order.buyerId !== record.account.accountId) return refuse("not_owner");
+  author(record, { t: "order_refunded", orderId, escrow: order.maxPrice });
+  await closeOrder(ctx, orderId);
+  return finish(ctx, [record], record);
+}
+async function fillOrder(ctx, record, orderId, itemId) {
+  const order = await openOrder(ctx, orderId);
+  if (!order) return refuse("gone");
+  const gate = gateRefusal(ctx, record);
+  if (gate) return refuse(gate);
+  const goods = owned(record.state, "item", itemId);
+  const refusal = sellerRefusal(ctx, record.state, goods);
+  if (refusal || goods?.kind !== "item") return refuse(refusal ?? "unknown_goods");
+  if (order.buyerId === record.account.accountId) return refuse("self_trade");
+  if (!matches(order, goods.item)) return refuse("no_match");
+  const buyer = await counterparty(ctx, order.buyerId);
+  if (!hasRoom(buyer.state, goods)) return refuse("no_space");
+  const moved = await transfer(goods, ctx.now, () => nextLedgerId(ctx.books.kv, "t"), buyer.state);
+  if (moved.kind !== "item") throw new Error("market: an order fill moved a hero");
+  author(record, {
+    t: "order_sold",
+    orderId,
+    itemId,
+    base: goods.item.base,
+    rarity: goods.item.rarity,
+    price: order.maxPrice,
+    net: saleNet(order.maxPrice)
+  });
+  author(buyer, { t: "order_filled", orderId, item: moved.item, price: order.maxPrice });
+  await closeOrder(ctx, orderId);
+  return finish(ctx, [record, buyer], record);
 }
 
 // packages/ledger/src/ledger.ts
@@ -554,9 +855,18 @@ var Ledger = class {
   }
 };
 export {
+  COOLDOWN_MS,
+  EXPIRY_MS,
   LINK_INTERVAL_MS,
   LINK_URL,
   LOG_CAP,
   Ledger,
-  nextLedgerId
+  MAX_PRICE,
+  MIN_PRICE,
+  listingFee,
+  nextLedgerId,
+  saleFee,
+  saleNet,
+  transfer,
+  validPrice
 };
