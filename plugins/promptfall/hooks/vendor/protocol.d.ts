@@ -118,6 +118,88 @@ type Batch = {
 declare const BatchSchema: z.ZodType<Batch>;
 declare function compareSemver(a: string, b: string): -1 | 0 | 1;
 
+type ChatMessage = {
+    id: number;
+    name: string;
+    text: string;
+    at: number;
+};
+type ChatRefusal = 'not_linked' | 'chat_closed' | 'empty' | 'too_long' | 'rate_limited' | 'blocked' | 'unauthorized';
+type ChatResult = {
+    ok: true;
+    message: ChatMessage;
+} | {
+    ok: false;
+    reason: ChatRefusal;
+};
+type BossView = {
+    bossId: string;
+    name: string;
+    glyph: string;
+    maxHp: number;
+    /** 0 from the killing commit until `endsAt`, then the boss leaves the snapshot. */
+    hp: number;
+    /** Server epoch ms. */
+    spawnedAt: number;
+    endsAt: number;
+    /** The caller's tallied contribution. */
+    yours: number;
+};
+type WorldSnapshot = {
+    serverNow: number;
+    /** The server clock's rate, as `ServerConfig.speed`; a secondary never bootstraps. */
+    speed: number;
+    online: number;
+    /** Ascending zone, counts above 0 only. */
+    zones: {
+        zone: number;
+        count: number;
+    }[];
+    /** Names in the caller's zone, caller excluded, at most `HERE_MAX`, most recent heartbeat first. */
+    here: string[];
+    boss: BossView | null;
+    /** Ascending id. */
+    chat: ChatMessage[];
+    /** The resolved flags, the same object as `ServerConfig.flags`. */
+    flags: Record<string, boolean>;
+};
+type BoardRow = {
+    accountId: string;
+    name: string;
+    value: number;
+};
+/** At most `BOARD_ROWS` rows each, value descending. */
+type Boards = {
+    highestZone: BoardRow[];
+    damage: BoardRow[];
+    weekStart: number;
+};
+/** Online means a heartbeat inside this many real ms. */
+declare const PRESENCE_TTL_MS = 45000;
+declare const HERE_MAX = 10;
+/** UTF-16 units after trimming, the unit `String.length` and Zod's `.max` count. */
+declare const CHAT_MAX_CHARS = 200;
+declare const CHAT_BUCKET_CAPACITY = 5;
+declare const CHAT_REFILL_MS = 10000;
+declare const CHAT_KEEP = 200;
+declare const CHAT_SERVE = 50;
+declare const BOARD_ROWS = 20;
+/** Monday 00:00 UTC of the week holding `now` (day 0 was a Thursday). */
+declare function weekStartOf(now: number): number;
+declare const ChatMessageSchema: z.ZodType<ChatMessage>;
+declare const ChatResultSchema: z.ZodType<ChatResult>;
+declare const ChatBodySchema: z.ZodObject<{
+    text: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    text: string;
+}, {
+    text: string;
+}>;
+declare const BossViewSchema: z.ZodType<BossView>;
+declare const WorldSnapshotSchema: z.ZodType<WorldSnapshot>;
+declare const BoardRowSchema: z.ZodType<BoardRow>;
+declare const BoardsSchema: z.ZodType<Boards>;
+
 type Auth = {
     deviceToken: string;
 };
@@ -237,6 +319,10 @@ interface ServerClient {
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
     matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
+    /** The world poll: stamps the caller present and answers the snapshot. `since` is the chat mark; 0 asks for the last 50. */
+    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    chat(auth: Auth, text: string): Promise<ChatResult>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
 }
 type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end';
 declare const BUDGETS: Record<BudgetKind, {
@@ -253,7 +339,7 @@ type FetchLike = (url: string, init: {
     ok: boolean;
     text: string;
 }>;
-/** The phase 2 route table, base path included. `:id` marks a path segment. */
+/** The route table, base path included. `:id` marks a path segment. */
 declare const ROUTES: {
     readonly health: {
         readonly method: "GET";
@@ -315,6 +401,18 @@ declare const ROUTES: {
         readonly method: "POST";
         readonly path: "/v1/orders/:id/fill";
     };
+    readonly world: {
+        readonly method: "GET";
+        readonly path: "/v1/world";
+    };
+    readonly chat: {
+        readonly method: "POST";
+        readonly path: "/v1/chat";
+    };
+    readonly leaderboards: {
+        readonly method: "GET";
+        readonly path: "/v1/leaderboards";
+    };
 };
 /**
  * The ServerClient over HTTP. It never retries: the engine owns retries. Ledger
@@ -350,6 +448,9 @@ declare class HttpClient implements ServerClient {
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
     matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
+    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    chat(auth: Auth, text: string): Promise<ChatResult>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
 }
 
 interface KeyValue {
@@ -401,6 +502,8 @@ declare const LinkPollResponseSchema: z.ZodType<Unauthorized | LinkPoll, z.ZodTy
 declare const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized>;
 declare const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized>;
 declare const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized>;
+declare const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized>;
+declare const BoardsResponseSchema: z.ZodType<Boards | Unauthorized>;
 
 /** The error bodies of non-200 answers. */
 declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
@@ -428,4 +531,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type Bootstrap, BootstrapSchema, type BudgetKind, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, compareSemver };
+export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };

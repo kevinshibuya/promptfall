@@ -1,5 +1,7 @@
 import { atom, type On, read, update } from 'claude-code'
 import type {
+  BoardsState,
+  ChatState,
   DialogState,
   DialogTab,
   GameView,
@@ -8,12 +10,23 @@ import type {
   OrdersState,
   Prefs,
   SellState,
+  WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT, PREFS_DEFAULT } from '../state'
+import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  PREFS_DEFAULT,
+  WORLD_DEFAULT,
+} from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
+import { chatBody, postChat } from './chat'
 import { CLASS_LABEL, formatGold } from './format'
+import { boardsBody, loadBoards } from './leaderboards'
 import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
@@ -31,6 +44,9 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
@@ -41,6 +57,8 @@ const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
   { tab: 'orders', label: 'Orders', hotkey: 'r' },
   { tab: 'account', label: 'Account', hotkey: 'a' },
   { tab: 'odds', label: 'Odds', hotkey: 'o' },
+  { tab: 'chat', label: 'Chat', hotkey: 'c' },
+  { tab: 'leaderboards', label: 'Leaderboards', hotkey: 'b' },
 ]
 
 function percent(weight: number, total: number): string {
@@ -88,6 +106,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
     const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
     const notice = await read($, noticeAtom)
+    const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
 
     const readOnly = mode === 'secondary' || mode === 'paused' || !game()?.canApply()
     const act = async (event: PlayerEvent) => {
@@ -105,6 +124,14 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     }
     const updOrders: Updater<OrdersState> = async (fn) => {
       await update($, ordersAtom, (o) => fn(o ?? ORDERS_DEFAULT))
+    }
+    const chat: ChatState = (await read($, chatAtom)) ?? CHAT_DEFAULT
+    const boards: BoardsState = (await read($, boardsAtom)) ?? BOARDS_DEFAULT
+    const updChat: Updater<ChatState> = async (fn) => {
+      await update($, chatAtom, (c) => fn(c ?? CHAT_DEFAULT))
+    }
+    const updBoards: Updater<BoardsState> = async (fn) => {
+      await update($, boardsAtom, (b) => fn(b ?? BOARDS_DEFAULT))
     }
     const updDialog: Updater<DialogState> = async (fn) => {
       await update($, dialogAtom, (d) => fn(d ?? DIALOG_DEFAULT))
@@ -126,10 +153,12 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       if (!running) return
       if (next === 'market') await loadMarket(running, market.query, updMarket, after)
       if (next === 'orders') await loadOrders(running, updOrders, after)
+      if (next === 'leaderboards') await loadBoards(running, updBoards, after)
     }
 
     const tabs = (
-      <Box key="tabs" flexDirection="row" gap={2}>
+      // Eight tabs do not fit a pane docked beside the conversation: they wrap.
+      <Box key="tabs" flexDirection="row" flexWrap="wrap" columnGap={2}>
         {TABS.map((t) => (
           <Button
             key={`tab-${t.tab}`}
@@ -208,7 +237,21 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const body = []
 
     const running = game()
-    if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
+    if (tab === 'chat' && running) {
+      // Each draw of the Chat tab keeps the world poll fast while it is shown.
+      running.chatSeen(clientNow)
+      body.push(
+        ...chatBody(els, view, world, chat, {
+          setDraft: (text) => updChat((c) => ({ ...c, draft: text })),
+          post: async (text) => {
+            if (((await read($, chatAtom)) ?? chat).busy) return
+            await postChat(running, text, updChat, after)
+          },
+        }),
+      )
+    } else if (tab === 'leaderboards' && running) {
+      body.push(...boardsBody(els, view, world, boards))
+    } else if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
       const sell = dialog.sell
       const close = () => updDialog((d) => ({ ...d, sell: null }))
       const goods =
@@ -218,7 +261,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const tradeableAt = goods?.tradeableAt ?? null
       const remaining = tradeableAt === null ? undefined : formatRemaining(remainingMs(tradeableAt))
       body.push(
-        ...sellBody(els, view, sell, remainingMs, {
+        ...sellBody(els, view, world, sell, remainingMs, {
           close,
           setPrice: (text) => updSell((s) => ({ ...s, price: text })),
           list: (price) =>
@@ -244,7 +287,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'market' && running) {
       body.push(
-        ...marketBody(els, pick, view, market, readOnly, {
+        ...marketBody(els, pick, view, world, market, readOnly, {
           setQuery: (q) => loadMarket(running, q, updMarket, after),
           ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
           confirm: async () =>
@@ -253,7 +296,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'orders' && running) {
       body.push(
-        ...ordersBody(els, pick, view, orders, readOnly, remainingMs, {
+        ...ordersBody(els, pick, view, world, orders, readOnly, remainingMs, {
           cancelListing: async (id) => {
             await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
           },

@@ -1,10 +1,11 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import type { GameView } from '../types'
+import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { Ledger } from './vendor/ledger.js'
-import { MemoryKeyValue } from './vendor/protocol.js'
+import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import { WORLD_POLL_MS, WORLD_STALE_MS } from './world'
 
 /** Answers $.store from a map and records every write. */
 function store(on: On, seed: Record<string, unknown> = {}) {
@@ -636,4 +637,254 @@ test("past 120 s the dialog's read-only line is the outage notice", async ($, on
   expect(await ui.find({ text: /Promptfall: server unreachable/ })).toBeDefined()
   expect(await ui.find({ text: /not playing in this session/ })).toBeUndefined()
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// The world poll
+
+const URL_W = 'http://test'
+const URL_X = 'http://other'
+
+function snap(patch: Partial<WorldSnapshot> = {}): WorldSnapshot {
+  return {
+    serverNow: 2_000_000,
+    speed: 10,
+    online: 3,
+    zones: [{ zone: 1, count: 3 }],
+    here: ['Ashgrove'],
+    boss: null,
+    chat: [],
+    flags: { 'chat.enabled': true, 'presence.enabled': true, 'market.enabled': true },
+    ...patch,
+  }
+}
+
+const say = (id: number, text = `line ${id}`): ChatMessage => ({
+  id,
+  name: 'Brindle',
+  text,
+  at: id,
+})
+
+const LIVE_BOSS = {
+  bossId: 'wb1',
+  name: 'The Promptwyrm',
+  glyph: '☠',
+  maxHp: 4000,
+  hp: 2500,
+  spawnedAt: 1,
+  endsAt: 9_999_999_999,
+  yours: 0,
+}
+
+/**
+ * A remote server whose account routes are the vendored ledger and whose world
+ * poll answers `net.world(since, url)`. `holdWorld` keeps the next poll open
+ * until `release()`; `worldDown` throws on it.
+ */
+function worldNet(on: On) {
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => 1_000_000,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: async () => ({ login: 'remote-player' }),
+  })
+  const net = {
+    ledger,
+    worldDown: false,
+    holdWorld: false,
+    release: (() => undefined) as () => void,
+    polls: [] as string[],
+    world: (_since: number, _url: string): WorldSnapshot => snap(),
+  }
+  on('http.fetch', async (_$, e) => {
+    const [full, query = ''] = e.url.split('?')
+    const path = (full ?? '').replace(/^https?:\/\/[^/]+/, '')
+    const method = e.init?.method ?? 'GET'
+    const header = e.init?.headers?.authorization ?? ''
+    const auth = { deviceToken: header.replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    const ok = (result: unknown) => ({
+      value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) },
+    })
+    if (method === 'GET' && path === '/v1/world') {
+      net.polls.push(e.url)
+      if (net.worldDown) throw new Error('connect ECONNREFUSED')
+      if (net.holdWorld) {
+        net.holdWorld = false
+        await new Promise<void>((resolve) => {
+          net.release = resolve
+        })
+      }
+      const since = Number(/since=(\d+)/.exec(query)?.[1] ?? 0)
+      return ok(net.world(since, e.url))
+    }
+    if (method === 'POST' && path === '/v1/bootstrap') return ok(await ledger.bootstrap(body))
+    if (method === 'POST' && path === '/v1/batches') return ok(await ledger.submit(body, auth))
+    if (method === 'GET' && path === '/v1/account') return ok(await ledger.account(auth))
+    return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+  })
+  return net
+}
+
+const worldOf = (last: Map<string, unknown>) => last.get('world') as WorldState
+
+test('the world poll goes out on start and every 15 s, with the chat mark', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = (since) => snap({ chat: since === 0 ? [say(1), say(2), say(3)] : [] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(net.polls[0]).toBe(`${URL_W}/v1/world?since=0`)
+  const world = worldOf(last)
+  expect(world.snapshot?.online).toBe(3)
+  expect(world.messages.map((m) => m.id)).toEqual([1, 2, 3])
+  expect(world.chatMark).toBe(3)
+  expect(world.clock?.speed).toBe(10)
+  const before = net.polls.length
+  await time.advance(WORLD_POLL_MS)
+  expect(net.polls.length).toBe(before + 1)
+  expect(net.polls.at(-1)).toBe(`${URL_W}/v1/world?since=3`)
+  await time.advance(WORLD_POLL_MS)
+  expect(net.polls.length).toBe(before + 2)
+})
+
+test('a live boss polls every 5 s; a dead or gone one goes back to 15 s', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = LIVE_BOSS
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).snapshot?.boss?.hp).toBe(2500)
+  let n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(3)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  boss = null
+  await time.advance(5_000)
+  n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(1)
+})
+
+test('at most one world poll is in flight', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = () => snap({ boss: LIVE_BOSS })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  net.holdWorld = true
+  const n = net.polls.length
+  await time.advance(5_000)
+  expect(net.polls.length).toBe(n + 1)
+  await time.advance(9_000)
+  expect(net.polls.length).toBe(n + 1)
+  net.release()
+  await time.advance(5_000)
+  expect(net.polls.length).toBe(n + 2)
+})
+
+test('a message already held is not added twice', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = (since) => snap({ chat: since === 0 ? [say(1), say(2)] : [say(2), say(3)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(WORLD_POLL_MS)
+  expect(worldOf(last).messages.map((m) => m.id)).toEqual([1, 2, 3])
+})
+
+test('a throwing world poll sets no notice; 45 s without a success is stale until the next', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).stale).toBe(false)
+  net.worldDown = true
+  const view = JSON.stringify(last.get('view'))
+  await time.advance(WORLD_STALE_MS - 1_000)
+  expect(last.get('notice') ?? null).toBeNull()
+  expect(last.get('mode')).toBe('primary')
+  expect(JSON.stringify(last.get('view'))).not.toBe(view)
+  expect(worldOf(last).stale).toBe(false)
+  await time.advance(1_000)
+  expect(worldOf(last).stale).toBe(true)
+  net.worldDown = false
+  await time.advance(WORLD_POLL_MS)
+  expect(worldOf(last).stale).toBe(false)
+  expect(last.get('notice') ?? null).toBeNull()
+})
+
+test('a secondary polls too, and a switch made elsewhere resets the world and polls the new server', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const net = worldNet(on)
+  const a = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+  const x = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+  const { data } = store(on, {
+    'promptfall:server': URL_W,
+    [`promptfall:token:${URL_W}`]: a.deviceToken,
+    [`promptfall:token:${URL_X}`]: x.deviceToken,
+    [LEASE]: { owner: 'other', until: 9_999_999_999_999 },
+  })
+  const last = states(on)
+  engineBottom(on)
+  net.world = (_since, url) =>
+    url.startsWith(URL_X) ? snap({ online: 7 }) : snap({ chat: [say(1)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(1)
+  expect(last.get('mode')).toBe('secondary')
+  expect(net.polls[0]).toBe(`${URL_W}/v1/world?since=0`)
+  expect(worldOf(last).messages.map((m) => m.id)).toEqual([1])
+  data.set('promptfall:server', URL_X)
+  await time.advance(10_000)
+  expect(net.polls.some((u) => u.startsWith(`${URL_X}/v1/world?since=0`))).toBe(true)
+  expect(worldOf(last).snapshot?.online).toBe(7)
+  expect(worldOf(last).messages).toEqual([])
+})
+
+test('/promptfall server local resets the world to the in-process snapshot, chat closed', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = () => snap({ chat: [say(1)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).messages).toHaveLength(1)
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  await time.advance(1)
+  const world = worldOf(last)
+  expect(world.messages).toEqual([])
+  expect(world.snapshot?.flags['chat.enabled']).toBe(false)
+  expect(world.snapshot?.online).toBe(1)
 })

@@ -8,6 +8,7 @@ import type {
   LootView,
   OrderView,
   RosterHeroView,
+  WorldState,
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
 import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
@@ -140,7 +141,37 @@ export function toAccountView(
     linked: account?.linked?.login ?? null,
     server,
     marketOpen: config?.flags['market.enabled'] ?? true,
+    chatOpen: config?.flags['chat.enabled'] ?? true,
+    presenceOpen: config?.flags['presence.enabled'] ?? true,
+    leaderboardsOpen: config?.flags['leaderboards.enabled'] ?? true,
+    bossOpen: config?.flags['worldboss.enabled'] ?? true,
     returns,
+  }
+}
+
+export type Gates = {
+  chatOpen: boolean
+  presenceOpen: boolean
+  leaderboardsOpen: boolean
+  bossOpen: boolean
+  marketOpen: boolean
+}
+
+/**
+ * What is open: the latest world snapshot's flags once there is one, the
+ * bootstrap config before, so a restarted server's flags reach every surface
+ * within one poll.
+ */
+export function gates(world: WorldState | null, account: AccountView): Gates {
+  const flags = world?.snapshot?.flags
+  const open = (name: string, fallback: boolean) =>
+    flags ? (flags[name] ?? fallback) !== false : fallback
+  return {
+    chatOpen: open('chat.enabled', account.chatOpen),
+    presenceOpen: open('presence.enabled', account.presenceOpen),
+    leaderboardsOpen: open('leaderboards.enabled', account.leaderboardsOpen),
+    bossOpen: open('worldboss.enabled', account.bossOpen),
+    marketOpen: open('market.enabled', account.marketOpen),
   }
 }
 

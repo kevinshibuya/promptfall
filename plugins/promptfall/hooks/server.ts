@@ -30,6 +30,8 @@ export function resolveClient(
       seedSource: () => Number.parseInt(crypto.randomUUID().slice(0, 8), 16),
       tokenSource: () => crypto.randomUUID(),
       linkApprover: async () => ({ login: 'player' }),
+      // Chat and the world boss need other players: off on the in-process ledger.
+      flags: { 'chat.enabled': false, 'worldboss.enabled': false },
     })
     return { client: ledger, tokenKey: 'deviceToken', label: IN_PROCESS, host: ledger.host }
   }

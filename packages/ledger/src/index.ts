@@ -1,3 +1,4 @@
+export { BLOCKED_WORDS, isBlocked } from './blocklist'
 export type { AccountRecord, LogEntry, PendingReturn } from './books'
 export { LOG_CAP } from './books'
 export {

@@ -41,12 +41,17 @@ The host that runs as a separate local process speaking the real HTTP protocol, 
 _Avoid_: dev server, mock server
 
 **Bot**:
-A seeded account inside the HTTP fake that trades through the same ledger API as a player.
+A seeded account inside the HTTP fake that plays and trades through the same public API as
+a player: it submits batches, lists, buys, chats and fights the world boss.
 _Avoid_: NPC, agent, simulated player
 
 **Cursor**:
 An account's position in its stream of server events. A batch declares the cursor its
 client has applied.
+
+**Delivery**:
+The server events pending past a client's cursor, carried on a response.
+_Avoid_: event stream (phase 5's long-poll), pending events, push
 
 **Primary session**:
 The one session per account that ticks and submits; every other session renders read-only.
@@ -78,3 +83,47 @@ _Avoid_: mailbox, pending items
 **Cooldown**:
 The 24 hours after a transfer during which an item or hero cannot be listed again.
 _Avoid_: binding, lock
+
+### World
+
+**World poll**:
+The read a session makes for a world snapshot. It is also the session's heartbeat.
+_Avoid_: stream, long-poll (phase 5), sync
+
+**World snapshot**:
+What the world poll answers: presence, the live world boss and the chat tail. Never sim
+state.
+_Avoid_: world state, feed, stream, event stream
+
+**Chat mark**:
+The id of the last chat message a client has shown; a poll asks for newer ones only.
+_Avoid_: chat cursor (the cursor is per account and for server events), offset, since
+
+**Heartbeat**:
+The world poll's side effect of stamping an account present, in its zone, at the server's
+clock.
+_Avoid_: ping, keepalive, check-in
+
+**Online**:
+An account with a heartbeat inside the presence TTL.
+_Avoid_: active, connected, logged in
+
+**World boss**:
+The shared enemy with one global HP that every online party damages during its window. The
+zone boss and the turn boss stay sim enemies of one party.
+_Avoid_: raid boss, global boss, event boss, boss (alone)
+
+**Boss mode**:
+The stretch during which a party's encounter is the world boss: entered by the server
+event `boss_engaged`, left by `boss_disengaged`. Normal waves pause.
+_Avoid_: raid, boss fight, boss phase
+
+**Contribution**:
+An account's tallied damage to one world boss, read by the server from the party's
+committed state.
+_Avoid_: score, participation, damage share
+
+**Reward**:
+What the server rolls for a contributor when a world boss dies or expires, delivered as
+the server event `rewarded`.
+_Avoid_: loot (that is a drop), prize, payout

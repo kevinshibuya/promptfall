@@ -1,3 +1,10 @@
+// packages/ledger/src/blocklist.ts
+var BLOCKED_WORDS = ["heck", "darn", "frick", "blockedword"];
+var blocked = new Set(BLOCKED_WORDS);
+function isBlocked(text) {
+  return text.toLowerCase().split(/[^\p{L}\p{N}]+/u).some((word) => blocked.has(word));
+}
+
 // packages/ledger/src/books.ts
 import {
   BUDGETS
@@ -27,6 +34,13 @@ function fullBuckets() {
 }
 function isCurrent(record) {
   return record.state.v === SIM_VERSION;
+}
+function publicName(record) {
+  const raw = record.account.displayName ?? record.account.linked?.login ?? null;
+  if (raw === null) return "adventurer";
+  const name = raw.replace(/\p{Cc}/gu, "");
+  if (name.trim() === "" || isBlocked(name)) return "adventurer";
+  return name;
 }
 function newRecord(account, state, now) {
   return {
@@ -222,7 +236,8 @@ async function nextLedgerId(kv, prefix) {
 import {
   BatchSchema,
   BUDGETS as BUDGETS2,
-  compareSemver
+  compareSemver,
+  PRESENCE_TTL_MS
 } from './protocol.js';
 import {
   createInitialState,
@@ -245,9 +260,6 @@ function refuse(reason) {
 }
 function open(ctx) {
   return ctx.flags["market.enabled"] !== false;
-}
-function nameOf(record) {
-  return record.account.displayName ?? record.account.linked?.login ?? "adventurer";
 }
 async function ids(ctx, key) {
   const raw = await ctx.books.kv.get(key);
@@ -403,7 +415,7 @@ async function list(ctx, record, input) {
   const listing = {
     id,
     sellerId: record.account.accountId,
-    sellerName: nameOf(record),
+    sellerName: publicName(record),
     goods,
     price: input.price,
     createdAt: ctx.now,
@@ -509,11 +521,136 @@ async function fillOrder(ctx, record, orderId, itemId) {
   return finish(ctx, [record, buyer], record);
 }
 
+// packages/ledger/src/world.ts
+import {
+  BOARD_ROWS,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  HERE_MAX,
+  weekStartOf
+} from './protocol.js';
+var CHAT_KEY = "pf:chat";
+var BOARDS_KEY = "pf:boards";
+async function loadChat(kv) {
+  const raw = await kv.get(CHAT_KEY);
+  return raw ?? { nextId: 1, messages: [] };
+}
+async function loadBoards(kv, now) {
+  const raw = await kv.get(BOARDS_KEY);
+  return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
+}
+function prune(ctx) {
+  for (const [id, entry] of ctx.presence) {
+    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
+  }
+}
+async function world(ctx, record, since) {
+  const presenceOn = ctx.flags["presence.enabled"] !== false;
+  const id = record.account.accountId;
+  prune(ctx);
+  if (presenceOn && isCurrent(record)) {
+    ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now });
+  }
+  let online = 0;
+  let zones = [];
+  let here = [];
+  if (presenceOn) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const entry of ctx.presence.values()) {
+      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
+    }
+    online = ctx.presence.size;
+    zones = [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }));
+    const mine = ctx.presence.get(id);
+    if (mine) {
+      here = [...ctx.presence.entries()].filter(([other, entry]) => other !== id && entry.zone === mine.zone).sort(([, a], [, b]) => b.at - a.at).slice(0, HERE_MAX).map(([, entry]) => entry.name);
+    }
+  }
+  let chat2 = [];
+  if (ctx.flags["chat.enabled"] !== false) {
+    const { messages } = await loadChat(ctx.books.kv);
+    chat2 = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since);
+  }
+  return {
+    serverNow: ctx.now,
+    speed: ctx.speed,
+    online,
+    zones,
+    here,
+    boss: null,
+    chat: chat2,
+    flags: ctx.flags
+  };
+}
+function refillChat(bucket, now) {
+  if (!bucket) return { tokens: CHAT_BUCKET_CAPACITY, refillAt: now };
+  const n = Math.floor(Math.max(0, now - bucket.refillAt) / CHAT_REFILL_MS);
+  const tokens = Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n);
+  return {
+    tokens,
+    refillAt: tokens === CHAT_BUCKET_CAPACITY ? now : bucket.refillAt + n * CHAT_REFILL_MS
+  };
+}
+async function chat(ctx, record, text) {
+  if (ctx.flags["chat.enabled"] === false) return { ok: false, reason: "chat_closed" };
+  if (!record.account.linked) return { ok: false, reason: "not_linked" };
+  const trimmed = text.replace(/\p{Cc}/gu, "").trim();
+  if (trimmed === "") return { ok: false, reason: "empty" };
+  if (trimmed.length > CHAT_MAX_CHARS) return { ok: false, reason: "too_long" };
+  if (isBlocked(trimmed)) return { ok: false, reason: "blocked" };
+  const bucket = refillChat(record.chat, ctx.now);
+  if (bucket.tokens < 1) return { ok: false, reason: "rate_limited" };
+  record.chat = { tokens: bucket.tokens - 1, refillAt: bucket.refillAt };
+  const stored = await loadChat(ctx.books.kv);
+  const message = {
+    id: stored.nextId,
+    name: publicName(record),
+    text: trimmed,
+    at: ctx.now
+  };
+  await ctx.books.save(record);
+  await ctx.books.kv.set(CHAT_KEY, {
+    nextId: stored.nextId + 1,
+    messages: [...stored.messages, message].slice(-CHAT_KEEP)
+  });
+  return { ok: true, message };
+}
+async function leaderboards(ctx) {
+  const weekStart = weekStartOf(ctx.now);
+  if (ctx.flags["leaderboards.enabled"] === false) {
+    return { highestZone: [], damage: [], weekStart };
+  }
+  const boards = await loadBoards(ctx.books.kv, ctx.now);
+  const damage = boards.week.start === weekStart ? Object.entries(boards.week.damage).map(([accountId, { name, value }]) => ({ accountId, name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)).slice(0, BOARD_ROWS) : [];
+  return { highestZone: boards.zone, damage, weekStart };
+}
+async function offerZone(kv, now, row) {
+  const boards = await loadBoards(kv, now);
+  const before = JSON.stringify(boards.zone);
+  const rows = boards.zone.map((r) => ({ ...r }));
+  const mine = rows.find((r) => r.accountId === row.accountId);
+  if (mine) {
+    mine.name = row.name;
+    mine.value = Math.max(mine.value, row.value);
+  } else {
+    const last = rows.at(-1);
+    if (rows.length < BOARD_ROWS || last && row.value > last.value) rows.push({ ...row });
+  }
+  rows.sort((a, b) => b.value - a.value);
+  const zone = rows.slice(0, BOARD_ROWS);
+  if (JSON.stringify(zone) === before) return;
+  await kv.set(BOARDS_KEY, { ...boards, zone });
+}
+
 // packages/ledger/src/ledger.ts
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
 var unauthorized = { reason: "unauthorized" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
+var chatUnauthorized = { ok: false, reason: "unauthorized" };
 var Ledger = class {
   constructor(options) {
     this.options = options;
@@ -531,6 +668,7 @@ var Ledger = class {
   kv;
   books;
   chain = Promise.resolve();
+  presence = /* @__PURE__ */ new Map();
   /**
    * The flush runs even when `fn` threw, so an operation must validate before
    * its first `set`; `author` throws before it touches the record for that reason.
@@ -547,7 +685,15 @@ var Ledger = class {
     return next;
   }
   flags() {
-    return { "market.enabled": true, ...this.options.flags };
+    return {
+      "market.enabled": true,
+      "chat.enabled": true,
+      "worldboss.enabled": true,
+      "presence.enabled": true,
+      "leaderboards.enabled": true,
+      maintenance: false,
+      ...this.options.flags
+    };
   }
   async config() {
     return {
@@ -560,6 +706,17 @@ var Ledger = class {
   }
   async marketContext() {
     return { books: this.books, now: await this.options.now(), flags: this.flags() };
+  }
+  async worldContext() {
+    const speed = this.options.speed ?? 1;
+    return {
+      books: this.books,
+      now: await this.options.now(),
+      flags: this.flags(),
+      presence: this.presence,
+      ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
+      speed
+    };
   }
   // ---------------------------------------------------------------------------
   // Accounts
@@ -683,6 +840,11 @@ var Ledger = class {
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING);
       settle(record);
       await this.books.deliverReturns(record);
+      await offerZone(this.kv, now, {
+        accountId: record.account.accountId,
+        name: publicName(record),
+        value: record.state.highestZone
+      });
       if (hash === batch.resultHash) {
         await this.books.save(record);
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) };
@@ -823,6 +985,32 @@ var Ledger = class {
     );
   }
   // ---------------------------------------------------------------------------
+  // World: presence, chat, leaderboards
+  world(auth, since) {
+    return this.run(async () => {
+      const ctx = await this.worldContext();
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      return world(ctx, record, since);
+    });
+  }
+  chat(auth, text) {
+    return this.run(async () => {
+      const ctx = await this.worldContext();
+      const record = await this.books.authenticate(auth);
+      if (!record) return chatUnauthorized;
+      return chat(ctx, record, text);
+    });
+  }
+  leaderboards(auth) {
+    return this.run(async () => {
+      const ctx = await this.worldContext();
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      return leaderboards(ctx);
+    });
+  }
+  // ---------------------------------------------------------------------------
   // Host privileges
   async mint(input) {
     if (input.name.length > 128) throw new Error("mint: name over 128 characters");
@@ -842,6 +1030,11 @@ var Ledger = class {
     );
     await this.books.save(record);
     await this.kv.set(tokenKey(deviceToken), accountId);
+    await offerZone(this.kv, now, {
+      accountId,
+      name: publicName(record),
+      value: input.state.highestZone
+    });
     return { accountId, deviceToken };
   }
   async currentRecord(accountId) {
@@ -872,6 +1065,7 @@ var Ledger = class {
   }
 };
 export {
+  BLOCKED_WORDS,
   COOLDOWN_MS,
   EXPIRY_MS,
   LINK_INTERVAL_MS,
@@ -880,6 +1074,7 @@ export {
   Ledger,
   MAX_PRICE,
   MIN_PRICE,
+  isBlocked,
   listingFee,
   nextLedgerId,
   saleFee,

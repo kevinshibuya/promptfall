@@ -1,4 +1,4 @@
-import type { GameView, OrdersState, RarityName } from '../../types'
+import type { GameView, OrdersState, RarityName, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { validPrice } from '../vendor/ledger.js'
 import { content, type Item, vendorValue } from '../vendor/sim.js'
@@ -86,6 +86,7 @@ export function ordersBody(
   els: Els,
   pick: PickFn,
   view: GameView,
+  world: WorldState | null,
   orders: OrdersState,
   readOnly: boolean,
   remainingMs: (deadline: number) => number,
@@ -171,7 +172,7 @@ export function ordersBody(
     )
   }
   if (readOnly) return body
-  const gate = gateLine(view)
+  const gate = gateLine(view, world)
   if (gate) {
     body.push(
       <Text key="orders-gate" color="yellow">
