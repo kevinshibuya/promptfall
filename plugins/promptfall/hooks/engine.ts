@@ -151,9 +151,12 @@ export class GameEngine {
     try {
       boot = await this.deps.client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
     } catch {
+      if (this.stopped) return
       await this.enterOutage('start')
       return
     }
+    // Replaced (a reset or a switch) while the bootstrap was in flight: write nothing.
+    if (this.stopped) return
     this.firstRun = boot.deviceToken !== token
     this.token = boot.deviceToken
     if (boot.deviceToken !== token) await this.deps.kv.set(this.tokenKey, boot.deviceToken)
@@ -375,6 +378,7 @@ export class GameEngine {
       if (this.outage) throw new Error('unreachable')
       await this.doFlush()
       if (this.outage) throw new Error('unreachable')
+      if (this.paused !== null) throw new Error('not_primary')
       const token = this.token
       if (!token) throw new Error('not_primary')
       let r: R

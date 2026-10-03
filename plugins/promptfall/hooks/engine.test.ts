@@ -30,6 +30,7 @@ class Recorder implements ServerClient {
   failBootstraps = 0
   fakeNextAck: BatchAck | null = null
   hold: Promise<void> | null = null
+  holdBootstrap: Promise<void> | null = null
   constructor(readonly inner: Ledger) {}
 
   async bootstrap(input: {
@@ -37,6 +38,7 @@ class Recorder implements ServerClient {
     deviceToken: string | null
   }): Promise<Bootstrap> {
     this.bootstraps += 1
+    if (this.holdBootstrap) await this.holdBootstrap
     if (this.failBootstraps > 0) {
       this.failBootstraps -= 1
       throw new Error('unreachable')
@@ -432,4 +434,55 @@ test('a fractional timestamp is stored as whole milliseconds', async () => {
   expect(engine.isPaused()).toBe(false)
   expect(client.acks[0]).toMatchObject({ ok: true })
   expect(client.batches[0]?.events[0]?.at).toBe(1000)
+})
+
+test('a flush that pauses the engine stops the trade', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.fakeNextAck = { ok: false, reason: 'unauthorized' }
+  let called = false
+  await expect(
+    engine.trade(async () => {
+      called = true
+      return { ok: false, reason: 'gone' } as MarketResult
+    }),
+  ).rejects.toThrow('not_primary')
+  expect(called).toBe(false)
+  expect(engine.isPaused()).toBe(true)
+})
+
+test("a stopped engine's in-flight bootstrap writes nothing", async () => {
+  const { engine, client, kv } = setup()
+  let release: () => void = () => undefined
+  client.holdBootstrap = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const started = engine.start()
+  for (let i = 0; i < 20 && client.bootstraps === 0; i++) await Promise.resolve()
+  expect(client.bootstraps).toBe(1)
+  engine.stop()
+  release()
+  await started
+  expect(await kv.get('deviceToken')).toBeUndefined()
+  expect(engine.state()).toBeNull()
+})
+
+test('a server event that invalidates a buffered event re-steps it as rejected', async () => {
+  const { engine, client, effects, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'set_party', heroIds: ['h0', 'h1', 'h3'] }, at())
+  expect(effects.filter((k) => k === 'rejected')).toHaveLength(0)
+  client.fakeNextAck = {
+    ok: false,
+    reason: 'cursor_behind',
+    delivery: {
+      cursor: 1,
+      events: [{ n: 1, event: { t: 'listed', listingId: 'L1', kind: 'hero', id: 'h3', fee: 0 } }],
+    },
+  }
+  await engine.flush()
+  expect(effects.filter((k) => k === 'rejected')).toHaveLength(1)
+  // The resubmit at cursor 1 meets a ledger still at cursor 0: the fake delivery's doing.
+  expect(client.acks.at(-1)).toMatchObject({ ok: false, reason: 'cursor_mismatch' })
 })
