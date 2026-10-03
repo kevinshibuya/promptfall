@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util'
 import { startBots } from './bots'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
+import { parseFlags } from './flags'
 import { createFakeServer } from './server'
 
 // `pnpm fake -- --port 7777` passes a leading `--`; `pnpm fake --port 7777` does not.
@@ -19,6 +20,7 @@ const { values } = parseArgs({
     'player-name': { type: 'string', default: 'player' },
     data: { type: 'string', default: '.promptfall/fake.json' },
     bots: { type: 'string', default: '12' },
+    flag: { type: 'string', multiple: true, default: [] },
   },
   strict: true,
 })
@@ -47,6 +49,14 @@ if (!Number.isInteger(botCount) || botCount < 0) {
   process.exit(2)
 }
 
+let flags: ReturnType<typeof parseFlags>
+try {
+  flags = parseFlags(values.flag)
+} catch (error) {
+  console.error(`promptfall fake: ${(error as Error).message}`)
+  process.exit(2)
+}
+
 const kv = new FileKeyValue(data)
 const clock = new VirtualClock({ speed, persisted: kv.persistedClock })
 kv.attachClock(() => clock.snapshot())
@@ -55,7 +65,7 @@ const server = createFakeServer({
   kv,
   now: () => clock.now(),
   speed,
-  flags: { 'market.enabled': true },
+  flags,
   seedSource: () => randomInt(0, 2 ** 32),
   tokenSource: () => randomUUID(),
   playerName: values['player-name'],
@@ -63,8 +73,10 @@ const server = createFakeServer({
 })
 
 const listening = await server.listen(port)
+const passed = Object.entries(flags).map(([name, value]) => `${name}=${value}`)
 console.log(
-  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} data ${data}`,
+  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} data ${data}` +
+    (passed.length > 0 ? ` flags ${passed.join(',')}` : ''),
 )
 // The clock is on disk from the start, so a restart never resumes behind it.
 kv.flushSync()

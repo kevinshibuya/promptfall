@@ -4,6 +4,7 @@ import { Ledger, type LedgerFlag } from '@promptfall/ledger'
 import {
   type Auth,
   BatchSchema,
+  ChatBodySchema,
   type KeyValue,
   ListingQuerySchema,
   NewListingSchema,
@@ -69,6 +70,15 @@ function listingQuery(query: Record<string, string>): unknown {
   const page = query.page
   out.page = page !== undefined && /^\d+$/.test(page) ? Number(page) : page
   return out
+}
+
+/** `GET /v1/world`'s chat mark: absent is 0, digits are the number, anything else is 400. */
+function sinceOf(query: Record<string, string>): number {
+  const since = query.since
+  if (since === undefined) return 0
+  if (!/^\d+$/.test(since))
+    throw new SchemaError([{ message: 'since wants a non-negative integer' }])
+  return Number(since)
 }
 
 function authOf(req: IncomingMessage): Auth {
@@ -161,6 +171,9 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     cancelOrder: (r) => ledger.cancelOrder(r.auth, r.params.id ?? ''),
     matchingOrders: (r) => ledger.matchingOrders(r.auth, parse(ItemIdBody, r.query).itemId),
     fillOrder: (r) => ledger.fillOrder(r.auth, r.params.id ?? '', parse(ItemIdBody, r.body).itemId),
+    world: (r) => ledger.world(r.auth, sinceOf(r.query)),
+    chat: (r) => ledger.chat(r.auth, parse(ChatBodySchema, r.body).text),
+    leaderboards: (r) => ledger.leaderboards(r.auth),
   }
 
   const table = (Object.keys(ROUTES) as (keyof typeof ROUTES)[]).map((name) => ({

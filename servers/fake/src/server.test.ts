@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import {
   AccountResponseSchema,
   BatchAckSchema,
+  BoardsResponseSchema,
   BootstrapSchema,
+  ChatResultSchema,
   ErrorBodySchema,
   HealthSchema,
   HttpClient,
@@ -15,11 +17,13 @@ import {
   MatchingOrdersResponseSchema,
   MemoryKeyValue,
   MyOrdersResponseSchema,
+  WorldResponseSchema,
 } from '@promptfall/protocol'
 import { hashState, replay, SIM_VERSION } from '@promptfall/sim'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
+import { parseFlags } from './flags'
 import { createFakeServer } from './server'
 import { nodeFetch } from './test-support'
 
@@ -99,6 +103,19 @@ describe('HTTP fake', () => {
     const r = await raw('DELETE', '/v1/listings/%E0%A4%A', { token })
     expect(r).toEqual({ status: 404, body: { error: 'route' } })
     expect((await raw('GET', '/v1/health')).status).toBe(200)
+  })
+
+  it('reads the world mark from the query: absent is 0, anything but digits is 400', async () => {
+    const token = await freshToken()
+    const absent = await raw('GET', '/v1/world', { token })
+    expect(absent.status).toBe(200)
+    expect(WorldResponseSchema.parse(absent.body)).toMatchObject({ boss: null })
+    expect((await raw('GET', '/v1/world?since=12', { token })).status).toBe(200)
+    const bad = await raw('GET', '/v1/world?since=abc', { token })
+    expect(bad.status).toBe(400)
+    expect(ErrorBodySchema.parse(bad.body)).toMatchObject({ error: 'schema' })
+    expect((await raw('GET', '/v1/world?since=-1', { token })).status).toBe(400)
+    expect((await raw('POST', '/v1/chat', { body: '{"text":3}', token })).status).toBe(400)
   })
 
   it('answers 404 on an unknown route or method', async () => {
@@ -181,6 +198,9 @@ describe('HTTP fake', () => {
         (await raw('POST', '/v1/orders/O1/fill', { body: '{"itemId":"i0"}', token })).body,
         MarketResultSchema,
       ],
+      [(await raw('GET', '/v1/world?since=0', { token })).body, WorldResponseSchema],
+      [(await raw('POST', '/v1/chat', { body: '{"text":"hi"}', token })).body, ChatResultSchema],
+      [(await raw('GET', '/v1/leaderboards', { token })).body, BoardsResponseSchema],
     ]
     for (const [body, schema] of checks) expect(() => schema.parse(body)).not.toThrow()
     // The client agrees: it parses the same bodies.
@@ -245,5 +265,22 @@ describe('VirtualClock', () => {
     const a = clock.nowSync()
     real -= 1000
     expect(clock.nowSync()).toBe(a)
+  })
+})
+
+describe('parseFlags', () => {
+  it('reads name=value pairs over the six ledger flags', () => {
+    expect(parseFlags([])).toEqual({})
+    expect(parseFlags(['chat.enabled=false'])).toEqual({ 'chat.enabled': false })
+    expect(parseFlags(['maintenance=true', 'worldboss.enabled=false'])).toEqual({
+      maintenance: true,
+      'worldboss.enabled': false,
+    })
+  })
+
+  it('throws on an unknown name or a value other than true and false', () => {
+    expect(() => parseFlags(['bogus=true'])).toThrow(/chat\.enabled/)
+    expect(() => parseFlags(['chat.enabled=maybe'])).toThrow()
+    expect(() => parseFlags(['chat.enabled'])).toThrow()
   })
 })
