@@ -16,6 +16,7 @@ import {
 } from '@promptfall/protocol'
 import { isBlocked } from './blocklist'
 import { type AccountRecord, type Books, isCurrent, publicName } from './books'
+import { BOSS_KEY, engage, isLive, loadBoss, toBossView } from './boss'
 
 /** Who polled, in the `Ledger` instance's memory only: never in the store. */
 export type Presence = Map<string, { zone: number; name: string; at: number }>
@@ -28,6 +29,9 @@ export type WorldContext = {
   /** Online means a heartbeat inside this many server-clock ms. */
   ttl: number
   speed: number
+  /** Draws reward items. */
+  seedSource: () => number
+  log: (line: string) => void
 }
 
 export const CHAT_KEY = 'pf:chat'
@@ -94,6 +98,20 @@ export async function world(
         .map(([, entry]) => entry.name)
     }
   }
+  // The boss: an online, current account not engaged yet joins on its poll.
+  const boss = await loadBoss(ctx.books.kv)
+  if (
+    boss &&
+    ctx.flags['worldboss.enabled'] !== false &&
+    isLive(ctx, boss) &&
+    ctx.presence.has(id) &&
+    isCurrent(record) &&
+    !(id in boss.contributions)
+  ) {
+    engage(record, boss)
+    await ctx.books.save(record)
+    await ctx.books.kv.set(BOSS_KEY, boss)
+  }
   let chat: ChatMessage[] = []
   if (ctx.flags['chat.enabled'] !== false) {
     const { messages } = await loadChat(ctx.books.kv)
@@ -105,7 +123,7 @@ export async function world(
     online,
     zones,
     here,
-    boss: null,
+    boss: toBossView(ctx, boss, id),
     chat,
     flags: ctx.flags,
   }
