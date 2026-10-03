@@ -19,3 +19,16 @@ Each Opus finding, checked against the code by hand:
 Also from the manual pass's server-side run: part A step 3's "a bot's chat line within a minute" is about 100 s after the fake starts (a bot speaks every sixth act, one act per 20 s), and step 4's "every few seconds" is about every 10. Both lines corrected.
 
 Left as noted, not changed: the zone label versus the committed zone for up to 15 s, the fast cadence while a closed or gated Chat tab is shown, a mark past a wiped store's last id (covered by the mismatch pause), rule 26's vacuous `chat: []`, rule 31 not committing a raised zone (the unit test covers it).
+
+## Second leg
+
+The codex leg hit the account's usage limit mid-run and left no findings (its one probe showed eight concurrent chat posts serialised to five accepted and three `rate_limited`). Kevin had the cross-check run as a second, fresh-context Opus `reviewer` instead (`opus-second.md`), on PR 1's own head: nothing blocks the merge, all eleven fixes confirmed. Taken:
+
+| # | Finding | Change |
+| --- | --- | --- |
+| 1 | A paste over 2000 raw characters that strips short still read as an outage | `postChat` sends the cleaned text; dialog test with a padded paste and a server-side `blocked` |
+| 2 | A failed bot start is now silent | `BotOptions.onError` reports it once; the CLI writes it to stderr; test with a rejecting `mint` |
+| 3 | Orphaned accounts keep their highest-zone rows | Taken in PR 2, where the version bump re-mints every bot of an old `--data`: the board shows current accounts only |
+| gap | The speed-scaled TTL test proved a lower bound only | It also expires the heartbeat 450 virtual seconds later |
+
+The plan records narrowings 32 (a full chat bucket stores no credit) and 33 (in-process chat says it needs a server). Left as noted: draft typed during an in-flight post is cleared on success (the plan's rule), ids reused after a crash that skipped the flush (deferred item Q's family), a post or a reload straddling a server switch, rule 26's vacuous `chat: []`, rule 31 not committing a raised zone.

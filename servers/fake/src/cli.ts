@@ -121,6 +121,7 @@ const bots =
         log: (line) => {
           if (process.env.PROMPTFALL_DEBUG) console.debug(line)
         },
+        onError: (line) => console.error(line),
       })
     : null
 
