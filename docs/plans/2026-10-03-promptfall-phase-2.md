@@ -402,9 +402,9 @@ Contract suite additions:
 
 **Boundaries:** No market rules yet beyond the stub and `expireDue` over empty lists. No HTTP. Nothing in the plugin.
 
-- [ ] Scaffold the package; recover `LocalServer` as `Ledger`; make phase 1's contract rules pass again under the new Mirror
-- [ ] Add the committed point, cursor, log, delivery, `host`, `deliverReturns`; write rules 10 to 13 (red), make them green
-- [ ] Run the acceptance check; commit `feat(ledger): account ledger with cursor, deliveries and link flow`
+- [x] Scaffold the package; recover `LocalServer` as `Ledger`; make phase 1's contract rules pass again under the new Mirror
+- [x] Add the committed point, cursor, log, delivery, `host`, `deliverReturns`; write rules 10 to 13 (red), make them green
+- [x] Run the acceptance check; commit `feat(ledger): account ledger with cursor, deliveries and link flow`
 
 ### Task 4: The HTTP fake process
 
