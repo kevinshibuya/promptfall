@@ -198,7 +198,20 @@ export async function leaderboards(ctx: WorldContext): Promise<Boards> {
           .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
           .slice(0, BOARD_ROWS)
       : []
-  return { highestZone: boards.zone, damage, weekStart }
+  const highestZone: BoardRow[] = []
+  for (const row of boards.zone)
+    if (await isPlaying(ctx.books, row.accountId)) highestZone.push(row)
+  return { highestZone, damage, weekStart }
+}
+
+/**
+ * Whether an account's board row still counts: its record exists at this sim
+ * version. An old `--data` re-mints every bot under a new version and leaves
+ * the old accounts behind; their rows must not hold the board.
+ */
+export async function isPlaying(books: Books, accountId: string): Promise<boolean> {
+  const record = await books.load(accountId)
+  return record !== null && isCurrent(record)
 }
 
 /**
@@ -206,10 +219,19 @@ export async function leaderboards(ctx: WorldContext): Promise<Boards> {
  * and the higher value; a new one goes in when there is room or it beats the
  * last row. Ties keep the earlier row first. Writes only on a change.
  */
-export async function offerZone(kv: KeyValue, now: number, row: BoardRow): Promise<void> {
+export async function offerZone(
+  kv: KeyValue,
+  now: number,
+  row: BoardRow,
+  /** Rows of accounts this answers false for are dropped first (see `isPlaying`). */
+  keep: (accountId: string) => Promise<boolean> = async () => true,
+): Promise<void> {
   const boards = await loadBoards(kv, now)
   const before = JSON.stringify(boards.zone)
-  const rows = boards.zone.map((r) => ({ ...r }))
+  const rows: BoardRow[] = []
+  for (const r of boards.zone) {
+    if (r.accountId === row.accountId || (await keep(r.accountId))) rows.push({ ...r })
+  }
   const mine = rows.find((r) => r.accountId === row.accountId)
   if (mine) {
     mine.name = row.name

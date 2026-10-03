@@ -378,12 +378,22 @@ async function leaderboards(ctx) {
   }
   const boards = await loadBoards(ctx.books.kv, ctx.now);
   const damage = boards.week.start === weekStart ? Object.entries(boards.week.damage).map(([accountId, { name, value }]) => ({ accountId, name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)).slice(0, BOARD_ROWS) : [];
-  return { highestZone: boards.zone, damage, weekStart };
+  const highestZone = [];
+  for (const row of boards.zone)
+    if (await isPlaying(ctx.books, row.accountId)) highestZone.push(row);
+  return { highestZone, damage, weekStart };
 }
-async function offerZone(kv, now, row) {
+async function isPlaying(books, accountId) {
+  const record = await books.load(accountId);
+  return record !== null && isCurrent(record);
+}
+async function offerZone(kv, now, row, keep = async () => true) {
   const boards = await loadBoards(kv, now);
   const before = JSON.stringify(boards.zone);
-  const rows = boards.zone.map((r) => ({ ...r }));
+  const rows = [];
+  for (const r of boards.zone) {
+    if (r.accountId === row.accountId || await keep(r.accountId)) rows.push({ ...r });
+  }
   const mine = rows.find((r) => r.accountId === row.accountId);
   if (mine) {
     mine.name = row.name;
@@ -1040,11 +1050,16 @@ var Ledger = class {
       settle(record);
       await contribute(await this.worldContext(now), record, prevDealt);
       await this.books.deliverReturns(record);
-      await offerZone(this.kv, now, {
-        accountId: record.account.accountId,
-        name: publicName(record),
-        value: record.state.highestZone
-      });
+      await offerZone(
+        this.kv,
+        now,
+        {
+          accountId: record.account.accountId,
+          name: publicName(record),
+          value: record.state.highestZone
+        },
+        (id) => isPlaying(this.books, id)
+      );
       if (hash === batch.resultHash) {
         await this.books.save(record);
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) };
@@ -1231,11 +1246,16 @@ var Ledger = class {
     );
     await this.books.save(record);
     await this.kv.set(tokenKey(deviceToken), accountId);
-    await offerZone(this.kv, now, {
-      accountId,
-      name: publicName(record),
-      value: input.state.highestZone
-    });
+    await offerZone(
+      this.kv,
+      now,
+      {
+        accountId,
+        name: publicName(record),
+        value: input.state.highestZone
+      },
+      (id) => isPlaying(this.books, id)
+    );
     return { accountId, deviceToken };
   }
   async currentRecord(accountId) {

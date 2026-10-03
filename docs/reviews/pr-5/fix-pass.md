@@ -30,3 +30,7 @@ The codex leg hit the account's usage limit mid-run and left no findings (its on
 | 3 | README's HP line wrong with presence off | One clause added |
 | 4 | A held snapshot without its clock could read `boss 62% · ` | The held clock comes along |
 | gap | Nothing pins non-boss behaviour across the version bump | `goldenEvents({ boss: false })` must still reach the v2 golden hash with the boss field stripped; it does |
+
+## Carried from PR 1's second leg
+
+Its finding 3 (orphaned accounts keep their highest-zone rows) is a version-bump problem, so it lands here: `leaderboards` serves, and `offerZone` keeps, only rows whose record exists at the current sim version (narrowing 37; ledger test with a phase 2 record holding a zone 9 row). Checked against a copy of the default `.promptfall/fake.json`: its board, written by version 3, holds the twelve current bots only.

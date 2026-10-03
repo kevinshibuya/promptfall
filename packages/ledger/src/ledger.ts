@@ -334,11 +334,16 @@ export class Ledger implements ServerClient {
       // The batch's damage to the world boss; a killing commit authors the rewards here.
       await boss.contribute(await this.worldContext(now), record, prevDealt)
       await this.books.deliverReturns(record)
-      await world.offerZone(this.kv, now, {
-        accountId: record.account.accountId,
-        name: publicName(record),
-        value: record.state.highestZone,
-      })
+      await world.offerZone(
+        this.kv,
+        now,
+        {
+          accountId: record.account.accountId,
+          name: publicName(record),
+          value: record.state.highestZone,
+        },
+        (id) => world.isPlaying(this.books, id),
+      )
       if (hash === batch.resultHash) {
         await this.books.save(record)
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) }
@@ -568,11 +573,16 @@ export class Ledger implements ServerClient {
     )
     await this.books.save(record)
     await this.kv.set(tokenKey(deviceToken), accountId)
-    await world.offerZone(this.kv, now, {
-      accountId,
-      name: publicName(record),
-      value: input.state.highestZone,
-    })
+    await world.offerZone(
+      this.kv,
+      now,
+      {
+        accountId,
+        name: publicName(record),
+        value: input.state.highestZone,
+      },
+      (id) => world.isPlaying(this.books, id),
+    )
     return { accountId, deviceToken }
   }
 
