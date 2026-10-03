@@ -677,6 +677,8 @@ PR from `feat/phase-3-boss` into `ai-staging` titled `Promptfall phase 3, PR 2: 
 35. **The Party tab gives the world boss two rows of the enemy column** (PR 2 review and the driven manual pass): the name on the first, the bar and `<shown>/<max>` on the second, the third empty, so the name is never clipped at 100 columns. This replaces Task 11's one-row slot.
 36. **A reload keeps the held snapshot and clock** (PR 2 review): the poller starts from the `world` atom's snapshot rather than none, so a live boss is not announced twice; a server switch still resets it.
 
+37. **The highest-zone board drops the rows of accounts missing or behind the sim version** (PR 1 second review): on every read and before every offer, so the bots an old `--data` re-mints under a new version never leave stale, higher rows holding the board.
+
 ## Out of scope
 
 The long-poll stream, presence in Redis, mute and ban, the admin CLI, pushed flag changes, deferred items M (a delivery with a gap after a 500-entry log fold) and Q (the virtual clock stepping back after a SIGKILL during a read-only stretch), and a transaction over the many records `settleBoss` writes (both phase 3 hosts flush atomically: one rename on the file fake, one process in memory) (phase 5); sound cues for the boss, sprites (phase 4); hero rewards from the boss (items only in phase 3); a chat word list beyond the placeholder (content, not mechanism); names colliding on a fake with more than one human (`--player-name` for every linked account; a fake limitation, noted in the record); rate limits on the world poll beyond the presence stamp being idempotent; migrations between sim versions.
