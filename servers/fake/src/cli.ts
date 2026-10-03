@@ -1,6 +1,7 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { startBots } from './bots'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
 import { createFakeServer } from './server'
@@ -17,6 +18,7 @@ const { values } = parseArgs({
     speed: { type: 'string', default: '1' },
     'player-name': { type: 'string', default: 'player' },
     data: { type: 'string', default: '.promptfall/fake.json' },
+    bots: { type: 'string', default: '12' },
   },
   strict: true,
 })
@@ -38,6 +40,11 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 const seed = positive('seed', values.seed, true)
 const speed = positive('speed', values.speed, false)
 const data = resolve(values.data)
+const botCount = Number(values.bots)
+if (!Number.isInteger(botCount) || botCount < 0) {
+  console.error('promptfall fake: --bots wants 0 or more')
+  process.exit(2)
+}
 
 const kv = new FileKeyValue(data)
 const clock = new VirtualClock({ speed, persisted: kv.persistedClock })
@@ -61,6 +68,24 @@ console.log(
 // The clock is on disk from the start, so a restart never resumes behind it.
 kv.flushSync()
 
+const bots =
+  botCount > 0
+    ? startBots({
+        ledger: server.ledger,
+        kv,
+        seed,
+        count: botCount,
+        speed,
+        schedule: (ms, fn) => {
+          const handle = setTimeout(fn, ms)
+          return { cancel: () => clearTimeout(handle) }
+        },
+        log: (line) => {
+          if (process.env.PROMPTFALL_DEBUG) console.debug(line)
+        },
+      })
+    : null
+
 const sweep = setInterval(() => {
   server.ledger.host.sweep().catch((error) => console.error('promptfall fake: sweep', error))
 }, 60_000 / speed)
@@ -70,6 +95,7 @@ async function shutdown(): Promise<void> {
   if (closing) return
   closing = true
   clearInterval(sweep)
+  bots?.stop()
   await listening.close()
   kv.flushSync()
   console.log('promptfall fake stopped')

@@ -567,9 +567,9 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** Bots use only `host.mint`, `host.credit`, `host.settle` and public methods. No direct `kv` writes except `pf:bot:<i>`. No plugin changes.
 
-- [ ] `bot-seed.ts` and `bot-config.ts`; the population assertion in `bots.test.ts` (red, then green)
-- [ ] `bots.ts` with the rest of `bots.test.ts` (red, then green)
-- [ ] CLI flag; run the acceptance check; commit `feat(fake-server): seeded bots that list, buy, order and cancel`
+- [x] `bot-seed.ts` and `bot-config.ts`; the population assertion in `bots.test.ts` (red, then green)
+- [x] `bots.ts` with the rest of `bots.test.ts` (red, then green)
+- [x] CLI flag; run the acceptance check; commit `feat(fake-server): seeded bots that list, buy, order and cancel`
 
 ### Task 9: Plugin: Market and Orders tabs, sell flow, order form, toasts, loot lines
 
