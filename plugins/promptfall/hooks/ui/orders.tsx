@@ -28,9 +28,10 @@ export async function loadOrders(
 ): Promise<void> {
   await upd((s) => ({ ...s, busy: true }))
   try {
-    await game.sync()
+    // The read expires what is due; the sync after it brings the returns and refunds home.
     const r = await game.market.myOrders()
     if ('reason' in r) throw new Error('Playing in another session')
+    await game.sync()
     await upd((s) => ({
       ...s,
       busy: false,
@@ -254,7 +255,7 @@ export function ordersBody(
   }
   body.push(
     <Box key="order-buttons" flexDirection="row" gap={2}>
-      {validPrice(price) ? (
+      {validPrice(price) && !orders.busy ? (
         <Button key="order-place" label="place" onPress={() => actions.submit()} />
       ) : null}
       <Button key="order-cancel" label="cancel" onPress={() => actions.closeForm()} />

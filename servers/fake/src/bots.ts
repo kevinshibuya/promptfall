@@ -105,8 +105,9 @@ export function startBots(options: BotOptions): Bots {
           name,
           linked: true,
         })
+        // Not flushed here: a flush outside the ledger's mutex could write another
+        // operation's half-done state. The next ledger write carries it to disk.
         await options.kv.set(botKey(i), saved)
-        await options.kv.flush?.()
       }
       bots.push({
         name,

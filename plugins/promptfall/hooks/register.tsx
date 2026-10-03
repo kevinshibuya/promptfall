@@ -5,15 +5,17 @@ import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
-import { DIALOG_DEFAULT } from './state'
+import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
+  Auth,
   FetchLike,
   LinkPoll,
   LinkStart,
   MarketResult,
+  ServerClient,
   Unauthorized,
 } from './vendor/protocol.js'
 import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
@@ -35,6 +37,8 @@ type Io = {
   paneNotice: (text: string | null) => Promise<void>
   /** Shows or clears the device-flow code in the dialog. */
   dialogLink: (link: { code: string; url: string } | null) => Promise<void>
+  /** Drops what the dialog holds of one server: a link code and an open sell panel. */
+  clearDialog: () => Promise<void>
   fetch: FetchLike
 }
 
@@ -182,7 +186,7 @@ class GameSession implements GameHandle {
     if (setting !== null) this.useServer(setting)
     await this.io.publish({ server: setting })
     // A code from before a hot reload has no poll behind it any more.
-    await this.io.dialogLink(null)
+    await this.io.clearDialog()
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
     this.off = (await this.io.mode()) === 'off'
     await this.io.publish({ leaseOwner: this.owner })
@@ -247,8 +251,15 @@ class GameSession implements GameHandle {
   /** A fresh engine on `setting`, started as primary or refreshed as secondary. */
   private async restart(setting: string | null): Promise<void> {
     this.useServer(setting)
-    await this.io.publish({ server: setting, notice: null, view: null })
-    await this.io.dialogLink(null)
+    // Listing and order ids belong to one server: nothing loaded or pending on the old one survives.
+    await this.io.publish({
+      server: setting,
+      notice: null,
+      view: null,
+      market: MARKET_DEFAULT,
+      orders: ORDERS_DEFAULT,
+    })
+    await this.io.clearDialog()
     if (this.role === 'primary') await this.becomePrimary()
     else await this.becomeSecondary()
   }
@@ -294,9 +305,21 @@ class GameSession implements GameHandle {
   }
 
   readonly market: GameHandle['market'] = {
-    browse: (query) => this.engine.call((client, auth) => client.browse(auth, query)),
-    myOrders: () => this.engine.call((client, auth) => client.myOrders(auth)),
-    matching: (itemId) => this.engine.call((client, auth) => client.matchingOrders(auth, itemId)),
+    browse: (query) => this.read((client, auth) => client.browse(auth, query)),
+    myOrders: () => this.read((client, auth) => client.myOrders(auth)),
+    matching: (itemId) => this.read((client, auth) => client.matchingOrders(auth, itemId)),
+  }
+
+  /** A market read: through the engine when playing; with the stored token otherwise (reads write nothing). */
+  private async read<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<T> {
+    if (this.role === 'primary') return this.engine.call(fn)
+    const token = await this.kv.get(this.server.tokenKey)
+    if (typeof token !== 'string') throw new Error('not_started')
+    try {
+      return await fn(this.server.client, { deviceToken: token })
+    } catch {
+      throw new Error('unreachable')
+    }
   }
 
   clock(): ReturnType<GameHandle['clock']> {
@@ -464,6 +487,8 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const, null)
 const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
+const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
+const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 
 let game: GameSession | null = null
 
@@ -496,6 +521,12 @@ export const register: Register = (on) => {
             await update($, leaseOwnerAtom, () => patch.leaseOwner ?? null)
           }
           if (patch.server !== undefined) await update($, serverAtom, () => patch.server ?? null)
+          if (patch.market !== undefined) {
+            await update($, marketAtom, () => patch.market ?? MARKET_DEFAULT)
+          }
+          if (patch.orders !== undefined) {
+            await update($, ordersAtom, () => patch.orders ?? ORDERS_DEFAULT)
+          }
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -505,6 +536,9 @@ export const register: Register = (on) => {
         },
         dialogLink: async (link) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+        },
+        clearDialog: async () => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
@@ -537,6 +571,12 @@ export const register: Register = (on) => {
             await update($, leaseOwnerAtom, () => patch.leaseOwner ?? null)
           }
           if (patch.server !== undefined) await update($, serverAtom, () => patch.server ?? null)
+          if (patch.market !== undefined) {
+            await update($, marketAtom, () => patch.market ?? MARKET_DEFAULT)
+          }
+          if (patch.orders !== undefined) {
+            await update($, ordersAtom, () => patch.orders ?? ORDERS_DEFAULT)
+          }
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -546,6 +586,9 @@ export const register: Register = (on) => {
         },
         dialogLink: async (link) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+        },
+        clearDialog: async () => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),

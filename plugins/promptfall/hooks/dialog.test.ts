@@ -289,10 +289,16 @@ async function marketHarness(
   return { ledger, player, bot, sent }
 }
 
-async function startOnTest($: Parameters<TestBody>[0], on: On, player: { deviceToken: string }) {
+async function startOnTest(
+  $: Parameters<TestBody>[0],
+  on: On,
+  player: { deviceToken: string },
+  seed: Record<string, unknown> = {},
+) {
   const data = new Map<string, unknown>([
     ['promptfall:server', TEST_URL],
     [`promptfall:token:${TEST_URL}`, player.deviceToken],
+    ...Object.entries(seed),
   ])
   const states = new Map<string, unknown>()
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
@@ -433,5 +439,44 @@ test('a closed market says so', async ($, on) => {
   await ui.press({ key: 'tab-inventory' })
   await ui.press({ key: 'sell-iR' })
   expect(await ui.find({ text: 'The market is closed.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a server switch drops a pending buy confirmation and the market page', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-market' })
+  const listing = (await ui.findAll({ type: 'Button' })).find((b: { key?: string }) =>
+    /^buy-L/.test(b.key ?? ''),
+  )
+  await ui.press({ key: listing?.key ?? '' })
+  expect(await ui.find({ text: /^Buy Steel Longsword/ })).toBeDefined()
+  await $.command.run({
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 120 },
+    command: 'promptfall',
+    args: 'server local',
+  })
+  const market = states.get('market') as { confirm: string | null; page: unknown }
+  expect(market.confirm).toBeNull()
+  expect(market.page).toBeNull()
+  expect(await ui.find({ key: 'buy-confirm' })).toBeUndefined()
+  expect(sent.filter((r) => /\/buy$/.test(r.path))).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a session that is not playing still browses the market', async ($, on) => {
+  const { player } = await marketHarness(on)
+  const { ui, states } = await startOnTest($, on, player, {
+    'promptfall:lease': { owner: 'other', until: 9_999_999_999_999 },
+  })
+  expect(states.get('mode')).toBe('secondary')
+  await ui.press({ key: 'tab-market' })
+  expect(await ui.find({ text: /Steel Longsword \(rare\)/ })).toBeDefined()
+  expect(
+    (await ui.findAll({ type: 'Button' })).some((b: { key?: string }) =>
+      /^buy-L/.test(b.key ?? ''),
+    ),
+  ).toBe(false)
   await ui.unmount()
 })
