@@ -240,7 +240,14 @@ export class GameEngine {
       let ack: BatchAck
       try {
         ack = await this.deps.client.submit(sent.batch, { deviceToken: this.token })
-      } catch {
+      } catch (error) {
+        // A 4xx says this request will never succeed: the client and server disagree, so update.
+        // Everything else (unreachable, a timeout, a 5xx, an unreadable body) is an outage.
+        const status = (error as { name?: string; status?: number } | null)?.status
+        if ((error as { name?: string } | null)?.name === 'ServerError' && status && status < 500) {
+          this.setPaused(UPDATE_NOTICE)
+          return
+        }
         await this.enterOutage('flush')
         return
       }

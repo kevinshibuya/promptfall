@@ -4380,9 +4380,10 @@ var ROUTES = {
   matchingOrders: { method: "GET", path: "/v1/orders/matching" },
   fillOrder: { method: "POST", path: "/v1/orders/:id/fill" }
 };
-function failure(name, message) {
+function failure(name, message, status) {
   const error = new Error(message);
   error.name = name;
+  if (status !== void 0) error.status = status;
   return error;
 }
 function queryString(params) {
@@ -4421,7 +4422,11 @@ var HttpClient = class {
       throw failure("ServerUnreachable", `${method} ${resolved}: ${String(error)}`);
     }
     if (response.status !== 200) {
-      throw failure("ServerError", `${method} ${resolved}: status ${response.status}`);
+      throw failure(
+        "ServerError",
+        `${method} ${resolved}: status ${response.status}`,
+        response.status
+      );
     }
     let body;
     try {
