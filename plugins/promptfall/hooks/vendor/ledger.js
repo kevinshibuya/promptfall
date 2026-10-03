@@ -168,6 +168,14 @@ var Books = class {
   }
 };
 
+// packages/ledger/src/boss-config.ts
+var WORLD_BOSSES = [
+  { name: "The Promptwyrm", glyph: "\u2620" },
+  { name: "Hallucinox", glyph: "\u25C8" },
+  { name: "The Context Leviathan", glyph: "\u224B" },
+  { name: "Tokenmaw", glyph: "\u2736" }
+];
+
 // packages/ledger/src/goods.ts
 import {
   heroStats,
@@ -246,11 +254,333 @@ import {
   SIM_VERSION as SIM_VERSION2
 } from './sim.js';
 
+// packages/ledger/src/boss.ts
+import {
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_TOP_BONUS,
+  BOSS_WINDOW_MS,
+  weekStartOf as weekStartOf2
+} from './protocol.js';
+import {
+  content,
+  rollRewardItem
+} from './sim.js';
+
+// packages/ledger/src/world.ts
+import {
+  BOARD_ROWS,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  HERE_MAX,
+  weekStartOf
+} from './protocol.js';
+var CHAT_KEY = "pf:chat";
+var BOARDS_KEY = "pf:boards";
+async function loadChat(kv) {
+  const raw = await kv.get(CHAT_KEY);
+  return raw ?? { nextId: 1, messages: [] };
+}
+async function loadBoards(kv, now) {
+  const raw = await kv.get(BOARDS_KEY);
+  return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
+}
+function prune(ctx) {
+  for (const [id, entry] of ctx.presence) {
+    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
+  }
+}
+async function world(ctx, record, since) {
+  const presenceOn = ctx.flags["presence.enabled"] !== false;
+  const id = record.account.accountId;
+  prune(ctx);
+  if (presenceOn && isCurrent(record)) {
+    ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now });
+  }
+  let online = 0;
+  let zones = [];
+  let here = [];
+  if (presenceOn) {
+    const counts = /* @__PURE__ */ new Map();
+    for (const entry of ctx.presence.values()) {
+      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
+    }
+    online = ctx.presence.size;
+    zones = [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }));
+    const mine = ctx.presence.get(id);
+    if (mine) {
+      here = [...ctx.presence.entries()].filter(([other, entry]) => other !== id && entry.zone === mine.zone).sort(([, a], [, b]) => b.at - a.at).slice(0, HERE_MAX).map(([, entry]) => entry.name);
+    }
+  }
+  const boss = await loadBoss(ctx.books.kv);
+  if (boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
+    engage(record, boss);
+    await ctx.books.save(record);
+    await ctx.books.kv.set(BOSS_KEY, boss);
+  }
+  let chat2 = [];
+  if (ctx.flags["chat.enabled"] !== false) {
+    const { messages } = await loadChat(ctx.books.kv);
+    chat2 = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since);
+  }
+  return {
+    serverNow: ctx.now,
+    speed: ctx.speed,
+    online,
+    zones,
+    here,
+    boss: toBossView(ctx, boss, id),
+    chat: chat2,
+    flags: ctx.flags
+  };
+}
+function refillChat(bucket, now) {
+  if (!bucket) return { tokens: CHAT_BUCKET_CAPACITY, refillAt: now };
+  const n = Math.floor(Math.max(0, now - bucket.refillAt) / CHAT_REFILL_MS);
+  const tokens = Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n);
+  return {
+    tokens,
+    refillAt: tokens === CHAT_BUCKET_CAPACITY ? now : bucket.refillAt + n * CHAT_REFILL_MS
+  };
+}
+async function chat(ctx, record, text) {
+  if (ctx.flags["chat.enabled"] === false) return { ok: false, reason: "chat_closed" };
+  if (!record.account.linked) return { ok: false, reason: "not_linked" };
+  const trimmed = text.replace(/\p{Cc}/gu, "").trim();
+  if (trimmed === "") return { ok: false, reason: "empty" };
+  if (trimmed.length > CHAT_MAX_CHARS) return { ok: false, reason: "too_long" };
+  if (isBlocked(trimmed)) return { ok: false, reason: "blocked" };
+  const bucket = refillChat(record.chat, ctx.now);
+  if (bucket.tokens < 1) return { ok: false, reason: "rate_limited" };
+  record.chat = { tokens: bucket.tokens - 1, refillAt: bucket.refillAt };
+  const stored = await loadChat(ctx.books.kv);
+  const message = {
+    id: stored.nextId,
+    name: publicName(record),
+    text: trimmed,
+    at: ctx.now
+  };
+  await ctx.books.save(record);
+  await ctx.books.kv.set(CHAT_KEY, {
+    nextId: stored.nextId + 1,
+    messages: [...stored.messages, message].slice(-CHAT_KEEP)
+  });
+  return { ok: true, message };
+}
+async function leaderboards(ctx) {
+  const weekStart = weekStartOf(ctx.now);
+  if (ctx.flags["leaderboards.enabled"] === false) {
+    return { highestZone: [], damage: [], weekStart };
+  }
+  const boards = await loadBoards(ctx.books.kv, ctx.now);
+  const damage = boards.week.start === weekStart ? Object.entries(boards.week.damage).map(([accountId, { name, value }]) => ({ accountId, name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)).slice(0, BOARD_ROWS) : [];
+  const highestZone = [];
+  for (const row of boards.zone)
+    if (await isPlaying(ctx.books, row.accountId)) highestZone.push(row);
+  return { highestZone, damage, weekStart };
+}
+async function isPlaying(books, accountId) {
+  const record = await books.load(accountId);
+  return record !== null && isCurrent(record);
+}
+async function offerZone(kv, now, row, keep = async () => true) {
+  const boards = await loadBoards(kv, now);
+  const before = JSON.stringify(boards.zone);
+  const rows = [];
+  for (const r of boards.zone) {
+    if (r.accountId === row.accountId || await keep(r.accountId)) rows.push({ ...r });
+  }
+  const mine = rows.find((r) => r.accountId === row.accountId);
+  if (mine) {
+    mine.name = row.name;
+    mine.value = Math.max(mine.value, row.value);
+  } else {
+    const last = rows.at(-1);
+    if (rows.length < BOARD_ROWS || last && row.value > last.value) rows.push({ ...row });
+  }
+  rows.sort((a, b) => b.value - a.value);
+  const zone = rows.slice(0, BOARD_ROWS);
+  if (JSON.stringify(zone) === before) return;
+  await kv.set(BOARDS_KEY, { ...boards, zone });
+}
+
+// packages/ledger/src/boss.ts
+var BOSS_KEY = "pf:world:boss";
+function bossStats() {
+  const stats = content.enemies[content.zones[0]?.boss ?? ""]?.stats;
+  if (!stats) throw new Error("content has no zone 1 boss");
+  return { ...stats };
+}
+async function loadBoss(kv) {
+  const raw = await kv.get(BOSS_KEY);
+  return raw ?? null;
+}
+async function saveBoss(kv, boss) {
+  await kv.set(BOSS_KEY, boss);
+}
+function toBossView(ctx, boss, accountId) {
+  if (!boss || ctx.flags["worldboss.enabled"] === false || ctx.now >= boss.endsAt) return null;
+  const { bossId, name, glyph, maxHp, hp, spawnedAt, endsAt } = boss;
+  return {
+    bossId,
+    name,
+    glyph,
+    maxHp,
+    hp,
+    spawnedAt,
+    endsAt,
+    yours: boss.contributions[accountId] ?? 0
+  };
+}
+function isLive(ctx, boss) {
+  return !boss.closed && boss.hp > 0 && ctx.now < boss.endsAt;
+}
+function engage(record, boss) {
+  if (!isCurrent(record)) return;
+  const engaged = record.state.boss;
+  if (engaged?.bossId !== boss.bossId) {
+    if (engaged) author(record, { t: "boss_disengaged", bossId: engaged.bossId });
+    author(record, {
+      t: "boss_engaged",
+      bossId: boss.bossId,
+      name: boss.name,
+      glyph: boss.glyph,
+      stats: bossStats()
+    });
+  }
+  boss.contributions[record.account.accountId] ??= 0;
+}
+function disengage(ctx, record, bossId) {
+  if (record.state.boss?.bossId === bossId) {
+    author(record, { t: "boss_disengaged", bossId });
+    return;
+  }
+  ctx.log(`boss ${bossId}: ${record.account.accountId} was not engaged, nothing to disengage`);
+}
+function partyClasses(state) {
+  const classes = [];
+  for (const id of state.party) {
+    const hero = state.roster.find((h) => h.id === id);
+    if (hero) classes.push(hero.cls);
+  }
+  return classes;
+}
+function rewardGold(rarity, zone) {
+  return 3 * content.rarity[rarity].vendorGoldPerZone * zone;
+}
+async function settleBoss(ctx, boss, options) {
+  const kv = ctx.books.kv;
+  const threshold = Math.floor(BOSS_BASE_HP * BOSS_THRESHOLD_BP / 1e4);
+  const top = Object.entries(boss.contributions).filter(([, value]) => value > 0).sort(([a, x], [b, y]) => y - x || (a < b ? -1 : a > b ? 1 : 0)).slice(0, BOSS_TOP_BONUS).map(([id]) => id);
+  for (const [id, contribution] of Object.entries(boss.contributions)) {
+    const record = options.inHand?.account.accountId === id ? options.inHand : await ctx.books.load(id);
+    if (!record || !isCurrent(record)) continue;
+    const rolls = (contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0);
+    for (let i = 0; i < rolls; i++) {
+      const zone = record.state.zone;
+      const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
+      if (!rolled) {
+        author(record, {
+          t: "rewarded",
+          bossId: boss.bossId,
+          goods: null,
+          gold: rewardGold("rare", zone)
+        });
+        continue;
+      }
+      const item = { ...rolled, id: await nextLedgerId(kv, "r") };
+      const goods = { kind: "item", item };
+      const gold = rewardGold(item.rarity, zone);
+      if (hasRoom(record.state, goods)) {
+        author(record, { t: "rewarded", bossId: boss.bossId, goods, gold });
+      } else {
+        record.returns.push({ listingId: boss.bossId, goods });
+        author(record, { t: "rewarded", bossId: boss.bossId, goods: null, gold });
+      }
+    }
+    await ctx.books.syncReturnsQueue(record);
+    disengage(ctx, record, boss.bossId);
+    await ctx.books.save(record);
+  }
+  boss.closed = true;
+  await saveBoss(kv, boss);
+}
+async function advanceBoss(ctx) {
+  const kv = ctx.books.kv;
+  const on = ctx.flags["worldboss.enabled"] !== false;
+  const stored = await loadBoss(kv);
+  if (stored && !stored.closed && (ctx.now >= stored.endsAt || !on)) {
+    await settleBoss(ctx, stored, { expired: true, inHand: null });
+  }
+  const gridIndex = Math.floor(ctx.now / BOSS_GRID_MS);
+  const spawnAt = gridIndex * BOSS_GRID_MS;
+  const bossId = `wb${gridIndex.toString(36)}`;
+  if (!on || ctx.now >= spawnAt + BOSS_WINDOW_MS || stored?.bossId === bossId) return;
+  const online = [...ctx.presence.entries()].filter(([, entry]) => ctx.now - entry.at < ctx.ttl).map(([id]) => id);
+  const def = WORLD_BOSSES[gridIndex % WORLD_BOSSES.length] ?? { name: "World Boss", glyph: "\u2620" };
+  const hp = BOSS_BASE_HP * Math.max(1, online.length);
+  const boss = {
+    bossId,
+    name: def.name,
+    glyph: def.glyph,
+    spawnedAt: spawnAt,
+    endsAt: spawnAt + BOSS_WINDOW_MS,
+    maxHp: hp,
+    hp,
+    contributions: {},
+    closed: false
+  };
+  for (const id of online) {
+    const record = await ctx.books.load(id);
+    if (!record) continue;
+    engage(record, boss);
+    await ctx.books.save(record);
+  }
+  await saveBoss(kv, boss);
+}
+function dealtBefore(before, after) {
+  if (!before.boss || !after.boss || before.boss.bossId !== after.boss.bossId) return null;
+  return before.boss.dealt;
+}
+async function contribute(ctx, record, prevDealt) {
+  const next = record.state.boss;
+  if (prevDealt === null || !next) return;
+  const kv = ctx.books.kv;
+  const boss = await loadBoss(kv);
+  if (ctx.flags["worldboss.enabled"] === false) return;
+  if (!boss || boss.bossId !== next.bossId || !isLive(ctx, boss)) return;
+  const delta = next.dealt - prevDealt;
+  if (delta <= 0) return;
+  const id = record.account.accountId;
+  boss.hp = Math.max(0, boss.hp - delta);
+  boss.contributions[id] = (boss.contributions[id] ?? 0) + delta;
+  const weekStart = weekStartOf2(ctx.now);
+  const boards = await kv.get(BOARDS_KEY) ?? {
+    zone: [],
+    week: { start: weekStart, damage: {} }
+  };
+  const week = boards.week.start === weekStart ? boards.week : { start: weekStart, damage: {} };
+  const value = (week.damage[id]?.value ?? 0) + delta;
+  await kv.set(BOARDS_KEY, {
+    ...boards,
+    week: {
+      start: weekStart,
+      damage: { ...week.damage, [id]: { name: publicName(record), value } }
+    }
+  });
+  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record });
+  else await saveBoss(kv, boss);
+}
+
 // packages/ledger/src/market.ts
 import {
   LISTINGS_PER_PAGE
 } from './protocol.js';
-import { content } from './sim.js';
+import { content as content2 } from './sim.js';
 var LISTINGS_KEY = "pf:listings";
 var ORDERS_KEY = "pf:orders";
 var listingKey = (id) => `pf:listing:${id}`;
@@ -466,8 +796,8 @@ async function placeOrder(ctx, record, input) {
   if (gate) return refuse(gate);
   if (!validPrice(input.maxPrice)) return refuse("bad_price");
   if (!tradeableRarity(input.minRarity)) return refuse("not_tradeable_rarity");
-  if (!content.itemBases[input.base]) return refuse("unknown_goods");
-  if (input.affixId !== null && !content.affixes[input.affixId]) return refuse("unknown_goods");
+  if (!content2.itemBases[input.base]) return refuse("unknown_goods");
+  if (input.affixId !== null && !content2.affixes[input.affixId]) return refuse("unknown_goods");
   if (record.state.gold < input.maxPrice) return refuse("not_enough_gold");
   const id = await nextLedgerId(ctx.books.kv, "O");
   author(record, { t: "order_placed", orderId: id, escrow: input.maxPrice });
@@ -519,130 +849,6 @@ async function fillOrder(ctx, record, orderId, itemId) {
   author(buyer, { t: "order_filled", orderId, item: moved.item, price: order.maxPrice });
   await closeOrder(ctx, orderId);
   return finish(ctx, [record, buyer], record);
-}
-
-// packages/ledger/src/world.ts
-import {
-  BOARD_ROWS,
-  CHAT_BUCKET_CAPACITY,
-  CHAT_KEEP,
-  CHAT_MAX_CHARS,
-  CHAT_REFILL_MS,
-  CHAT_SERVE,
-  HERE_MAX,
-  weekStartOf
-} from './protocol.js';
-var CHAT_KEY = "pf:chat";
-var BOARDS_KEY = "pf:boards";
-async function loadChat(kv) {
-  const raw = await kv.get(CHAT_KEY);
-  return raw ?? { nextId: 1, messages: [] };
-}
-async function loadBoards(kv, now) {
-  const raw = await kv.get(BOARDS_KEY);
-  return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
-}
-function prune(ctx) {
-  for (const [id, entry] of ctx.presence) {
-    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
-  }
-}
-async function world(ctx, record, since) {
-  const presenceOn = ctx.flags["presence.enabled"] !== false;
-  const id = record.account.accountId;
-  prune(ctx);
-  if (presenceOn && isCurrent(record)) {
-    ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now });
-  }
-  let online = 0;
-  let zones = [];
-  let here = [];
-  if (presenceOn) {
-    const counts = /* @__PURE__ */ new Map();
-    for (const entry of ctx.presence.values()) {
-      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
-    }
-    online = ctx.presence.size;
-    zones = [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }));
-    const mine = ctx.presence.get(id);
-    if (mine) {
-      here = [...ctx.presence.entries()].filter(([other, entry]) => other !== id && entry.zone === mine.zone).sort(([, a], [, b]) => b.at - a.at).slice(0, HERE_MAX).map(([, entry]) => entry.name);
-    }
-  }
-  let chat2 = [];
-  if (ctx.flags["chat.enabled"] !== false) {
-    const { messages } = await loadChat(ctx.books.kv);
-    chat2 = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since);
-  }
-  return {
-    serverNow: ctx.now,
-    speed: ctx.speed,
-    online,
-    zones,
-    here,
-    boss: null,
-    chat: chat2,
-    flags: ctx.flags
-  };
-}
-function refillChat(bucket, now) {
-  if (!bucket) return { tokens: CHAT_BUCKET_CAPACITY, refillAt: now };
-  const n = Math.floor(Math.max(0, now - bucket.refillAt) / CHAT_REFILL_MS);
-  const tokens = Math.min(CHAT_BUCKET_CAPACITY, bucket.tokens + n);
-  return {
-    tokens,
-    refillAt: tokens === CHAT_BUCKET_CAPACITY ? now : bucket.refillAt + n * CHAT_REFILL_MS
-  };
-}
-async function chat(ctx, record, text) {
-  if (ctx.flags["chat.enabled"] === false) return { ok: false, reason: "chat_closed" };
-  if (!record.account.linked) return { ok: false, reason: "not_linked" };
-  const trimmed = text.replace(/\p{Cc}/gu, "").trim();
-  if (trimmed === "") return { ok: false, reason: "empty" };
-  if (trimmed.length > CHAT_MAX_CHARS) return { ok: false, reason: "too_long" };
-  if (isBlocked(trimmed)) return { ok: false, reason: "blocked" };
-  const bucket = refillChat(record.chat, ctx.now);
-  if (bucket.tokens < 1) return { ok: false, reason: "rate_limited" };
-  record.chat = { tokens: bucket.tokens - 1, refillAt: bucket.refillAt };
-  const stored = await loadChat(ctx.books.kv);
-  const message = {
-    id: stored.nextId,
-    name: publicName(record),
-    text: trimmed,
-    at: ctx.now
-  };
-  await ctx.books.save(record);
-  await ctx.books.kv.set(CHAT_KEY, {
-    nextId: stored.nextId + 1,
-    messages: [...stored.messages, message].slice(-CHAT_KEEP)
-  });
-  return { ok: true, message };
-}
-async function leaderboards(ctx) {
-  const weekStart = weekStartOf(ctx.now);
-  if (ctx.flags["leaderboards.enabled"] === false) {
-    return { highestZone: [], damage: [], weekStart };
-  }
-  const boards = await loadBoards(ctx.books.kv, ctx.now);
-  const damage = boards.week.start === weekStart ? Object.entries(boards.week.damage).map(([accountId, { name, value }]) => ({ accountId, name, value })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name)).slice(0, BOARD_ROWS) : [];
-  return { highestZone: boards.zone, damage, weekStart };
-}
-async function offerZone(kv, now, row) {
-  const boards = await loadBoards(kv, now);
-  const before = JSON.stringify(boards.zone);
-  const rows = boards.zone.map((r) => ({ ...r }));
-  const mine = rows.find((r) => r.accountId === row.accountId);
-  if (mine) {
-    mine.name = row.name;
-    mine.value = Math.max(mine.value, row.value);
-  } else {
-    const last = rows.at(-1);
-    if (rows.length < BOARD_ROWS || last && row.value > last.value) rows.push({ ...row });
-  }
-  rows.sort((a, b) => b.value - a.value);
-  const zone = rows.slice(0, BOARD_ROWS);
-  if (JSON.stringify(zone) === before) return;
-  await kv.set(BOARDS_KEY, { ...boards, zone });
 }
 
 // packages/ledger/src/ledger.ts
@@ -707,15 +913,17 @@ var Ledger = class {
   async marketContext() {
     return { books: this.books, now: await this.options.now(), flags: this.flags() };
   }
-  async worldContext() {
+  async worldContext(at) {
     const speed = this.options.speed ?? 1;
     return {
       books: this.books,
-      now: await this.options.now(),
+      now: at ?? await this.options.now(),
       flags: this.flags(),
       presence: this.presence,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
-      speed
+      speed,
+      seedSource: this.options.seedSource,
+      log: this.options.log ?? (() => void 0)
     };
   }
   // ---------------------------------------------------------------------------
@@ -830,6 +1038,7 @@ var Ledger = class {
         ({ at: _at, ...event }) => event
       );
       const result = replay2(record.state, events).state;
+      const prevDealt = dealtBefore(record.state, result);
       const hash = hashState2(result);
       const seq = record.seq + 1;
       for (const kind of KINDS) buckets[kind] -= counts[kind];
@@ -839,12 +1048,18 @@ var Ledger = class {
       record.buckets = buckets;
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING);
       settle(record);
+      await contribute(await this.worldContext(now), record, prevDealt);
       await this.books.deliverReturns(record);
-      await offerZone(this.kv, now, {
-        accountId: record.account.accountId,
-        name: publicName(record),
-        value: record.state.highestZone
-      });
+      await offerZone(
+        this.kv,
+        now,
+        {
+          accountId: record.account.accountId,
+          name: publicName(record),
+          value: record.state.highestZone
+        },
+        (id) => isPlaying(this.books, id)
+      );
       if (hash === batch.resultHash) {
         await this.books.save(record);
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) };
@@ -989,6 +1204,7 @@ var Ledger = class {
   world(auth, since) {
     return this.run(async () => {
       const ctx = await this.worldContext();
+      await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
       return world(ctx, record, since);
@@ -1030,11 +1246,16 @@ var Ledger = class {
     );
     await this.books.save(record);
     await this.kv.set(tokenKey(deviceToken), accountId);
-    await offerZone(this.kv, now, {
-      accountId,
-      name: publicName(record),
-      value: input.state.highestZone
-    });
+    await offerZone(
+      this.kv,
+      now,
+      {
+        accountId,
+        name: publicName(record),
+        value: input.state.highestZone
+      },
+      (id) => isPlaying(this.books, id)
+    );
     return { accountId, deviceToken };
   }
   async currentRecord(accountId) {
@@ -1055,6 +1276,7 @@ var Ledger = class {
     await this.books.save(record);
   }
   async sweep() {
+    await advanceBoss(await this.worldContext());
     await expireDue(await this.marketContext());
     for (const accountId of await this.books.returnsQueue()) {
       const record = await this.books.load(accountId);
@@ -1074,6 +1296,7 @@ export {
   Ledger,
   MAX_PRICE,
   MIN_PRICE,
+  WORLD_BOSSES,
   isBlocked,
   listingFee,
   nextLedgerId,

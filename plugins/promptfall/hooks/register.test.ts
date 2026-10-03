@@ -2,10 +2,12 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState } from './vendor/sim.js'
-import { WORLD_POLL_MS, WORLD_STALE_MS } from './world'
+import { toAccountView, toGameView } from './view'
+import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
 /** Answers $.store from a map and records every write. */
 function store(on: On, seed: Record<string, unknown> = {}) {
@@ -887,4 +889,123 @@ test('/promptfall server local resets the world to the in-process snapshot, chat
   expect(world.messages).toEqual([])
   expect(world.snapshot?.flags['chat.enabled']).toBe(false)
   expect(world.snapshot?.online).toBe(1)
+})
+
+// ---------------------------------------------------------------------------
+// The world boss
+
+test('the boss appearing and going down toast once each', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  states(on)
+  const toasts: string[] = []
+  engineBottom(on, toasts)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = null
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  await time.advance(5_000)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  await time.advance(15_000)
+  expect(toasts.filter((t) => t === 'World boss The Promptwyrm has appeared')).toHaveLength(1)
+  expect(toasts.filter((t) => t === 'The Promptwyrm is down')).toHaveLength(1)
+})
+
+test('a reward toasts the item or the gold, and the loot log names it', () => {
+  const item = {
+    id: 'r0',
+    base: 'steel_longsword',
+    rarity: 'rare' as const,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
+  expect(
+    effectToast({ k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item }, gold: 45 }),
+  ).toBe('Boss reward: Steel Longsword (rare)')
+  expect(effectToast({ k: 'rewarded', bossId: 'wb1', goods: null, gold: 45 })).toBe(
+    'Boss reward: 45 gold',
+  )
+  const state = {
+    ...createInitialState(1),
+    lootLog: [{ k: 'reward' as const, base: 'steel_longsword', rarity: 'rare' as const, gold: 45 }],
+  }
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  expect(view.loot.at(-1)?.text).toBe('boss reward Steel Longsword (+45g)')
+})
+
+test('a boss seen in the snapshot reaches the primary through its next flush, with no account call', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  let now = 10_800_000 - 1_000
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => now,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: async () => ({ login: 'remote-player' }),
+  })
+  const requests: string[] = []
+  const behind: string[][] = []
+  on('http.fetch', async (_$, e) => {
+    const path = (e.url.split('?')[0] ?? '').replace(/^https?:\/\/[^/]+/, '')
+    const method = e.init?.method ?? 'GET'
+    requests.push(`${method} ${path}`)
+    const auth = { deviceToken: (e.init?.headers?.authorization ?? '').replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    let result: unknown
+    if (path === '/v1/world') result = await ledger.world(auth, 0)
+    else if (path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    else if (path === '/v1/batches') {
+      const ack = await ledger.submit(body, auth)
+      if (!ack.ok && ack.reason === 'cursor_behind') {
+        behind.push(ack.delivery.events.map((x) => x.event.t))
+      }
+      result = ack
+    } else if (path === '/v1/account') result = await ledger.account(auth)
+    else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  now = 10_800_000 + 1_000
+  await time.advance(30_000)
+  const boss = (last.get('world') as WorldState).snapshot?.boss
+  expect(boss).toBeTruthy()
+  expect((last.get('view') as GameView).boss?.bossId).toBe(boss?.bossId)
+  expect(behind.some((kinds) => kinds.includes('boss_engaged'))).toBe(true)
+  expect(requests).not.toContain('GET /v1/account')
+})
+
+test('a reload during a live boss keeps the held snapshot, so the boss is not announced again', async () => {
+  const toasts: string[] = []
+  const held: WorldState = {
+    snapshot: snap({ boss: LIVE_BOSS }),
+    fetchedAt: 1,
+    stale: false,
+    messages: [],
+    chatMark: 0,
+    clock: null,
+    committedDealt: null,
+  }
+  const poller = new WorldPoller({
+    now: async () => 2,
+    every: () => ({ cancel: () => undefined }),
+    after: () => ({ cancel: () => undefined }),
+    publish: async () => undefined,
+    load: async () => held,
+    fetch: async () => snap({ boss: LIVE_BOSS }),
+    toast: (text) => toasts.push(text),
+  })
+  await poller.start()
+  expect(toasts).toEqual([])
 })

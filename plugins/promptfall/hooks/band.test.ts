@@ -1,6 +1,7 @@
 import type { On, RenderElement } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, WorldState } from '../types'
+import { bossSegment, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
@@ -241,4 +242,135 @@ test('the snapshot flags win over the bootstrap config: chat closed while the co
   await ui.press({ key: 'tab-world' })
   expect(await ui.find({ text: 'chat is closed' })).toBeDefined()
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// The world boss
+
+const BOSS = {
+  bossId: 'wb1',
+  name: 'The Promptwyrm',
+  glyph: '☠',
+  maxHp: 10_000,
+  hp: 6_200,
+  spawnedAt: 1_000_000,
+  endsAt: 1_000_000 + 11 * 60_000 + 30_000,
+  yours: 0,
+}
+
+function bossWorld(
+  boss: WorldSnapshot['boss'],
+  committedDealt: WorldState['committedDealt'],
+): WorldState {
+  return {
+    snapshot: {
+      serverNow: 1_000_000,
+      speed: 1,
+      online: 13,
+      zones: [{ zone: 1, count: 13 }],
+      here: [],
+      boss,
+      chat: [],
+      flags: {},
+    },
+    fetchedAt: 1_000_000,
+    stale: false,
+    messages: [],
+    chatMark: 0,
+    clock: { serverNow: 1_000_000, clientNow: 1_000_000, speed: 1 },
+    committedDealt,
+  }
+}
+
+test('the boss line and the status segment read the snapshot, less what this party dealt since', async ($, on) => {
+  const { states } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const plain = states.get('view') as GameView
+  const view = (dealt: number): GameView => ({
+    ...plain,
+    boss: { bossId: 'wb1', name: BOSS.name, glyph: '☠', dealt },
+  })
+  const now = 1_000_000
+  // The view's tally equals the committed one: the server's HP as it is.
+  const even = bossWorld(BOSS, { bossId: 'wb1', dealt: 0 })
+  expect(bossSegment(view(0), even, now)).toBe('boss 62% · 11m')
+  expect(worldRows(view(0), even, now)[1]?.text).toBe(
+    'World boss The Promptwyrm █████░░░ 62% · 11m left · you 0',
+  )
+  // 300 dealt locally past the committed 200: 5,900 shown.
+  const ahead = bossWorld(BOSS, { bossId: 'wb1', dealt: 200 })
+  expect(bossSegment(view(500), ahead, now)).toBe('boss 59% · 11m')
+  // A secondary has no committed reading: nothing is subtracted.
+  expect(bossSegment(view(500), bossWorld(BOSS, null), now)).toBe('boss 62% · 11m')
+  // Down: no segment, and the World row says so.
+  const down = bossWorld({ ...BOSS, hp: 0 }, null)
+  expect(bossSegment(view(500), down, now)).toBeNull()
+  expect(worldRows(view(500), down, now)[1]?.text).toBe('The Promptwyrm is down · you 500')
+})
+
+/** A remote ledger at http://test whose clock the test moves; `boss` overrides the snapshot's. */
+function bossNet(on: On) {
+  const net = {
+    now: 10_800_000 - 1_000,
+    boss: undefined as WorldSnapshot['boss'] | undefined,
+  }
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => net.now,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: async () => ({ login: 'remote-player' }),
+  })
+  on('http.fetch', async (_$, e) => {
+    const [full, query = ''] = e.url.split('?')
+    const path = (full ?? '').replace(/^https?:\/\/[^/]+/, '')
+    const method = e.init?.method ?? 'GET'
+    const auth = { deviceToken: (e.init?.headers?.authorization ?? '').replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    let result: unknown
+    if (method === 'GET' && path === '/v1/world') {
+      const w = await ledger.world(auth, Number(/since=(\d+)/.exec(query)?.[1] ?? 0))
+      result = net.boss !== undefined && !('reason' in w) ? { ...w, boss: net.boss } : w
+    } else if (method === 'POST' && path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
+    else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
+    else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
+  })
+  return net
+}
+
+test('in boss mode the first enemy slot is the boss with its bar; without the boss in the snapshot, the name and you', async ($, on) => {
+  const { clock, states } = harness(on)
+  const net = bossNet(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server http://test' })
+  await clock.advance(1)
+  net.now = 10_800_000 + 1_000
+  await clock.advance(30_000)
+  const view = states.get('view') as GameView
+  const world = states.get('world') as WorldState
+  const boss = world.snapshot?.boss
+  if (!boss || !view.boss) throw new Error('not in boss mode')
+  expect(view.boss.bossId).toBe(boss.bossId)
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
+  await ui.press({ key: 'tab-party' })
+  expect(
+    await ui.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}\\s*$`) }),
+  ).toBeDefined()
+  expect(await ui.find({ key: 'boss-slot' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\/4,000\s*$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /boss \d+% · / })).toBeDefined()
+  await ui.unmount()
+  net.boss = null
+  await clock.advance(5_000)
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
+  expect(await again.find({ key: 'boss-slot' })).toBeUndefined()
+  // The name keeps the first row; what you dealt takes the bar's place on the second.
+  expect(
+    await again.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}\\s*$`) }),
+  ).toBeDefined()
+  expect(await again.find({ type: 'Text', text: /^ {3}you \d+/ })).toBeDefined()
+  await again.unmount()
 })

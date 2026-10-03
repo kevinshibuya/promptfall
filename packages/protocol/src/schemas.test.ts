@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { BatchSchema, compareSemver, HEX16, TimedEventSchema } from './schemas'
+import { DeliverySchema } from './market'
+import { BatchSchema, compareSemver, HEX16, ServerEventSchema, TimedEventSchema } from './schemas'
 
 const valid = {
   batchId: crypto.randomUUID(),
@@ -87,5 +88,40 @@ describe('compareSemver', () => {
     expect(compareSemver('0.0.9', '0.1.0')).toBe(-1)
     expect(compareSemver('0.10.0', '0.9.0')).toBe(1)
     expect(compareSemver('1.0.0', '0.99.99')).toBe(1)
+  })
+})
+
+describe('boss events', () => {
+  const engaged = {
+    t: 'boss_engaged',
+    bossId: 'wb1',
+    name: 'The Promptwyrm',
+    glyph: '☠',
+    stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+  }
+
+  it('a delivery carrying boss_engaged, boss_disengaged and rewarded parses', () => {
+    const delivery = {
+      cursor: 3,
+      events: [
+        { n: 1, event: engaged },
+        { n: 2, event: { t: 'rewarded', bossId: 'wb1', goods: null, gold: 45 } },
+        { n: 3, event: { t: 'boss_disengaged', bossId: 'wb1' } },
+      ],
+    }
+    expect(DeliverySchema.parse(delivery)).toEqual(delivery)
+  })
+
+  it('stats are non-negative integers and gold is non-negative', () => {
+    const bad = { ...engaged, stats: { ...engaged.stats, atk: -1 } }
+    expect(ServerEventSchema.safeParse(bad).success).toBe(false)
+    expect(
+      ServerEventSchema.safeParse({ t: 'rewarded', bossId: 'wb1', goods: null, gold: -5 }).success,
+    ).toBe(false)
+  })
+
+  it('a batch carrying boss_engaged fails', () => {
+    const batch = { ...valid, events: [{ ...engaged, at: 1 }] }
+    expect(BatchSchema.safeParse(batch).success).toBe(false)
   })
 })

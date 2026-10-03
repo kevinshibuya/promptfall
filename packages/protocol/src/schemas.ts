@@ -6,6 +6,7 @@ import type {
   PlayerEvent,
   Rarity,
   ServerEvent,
+  Stats,
 } from '@promptfall/sim'
 import { z } from 'zod'
 
@@ -95,6 +96,13 @@ export const GoodsSchema: z.ZodType<Goods> = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('hero'), hero: HeroSchema }),
 ])
 
+export const StatsSchema: z.ZodType<Stats> = z.object({
+  hp: count,
+  atk: count,
+  def: count,
+  spd: count,
+})
+
 export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t', [
   z.object({
     t: z.literal('listed'),
@@ -127,6 +135,20 @@ export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t
     net: count,
   }),
   z.object({ t: z.literal('credited'), gold: count, reason: z.string().max(64) }),
+  z.object({
+    t: z.literal('boss_engaged'),
+    bossId: id,
+    name: z.string().max(128),
+    glyph: z.string().max(8),
+    stats: StatsSchema,
+  }),
+  z.object({ t: z.literal('boss_disengaged'), bossId: id }),
+  z.object({
+    t: z.literal('rewarded'),
+    bossId: id,
+    goods: GoodsSchema.nullable(),
+    gold: count,
+  }),
 ])
 
 /** Structural check of a sim state: the fields every version has; the rest passes through. */

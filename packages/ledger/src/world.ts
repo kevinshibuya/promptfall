@@ -16,6 +16,7 @@ import {
 } from '@promptfall/protocol'
 import { isBlocked } from './blocklist'
 import { type AccountRecord, type Books, isCurrent, publicName } from './books'
+import { BOSS_KEY, engage, isLive, loadBoss, toBossView } from './boss'
 
 /** Who polled, in the `Ledger` instance's memory only: never in the store. */
 export type Presence = Map<string, { zone: number; name: string; at: number }>
@@ -28,6 +29,9 @@ export type WorldContext = {
   /** Online means a heartbeat inside this many server-clock ms. */
   ttl: number
   speed: number
+  /** Draws reward items. */
+  seedSource: () => number
+  log: (line: string) => void
 }
 
 export const CHAT_KEY = 'pf:chat'
@@ -61,7 +65,10 @@ function prune(ctx: WorldContext): void {
   }
 }
 
-/** The world poll: stamps the caller present and answers the snapshot. Writes nothing to the store. */
+/**
+ * The world poll: stamps the caller present (in memory) and answers the snapshot. It writes to the
+ * store only to engage the caller with a live boss.
+ */
 export async function world(
   ctx: WorldContext,
   record: AccountRecord,
@@ -94,6 +101,21 @@ export async function world(
         .map(([, entry]) => entry.name)
     }
   }
+  // The boss: an online, current account not engaged yet joins on its poll. With presence
+  // off nobody is ever stamped, so the poll itself counts as being online.
+  const boss = await loadBoss(ctx.books.kv)
+  if (
+    boss &&
+    ctx.flags['worldboss.enabled'] !== false &&
+    isLive(ctx, boss) &&
+    (!presenceOn || ctx.presence.has(id)) &&
+    isCurrent(record) &&
+    !(id in boss.contributions)
+  ) {
+    engage(record, boss)
+    await ctx.books.save(record)
+    await ctx.books.kv.set(BOSS_KEY, boss)
+  }
   let chat: ChatMessage[] = []
   if (ctx.flags['chat.enabled'] !== false) {
     const { messages } = await loadChat(ctx.books.kv)
@@ -105,7 +127,7 @@ export async function world(
     online,
     zones,
     here,
-    boss: null,
+    boss: toBossView(ctx, boss, id),
     chat,
     flags: ctx.flags,
   }
@@ -176,7 +198,20 @@ export async function leaderboards(ctx: WorldContext): Promise<Boards> {
           .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name))
           .slice(0, BOARD_ROWS)
       : []
-  return { highestZone: boards.zone, damage, weekStart }
+  const highestZone: BoardRow[] = []
+  for (const row of boards.zone)
+    if (await isPlaying(ctx.books, row.accountId)) highestZone.push(row)
+  return { highestZone, damage, weekStart }
+}
+
+/**
+ * Whether an account's board row still counts: its record exists at this sim
+ * version. An old `--data` re-mints every bot under a new version and leaves
+ * the old accounts behind; their rows must not hold the board.
+ */
+export async function isPlaying(books: Books, accountId: string): Promise<boolean> {
+  const record = await books.load(accountId)
+  return record !== null && isCurrent(record)
 }
 
 /**
@@ -184,10 +219,19 @@ export async function leaderboards(ctx: WorldContext): Promise<Boards> {
  * and the higher value; a new one goes in when there is room or it beats the
  * last row. Ties keep the earlier row first. Writes only on a change.
  */
-export async function offerZone(kv: KeyValue, now: number, row: BoardRow): Promise<void> {
+export async function offerZone(
+  kv: KeyValue,
+  now: number,
+  row: BoardRow,
+  /** Rows of accounts this answers false for are dropped first (see `isPlaying`). */
+  keep: (accountId: string) => Promise<boolean> = async () => true,
+): Promise<void> {
   const boards = await loadBoards(kv, now)
   const before = JSON.stringify(boards.zone)
-  const rows = boards.zone.map((r) => ({ ...r }))
+  const rows: BoardRow[] = []
+  for (const r of boards.zone) {
+    if (r.accountId === row.accountId || (await keep(r.accountId))) rows.push({ ...r })
+  }
   const mine = rows.find((r) => r.accountId === row.accountId)
   if (mine) {
     mine.name = row.name

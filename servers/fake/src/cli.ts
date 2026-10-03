@@ -2,6 +2,7 @@ import { randomInt, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { HttpClient } from '@promptfall/protocol'
+import { bossInRebase, nextGridPoint } from './boss-in'
 import { startBots } from './bots'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
@@ -23,6 +24,7 @@ const { values } = parseArgs({
     data: { type: 'string', default: '.promptfall/fake.json' },
     bots: { type: 'string', default: '12' },
     flag: { type: 'string', multiple: true, default: [] },
+    'boss-in': { type: 'string' },
   },
   strict: true,
 })
@@ -59,8 +61,21 @@ try {
   process.exit(2)
 }
 
+const bossIn = values['boss-in'] === undefined ? null : positive('boss-in', values['boss-in'], true)
+
 const kv = new FileKeyValue(data)
-const clock = new VirtualClock({ speed, persisted: kv.persistedClock })
+// --boss-in: a dev flag for the manual pass. The clock only ever moves forward, so it stays
+// monotonic; the file's clock is rebased at the first flush.
+let persisted = kv.persistedClock
+if (bossIn !== null) {
+  const realNow = Date.now()
+  const virtualNow = persisted
+    ? persisted.virtualAt + Math.max(0, realNow - persisted.realAt) * speed
+    : realNow
+  const target = bossInRebase(virtualNow, bossIn, speed)
+  if (target !== null) persisted = { virtualAt: target, realAt: realNow }
+}
+const clock = new VirtualClock({ speed, persisted })
 kv.attachClock(() => clock.snapshot())
 
 const server = createFakeServer({
@@ -75,10 +90,17 @@ const server = createFakeServer({
 })
 
 const listening = await server.listen(port)
+/** Real seconds to the next grid point. */
+function bossInSeconds(): number {
+  const now = clock.nowSync()
+  return Math.round((nextGridPoint(now) - now) / speed / 1000)
+}
+
 const passed = Object.entries(flags).map(([name, value]) => `${name}=${value}`)
 console.log(
   `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} data ${data}` +
-    (passed.length > 0 ? ` flags ${passed.join(',')}` : ''),
+    (passed.length > 0 ? ` flags ${passed.join(',')}` : '') +
+    (bossIn !== null ? ` boss in ${bossInSeconds()}s` : ''),
 )
 // The clock is on disk from the start, so a restart never resumes behind it.
 kv.flushSync()

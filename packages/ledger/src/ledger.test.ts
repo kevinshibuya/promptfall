@@ -6,6 +6,7 @@ import {
   hashState,
   type Item,
   replay,
+  SIM_VERSION,
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, LOG_CAP } from './books'
@@ -158,7 +159,7 @@ function batchFor(boot: Bootstrap, base: GameState, cursor: number) {
     accountId: boot.account.accountId,
     seq: boot.seq,
     clientVersion: '0.1.0',
-    simVersion: 2,
+    simVersion: SIM_VERSION,
     cursor,
     baseHash: hashState(base),
     resultHash: hashState(replay(base, events).state),
@@ -213,7 +214,7 @@ describe('Ledger returns', () => {
         accountId,
         seq: 0,
         clientVersion: '0.1.0',
-        simVersion: 2,
+        simVersion: SIM_VERSION,
         cursor: 1,
         baseHash: hashState(boot.state),
         resultHash: hashState(replay(local, events).state),
@@ -256,7 +257,7 @@ describe('Ledger with a v1 record', () => {
     expect(boot.delivery).toEqual({ cursor: 0, events: [] })
     expect(await mem.get('pf:acct:old:record')).toEqual(v1)
     const ack = await ledger.submit(batchFor(boot, old, 0), { deviceToken: 'oldtoken' })
-    expect(ack).toEqual({ ok: false, reason: 'sim_version', simVersion: 2 })
+    expect(ack).toEqual({ ok: false, reason: 'sim_version', simVersion: SIM_VERSION })
   })
 })
 

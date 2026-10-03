@@ -86,6 +86,8 @@ export type GameView = {
   accountId: string
   firstRun: boolean
   account: AccountView
+  /** Boss mode: the world boss this party is engaged with and what it has dealt (committed and local). */
+  boss: { bossId: string; name: string; glyph: string; dealt: number } | null
 }
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
 

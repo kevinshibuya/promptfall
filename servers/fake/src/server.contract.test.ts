@@ -11,9 +11,9 @@ afterAll(async () => {
 
 let counter = 0
 
-runServerContract('HTTP fake', async (clock, { flags }) => {
+runServerContract('HTTP fake', async (clock, { flags, kv }) => {
   const server = createFakeServer({
-    kv: new MemoryKeyValue(),
+    kv: kv ?? new MemoryKeyValue(),
     now: clock.now,
     speed: 1,
     flags,

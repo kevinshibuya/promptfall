@@ -63,6 +63,19 @@ export const CHAT_KEEP = 200
 export const CHAT_SERVE = 50
 export const BOARD_ROWS = 20
 
+// The world boss (PR 2). The base is sized by measured sustained damage: see the phase 3 plan.
+
+/** Bosses spawn on this grid of the server clock, from epoch zero. */
+export const BOSS_GRID_MS = 10_800_000
+/** A boss lives this long, or until dead. */
+export const BOSS_WINDOW_MS = 1_200_000
+/** HP per account online at the spawn. */
+export const BOSS_BASE_HP = 4000
+/** A contribution at or above this share of BOSS_BASE_HP, in basis points, earns the guaranteed drop. */
+export const BOSS_THRESHOLD_BP = 500
+/** The top contributors of a killed boss each get one bonus roll. */
+export const BOSS_TOP_BONUS = 3
+
 const DAY_MS = 86_400_000
 
 /** Monday 00:00 UTC of the week holding `now` (day 0 was a Thursday). */

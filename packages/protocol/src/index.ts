@@ -69,11 +69,17 @@ export {
   ItemSchema,
   PLAYER_EVENT_KINDS,
   ServerEventSchema,
+  StatsSchema,
   type TimedEvent,
   TimedEventSchema,
 } from './schemas'
 export {
   BOARD_ROWS,
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_TOP_BONUS,
+  BOSS_WINDOW_MS,
   type BoardRow,
   BoardRowSchema,
   type Boards,

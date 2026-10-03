@@ -208,6 +208,10 @@ export function startBots(options: BotOptions): Bots {
     return false
   }
 
+  /**
+   * The mirror applies `boss_engaged` from a `cursor_behind` answer like any
+   * delivery, so a bot in boss mode fights the world boss through its batches.
+   */
   async function play(bot: Bot): Promise<void> {
     const events = playEvents(bot)
     let ack = await client.submit(bot.mirror.batch(events), bot.auth)

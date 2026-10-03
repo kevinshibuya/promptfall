@@ -511,9 +511,9 @@ Then open the PR from `feat/phase-3` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No change to zone content, loot tables, drop rates or the pace target (`harness.test.ts` must stay green untouched). No wall-clock value in the sim. Do not touch `packages/protocol` or the ledger.
 
-- [ ] Types, `boss: null`, `SIM_VERSION 3`; fix the type errors in `packages/sim`
-- [ ] `boss.test.ts` red; `combat.ts`, `progression.ts`, `server-events.ts`, `step.ts` until green
-- [ ] `rollRewardItem` and its test; the determinism generator; the golden script and hash; commit `feat(sim): boss mode, world_boss enemy, boss and reward server events, SIM_VERSION 3`
+- [x] Types, `boss: null`, `SIM_VERSION 3`; fix the type errors in `packages/sim`
+- [x] `boss.test.ts` red; `combat.ts`, `progression.ts`, `server-events.ts`, `step.ts` until green
+- [x] `rollRewardItem` and its test; the determinism generator; the golden script and hash; commit `feat(sim): boss mode, world_boss enemy, boss and reward server events, SIM_VERSION 3`
 
 ### Task 9: Protocol: the three event schemas; contract rules 33 to 40
 
@@ -544,8 +544,8 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No ledger code. No plugin.
 
-- [ ] Schemas and their test; commit `feat(protocol): boss and reward event schemas`
-- [ ] Rules 33 to 40 (red); `ContractMake.kv`; commit `test(contract): world boss rules 33 to 40`
+- [x] Schemas and their test; commit `feat(protocol): boss and reward event schemas`
+- [x] Rules 33 to 40 (red); `ContractMake.kv`; commit `test(contract): world boss rules 33 to 40`
 
 ### Task 10: Ledger: the boss record, schedule, contribution, rewards, weekly damage
 
@@ -574,9 +574,9 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No plugin. No new route (the snapshot carries the boss). No change to the market rules.
 
-- [ ] `boss-config.ts`, `boss.ts`, `boss.test.ts` red then green, the six lifecycle cases included
-- [ ] Wire `advanceBoss` in `world` and `sweep`, engage on poll, the contribution read, `settleBoss`; the two runners' `kv`; rules 33 to 40 green over the in-process host, then over HTTP
-- [ ] `boss-in.ts`, its test, `--boss-in` in the CLI; the bots' case; run the acceptance check; commit `feat(ledger): world boss on the 3 hour grid, contribution from committed batches, rewards; --boss-in`
+- [x] `boss-config.ts`, `boss.ts`, `boss.test.ts` red then green, the six lifecycle cases included
+- [x] Wire `advanceBoss` in `world` and `sweep`, engage on poll, the contribution read, `settleBoss`; the two runners' `kv`; rules 33 to 40 green over the in-process host, then over HTTP
+- [x] `boss-in.ts`, its test, `--boss-in` in the CLI; the bots' case; run the acceptance check; commit `feat(ledger): world boss on the 3 hour grid, contribution from committed batches, rewards; --boss-in`
 
 ### Task 11: Plugin: the boss in the band, the toasts, the reward
 
@@ -604,9 +604,9 @@ For rule 40 `ContractMake` gains an optional `options.kv?: KeyValue`; the two ru
 
 **Boundaries:** No `$.ui.status` (record D1). No new dialog tab. No sound. The outage, lease and flush rules are untouched.
 
-- [ ] `pnpm vendor`; the v3 golden; `toGameView.boss`, the `world_boss` enemy view, the loot line; `engine.committedBoss`
-- [ ] Band: enemy slot, status segment, World row; `band.test.ts` red then green
-- [ ] Toasts, `committedDealt`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): world boss in the band, boss toasts, rewards in the loot log`
+- [x] `pnpm vendor`; the v3 golden; `toGameView.boss`, the `world_boss` enemy view, the loot line; `engine.committedBoss`
+- [x] Band: enemy slot, status segment, World row; `band.test.ts` red then green
+- [x] Toasts, `committedDealt`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): world boss in the band, boss toasts, rewards in the loot log`
 
 ### Task 12: PR 2: manual pass part B, docs, pull request
 
@@ -635,7 +635,7 @@ PR from `feat/phase-3-boss` into `ai-staging` titled `Promptfall phase 3, PR 2: 
 
 **Boundaries:** Docs only. Do not merge.
 
-- [ ] Write part B; update the README; run the check line; open the PR; stop
+- [x] Write part B; update the README; run the check line; open the PR; stop
 
 ## Spec conflicts and narrowings
 
@@ -673,6 +673,11 @@ PR from `feat/phase-3-boss` into `ai-staging` titled `Promptfall phase 3, PR 2: 
 
 32. **Chat buckets store no credit while full** (PR 1 review): a full bucket's refill clock restarts at the poll, so an idle account bursts the capacity and no more; the batch buckets keep their carried remainder.
 33. **In-process, chat says it needs a server** (driven manual pass): the Chat tab reads `Chat needs a server: /promptfall server <url>` and the band `chat needs a server` instead of the closed-chat text, which read as a fault. The dialog's tabs wrap in a docked pane, and a chat line clips its text, never the speaker's colon.
+34. **With presence off, the world poll engages the caller** (PR 2 review): nobody is ever stamped, so "online" for boss engagement falls back to the poll itself, and a spawn is sized for one share.
+35. **The Party tab gives the world boss two rows of the enemy column** (PR 2 review and the driven manual pass): the name on the first, the bar and `<shown>/<max>` on the second, the third empty, so the name is never clipped at 100 columns. This replaces Task 11's one-row slot.
+36. **A reload keeps the held snapshot and clock** (PR 2 review): the poller starts from the `world` atom's snapshot rather than none, so a live boss is not announced twice; a server switch still resets it.
+
+37. **The highest-zone board drops the rows of accounts missing or behind the sim version** (PR 1 second review): on every read and before every offer, so the bots an old `--data` re-mints under a new version never leave stale, higher rows holding the board.
 
 ## Out of scope
 

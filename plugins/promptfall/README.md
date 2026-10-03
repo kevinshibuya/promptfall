@@ -81,12 +81,38 @@ counts two), more than 5 quick messages (then one every 10 seconds), a blocked w
 line. During an outage a post answers `Server unreachable`. On mobile the tab is read-only.
 
 The Leaderboards tab (`b`) shows who is online by zone, the 20 highest zones reached, and this
-week's world boss damage (empty until phase 3's world boss; the week starts Monday 00:00 UTC). Your
-row is cyan. Names are GitHub logins; an unlinked account shows as `adventurer`.
+week's world boss damage (the week starts Monday 00:00 UTC). Your row is cyan. Names are GitHub logins; an unlinked account shows as `adventurer`.
 
 Each part sits behind a server flag: when the server turns chat, presence or the boards off, the
 tab says so within one poll. The in-process ledger has chat off: its World tab reads
 `1 online` and `chat needs a server`, and the Chat tab says how to reach one.
+
+### World boss
+
+A world boss spawns every 3 hours on the server's clock (00:00, 03:00, ... UTC) and lives 20
+minutes or until it dies. Its HP is 4,000 for each account online when it spawns (one share when the
+server turns presence off). Every account
+online is engaged at the spawn, and one that comes online later is engaged on its first poll.
+Engaged, the party fights the boss instead of waves: tool calls spawn nothing (they still count
+toward the turn boss), a wiped party is healed in place with no retreat, and nothing drops, since
+the boss never dies on your side. The server counts the damage your committed batches dealt.
+
+The band shows it: the Party tab's enemy column is the boss, its name on the first row and its bar
+on the second (the server's HP, less what your party dealt since the last poll), the status row ends in `boss 62% · 11m`, and the World
+tab's second row reads `World boss <name> <bar> 62% · 11m left · you <damage>`. Toasts say when a
+boss appears and when it is down. While a boss is live every session polls the world every 5
+seconds.
+
+Rewards land when the boss dies, or when its window ends: a guaranteed boss-rarity item for 200
+damage or more (5% of the base), and on a kill one bonus roll each for the top 3. Each reward
+toasts `Boss reward: <item> (<rarity>)` and shows as `boss reward <item> (+<gold>g)` in the loot
+log. An item with no free slot toasts `Boss reward: <gold> gold` instead, waits in the returns
+queue, and arrives as a `returned` loot line when a slot frees. The boss
+board counts every hit, past the boss's remaining HP too.
+
+The world boss changed the sim, so the game is at sim version 3. A store or a fake snapshot from
+phase 2 is behind it: the band reads the older-version notice, and `/promptfall account`,
+`Reset this machine's data` starts a fresh account. The in-process ledger has no world boss.
 
 ### Account tab
 
@@ -126,7 +152,7 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No world boss yet (phase 3's second part). No sprites or sound. No mute or ban: the word list is
+No sprites or sound. No mute or ban: the word list is
 the only filter. The GitHub link is approved by the fakes, not by GitHub, and the in-process ledger
 has no bots, so its market is yours alone and its chat is closed.
 
