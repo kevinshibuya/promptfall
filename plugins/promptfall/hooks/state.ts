@@ -1,4 +1,4 @@
-import type { DialogState, Prefs } from '../types'
+import type { DialogState, MarketState, OrdersState, Prefs } from '../types'
 
 // The session's values are declared in types/index.d.ts. The scan behind
 // `claude plugin validate` reads an atom only where it is declared in the
@@ -11,4 +11,13 @@ export const DIALOG_DEFAULT: DialogState = {
   partyPick: [],
   paneNotice: null,
   link: null,
+  sell: null,
 }
+export const MARKET_DEFAULT: MarketState = {
+  query: { kind: 'item', sort: 'price', page: 0 },
+  page: null,
+  busy: false,
+  confirm: null,
+  error: null,
+}
+export const ORDERS_DEFAULT: OrdersState = { mine: null, form: null, busy: false, error: null }

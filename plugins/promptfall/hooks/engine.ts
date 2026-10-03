@@ -6,10 +6,15 @@ import type {
   BatchAck,
   Delivery,
   KeyValue,
+  ListingPage,
+  ListingQuery,
   MarketResult,
+  MyOrders,
+  Order,
   ServerClient,
   ServerConfig,
   TimedEvent,
+  Unauthorized,
 } from './vendor/protocol.js'
 import {
   type Effect,
@@ -65,6 +70,14 @@ export type GameHandle = {
   link: () => Promise<void>
   /** Deletes this machine's Promptfall data but the lease, then starts over on the same server. */
   reset: () => Promise<void>
+  /** Market reads: no flush first, reads need none. Throw `unreachable` or `not_started`. */
+  market: {
+    browse: (query: ListingQuery) => Promise<ListingPage | Unauthorized>
+    myOrders: () => Promise<MyOrders | Unauthorized>
+    matching: (itemId: string) => Promise<Order[] | Unauthorized>
+  }
+  /** The last server clock seen, for showing server deadlines as real time left. */
+  clock: () => { serverNow: number; clientNow: number; speed: number } | null
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>

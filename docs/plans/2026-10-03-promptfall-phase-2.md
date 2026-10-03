@@ -597,11 +597,11 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No band change. No new `$` namespace. No market rule evaluated on the client beyond the display arithmetic above.
 
-- [ ] Types, tabs, command args, `time.ts`; `dialog.test.ts` red for the Market tab
-- [ ] `market.tsx` with browse, filters, paging, buy with confirm
-- [ ] `sell.tsx` with matching orders, the price form and the cooldown line; `Sell` buttons
-- [ ] `orders.tsx` with listings, orders, returns, the order form
-- [ ] Toasts and loot lines; README; run the acceptance check; commit `feat(plugin): market and orders tabs, sell flow, trade toasts`
+- [x] Types, tabs, command args, `time.ts`; `dialog.test.ts` red for the Market tab
+- [x] `market.tsx` with browse, filters, paging, buy with confirm
+- [x] `sell.tsx` with matching orders, the price form and the cooldown line; `Sell` buttons
+- [x] `orders.tsx` with listings, orders, returns, the order form
+- [x] Toasts and loot lines; README; run the acceptance check; commit `feat(plugin): market and orders tabs, sell flow, trade toasts`
 
 ### Task 10: PR 2: manual pass part B, docs, pull request
 
