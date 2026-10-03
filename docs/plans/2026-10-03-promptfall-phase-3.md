@@ -635,7 +635,7 @@ PR from `feat/phase-3-boss` into `ai-staging` titled `Promptfall phase 3, PR 2: 
 
 **Boundaries:** Docs only. Do not merge.
 
-- [ ] Write part B; update the README; run the check line; open the PR; stop
+- [x] Write part B; update the README; run the check line; open the PR; stop
 
 ## Spec conflicts and narrowings
 
