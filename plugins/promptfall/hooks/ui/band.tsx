@@ -30,13 +30,14 @@ export function registerBand(on: On): void {
     const notice = await read($, noticeAtom)
     if (view === null) {
       // No game to draw (an older version's data, or no server yet): the notice alone, on one line.
+      // Every notice already names the game.
       if (!notice) return next(e)
       const { Box, Text } = $.ui.resolve(e)
       const width = Math.max(20, e.props.bodyColumns)
       return (
         <Box key="band" flexDirection="column">
           <Text key="row-notice" wrap="truncate">
-            {clip(`Promptfall · ${notice}`, width - 2)}
+            {clip(notice, width - 2)}
           </Text>
         </Box>
       )
