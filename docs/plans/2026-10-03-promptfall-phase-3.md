@@ -343,10 +343,10 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** No boss code (PR 2). No HTTP routes. No plugin. `pf:chat` and `pf:boards` are the only new keys.
 
-- [ ] `blocklist.ts`, `publicName`; `world.test.ts` red then green
-- [ ] Presence, `world()`, flags; rules 25 and 32 red then green over the in-process host
-- [ ] Chat; rules 26 to 30
-- [ ] Boards, `offerZone` in `submit` and `mint`; rule 31; commit `feat(ledger): presence in memory, chat with a blocklist and a bucket, leaderboards, phase 3 flags`
+- [x] `blocklist.ts`, `publicName`; `world.test.ts` red then green
+- [x] Presence, `world()`, flags; rules 25 and 32 red then green over the in-process host
+- [x] Chat; rules 26 to 30
+- [x] Boards, `offerZone` in `submit` and `mint`; rule 31; commit `feat(ledger): presence in memory, chat with a blocklist and a bucket, leaderboards, phase 3 flags`
 
 ### Task 3: HTTP fake: the three routes and `--flag`
 
