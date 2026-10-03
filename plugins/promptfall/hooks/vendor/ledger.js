@@ -93,8 +93,8 @@ var TrackedKeyValue = class {
   }
   async flush() {
     if (!this.dirty) return;
-    this.dirty = false;
     await this.inner.flush?.();
+    this.dirty = false;
   }
 };
 var Books = class {
@@ -230,6 +230,10 @@ var Ledger = class {
   kv;
   books;
   chain = Promise.resolve();
+  /**
+   * The flush runs even when `fn` threw, so an operation must validate before
+   * its first `set`; `author` throws before it touches the record for that reason.
+   */
   run(fn) {
     const next = this.chain.then(async () => {
       try {

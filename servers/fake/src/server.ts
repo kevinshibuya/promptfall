@@ -114,7 +114,12 @@ function match(pattern: string, path: string): Record<string, string> | null {
     const v = b[i] ?? ''
     if (p.startsWith(':')) {
       if (v === '') return null
-      params[p.slice(1)] = decodeURIComponent(v)
+      try {
+        params[p.slice(1)] = decodeURIComponent(v)
+      } catch {
+        // An undecodable segment names no resource: answered as an unknown route.
+        return null
+      }
     } else if (p !== v) {
       return null
     }
@@ -164,23 +169,24 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
   }))
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const url = new URL(req.url ?? '/', 'http://fake')
-    let route: { handler: Handler; params: Record<string, string> } | null = null
-    for (const entry of table) {
-      if (entry.method !== req.method) continue
-      const params = match(entry.path, url.pathname)
-      if (params) {
-        route = { handler: entry.handler, params }
-        break
-      }
-    }
-    if (!route) {
-      // Drain the body so the connection can be reused.
-      req.resume()
-      send(res, 404, { error: 'route' })
-      return
-    }
+    // Everything, routing included, sits inside the try: one bad request never escapes.
     try {
+      const url = new URL(req.url ?? '/', 'http://fake')
+      let route: { handler: Handler; params: Record<string, string> } | null = null
+      for (const entry of table) {
+        if (entry.method !== req.method) continue
+        const params = match(entry.path, url.pathname)
+        if (params) {
+          route = { handler: entry.handler, params }
+          break
+        }
+      }
+      if (!route) {
+        // Drain the body so the connection can be reused.
+        req.resume()
+        send(res, 404, { error: 'route' })
+        return
+      }
       const body = await readBody(req)
       const query: Record<string, string> = {}
       for (const [key, value] of url.searchParams) query[key] = value

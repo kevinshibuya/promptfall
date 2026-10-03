@@ -150,8 +150,9 @@ export class TrackedKeyValue implements KeyValue {
 
   async flush(): Promise<void> {
     if (!this.dirty) return
-    this.dirty = false
     await this.inner.flush?.()
+    // Only a flush that landed is done: a failed one is retried by the next operation.
+    this.dirty = false
   }
 }
 
