@@ -1,5 +1,13 @@
 export type BandTab = 'party' | 'loot' | 'world'
-export type DialogTab = 'inventory' | 'heroes' | 'market' | 'orders' | 'account' | 'odds'
+export type DialogTab =
+  | 'inventory'
+  | 'heroes'
+  | 'market'
+  | 'orders'
+  | 'account'
+  | 'odds'
+  | 'chat'
+  | 'leaderboards'
 export type Mode = 'primary' | 'secondary' | 'paused' | 'off'
 export type HeroView = {
   id: string
@@ -171,6 +179,13 @@ export type WorldSnapshot = {
   flags: Record<string, boolean>
 }
 
+export type BoardRow = { accountId: string; name: string; value: number }
+export type Boards = { highestZone: BoardRow[]; damage: BoardRow[]; weekStart: number }
+
+/** The Chat tab's compose box: the draft is the Input's value, cleared after a post. */
+export type ChatState = { draft: string; busy: boolean; error: string | null }
+export type BoardsState = { boards: Boards | null; busy: boolean; error: string | null }
+
 /** The world poll's result, published by the session's poller. */
 export type WorldState = {
   snapshot: WorldSnapshot | null
@@ -203,6 +218,8 @@ declare module 'claude-code' {
       market: MarketState
       orders: OrdersState
       world: WorldState
+      chat: ChatState
+      boards: BoardsState
     }
   }
 }

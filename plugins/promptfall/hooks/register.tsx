@@ -5,7 +5,14 @@ import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT, WORLD_DEFAULT } from './state'
+import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  WORLD_DEFAULT,
+} from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
@@ -281,6 +288,8 @@ class GameSession implements GameHandle {
       view: null,
       market: MARKET_DEFAULT,
       orders: ORDERS_DEFAULT,
+      chat: CHAT_DEFAULT,
+      boards: BOARDS_DEFAULT,
     })
     await this.io.clearDialog()
     if (this.role === 'primary') await this.becomePrimary()
@@ -543,6 +552,8 @@ const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 let game: GameSession | null = null
 
@@ -583,6 +594,10 @@ export const register: Register = (on) => {
           }
           if (patch.world !== undefined) {
             await update($, worldAtom, () => patch.world ?? WORLD_DEFAULT)
+          }
+          if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
+          if (patch.boards !== undefined) {
+            await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
         toast: (text) => $.ui.toast(text),
@@ -637,6 +652,10 @@ export const register: Register = (on) => {
           }
           if (patch.world !== undefined) {
             await update($, worldAtom, () => patch.world ?? WORLD_DEFAULT)
+          }
+          if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
+          if (patch.boards !== undefined) {
+            await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
         toast: (text) => $.ui.toast(text),
