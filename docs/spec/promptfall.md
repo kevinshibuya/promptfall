@@ -1,7 +1,8 @@
 # Promptfall, product and architecture spec
 
-Decided in a grilling session on 2026-10-02. Every section is a decision, not a
-proposal. A change here is a change of contract and goes through the same gate.
+Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03. Every
+section is a decision, not a proposal. A change here is a change of contract and goes
+through the same gate.
 
 ## 1. What it is
 
@@ -147,12 +148,28 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   active party cannot be listed.
 - No binding. An item or hero that changes hands cannot be relisted for 24
   hours.
-- Fixed price listings, expiring after 7 days, small listing fee, 5 percent
-  sale fee on completion.
+- Fixed price listings, expiring after 7 days. Prices are integers from 1 to
+  1,000,000 gold. Listing fee 2 percent of the asking price, minimum 1 gold,
+  paid on listing and kept on cancel and expiry. Sale fee 5 percent of the
+  price, `floor(price × 500 / 10000)`, on listings and on buy-order fills alike.
+- A listing can be cancelled any time before it sells. A listed item or hero
+  leaves the inventory or roster and frees its slot.
+- Expiry and cancel return the item or hero. With no free slot it waits in
+  returns and is delivered the moment a slot frees. Returns are never vendored;
+  auto-vendoring is for drops only.
 - Buy orders: base type, minimum rarity, at most one required affix, maximum
   price. Gold is escrowed when the order is placed. No auto-match: a seller sees
-  matching orders in the sell flow and accepts one explicitly.
-- Trading requires an account linked to GitHub.
+  matching orders in the sell flow and accepts one explicitly. An order expires
+  after 7 days, fills exactly once and closes; cancel refunds the escrow in full.
+- A purchase needs a free inventory slot (roster slot for a hero) and the gold,
+  or it is refused. Buyer and seller are never the same account.
+- A hero is listed with no equipment: the dialog unequips into the inventory
+  first and refuses when space is lacking. A transferred hero arrives at level
+  1, 0 XP, full HP, same rarity and traits.
+- Market events (sold, bought, returned) land in the loot log next to drops.
+- Listings show the seller's name.
+- Browsing is open to every account. Listing, buying and ordering need a linked
+  GitHub account and `market.enabled`; the dialog says so in place.
 - Published odds: an Odds screen in the dialog shows drop, rarity and tavern
   tables.
 
@@ -191,12 +208,40 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   over any bucket is rejected whole. Every submission is authenticated by the
   device token and must name its own account. Client timestamps order events
   within a batch and nothing else.
+- The sim's events are of two kinds. Player events originate on a client and
+  travel in batches: combat, rests, equips, vendoring. Server events are
+  authored only by the ledger and are the effects of trades on an account's
+  inventory, roster and gold: `listed`, `returned`, `sold`, `bought`,
+  `order_placed`, `order_refunded`, `order_filled`, `fee`. The sim applies a
+  server event without judging it; one it cannot apply is a bug caught by the
+  hash check, never a rejection. The batch schema accepts player events only.
+- A batch declares the cursor of the last server event its client applied. The
+  server replays the server events after the committed cursor up to the declared
+  one, then the batch's player events; `baseHash` is the last committed hash,
+  `resultHash` the hash after both. A cursor behind the committed one gets the
+  authoritative state back. Every authenticated response may carry the server
+  events pending past the client's cursor. The client re-steps its buffered
+  player events over server events as they arrive, so a locally seen spend can
+  turn into a rejection when a trade drained the gold first: the server wins.
+- A market action flushes the client's buffer and waits for the ack before the
+  request, so the ledger validates against state at most one round trip old.
+  Only the primary session trades.
+- An item or hero that changes hands gets a ledger id in the ledger's own
+  namespace and keeps it for life. Transferred items and heroes carry
+  `tradeableAt`, listings and orders carry `expiresAt`, all server epoch
+  milliseconds; the sim stores them and never compares them. The ledger
+  enforces cooldowns and expiries on its own clock.
 - On hash mismatch the server wins. Small drift is corrected silently; a revoked
   drop raises a toast; repeated revocations flag the account.
 - Hard version gate: a client below the server's minimum version shows an update
-  banner and the sim pauses. No multi-version replay on the server.
-- Server unreachable: the sim pauses, a banner shows, up to 2 minutes of batches
-  are buffered, reconnects use exponential backoff with jitter.
+  banner and the sim pauses. No multi-version replay on the server, and no
+  state migration between sim versions: a state behind the server's sim version
+  is reset from the Account tab.
+- Server unreachable: the banner shows at once; the sim keeps ticking and
+  buffering for 2 minutes of wall clock from the first failure, then pauses;
+  retries back off from 1 to 30 seconds with jitter; the first success flushes
+  the buffer and clears the banner. A thrown submit is an outage, never a
+  permanent pause.
 - One primary session per account ticks. Phase 1 elects it with a lease in the
   local store; phase 5 with a server lease. Other sessions show "playing in
   another session" and render read-only.
@@ -225,15 +270,41 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
 ## 9. Fake servers and the contract suite
 
+- `@promptfall/ledger` is the server core: account records, batch replay and
+  the market rules as pure functions over an injected clock and key-value
+  store, with expiries run through `sweep(now)`. Three hosts run it: the
+  in-process fake, the HTTP fake and the real server. A host adds transport,
+  persistence and, for the HTTP fake, bots; it never adds rules.
 - Phase 1: an in-process fake inside the plugin, no infrastructure, persisting
   through the local store. It replays batches like the real server will, so the
-  client already sends inputs and reconciles hashes.
-- Phase 2 on: a separate local Node process in the monorepo speaking the real
-  HTTP protocol, with seeded deterministic bots that list, buy, chat, appear in
-  presence and hit the boss. The bots are the load generator for the real server
-  later.
+  client already sends inputs and reconciles hashes. It stays the default
+  server: a plugin installed with nothing running still plays.
+- Phase 2 on: the HTTP fake at `servers/fake`, a separate local Node process in
+  the monorepo on `node:http`, speaking the real HTTP protocol with the shared
+  schemas, persisting a JSON snapshot after every mutation. Flags: `--port`,
+  `--seed`, `--speed`, `--player-name`, `--data`. `--speed` scales the bots'
+  cadence and the ledger's clock together, so cooldowns and expiries can be
+  watched. The GitHub link flow is approved on the first poll with
+  `--player-name` as the login.
+- Bots: 12 seeded accounts with names from a fixed list, inventories and
+  rosters rolled from the sim's own loot tables, a gold stipend per tick so
+  they never run dry. Each tick they list, buy, place or cancel through the
+  same ledger API as a player, never a back door. Phase 3 adds chat, presence
+  and the world boss. Their numbers live in one config file and are tuning,
+  not contract. The bots are the load generator for the real server later.
+- `/promptfall server <url>` points a session at an HTTP server and
+  `/promptfall server local` back at the in-process fake. One device token per
+  server; switching re-bootstraps and adopts that server's state. Nothing moves
+  between servers, ever.
+- Until the event stream exists (phase 3), server events ride on responses: the
+  batch ack and the market responses carry what is pending past the client's
+  cursor, and the dialog refreshes when opened. The cursor is explicit in the
+  protocol so the stream is an addition, not a change.
+- `HttpClient` in `@promptfall/protocol` implements `ServerClient` over an
+  injected fetch: `$.http.fetch` in the plugin, the global in tests.
 - One contract test suite in `@promptfall/protocol` runs against the in-process
-  fake, the HTTP fake and the real API.
+  fake, the HTTP fake and the real API. Trade cases run two accounts against
+  one host.
 
 ## 10. Client structure
 
@@ -247,9 +318,20 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Dialog via `/promptfall [tab]`: Inventory, Heroes, Account, Odds in phase 1;
   Market and Orders in phase 2; Chat in phase 3. Opened with focus,
   closes on Escape, holds toasts.
+- Market tab: listings filtered by kind (items or heroes), base type or class
+  and minimum rarity, sorted by price or newest, 10 per page, Buy on a hotkey
+  with a confirm step. Orders tab: my listings, my buy orders, a form for a
+  new order, the count waiting in returns. Selling starts from the Inventory
+  and Heroes tabs: matching buy orders first, then the fixed-price form, with
+  fee and net shown before confirming. Market and Orders are always listed; a
+  closed market or an unlinked account is said in place, with a hotkey to the
+  Account tab.
+- Account tab: link GitHub (the device flow: a code, a URL, a poll), the
+  current server, and a reset of this machine's data.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag.
-- Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited.
+  toggles the farm flag. `/promptfall server <url>|local` picks the server.
+- Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited,
+  listing sold, purchase complete, order filled, item returned.
 - Sound (phase 4): off by default, toggle in Account; cues for drop, level up,
   boss spawn.
 
@@ -269,7 +351,9 @@ back to glyphs everywhere else.
 
 1. Solo loop: monorepo, sim, protocol, plugin with band and dialog, in-process
    fake, balance harness, determinism tests.
-2. Market, buy orders, hero trading, against the HTTP fake with bots.
+2. Market, buy orders, hero trading, against the HTTP fake with bots. Two PRs:
+   the ledger, server events, `HttpClient`, the HTTP fake and the outage rules
+   first, with the contract suite green against both fakes; the market second.
 3. Presence, chat, leaderboards, world bosses, against the same fake.
 4. Sprites and sound.
 5. Real server: accounts, authority, flags, admin CLI, Docker Compose, contract
