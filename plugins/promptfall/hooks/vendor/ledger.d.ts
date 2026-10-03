@@ -47,7 +47,7 @@ type AccountRecord = {
 };
 declare const LOG_CAP = 500;
 
-/** The world bosses, one per grid point in turn. Names and glyphs only: the numbers live in @promptfall/protocol. */
+/** The world bosses, one per grid point in turn. Names and glyphs only: the numbers live in the protocol package. */
 declare const WORLD_BOSSES: readonly {
     name: string;
     glyph: string;
