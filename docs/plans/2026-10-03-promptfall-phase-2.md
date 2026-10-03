@@ -508,7 +508,7 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No code changes in this task beyond docs. Do not merge.
 
-- [ ] Write part A of the manual pass; update the READMEs
+- [x] Write part A of the manual pass; update the READMEs
 - [ ] Run the full check line; open the PR; stop
 
 ### Task 7: Ledger market rules, routes, contract cases
