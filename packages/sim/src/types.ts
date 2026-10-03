@@ -1,4 +1,4 @@
-export const SIM_VERSION = 2 as const
+export const SIM_VERSION = 3 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -32,7 +32,7 @@ export type Hero = {
   /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
   tradeableAt: number | null
 }
-export type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss'
+export type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss' | 'world_boss'
 export type Enemy = { id: string; def: string; kind: EnemyKind; hp: number; maxHp: number }
 export type Encounter = {
   enemies: Enemy[]
@@ -54,6 +54,7 @@ export type LootEntry =
       rarity: Rarity
       gold: number
     }
+  | { k: 'reward'; base: string; rarity: Rarity; gold: number }
 
 export type PlayerEvent =
   | { t: 'tick' }
@@ -98,6 +99,11 @@ export type ServerEvent =
       net: number
     }
   | { t: 'credited'; gold: number; reason: string }
+  /** Boss mode: the encounter becomes one undying `world_boss` with these (zone 1 baseline) stats. */
+  | { t: 'boss_engaged'; bossId: string; name: string; glyph: string; stats: Stats }
+  | { t: 'boss_disengaged'; bossId: string }
+  /** One reward roll; `goods` null when the item waited in returns. */
+  | { t: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
 
 export type Event = PlayerEvent | ServerEvent
 export type EventKind = Event['t']
@@ -113,6 +119,9 @@ export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
   'order_filled',
   'order_sold',
   'credited',
+  'boss_engaged',
+  'boss_disengaged',
+  'rewarded',
 ]
 
 export type Effect =
@@ -128,6 +137,7 @@ export type Effect =
   | { k: 'party_applied'; heroIds: [string, string, string] }
   | { k: 'hero_recruited'; hero: Hero; via: 'contract' | 'tavern' }
   | { k: 'rejected'; event: Event; reason: string }
+  | { k: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
   | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }
 
 export type GameState = {
@@ -153,6 +163,8 @@ export type GameState = {
   pendingTurnBoss: boolean
   lootLog: LootEntry[]
   stats: { kills: number; bosses: number; wipes: number }
+  /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
+  boss: { bossId: string; name: string; glyph: string; stats: Stats; dealt: number } | null
 }
 
 export type StepResult = { state: GameState; effects: Effect[] }

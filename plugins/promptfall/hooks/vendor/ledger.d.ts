@@ -47,6 +47,12 @@ type AccountRecord = {
 };
 declare const LOG_CAP = 500;
 
+/** The world bosses, one per grid point in turn. Names and glyphs only: the numbers live in the protocol package. */
+declare const WORLD_BOSSES: readonly {
+    name: string;
+    glyph: string;
+}[];
+
 declare const COOLDOWN_MS = 86400000;
 declare const EXPIRY_MS = 604800000;
 declare const MIN_PRICE = 1;
@@ -65,8 +71,8 @@ declare function validPrice(price: number): boolean;
  */
 declare function transfer(goods: Goods, now: number, nextId: () => Promise<string>, receiver: GameState): Promise<Goods>;
 
-/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods), base 36 over one global counter. */
-declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't'): Promise<string>;
+/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods, `r` boss rewards), base 36 over one global counter. */
+declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r'): Promise<string>;
 
 type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance';
 type LedgerOptions = {
@@ -85,6 +91,8 @@ type LedgerOptions = {
     } | null>;
     /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
     presenceTtlMs?: number;
+    /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
+    log?: (line: string) => void;
 };
 type LedgerHost = {
     /** Mints an account with a given state and name (bots, tests). */
@@ -171,4 +179,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

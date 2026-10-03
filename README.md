@@ -7,13 +7,13 @@ and each prompt you submit is a short rest. The product and architecture contrac
 
 ## Status
 
-Phases 1 and 2 are built, and the first half of phase 3. Phase 1 is the solo loop: the
-deterministic sim, the batch protocol, and the plugin with its band and dialog. Phase 2 is the
-market: the account ledger with server events and deliveries, item and hero trading with buy
-orders, an HTTP fake server with seeded bots, outages, server switching and the GitHub link flow.
-Phase 3's first half is the social layer: a world poll that carries presence and the chat tail,
-chat with a word list and a rate limit, highest-zone and weekly boss-damage leaderboards, and bots
-that play through the public HTTP API like a player. The world boss is phase 3's second half.
+Phases 1 to 3 are built. Phase 1 is the solo loop: the deterministic sim, the batch protocol, and
+the plugin with its band and dialog. Phase 2 is the market: the account ledger with server events
+and deliveries, item and hero trading with buy orders, an HTTP fake server with seeded bots,
+outages, server switching and the GitHub link flow. Phase 3 is the social layer: a world poll that
+carries presence and the chat tail, chat with a word list and a rate limit, highest-zone and weekly
+boss-damage leaderboards, bots that play through the public HTTP API like a player, and a world
+boss every 3 hours that every online party fights together (sim version 3).
 Phases 4 and 5 (art, real server) each get their own plan when their turn comes.
 
 ## Play it
@@ -29,6 +29,7 @@ point the plugin at it:
 ```sh
 pnpm fake --port 7777 --speed 10        # one terminal: the fake, with 12 bots
 # --flag chat.enabled=false (repeatable) turns a server flag off
+# --boss-in 60 brings the next world boss a minute out (a dev flag)
 /promptfall server http://127.0.0.1:7777   # in the Claude Code session
 ```
 

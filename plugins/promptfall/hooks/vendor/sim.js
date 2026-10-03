@@ -478,8 +478,18 @@ var content = {
 };
 
 // packages/sim/src/golden.ts
+var GOLDEN_BOSS = "wbgold";
+var GOLDEN_REWARD = {
+  id: "r0",
+  base: "steel_longsword",
+  rarity: "rare",
+  affixes: [],
+  equippedBy: null,
+  tradeableAt: null
+};
 var GOLDEN_SEED = 20261002;
-function goldenEvents() {
+function goldenEvents(options = {}) {
+  const boss = options.boss ?? true;
   const events = [
     { t: "set_party", heroIds: ["h0", "h3", "h2"] },
     { t: "set_farm", on: false },
@@ -492,6 +502,24 @@ function goldenEvents() {
       if (i % 3 === 0) events.push({ t: "tool_call" });
     }
     events.push({ t: "turn_end" });
+    if (boss && turn === 3) {
+      events.push({
+        t: "boss_engaged",
+        bossId: GOLDEN_BOSS,
+        name: "Golden Wyrm",
+        glyph: "\u2620",
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 }
+      });
+    }
+    if (boss && turn === 6) events.push({ t: "boss_disengaged", bossId: GOLDEN_BOSS });
+    if (boss && turn === 7) {
+      events.push({
+        t: "rewarded",
+        bossId: GOLDEN_BOSS,
+        goods: { kind: "item", item: GOLDEN_REWARD },
+        gold: 45
+      });
+    }
     if (turn === 2) events.push({ t: "equip", heroId: "h0", itemId: "i10" });
     if (turn === 4) events.push({ t: "set_party", heroIds: ["h0", "h1", "h2"] });
     if (turn === 5) events.push({ t: "dismiss", heroId: "h3" });
@@ -509,7 +537,7 @@ function goldenEvents() {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "261e337c034123fa";
+var GOLDEN_HASH = "21ecdbaf9e864e9d";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -686,6 +714,7 @@ function pickWaveEnemy(s) {
 }
 function onToolCall(s) {
   s.turnToolCalls += 1;
+  if (s.boss) return;
   const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3));
   const defId = pickWaveEnemy(s);
   if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, "wave");
@@ -796,6 +825,10 @@ function onEnemyKilled(s, enemy, effects) {
 }
 function checkWipe(s, effects) {
   if (livingParty(s).length > 0) return false;
+  if (s.boss) {
+    fullHealParty(s);
+    return true;
+  }
   const retreatedTo = Math.max(1, s.zone - 1);
   effects.push({ k: "wipe", retreatedTo });
   s.encounter = null;
@@ -866,16 +899,76 @@ function rollContract(s, effects) {
   pushLog(s, { k: "item", itemId: hero.id, base: "contract", rarity: rarity2, vendoredFor: gold });
 }
 
+// packages/sim/src/types.ts
+var SIM_VERSION = 3;
+var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
+var SERVER_EVENT_KINDS = [
+  "listed",
+  "returned",
+  "sold",
+  "bought",
+  "order_placed",
+  "order_refunded",
+  "order_filled",
+  "order_sold",
+  "credited",
+  "boss_engaged",
+  "boss_disengaged",
+  "rewarded"
+];
+
+// packages/sim/src/state.ts
+function createInitialState(seed) {
+  const state = {
+    v: SIM_VERSION,
+    seed: seed >>> 0,
+    rng: seed >>> 0,
+    counter: 0,
+    tick: 0,
+    gold: 0,
+    zone: 1,
+    wave: 1,
+    farm: false,
+    highestZone: 1,
+    roster: [],
+    party: ["", "", ""],
+    pendingParty: null,
+    inventory: [],
+    inventoryCap: 30,
+    rosterCap: 24,
+    recruits: 0,
+    turnToolCalls: 0,
+    encounter: null,
+    pendingTurnBoss: false,
+    lootLog: [],
+    stats: { kills: 0, bosses: 0, wipes: 0 },
+    boss: null
+  };
+  const roster = ["knight_1", "black_mage_1", "white_mage_1", "archer_1"].map(
+    (id) => generateHero(state, "common", id)
+  );
+  state.roster = roster;
+  state.rng = state.seed;
+  const [k, b, w] = roster;
+  return { ...state, roster, party: [k?.id ?? "", b?.id ?? "", w?.id ?? ""] };
+}
+
 // packages/sim/src/loot.ts
 function vendorValue(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
   return content.rarity[item.rarity].vendorGoldPerZone * minZone;
 }
 function rollItem(s, boss) {
+  return rollItemFor(
+    s,
+    boss,
+    partyHeroes(s).map((h) => h.cls)
+  );
+}
+function rollItemFor(s, boss, classes) {
   const zone = content.zones[s.zone - 1];
   if (!zone) return null;
   const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
-  const classes = partyHeroes(s).map((h) => h.cls);
   const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
     const b = content.itemBases[id];
     return b !== void 0 && b.minZone <= s.zone && b.classes.some((c) => classes.includes(c));
@@ -893,6 +986,11 @@ function rollItem(s, boss) {
     affixes2.push({ id, value: min + draw(s, max - min + 1) });
   }
   return { id: newId(s, "i"), base: baseId, rarity: rarity2, affixes: affixes2, equippedBy: null, tradeableAt: null };
+}
+function rollRewardItem(seed, zone, classes) {
+  const scratch = { ...createInitialState(seed), zone };
+  const item = rollItemFor(scratch, true, classes);
+  return item ? { ...item, id: "" } : null;
 }
 function rollDrops(state, def) {
   const s = state;
@@ -936,63 +1034,29 @@ function rerollAffix(s, item, index) {
   affix.value = min + draw(s, max - min + 1);
 }
 
-// packages/sim/src/types.ts
-var SIM_VERSION = 2;
-var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
-var SERVER_EVENT_KINDS = [
-  "listed",
-  "returned",
-  "sold",
-  "bought",
-  "order_placed",
-  "order_refunded",
-  "order_filled",
-  "order_sold",
-  "credited"
-];
-
-// packages/sim/src/state.ts
-function createInitialState(seed) {
-  const state = {
-    v: SIM_VERSION,
-    seed: seed >>> 0,
-    rng: seed >>> 0,
-    counter: 0,
-    tick: 0,
-    gold: 0,
-    zone: 1,
-    wave: 1,
-    farm: false,
-    highestZone: 1,
-    roster: [],
-    party: ["", "", ""],
-    pendingParty: null,
-    inventory: [],
-    inventoryCap: 30,
-    rosterCap: 24,
-    recruits: 0,
-    turnToolCalls: 0,
-    encounter: null,
-    pendingTurnBoss: false,
-    lootLog: [],
-    stats: { kills: 0, bosses: 0, wipes: 0 }
-  };
-  const roster = ["knight_1", "black_mage_1", "white_mage_1", "archer_1"].map(
-    (id) => generateHero(state, "common", id)
-  );
-  state.roster = roster;
-  state.rng = state.seed;
-  const [k, b, w] = roster;
-  return { ...state, roster, party: [k?.id ?? "", b?.id ?? "", w?.id ?? ""] };
-}
-
 // packages/sim/src/combat.ts
 function damage(s, atk, def) {
   const v = 9e3 + draw(s, 2001);
   return Math.max(1, Math.floor(atk * v / 1e4) - Math.floor(def / 2));
 }
-function enemyStats(enemy) {
-  return content.enemies[enemy.def]?.stats ?? { hp: 1, atk: 1, def: 0, spd: 0 };
+var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
+function zoneBossStats(zone) {
+  return content.enemies[content.zones[zone - 1]?.boss ?? ""]?.stats ?? NO_STATS;
+}
+function scaledBossStats(s) {
+  const carried = s.boss?.stats ?? NO_STATS;
+  const z1 = zoneBossStats(1);
+  const zb = zoneBossStats(s.zone);
+  return {
+    hp: carried.hp,
+    atk: Math.floor(carried.atk * zb.atk / Math.max(1, z1.atk)),
+    def: Math.floor(carried.def * zb.def / Math.max(1, z1.def)),
+    spd: carried.spd + Math.floor(s.zone / 3)
+  };
+}
+function enemyStats(s, enemy) {
+  if (enemy.kind === "world_boss") return scaledBossStats(s);
+  return content.enemies[enemy.def]?.stats ?? NO_STATS;
 }
 function lowestHpEnemy(enemies2) {
   let best;
@@ -1000,6 +1064,10 @@ function lowestHpEnemy(enemies2) {
   return best;
 }
 function hitEnemy(s, enemy, amount, effects) {
+  if (enemy.kind === "world_boss") {
+    if (s.boss) s.boss.dealt += amount;
+    return;
+  }
   enemy.hp = Math.max(0, enemy.hp - amount);
   if (enemy.hp === 0) onEnemyKilled(s, enemy, effects);
 }
@@ -1010,14 +1078,14 @@ function heroAct(s, hero, effects, round) {
   switch (hero.cls) {
     case "knight": {
       const target = encounter.enemies[0];
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(target).def), effects);
+      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
       return;
     }
     case "black_mage": {
       const atk = Math.floor(stats.atk * 6e3 / 1e4);
       for (const target of [...encounter.enemies]) {
         if (!s.encounter?.enemies.includes(target)) continue;
-        hitEnemy(s, target, damage(s, atk, enemyStats(target).def), effects);
+        hitEnemy(s, target, damage(s, atk, enemyStats(s, target).def), effects);
       }
       return;
     }
@@ -1038,13 +1106,13 @@ function heroAct(s, hero, effects, round) {
         return;
       }
       const target = lowestHpEnemy(encounter.enemies);
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(target).def), effects);
+      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
       return;
     }
     case "archer": {
       const target = lowestHpEnemy(encounter.enemies);
       if (!target) return;
-      let amount = damage(s, stats.atk, enemyStats(target).def);
+      let amount = damage(s, stats.atk, enemyStats(s, target).def);
       if (drawBp(s) < 2e3) amount *= 2;
       hitEnemy(s, target, amount, effects);
       return;
@@ -1059,7 +1127,7 @@ function enemyAct(s, enemy, effects) {
   if (knights.length > 0 && drawBp(s) < 6e3) target = knights[draw(s, knights.length)];
   else target = living[draw(s, living.length)];
   if (!target) return;
-  const stats = enemyStats(enemy);
+  const stats = enemyStats(s, enemy);
   const amount = damage(s, stats.atk, heroStats(s, target).def);
   target.hp = Math.max(0, target.hp - amount);
   if (target.hp === 0) effects.push({ k: "hero_fell", heroId: target.id });
@@ -1073,7 +1141,7 @@ function resolveRound(s, effects) {
   for (const hero of livingParty(s))
     actors.push({ side: "hero", id: hero.id, spd: heroStats(s, hero).spd });
   for (const enemy of encounter.enemies) {
-    actors.push({ side: "enemy", id: enemy.id, spd: enemyStats(enemy).spd });
+    actors.push({ side: "enemy", id: enemy.id, spd: enemyStats(s, enemy).spd });
   }
   actors.sort((a, b) => b.spd - a.spd);
   const round = { healed: false };
@@ -1358,6 +1426,48 @@ function credited(state, event) {
     effects.push({ k: "gold", amount: event.gold });
   });
 }
+function bossEngaged(state, event) {
+  if (state.boss !== null) return unapplicable(state, event, "already_engaged");
+  return draft(state, (s) => {
+    const { hp } = event.stats;
+    s.encounter = {
+      enemies: [{ id: newId(s, "e"), def: "world_boss", kind: "world_boss", hp, maxHp: hp }],
+      queue: [],
+      waveSize: 0,
+      spawnedInWave: 0
+    };
+    s.boss = {
+      bossId: event.bossId,
+      name: event.name,
+      glyph: event.glyph,
+      stats: { ...event.stats },
+      dealt: 0
+    };
+  });
+}
+function bossDisengaged(state, event) {
+  if (state.boss?.bossId !== event.bossId) return unapplicable(state, event, "not_engaged");
+  return draft(state, (s) => {
+    s.encounter = null;
+    s.boss = null;
+  });
+}
+function rewarded(state, event) {
+  const goods = event.goods;
+  if (goods) {
+    const full = noRoom(state, goods);
+    if (full) return unapplicable(state, event, full);
+  }
+  return draft(state, (s, effects) => {
+    s.gold += event.gold;
+    if (goods) {
+      insert(s, goods);
+      const { base: base2, rarity: rarity2 } = goods.kind === "item" ? goods.item : { base: goods.hero.template, rarity: goods.hero.rarity };
+      pushLog(s, { k: "reward", base: base2, rarity: rarity2, gold: event.gold });
+    }
+    effects.push({ k: "rewarded", bossId: event.bossId, goods: clone(goods), gold: event.gold });
+  });
+}
 
 // packages/sim/src/step.ts
 var handlers = {
@@ -1387,7 +1497,10 @@ var handlers = {
   order_refunded: orderRefunded,
   order_filled: orderFilled,
   order_sold: orderSold,
-  credited
+  credited,
+  boss_engaged: bossEngaged,
+  boss_disengaged: bossDisengaged,
+  rewarded
 };
 function step(state, event) {
   const handler = handlers[event.t];
@@ -1416,6 +1529,7 @@ export {
   hashState,
   heroStats,
   replay,
+  rollRewardItem,
   step,
   vendorValue
 };

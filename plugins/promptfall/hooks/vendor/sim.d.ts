@@ -1,4 +1,4 @@
-declare const SIM_VERSION: 2;
+declare const SIM_VERSION: 3;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -36,7 +36,7 @@ type Hero = {
     /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
     tradeableAt: number | null;
 };
-type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss';
+type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss' | 'world_boss';
 type Enemy = {
     id: string;
     def: string;
@@ -77,6 +77,11 @@ type LootEntry = {
     k: 'trade';
     what: 'sold' | 'bought' | 'returned';
     kind: TradeKind;
+    base: string;
+    rarity: Rarity;
+    gold: number;
+} | {
+    k: 'reward';
     base: string;
     rarity: Rarity;
     gold: number;
@@ -169,6 +174,24 @@ type ServerEvent = {
     t: 'credited';
     gold: number;
     reason: string;
+}
+/** Boss mode: the encounter becomes one undying `world_boss` with these (zone 1 baseline) stats. */
+ | {
+    t: 'boss_engaged';
+    bossId: string;
+    name: string;
+    glyph: string;
+    stats: Stats;
+} | {
+    t: 'boss_disengaged';
+    bossId: string;
+}
+/** One reward roll; `goods` null when the item waited in returns. */
+ | {
+    t: 'rewarded';
+    bossId: string;
+    goods: Goods | null;
+    gold: number;
 };
 type Event = PlayerEvent | ServerEvent;
 type EventKind = Event['t'];
@@ -219,6 +242,11 @@ type Effect = {
     event: Event;
     reason: string;
 } | {
+    k: 'rewarded';
+    bossId: string;
+    goods: Goods | null;
+    gold: number;
+} | {
     k: 'traded';
     entry: Extract<LootEntry, {
         k: 'trade';
@@ -251,6 +279,14 @@ type GameState = {
         bosses: number;
         wipes: number;
     };
+    /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
+    boss: {
+        bossId: string;
+        name: string;
+        glyph: string;
+        stats: Stats;
+        dealt: number;
+    } | null;
 };
 type StepResult = {
     state: GameState;
@@ -349,16 +385,21 @@ declare const content: Content;
 
 declare const GOLDEN_SEED = 20261002;
 /**
- * A fixed 300-event script mixing world events and commands. Ids are the ones
- * the initial state mints (h0 to h3) plus guesses, so some commands are
- * rejected; rejections are part of the contract too.
+ * A fixed 300-event script mixing world events, commands and a world boss
+ * stretch (engaged after turn 3, disengaged after turn 6, a reward after
+ * turn 7). Ids are the ones the initial state mints (h0 to h3) plus guesses,
+ * so some commands are rejected; rejections are part of the contract too.
  */
-declare function goldenEvents(): Event[];
-declare const GOLDEN_HASH = "261e337c034123fa";
+declare function goldenEvents(options?: {
+    boss?: boolean;
+}): Event[];
+declare const GOLDEN_HASH = "21ecdbaf9e864e9d";
 
 declare function hashState(state: GameState): string;
 
 declare function vendorValue(item: Item): number;
+/** A boss-rarity item of the zone for a party of these classes, drawn from `seed` alone. `id` is '' for the caller to replace. */
+declare function rollRewardItem(seed: number, zone: number, classes: readonly HeroClass[]): Item | null;
 
 declare function heroStats(state: GameState, hero: Hero): Stats;
 
@@ -367,4 +408,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { type Affix, type AffixDef, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, SERVER_EVENT_KINDS, SIM_VERSION, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, goldenEvents, hashState, heroStats, replay, step, vendorValue };
+export { type Affix, type AffixDef, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, SERVER_EVENT_KINDS, SIM_VERSION, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };

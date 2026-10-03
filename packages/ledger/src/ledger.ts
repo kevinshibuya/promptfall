@@ -50,6 +50,7 @@ import {
   TrackedKeyValue,
   tokenKey,
 } from './books'
+import * as boss from './boss'
 import * as market from './market'
 import * as world from './world'
 
@@ -75,6 +76,8 @@ export type LedgerOptions = {
   linkApprover: (code: string) => Promise<{ login: string } | null>
   /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
   presenceTtlMs?: number
+  /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
+  log?: (line: string) => void
 }
 
 export type LedgerHost = {
@@ -166,15 +169,17 @@ export class Ledger implements ServerClient {
     return { books: this.books, now: await this.options.now(), flags: this.flags() }
   }
 
-  private async worldContext(): Promise<world.WorldContext> {
+  private async worldContext(at?: number): Promise<world.WorldContext> {
     const speed = this.options.speed ?? 1
     return {
       books: this.books,
-      now: await this.options.now(),
+      now: at ?? (await this.options.now()),
       flags: this.flags(),
       presence: this.presence,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
       speed,
+      seedSource: this.options.seedSource,
+      log: this.options.log ?? (() => undefined),
     }
   }
 
@@ -316,6 +321,7 @@ export class Ledger implements ServerClient {
         ({ at: _at, ...event }) => event as PlayerEvent,
       )
       const result = replay(record.state, events).state
+      const prevDealt = boss.dealtBefore(record.state, result)
       const hash = hashState(result)
       const seq = record.seq + 1
       for (const kind of KINDS) buckets[kind] -= counts[kind]
@@ -325,12 +331,19 @@ export class Ledger implements ServerClient {
       record.buckets = buckets
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING)
       settle(record)
+      // The batch's damage to the world boss; a killing commit authors the rewards here.
+      await boss.contribute(await this.worldContext(now), record, prevDealt)
       await this.books.deliverReturns(record)
-      await world.offerZone(this.kv, now, {
-        accountId: record.account.accountId,
-        name: publicName(record),
-        value: record.state.highestZone,
-      })
+      await world.offerZone(
+        this.kv,
+        now,
+        {
+          accountId: record.account.accountId,
+          name: publicName(record),
+          value: record.state.highestZone,
+        },
+        (id) => world.isPlaying(this.books, id),
+      )
       if (hash === batch.resultHash) {
         await this.books.save(record)
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) }
@@ -509,6 +522,8 @@ export class Ledger implements ServerClient {
   world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
     return this.run(async () => {
       const ctx = await this.worldContext()
+      // Before any record loads: the caller's record is read fresh after it.
+      await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
       return world.world(ctx, record, since)
@@ -558,11 +573,16 @@ export class Ledger implements ServerClient {
     )
     await this.books.save(record)
     await this.kv.set(tokenKey(deviceToken), accountId)
-    await world.offerZone(this.kv, now, {
-      accountId,
-      name: publicName(record),
-      value: input.state.highestZone,
-    })
+    await world.offerZone(
+      this.kv,
+      now,
+      {
+        accountId,
+        name: publicName(record),
+        value: input.state.highestZone,
+      },
+      (id) => world.isPlaying(this.books, id),
+    )
     return { accountId, deviceToken }
   }
 
@@ -588,6 +608,7 @@ export class Ledger implements ServerClient {
   }
 
   private async sweep(): Promise<void> {
+    await boss.advanceBoss(await this.worldContext())
     await market.expireDue(await this.marketContext())
     for (const accountId of await this.books.returnsQueue()) {
       const record = await this.books.load(accountId)

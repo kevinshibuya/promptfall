@@ -28,8 +28,24 @@ export type PollerDeps = {
   load: () => Promise<WorldState | null>
   /** One poll with the stored token, outside the engine lock. Throws when there is none. */
   fetch: (since: number) => Promise<WorldSnapshot | Unauthorized>
-  /** PR 2: the committed boss tally on a primary; null on a secondary. */
+  /** The committed boss tally on a primary; null on a secondary. */
   committedDealt?: () => WorldState['committedDealt']
+  /** Shows a toast: the boss transitions. */
+  toast?: (text: string) => void
+}
+
+/** The toast a snapshot transition earns: a boss appearing, or the same boss going down. */
+export function bossTransition(
+  before: WorldSnapshot['boss'] | undefined,
+  after: WorldSnapshot['boss'],
+): string | null {
+  if (!after) return null
+  if (after.hp > 0 && before?.bossId !== after.bossId)
+    return `World boss ${after.name} has appeared`
+  if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) {
+    return `${after.name} is down`
+  }
+  return null
 }
 
 /** Inserts messages by id, ascending, dropping ids already held; the oldest past CHAT_KEEP go. */
@@ -64,7 +80,15 @@ export class WorldPoller {
     if (!this.started) {
       this.started = true
       const held = await this.deps.load()
-      if (held) this.state = { ...WORLD_DEFAULT, messages: held.messages }
+      // The held snapshot stays until the first poll, so a reload during a live boss does not toast it again.
+      if (held) {
+        this.state = {
+          ...WORLD_DEFAULT,
+          messages: held.messages,
+          snapshot: held.snapshot,
+          clock: held.clock,
+        }
+      }
       this.rearm(WORLD_POLL_MS)
     }
     await this.poll()
@@ -138,6 +162,7 @@ export class WorldPoller {
     const now = await this.deps.now()
     if (epoch !== this.epoch) return
     const last = answer.chat.at(-1)
+    const toast = bossTransition(this.state.snapshot?.boss, answer.boss)
     this.state = {
       snapshot: answer,
       fetchedAt: now,
@@ -154,6 +179,7 @@ export class WorldPoller {
       void this.deps.publish(this.state)
     })
     await this.deps.publish(this.state)
+    if (toast) this.deps.toast?.(toast)
     this.rearm(this.cadence(now))
   }
 }

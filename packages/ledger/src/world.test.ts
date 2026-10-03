@@ -163,3 +163,36 @@ describe('presence on a fast clock', () => {
     expect(later.online).toBe(1)
   })
 })
+
+describe('the highest-zone board over an old --data', () => {
+  it('drops the rows of accounts behind the sim version, on read and on the next offer', async () => {
+    const kv = new MemoryKeyValue()
+    let n = 0
+    const ledger = new Ledger({
+      kv,
+      now: async () => 1_700_000_000_000,
+      minClientVersion: '0.1.0',
+      seedSource: () => 7,
+      tokenSource: () => `token-${n++}`,
+      linkApprover: async () => ({ login: 'player' }),
+    })
+    // A phase 2 bot left behind by a re-mint: an old record holding a high row.
+    const old = recordNamed('Ashgrove')
+    await kv.set('pf:acct:a1:record', { ...old, state: { ...old.state, v: 2 } })
+    await kv.set(BOARDS_KEY, {
+      zone: [{ accountId: 'a1', name: 'Ashgrove', value: 9 }],
+      week: { start: 0, damage: {} },
+    })
+    const m = await ledger.host.mint({
+      state: createInitialState(7),
+      name: 'Ashgrove',
+      linked: true,
+    })
+    const b = await ledger.leaderboards({ deviceToken: m.deviceToken })
+    if ('reason' in b) throw new Error('unauthorized')
+    expect(b.highestZone).toEqual([{ accountId: m.accountId, name: 'Ashgrove', value: 1 }])
+    expect(((await kv.get(BOARDS_KEY)) as StoredBoards).zone.map((r) => r.accountId)).toEqual([
+      m.accountId,
+    ])
+  })
+})

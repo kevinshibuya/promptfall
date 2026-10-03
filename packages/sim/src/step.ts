@@ -14,6 +14,8 @@ import {
 import { draft, reject } from './draft'
 import { onRest, onToolCall, onTurnEnd, refillFromQueue, spawnOnEmptyTick } from './progression'
 import {
+  bossDisengaged,
+  bossEngaged,
   bought,
   credited,
   listed,
@@ -22,6 +24,7 @@ import {
   orderRefunded,
   orderSold,
   returned,
+  rewarded,
   sold,
 } from './server-events'
 import type { Effect, Event, EventKind, GameState, StepResult } from './types'
@@ -62,6 +65,9 @@ const handlers: Handlers = {
   order_filled: orderFilled,
   order_sold: orderSold,
   credited,
+  boss_engaged: bossEngaged,
+  boss_disengaged: bossDisengaged,
+  rewarded,
 }
 
 export function step(state: GameState, event: Event): StepResult {
