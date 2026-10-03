@@ -1,6 +1,7 @@
 # Promptfall, product and architecture spec
 
-Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03. Every
+Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03 and for
+phase 3 on 2026-10-03. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -58,7 +59,9 @@ Checked against Claude Code v2.1.287's mods API.
 - Timers: `$.clock.every(ms, fn)`. Each hook dispatch has a 10 second budget;
   time spent inside `$` calls does not count.
 - Network: `$.http.fetch(url, init)` only, resolves after the whole body. No
-  WebSocket, no server-sent events. Long-poll works because fetch time is free.
+  WebSocket, no server-sent events, no abort signal and no timeout field. The plugin
+  gives every fetch 15 seconds and treats a longer one as an outage, so a held
+  long-poll needs its own fetch path and its own failure rule (phase 5).
 - Persistence: `$.store` (a JSON file under the user's Claude Code config
   directory, shared by every session on the machine, 4 MiB total, no atomic
   compare-and-set) and `$.state` (per session, survives a hot reload, read while
@@ -141,6 +144,16 @@ Checked against Claude Code v2.1.287's mods API.
 Sources: kills, vendoring items, dismissing heroes. Sinks: reforge, tavern,
 inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
+### 4.6 Boss mode (phase 3)
+
+- The server event `boss_engaged` replaces the party's encounter with one enemy of
+  kind `world_boss`, carrying the stats the event gives, scaled to the party's zone.
+  It never dies locally; every hit adds to the state's damage dealt for that boss.
+  `boss_disengaged` clears it and the next tick spawns the wave as usual.
+- In boss mode tool calls spawn nothing, a wipe heals the party in place with no
+  retreat and no wipe counted, a rest heals as usual, and the boss grants no XP,
+  gold or drops. Rewards come from the server (§6).
+
 ## 5. Economy and market (phase 2)
 
 - Rare and above trade. Common and Uncommon vendor only.
@@ -174,28 +187,56 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Published odds: an Odds screen in the dialog shows drop, rarity and tavern
   tables.
 
-## 6. Social (phases 2 and 3)
+## 6. Social (phase 3)
 
-- Presence: a count per zone, from heartbeats held in Redis with a TTL, with
-  the names of players in the zone shown in the band's World tab.
-- Leaderboards: highest zone reached (all time) and world boss damage (weekly
-  reset). Names default to the GitHub login, filtered by a blocklist.
-- Global chat: one channel. Posting needs a linked GitHub account, 200
-  character limit, per-account rate limit, word blocklist. Delivered through the
-  event stream. Lives in the dialog's Chat tab; the band's World tab shows the
-  latest message as a one-line ticker.
-- World boss: spawns every 3 hours, lives 20 minutes or until dead, visible to
-  everyone online as a banner with a global HP bar. Every online party deals
-  damage through its normal batches; the server tallies contribution. Rewards: a
-  guaranteed drop above a participation threshold, bonus rolls for top
-  contributors, all rolled server-side.
-- Moderation in v1: name and chat blocklists, admin mute and ban, the chat flag.
+- World data (presence, the live world boss, the chat tail) is never sim state. A
+  session reads it with the world poll, `GET /v1/world`, every 15 seconds on the
+  flush cadence and every 5 seconds while a world boss is live or the Chat tab is
+  open. The poll is the heartbeat. Nothing is pushed until the phase 5 stream.
+- Presence: an account is online while its last heartbeat is inside a 45 second
+  TTL. Its zone is the committed state's zone on the server, never a client claim.
+  Presence is keyed by account, so a secondary session polling adds nothing. It
+  lives in the ledger's memory on the fakes and in Redis in phase 5; a restart
+  loses it and the next polls rebuild it. The World tab shows the count online,
+  the count per zone and the names in your zone.
+- Leaderboards: highest zone reached (all time) and world boss damage (weekly,
+  reset Monday 00:00 UTC on the server clock). Both come from the ledger's own
+  records, never from client claims, maintained incrementally at each commit and
+  each contribution, 20 rows each, read on demand. Names are the display name,
+  else `adventurer`; a name matching the blocklist shows as `adventurer`.
+- Global chat: one channel. Posting needs a linked GitHub account and
+  `chat.enabled`, 200 characters, a per-account token bucket on the server clock
+  (capacity 5, one per 10 seconds), and a word blocklist that refuses the message
+  instead of masking it. Any session of an account may post: chat needs no flush
+  and no lease. The ledger keeps the last 200 messages and serves the last 50 to a
+  poll with no chat mark, newer ones only after. Chat messages are not server
+  events. Lives in the dialog's Chat tab; the band's World tab shows the latest
+  message as a one-line ticker.
+- World boss: spawns on the server clock's 3 hour grid, lives 20 minutes or until
+  dead, visible to everyone online with a global HP bar. HP is a per-party base
+  times the count online at spawn. Every online account enters boss mode (§4.6)
+  through `boss_engaged`, an account that comes online during the window enters
+  it on its first poll, and the server reads the damage dealt from each committed
+  batch as the account's contribution. `boss_disengaged` ends boss mode when the
+  boss dies or expires. Rewards are rolled server-side at the killing commit with
+  the sim's loot tables at the contributor's zone: a guaranteed drop for any
+  contribution at or above 5 percent of the base, one bonus roll each for the top
+  3 contributors, all as `rewarded` server events, found in the next delivery by
+  anyone offline. An expired boss pays the threshold drop and no bonus rolls.
+  Goods with no free slot wait in returns, never vendored.
+- Flags: one per feature, `chat.enabled`, `worldboss.enabled`, `presence.enabled`,
+  `leaderboards.enabled`. The in-process fake runs with chat and the world boss
+  off, said in place like a closed market.
+- Moderation in phase 3: name and chat blocklists and the chat flag. Mute and ban
+  arrive in phase 5 with the admin CLI that issues them.
 
 ## 7. Simulation and authority
 
-- Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. API: create an
-  initial state from a seed, step a state with one event into a new state plus
-  effects, hash a state. Effects are UI notifications and carry no authority.
+- Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. Any change to the
+  sim bumps it, and a state behind the server's sim version is reset (phase 3
+  bumps it to 3). API: create an initial state from a seed, step a state with one
+  event into a new state plus effects, hash a state. Effects are UI notifications
+  and carry no authority.
 - The client runs the sim locally for instant feedback, buffers the events it
   fed in, and sends them in batches every 15 seconds. A batch carries a client
   generated id (retries are no-ops on the server), a per-account sequence
@@ -211,9 +252,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   within a batch and nothing else.
 - The sim's events are of two kinds. Player events originate on a client and
   travel in batches: combat, rests, equips, vendoring. Server events are
-  authored only by the ledger and are the effects of trades on an account's
-  inventory, roster and gold: `listed`, `returned`, `sold`, `bought`,
-  `order_placed`, `order_refunded`, `order_filled`, `order_sold`, `credited`.
+  authored only by the ledger: the effects of trades on an account's inventory,
+  roster and gold (`listed`, `returned`, `sold`, `bought`, `order_placed`,
+  `order_refunded`, `order_filled`, `order_sold`, `credited`) and the world boss
+  (`boss_engaged`, `boss_disengaged`, `rewarded`).
   The sim applies a server event without judging it; one it cannot apply is a
   bug caught by the hash check, never a rejection. The batch schema accepts
   player events only.
@@ -265,9 +307,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Accounts: anonymous device accounts minted on first launch; GitHub device
   flow to link, which unlocks trading and chat. Tokens are opaque random values
   stored hashed, cached briefly in Redis, revocable.
-- Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`, `maintenance`,
-  `minClientVersion`, in Postgres, cached in process per instance, invalidated
-  through Redis pub/sub, sent at startup and pushed on change.
+- Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`,
+  `presence.enabled`, `leaderboards.enabled`, `maintenance`, `minClientVersion`,
+  in Postgres, cached in process per instance, invalidated through Redis pub/sub,
+  sent at startup and pushed on change.
 - Admin: a CLI in the monorepo over authenticated admin endpoints. Actions:
   flip a flag, mute, ban, revoke an item. Every action lands in an audit table.
 - Retention: raw event batches 30 days, state snapshots per batch head kept.
@@ -291,27 +334,37 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   schemas, persisting a JSON snapshot after every mutation. Flags: `--port`,
   `--seed`, `--speed`, `--player-name`, `--data`. `--speed` scales the bots'
   cadence and the ledger's clock together, so cooldowns and expiries can be
-  watched. The GitHub link flow is approved on the first poll with
+  watched. `--flag <name>=<value>`, repeatable, sets a flag for the run; a flag
+  change is a restart. The GitHub link flow is approved on the first poll with
   `--player-name` as the login.
 - Bots: 12 seeded accounts with names from a fixed list, inventories and
   rosters rolled from the sim's own loot tables, a gold stipend per tick so
-  they never run dry. Each tick they list, buy, place or cancel through the
-  same ledger API as a player, never a back door. Phase 3 adds chat, presence
-  and the world boss. Their numbers live in one config file and are tuning,
-  not contract. The bots are the load generator for the real server later.
+  they never run dry. From phase 3 a bot is an HTTP client of the fake's own
+  port: each tick it submits a batch of ticks at an idle player's pace, then
+  lists, buys, fills a buy order, places or cancels an order, or posts a chat
+  line from a fixed list, through the same routes as a player. Minting and the
+  stipend are the only in-process calls. Bots advance through zones, show in
+  presence, fill the leaderboards and fight the world boss through their
+  batches, never a back door. Their numbers live in one config file and are
+  tuning, not contract. The bots are the load generator for the real server
+  later.
 - `/promptfall server <url>` points a session at an HTTP server and
   `/promptfall server local` back at the in-process fake. One device token per
   server; switching re-bootstraps and adopts that server's state. Nothing moves
   between servers, ever.
-- Until the event stream exists (phase 3), server events ride on responses: the
+- Until the event stream exists (phase 5), server events ride on responses: the
   batch ack and the market responses carry what is pending past the client's
   cursor, and the dialog refreshes when opened. The cursor is explicit in the
-  protocol so the stream is an addition, not a change.
+  protocol so the stream is an addition, not a change. World data (§6) is never a
+  server event; it is read with the world poll from phase 3 on.
 - `HttpClient` in `@promptfall/protocol` implements `ServerClient` over an
   injected fetch: `$.http.fetch` in the plugin, the global in tests.
 - One contract test suite in `@promptfall/protocol` runs against the in-process
   fake, the HTTP fake and the real API. Trade cases run two accounts against
-  one host.
+  one host. World cases drive the host's clock: presence stamps and expires,
+  chat gates and limits, the boss spawns on the grid, a committed batch in boss
+  mode adds contribution, the killing commit authors the rewards, flags off
+  answer the closed refusals.
 
 ## 10. Client structure
 
