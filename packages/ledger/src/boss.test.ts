@@ -287,7 +287,13 @@ describe('the ledger', () => {
       tokenSource: () => `tok-${n++}`,
       linkApprover: async () => ({ login: 'player' }),
     })
-    return { ledger, kv, advance: (ms: number) => void (t += ms) }
+    return {
+      ledger,
+      kv,
+      advance: (ms: number) => {
+        t += ms
+      },
+    }
   }
 
   const strong = (s: GameState): GameState => ({
