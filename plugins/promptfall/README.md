@@ -28,6 +28,8 @@ one zone at full health and costs nothing else.
 | --- | --- |
 | `/promptfall` | Opens the dialog on the Inventory tab |
 | `/promptfall heroes` | Opens it on Heroes (also `inventory`, `market`, `orders`, `account`, `odds`) |
+| `/promptfall chat` | Opens it on Chat, the cursor in the compose box |
+| `/promptfall leaderboards` | Opens it on Leaderboards and loads the boards |
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
@@ -64,6 +66,28 @@ in escrow until the order fills, is cancelled or expires. Trading needs a linked
 open market; cancelling works either way. Sales, purchases and returns toast and show in the
 loot log.
 
+### World
+
+Every session polls the server's world every 15 seconds, every 5 while the Chat tab is shown, and
+never blocks the game on it: a poll that fails is skipped and the next one tries again. The
+band's World tab (`w`) has three rows: who is online and who shares your zone
+(`13 online · zone 1: Ashgrove, Brindle`, or `nobody else here`), your highest zone, kills and
+wipes, and the last chat line. The first row dims when no poll has answered for 45 seconds.
+
+The Chat tab (`c` in the dialog) shows the last 14 messages, newest at the bottom, and a compose
+box; Enter posts. Posting needs a linked account, and any session may post, the one playing or
+not. The server refuses, and the tab flashes for 5 seconds: a line over 200 characters (an emoji
+counts two), more than 5 quick messages (then one every 10 seconds), a blocked word, or an empty
+line. During an outage a post answers `Server unreachable`. On mobile the tab is read-only.
+
+The Leaderboards tab (`b`) shows who is online by zone, the 20 highest zones reached, and this
+week's world boss damage (empty until phase 3's world boss; the week starts Monday 00:00 UTC). Your
+row is cyan. Names are GitHub logins; an unlinked account shows as `adventurer`.
+
+Each part sits behind a server flag: when the server turns chat, presence or the boards off, the
+tab says so within one poll. The in-process ledger has chat off: its World tab reads
+`1 online` and `chat needs a server`, and the Chat tab says how to reach one.
+
 ### Account tab
 
 `Link GitHub` shows a code and a link, and polls until the server approves it, then reads
@@ -85,6 +109,7 @@ would answer a survey.
 | `p` / `l` / `w` | Party, loot log, world tabs | |
 | `c` | Collapse to one row, or expand | |
 | `i` / `h` / `m` / `r` / `a` / `o` | | Inventory, Heroes, Market, Orders, Account, Odds tabs |
+| `c` / `b` | | Chat and Leaderboards tabs (outside the compose box) |
 | `y` / `n` | | Confirm or cancel a purchase |
 
 Esc closes the dialog. The band collapses to one row by itself under 100 columns or when fewer
@@ -101,8 +126,9 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No chat, presence, leaderboards or world bosses. No sprites or sound. The GitHub link is approved
-by the fakes, not by GitHub, and the in-process ledger has no bots, so its market is yours alone.
+No world boss yet (phase 3's second part). No sprites or sound. No mute or ban: the word list is
+the only filter. The GitHub link is approved by the fakes, not by GitHub, and the in-process ledger
+has no bots, so its market is yours alone and its chat is closed.
 
 ## Develop
 

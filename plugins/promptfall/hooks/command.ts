@@ -1,7 +1,8 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { DialogTab, MarketState, Mode, OrdersState } from '../types'
+import type { BoardsState, DialogTab, MarketState, Mode, OrdersState } from '../types'
 import type { GameHandle } from './engine'
-import { MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import { BOARDS_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
 
@@ -11,17 +12,27 @@ export const COMMAND = {
   name: 'promptfall',
   description: 'Promptfall: open the game, or off / on / farm / server',
   argumentHint:
-    '[inventory|heroes|market|orders|account|odds|off|on|farm|server <url>|server local]',
+    '[inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local]',
   immediate: true,
 } as const
 
-const TABS: readonly DialogTab[] = ['inventory', 'heroes', 'market', 'orders', 'account', 'odds']
+const TABS: readonly DialogTab[] = [
+  'inventory',
+  'heroes',
+  'market',
+  'orders',
+  'account',
+  'odds',
+  'chat',
+  'leaderboards',
+]
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
 
@@ -102,6 +113,15 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
         running,
         async (fn) => {
           await update($, ordersAtom, (o: OrdersState | undefined) => fn(o ?? ORDERS_DEFAULT))
+        },
+        after,
+      )
+    }
+    if (running && tab === 'leaderboards') {
+      await loadBoards(
+        running,
+        async (fn) => {
+          await update($, boardsAtom, (b: BoardsState | undefined) => fn(b ?? BOARDS_DEFAULT))
         },
         after,
       )

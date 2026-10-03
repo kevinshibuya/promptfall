@@ -4,9 +4,11 @@ import {
   type Auth,
   type BatchAck,
   BatchSchema,
+  type Boards,
   type Bootstrap,
   BUDGETS,
   type BudgetKind,
+  type ChatResult,
   compareSemver,
   type KeyValue,
   type LinkPoll,
@@ -17,9 +19,11 @@ import {
   type MyOrders,
   type NewOrder,
   type Order,
+  PRESENCE_TTL_MS,
   type ServerClient,
   type ServerConfig,
   type Unauthorized,
+  type WorldSnapshot,
 } from '@promptfall/protocol'
 import {
   createInitialState,
@@ -41,13 +45,21 @@ import {
   KINDS,
   linkKey,
   newRecord,
+  publicName,
   settle,
   TrackedKeyValue,
   tokenKey,
 } from './books'
 import * as market from './market'
+import * as world from './world'
 
-export type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'maintenance'
+export type LedgerFlag =
+  | 'market.enabled'
+  | 'chat.enabled'
+  | 'worldboss.enabled'
+  | 'presence.enabled'
+  | 'leaderboards.enabled'
+  | 'maintenance'
 
 export type LedgerOptions = {
   kv: KeyValue
@@ -61,6 +73,8 @@ export type LedgerOptions = {
   flags?: Partial<Record<LedgerFlag, boolean>>
   /** Links approve on the first poll with this login (the fakes). Phase 5 replaces it with GitHub. */
   linkApprover: (code: string) => Promise<{ login: string } | null>
+  /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
+  presenceTtlMs?: number
 }
 
 export type LedgerHost = {
@@ -85,6 +99,7 @@ type Link = { accountId: string; createdAt: number }
 
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
+const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
 
 /**
  * The account ledger: records, batch replay, server events and the market.
@@ -96,6 +111,7 @@ export class Ledger implements ServerClient {
   private readonly kv: TrackedKeyValue
   private readonly books: Books
   private chain: Promise<unknown> = Promise.resolve()
+  private readonly presence: world.Presence = new Map()
 
   constructor(private readonly options: LedgerOptions) {
     this.kv = new TrackedKeyValue(options.kv)
@@ -125,7 +141,15 @@ export class Ledger implements ServerClient {
   }
 
   private flags(): Record<string, boolean> {
-    return { 'market.enabled': true, ...this.options.flags }
+    return {
+      'market.enabled': true,
+      'chat.enabled': true,
+      'worldboss.enabled': true,
+      'presence.enabled': true,
+      'leaderboards.enabled': true,
+      maintenance: false,
+      ...this.options.flags,
+    }
   }
 
   private async config(): Promise<ServerConfig> {
@@ -140,6 +164,18 @@ export class Ledger implements ServerClient {
 
   private async marketContext(): Promise<market.MarketContext> {
     return { books: this.books, now: await this.options.now(), flags: this.flags() }
+  }
+
+  private async worldContext(): Promise<world.WorldContext> {
+    const speed = this.options.speed ?? 1
+    return {
+      books: this.books,
+      now: await this.options.now(),
+      flags: this.flags(),
+      presence: this.presence,
+      ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
+      speed,
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -290,6 +326,11 @@ export class Ledger implements ServerClient {
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING)
       settle(record)
       await this.books.deliverReturns(record)
+      await world.offerZone(this.kv, now, {
+        accountId: record.account.accountId,
+        name: publicName(record),
+        value: record.state.highestZone,
+      })
       if (hash === batch.resultHash) {
         await this.books.save(record)
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) }
@@ -463,6 +504,36 @@ export class Ledger implements ServerClient {
   }
 
   // ---------------------------------------------------------------------------
+  // World: presence, chat, leaderboards
+
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+    return this.run(async () => {
+      const ctx = await this.worldContext()
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      return world.world(ctx, record, since)
+    })
+  }
+
+  chat(auth: Auth, text: string): Promise<ChatResult> {
+    return this.run(async () => {
+      const ctx = await this.worldContext()
+      const record = await this.books.authenticate(auth)
+      if (!record) return chatUnauthorized
+      return world.chat(ctx, record, text)
+    })
+  }
+
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+    return this.run(async () => {
+      const ctx = await this.worldContext()
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      return world.leaderboards(ctx)
+    })
+  }
+
+  // ---------------------------------------------------------------------------
   // Host privileges
 
   private async mint(input: {
@@ -487,6 +558,11 @@ export class Ledger implements ServerClient {
     )
     await this.books.save(record)
     await this.kv.set(tokenKey(deviceToken), accountId)
+    await world.offerZone(this.kv, now, {
+      accountId,
+      name: publicName(record),
+      value: input.state.highestZone,
+    })
     return { accountId, deviceToken }
   }
 

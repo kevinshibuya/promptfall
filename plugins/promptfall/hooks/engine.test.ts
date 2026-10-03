@@ -120,6 +120,15 @@ class Recorder implements ServerClient {
   fillOrder(auth: Auth, orderId: string, itemId: string) {
     return this.inner.fillOrder(auth, orderId, itemId)
   }
+  world(auth: Auth, since: number) {
+    return this.inner.world(auth, since)
+  }
+  chat(auth: Auth, text: string) {
+    return this.inner.chat(auth, text)
+  }
+  leaderboards(auth: Auth) {
+    return this.inner.leaderboards(auth)
+  }
 }
 
 function setup(kv = new MemoryKeyValue()) {

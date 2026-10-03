@@ -1,16 +1,25 @@
 import type { Register } from 'claude-code'
 import { atom, read, update } from 'claude-code'
-import type { Mode } from '../types'
+import type { Mode, WorldState } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  WORLD_DEFAULT,
+} from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
   Auth,
+  Boards,
+  ChatResult,
   FetchLike,
   LinkPoll,
   LinkStart,
@@ -21,6 +30,7 @@ import type {
 import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { heroName, toAccountView, toGameView, tradeName } from './view'
+import { WorldPoller } from './world'
 
 type Timer = { cancel: () => void }
 
@@ -39,6 +49,8 @@ type Io = {
   dialogLink: (link: { code: string; url: string } | null) => Promise<void>
   /** Drops what the dialog holds of one server: a link code and an open sell panel. */
   clearDialog: () => Promise<void>
+  /** Reads the `world` atom. */
+  readWorld: () => Promise<WorldState | null>
   fetch: FetchLike
 }
 
@@ -132,11 +144,27 @@ class GameSession implements GameHandle {
   private pending: Promise<void> = Promise.resolve()
   private firstRun = false
   private paneNoticeGen = 0
+  private readonly poller: WorldPoller
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
     this.server = this.resolve(null)
     this.engine = this.makeEngine()
+    this.poller = new WorldPoller({
+      now: io.now,
+      every: io.every,
+      after: io.after,
+      publish: (world) => io.publish({ world }),
+      load: io.readWorld,
+      fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
+    })
+  }
+
+  /** The stored device token of the current server; reads and chat use it outside the engine. */
+  private async storedAuth(): Promise<Auth> {
+    const token = await this.kv.get(this.server.tokenKey)
+    if (typeof token !== 'string') throw new Error('not_started')
+    return { deviceToken: token }
   }
 
   private resolve(setting: string | null): ResolvedServer {
@@ -174,6 +202,8 @@ class GameSession implements GameHandle {
     this.setting = setting
     this.server = this.resolve(setting)
     this.engine = this.makeEngine()
+    // World data belongs to one server: drop it and poll the new one.
+    void this.poller.reset()
   }
 
   private async readSetting(): Promise<string | null> {
@@ -258,6 +288,8 @@ class GameSession implements GameHandle {
       view: null,
       market: MARKET_DEFAULT,
       orders: ORDERS_DEFAULT,
+      chat: CHAT_DEFAULT,
+      boards: BOARDS_DEFAULT,
     })
     await this.io.clearDialog()
     if (this.role === 'primary') await this.becomePrimary()
@@ -326,6 +358,33 @@ class GameSession implements GameHandle {
     return this.engine.clock()
   }
 
+  chatSeen(now: number): void {
+    this.poller.chatSeen(now)
+  }
+
+  /** Any session posts: no flush, no lease. A primary in an outage answers unreachable without a call. */
+  async chat(text: string): Promise<ChatResult> {
+    if (this.role === 'primary' && this.engine.isUnreachable()) throw new Error('unreachable')
+    const auth = await this.storedAuth()
+    let result: ChatResult
+    try {
+      result = await this.server.client.chat(auth, text)
+    } catch {
+      throw new Error('unreachable')
+    }
+    if (result.ok) await this.poller.insert(result.message)
+    return result
+  }
+
+  async leaderboards(): Promise<Boards | Unauthorized> {
+    const auth = await this.storedAuth()
+    try {
+      return await this.server.client.leaderboards(auth)
+    } catch {
+      throw new Error('unreachable')
+    }
+  }
+
   /** Deletes every Promptfall key but the lease, then starts over on the same server. */
   async reset(): Promise<void> {
     await this.claim()
@@ -356,6 +415,7 @@ class GameSession implements GameHandle {
     if (!processEnds) return
     this.tickTimer?.cancel()
     for (const timer of this.timers) timer.cancel()
+    this.poller.stop()
     if (this.role === 'primary') await release(this.kv, this.owner)
   }
 
@@ -376,7 +436,8 @@ class GameSession implements GameHandle {
     const setting = await this.readSetting()
     if (setting === this.setting) return
     this.useServer(setting)
-    await this.io.publish({ server: setting })
+    // Chat drafts and loaded boards belong to the old server too.
+    await this.io.publish({ server: setting, chat: CHAT_DEFAULT, boards: BOARDS_DEFAULT })
   }
 
   /**
@@ -403,6 +464,7 @@ class GameSession implements GameHandle {
     this.role = 'primary'
     await this.engine.start()
     await this.io.publish({ mode: this.mode() })
+    await this.poller.start()
     if (this.firstRun) {
       this.firstRun = false
       this.io.toast(WELCOME)
@@ -420,6 +482,7 @@ class GameSession implements GameHandle {
     this.role = 'secondary'
     await this.io.publish({ mode: this.mode() })
     await this.refresh()
+    await this.poller.start()
   }
 
   private async renew(): Promise<void> {
@@ -489,6 +552,9 @@ const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 let game: GameSession | null = null
 
@@ -527,6 +593,13 @@ export const register: Register = (on) => {
           if (patch.orders !== undefined) {
             await update($, ordersAtom, () => patch.orders ?? ORDERS_DEFAULT)
           }
+          if (patch.world !== undefined) {
+            await update($, worldAtom, () => patch.world ?? WORLD_DEFAULT)
+          }
+          if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
+          if (patch.boards !== undefined) {
+            await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
+          }
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -540,6 +613,7 @@ export const register: Register = (on) => {
         clearDialog: async () => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
+        readWorld: () => read($, worldAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),
@@ -577,6 +651,13 @@ export const register: Register = (on) => {
           if (patch.orders !== undefined) {
             await update($, ordersAtom, () => patch.orders ?? ORDERS_DEFAULT)
           }
+          if (patch.world !== undefined) {
+            await update($, worldAtom, () => patch.world ?? WORLD_DEFAULT)
+          }
+          if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
+          if (patch.boards !== undefined) {
+            await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
+          }
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -590,6 +671,7 @@ export const register: Register = (on) => {
         clearDialog: async () => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
+        readWorld: () => read($, worldAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),

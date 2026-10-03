@@ -4,6 +4,8 @@ import type {
   Auth,
   Batch,
   BatchAck,
+  Boards,
+  ChatResult,
   Delivery,
   KeyValue,
   ListingPage,
@@ -78,6 +80,12 @@ export type GameHandle = {
   }
   /** The last server clock seen, for showing server deadlines as real time left. */
   clock: () => { serverNow: number; clientNow: number; speed: number } | null
+  /** The Chat tab drew at `now`: the world poll runs fast for a while. Publishes nothing. */
+  chatSeen: (now: number) => void
+  /** Posts a chat line with the stored token. Throws `unreachable` in an outage or on a thrown call. */
+  chat: (text: string) => Promise<ChatResult>
+  /** The boards, with the stored token. Throws `unreachable` or `not_started`. */
+  leaderboards: () => Promise<Boards | Unauthorized>
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>
