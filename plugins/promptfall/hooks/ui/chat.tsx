@@ -1,5 +1,6 @@
 import type { ChatState, GameView, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
+import { IN_PROCESS } from '../server'
 import { CHAT_MAX_CHARS } from '../vendor/protocol.js'
 import { gates } from '../view'
 import {
@@ -9,6 +10,7 @@ import {
   errorText,
   flash,
   GATE_CHAT_CLOSED,
+  GATE_CHAT_LOCAL,
   GATE_UNLINKED,
   type Updater,
 } from './trade'
@@ -82,13 +84,18 @@ export function chatBody(
   for (const m of shown) {
     body.push(
       <Box key={`chat-${m.id}`} flexDirection="row" gap={1}>
-        <Text dimColor>{`${m.name}:`}</Text>
+        {/* The name never shrinks: a long line truncates its text, not the colon onto a new row. */}
+        <Box key={`chat-name-${m.id}`} flexShrink={0}>
+          <Text dimColor>{`${m.name}:`}</Text>
+        </Box>
         <Text wrap="truncate">{m.text}</Text>
       </Box>,
     )
   }
   const gate = !gates(world, view.account).chatOpen
-    ? GATE_CHAT_CLOSED
+    ? view.account.server === IN_PROCESS
+      ? GATE_CHAT_LOCAL
+      : GATE_CHAT_CLOSED
     : view.account.linked
       ? null
       : GATE_UNLINKED
