@@ -260,6 +260,24 @@ describe('Ledger flush', () => {
     expect(counting.flushes).toBe(5)
   })
 
+  it('a failed flush is retried by the next operation', async () => {
+    class FlakyKeyValue extends MemoryKeyValue {
+      flushes = 0
+      async flush(): Promise<void> {
+        this.flushes += 1
+        if (this.flushes === 1) throw new Error('disk full')
+      }
+    }
+    const kv = new FlakyKeyValue()
+    const { ledger } = makeLedger({ kv })
+    await expect(ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })).rejects.toThrow(
+      'disk full',
+    )
+    expect(kv.flushes).toBe(1)
+    await ledger.account({ deviceToken: 'nobody' })
+    expect(kv.flushes).toBe(2)
+  })
+
   it('serialises concurrent operations through one mutex', async () => {
     const { ledger, kv } = makeLedger()
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })

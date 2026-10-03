@@ -37,7 +37,8 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 const seed = positive('seed', values.seed, true)
 const speed = positive('speed', values.speed, false)
-const data = resolve(values.data)
+// `pnpm fake` runs in servers/fake; a relative --data is relative to where pnpm was invoked.
+const data = resolve(process.env.INIT_CWD ?? process.cwd(), values.data)
 
 const kv = new FileKeyValue(data)
 const clock = new VirtualClock({ speed, persisted: kv.persistedClock })

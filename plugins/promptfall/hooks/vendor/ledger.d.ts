@@ -87,6 +87,10 @@ declare class Ledger implements ServerClient {
     private readonly books;
     private chain;
     constructor(options: LedgerOptions);
+    /**
+     * The flush runs even when `fn` threw, so an operation must validate before
+     * its first `set`; `author` throws before it touches the record for that reason.
+     */
     private run;
     private flags;
     private config;
