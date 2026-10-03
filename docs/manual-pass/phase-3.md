@@ -17,10 +17,11 @@ compose box before typing a tab hotkey. The pane holds toasts until you press Es
    `Link GitHub`), as in phase 2 part A steps 2 and 5.
 3. **World tab.** Press `w` on the band within 15 seconds. Row 1 reads
    `13 online · zone 1: ...` with the names of bots in zone 1, or `nobody else here`. Row 2 reads
-   `highest zone 1 · kills ... · wipes ...`. Row 3 shows a bot's chat line within a minute, and
+   `highest zone 1 · kills ... · wipes ...`. Row 3 shows a bot's chat line about 100 seconds after
+   the fake started (a bot speaks on every sixth act, one act per 20 seconds), and
    `chat is quiet` before that.
 4. **Chat.** Run `/promptfall chat`. The last messages show, newest at the bottom, with bot lines
-   arriving every few seconds, and the cursor is already in the compose box. Type `hello` and press
+   arriving about every 10 seconds, and the cursor is already in the compose box. Type `hello` and press
    Enter: your line appears at once with your name, and the box is empty again.
    - Paste a 201-character line: `Too long: 200 characters at most` in red for 5 seconds, and
      nothing is posted.
@@ -39,8 +40,10 @@ compose box before typing a tab hotkey. The pane holds toasts until you press Es
    World tab is bright again, and the chat tail resumes with no gap in what you can see.
 8. **Two sessions.** In a third terminal open a second `claude --plugin-dir plugins/promptfall`.
    Its band reads `playing in another session`. `/promptfall chat` there still posts: a line from
-   the second session shows in the first within 15 seconds. The online count in both stays 13
-   (one entry per account).
+   the second session shows in the first within 15 seconds. The online count stays 13 (one entry
+   per account): the first terminal's World tab reads `13 online`, and in the second terminal's
+   `/promptfall leaderboards` the `Online by zone` counts sum to 13 (its band is the one-line
+   secondary form, with no World tab).
 9. **Backgrounded terminal.** Both sessions are one account, so the online count cannot show
    whether a hidden session's timers fire. Instead, hide or minimise the first terminal (the
    primary) for 2 minutes and watch the third terminal's band:
@@ -131,4 +134,4 @@ contract rule 35 instead.
 ## Findings
 
 - Idle timers (step 9):
-- World snapshot size (step 10):
+- World snapshot size (step 10): 4,516 bytes with a full 50-message tail of bot lines, measured against the fake on 2026-10-03; 50 messages at the 200-character limit come to about 14 KB, under 16,000.

@@ -1052,7 +1052,10 @@ export function runServerContract(name: string, make: ContractMake): void {
         zones: [{ zone: 1, count: 2 }],
         here: ['Ashgrove'],
       })
-      clock.advance(PRESENCE_TTL_MS)
+      // One ms before the TTL A still counts; at the TTL it does not (open at the far end).
+      clock.advance(PRESENCE_TTL_MS - 1)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 2, here: ['Ashgrove'] })
+      clock.advance(1)
       expect(await snapshot(client, b.auth)).toMatchObject({ online: 1, here: [] })
       await snapshot(client, a.auth)
       await snapshot(client, a.auth)

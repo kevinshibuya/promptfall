@@ -410,7 +410,8 @@ class GameSession implements GameHandle {
     const setting = await this.readSetting()
     if (setting === this.setting) return
     this.useServer(setting)
-    await this.io.publish({ server: setting })
+    // Chat drafts and loaded boards belong to the old server too.
+    await this.io.publish({ server: setting, chat: CHAT_DEFAULT, boards: BOARDS_DEFAULT })
   }
 
   /**
