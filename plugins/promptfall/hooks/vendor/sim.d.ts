@@ -390,7 +390,9 @@ declare const GOLDEN_SEED = 20261002;
  * turn 7). Ids are the ones the initial state mints (h0 to h3) plus guesses,
  * so some commands are rejected; rejections are part of the contract too.
  */
-declare function goldenEvents(): Event[];
+declare function goldenEvents(options?: {
+    boss?: boolean;
+}): Event[];
 declare const GOLDEN_HASH = "21ecdbaf9e864e9d";
 
 declare function hashState(state: GameState): string;

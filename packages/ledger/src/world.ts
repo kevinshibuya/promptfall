@@ -65,7 +65,10 @@ function prune(ctx: WorldContext): void {
   }
 }
 
-/** The world poll: stamps the caller present and answers the snapshot. Writes nothing to the store. */
+/**
+ * The world poll: stamps the caller present (in memory) and answers the snapshot. It writes to the
+ * store only to engage the caller with a live boss.
+ */
 export async function world(
   ctx: WorldContext,
   record: AccountRecord,
