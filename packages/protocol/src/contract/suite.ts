@@ -500,6 +500,9 @@ export function runServerContract(name: string, make: ContractMake): void {
         deviceToken: boot.deviceToken,
       })
       expect(after.seq).toBe(0)
+      // Neither the cursor_mismatch nor the cursor_behind committed or moved the committed point.
+      expect(after.state).toEqual(boot.state)
+      expect(after.cursor).toBe(0)
       if (behind.ok || behind.reason !== 'cursor_behind') throw new Error('expected cursor_behind')
       mirror.receive(behind.delivery)
       const credited: ServerEvent = { t: 'credited', gold: 120, reason: 'test' }

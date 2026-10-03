@@ -108,6 +108,10 @@ export class Ledger implements ServerClient {
     }
   }
 
+  /**
+   * The flush runs even when `fn` threw, so an operation must validate before
+   * its first `set`; `author` throws before it touches the record for that reason.
+   */
   private run<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.chain.then(async () => {
       try {

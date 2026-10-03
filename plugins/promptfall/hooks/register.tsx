@@ -9,7 +9,13 @@ import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
-import type { FetchLike, LinkPoll, MarketResult, Unauthorized } from './vendor/protocol.js'
+import type {
+  FetchLike,
+  LinkPoll,
+  LinkStart,
+  MarketResult,
+  Unauthorized,
+} from './vendor/protocol.js'
 import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { heroName, toAccountView, toGameView, tradeName } from './view'
@@ -36,6 +42,32 @@ type Io = {
 const SERVER_KEY = 'server'
 /** How many polls a link waits for approval before giving up (15 minutes at 5 s). */
 const LINK_POLLS = 180
+/** A request the server has not answered by then is a thrown fetch: an outage, not a held lock. */
+const FETCH_TIMEOUT_MS = 15_000
+
+/** `$.http.fetch` adapted to the protocol's FetchLike, giving up after `FETCH_TIMEOUT_MS`. */
+function timedFetch(
+  http: (
+    url: string,
+    init: Parameters<FetchLike>[1],
+  ) => Promise<{ status: number; ok: boolean; text: string }>,
+  after: (ms: number, fn: () => void) => Timer,
+): FetchLike {
+  return (url, init) =>
+    new Promise((resolve, reject) => {
+      const timer = after(FETCH_TIMEOUT_MS, () => reject(new Error('timeout')))
+      http(url, init).then(
+        (r) => {
+          timer.cancel()
+          resolve({ status: r.status, ok: r.ok, text: r.text })
+        },
+        (error: unknown) => {
+          timer.cancel()
+          reject(error)
+        },
+      )
+    })
+}
 
 const TURN_CADENCE_MS = 2000
 const IDLE_CADENCE_MS = 5000
@@ -85,6 +117,8 @@ class GameSession implements GameHandle {
   private server: ResolvedServer
   private setting: string | null = null
   private linkGen = 0
+  /** A token the server minted over: it does not know it, so a secondary stops asking with it. */
+  private orphanToken: string | null = null
   private role: 'primary' | 'secondary' = 'secondary'
   private off = false
   private owner = ''
@@ -132,6 +166,7 @@ class GameSession implements GameHandle {
   private useServer(setting: string | null): void {
     this.engine.stop()
     this.linkGen += 1
+    this.orphanToken = null
     this.setting = setting
     this.server = this.resolve(setting)
     this.engine = this.makeEngine()
@@ -146,13 +181,15 @@ class GameSession implements GameHandle {
     const setting = await this.readSetting()
     if (setting !== null) this.useServer(setting)
     await this.io.publish({ server: setting })
+    // A code from before a hot reload has no poll behind it any more.
+    await this.io.dialogLink(null)
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
     this.off = (await this.io.mode()) === 'off'
     await this.io.publish({ leaseOwner: this.owner })
     if (await acquire(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
     else await this.becomeSecondary()
     this.setCadence(IDLE_CADENCE_MS)
-    // A demoted primary keeps its buffer but never submits it: start() clears it on promotion.
+    // A demoted primary discards its engine, so nothing it held is ever submitted.
     this.timers.push(this.io.every(FLUSH_MS, () => void this.flushIfOwner()))
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
   }
@@ -211,6 +248,7 @@ class GameSession implements GameHandle {
   private async restart(setting: string | null): Promise<void> {
     this.useServer(setting)
     await this.io.publish({ server: setting, notice: null, view: null })
+    await this.io.dialogLink(null)
     if (this.role === 'primary') await this.becomePrimary()
     else await this.becomeSecondary()
   }
@@ -219,7 +257,13 @@ class GameSession implements GameHandle {
   async link(): Promise<void> {
     if (this.role !== 'primary') throw new Error('not_primary')
     const engine = this.engine
-    const start = await engine.call((client, auth) => client.linkStart(auth))
+    let start: LinkStart | Unauthorized
+    try {
+      start = await engine.call((client, auth) => client.linkStart(auth))
+    } catch {
+      // Unreachable: the band already says so, and the press stays a no-op.
+      return
+    }
     if ('reason' in start) return
     const gen = ++this.linkGen
     await this.io.dialogLink({ code: start.code, url: start.url })
@@ -266,7 +310,6 @@ class GameSession implements GameHandle {
     const setting = this.setting
     for (const key of await this.kv.keys()) if (key !== LEASE_KEY) await this.kv.delete(key)
     if (setting !== null) await this.kv.set(SERVER_KEY, setting)
-    await this.io.dialogLink(null)
     await this.restart(setting)
   }
 
@@ -301,7 +344,16 @@ class GameSession implements GameHandle {
 
   async claim(): Promise<void> {
     if (this.role === 'primary') return
+    await this.followSetting()
     if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+  }
+
+  /** The server setting is machine-wide: a session that is not primary follows a switch made elsewhere. */
+  private async followSetting(): Promise<void> {
+    const setting = await this.readSetting()
+    if (setting === this.setting) return
+    this.useServer(setting)
+    await this.io.publish({ server: setting })
   }
 
   /**
@@ -337,18 +389,18 @@ class GameSession implements GameHandle {
   }
 
   private async becomeSecondary(): Promise<void> {
+    if (this.role === 'primary') {
+      // Its retry timers and publishes must not outlive the lease.
+      this.engine.stop()
+      this.engine = this.makeEngine()
+    }
     this.role = 'secondary'
     await this.io.publish({ mode: this.mode() })
     await this.refresh()
   }
 
   private async renew(): Promise<void> {
-    // The server setting is machine-wide: a secondary follows a switch made elsewhere.
-    const setting = await this.readSetting()
-    if (setting !== this.setting && this.role === 'secondary') {
-      this.useServer(setting)
-      await this.io.publish({ server: setting })
-    }
+    if (this.role === 'secondary') await this.followSetting()
     const ok = await acquire(this.kv, this.owner, await this.io.now())
     if (ok && this.role === 'secondary') await this.becomePrimary()
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
@@ -361,7 +413,7 @@ class GameSession implements GameHandle {
    */
   private async refresh(): Promise<void> {
     const token = await this.kv.get(this.server.tokenKey)
-    if (typeof token !== 'string') return
+    if (typeof token !== 'string' || token === this.orphanToken) return
     let boot: Awaited<ReturnType<ResolvedServer['client']['bootstrap']>>
     try {
       boot = await this.server.client.bootstrap({
@@ -369,6 +421,11 @@ class GameSession implements GameHandle {
         deviceToken: token,
       })
     } catch {
+      return
+    }
+    if (boot.deviceToken !== token) {
+      // The server minted for this token: it is unknown there. Wait for the primary to store a new one.
+      this.orphanToken = token
       return
     }
     if (boot.state.v !== SIM_VERSION) {
@@ -449,8 +506,10 @@ export const register: Register = (on) => {
         dialogLink: async (link) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
         },
-        fetch: (url, init) =>
-          $.http.fetch(url, init).then((r) => ({ status: r.status, ok: r.ok, text: r.text })),
+        fetch: timedFetch(
+          (url, init) => $.http.fetch(url, init),
+          (ms, fn) => $.clock.after(ms, fn),
+        ),
       })
       game = session
       await session.start()
@@ -488,8 +547,10 @@ export const register: Register = (on) => {
         dialogLink: async (link) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
         },
-        fetch: (url, init) =>
-          $.http.fetch(url, init).then((r) => ({ status: r.status, ok: r.ok, text: r.text })),
+        fetch: timedFetch(
+          (url, init) => $.http.fetch(url, init),
+          (ms, fn) => $.clock.after(ms, fn),
+        ),
       })
       game = session
       await session.start()

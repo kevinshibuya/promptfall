@@ -94,6 +94,13 @@ describe('HTTP fake', () => {
     expect(d.status).toBe(400)
   })
 
+  it('an undecodable path segment is a 404 and the server stays up', async () => {
+    const token = await freshToken()
+    const r = await raw('DELETE', '/v1/listings/%E0%A4%A', { token })
+    expect(r).toEqual({ status: 404, body: { error: 'route' } })
+    expect((await raw('GET', '/v1/health')).status).toBe(200)
+  })
+
   it('answers 404 on an unknown route or method', async () => {
     const a = await raw('GET', '/v1/nothing')
     expect(a).toEqual({ status: 404, body: { error: 'route' } })
