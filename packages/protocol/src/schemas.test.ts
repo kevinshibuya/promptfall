@@ -6,7 +6,8 @@ const valid = {
   accountId: 'acct-1',
   seq: 0,
   clientVersion: '0.1.0',
-  simVersion: 1,
+  simVersion: 2,
+  cursor: 0,
   baseHash: '0123456789abcdef',
   resultHash: 'fedcba9876543210',
   events: [
@@ -49,6 +50,23 @@ describe('BatchSchema', () => {
 
   it('rejects an unknown event kind', () => {
     expect(TimedEventSchema.safeParse({ t: 'cheat', at: 1 }).success).toBe(false)
+  })
+
+  it('rejects a batch without a cursor', () => {
+    const { cursor: _cursor, ...rest } = valid
+    expect(BatchSchema.safeParse(rest).success).toBe(false)
+  })
+
+  it('rejects a negative cursor', () => {
+    expect(BatchSchema.safeParse({ ...valid, cursor: -1 }).success).toBe(false)
+  })
+
+  it('rejects a batch carrying a server event', () => {
+    const credited = { t: 'credited', gold: 1000, reason: 'cheat', at: 4 }
+    expect(TimedEventSchema.safeParse(credited).success).toBe(false)
+    expect(BatchSchema.safeParse({ ...valid, events: [...valid.events, credited] }).success).toBe(
+      false,
+    )
   })
 
   it('rejects an event without a timestamp', () => {

@@ -26,9 +26,23 @@ export function registerBand(on: On): void {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const view = await read($, viewAtom)
     const mode = await read($, modeAtom)
-    if (e.props.hasSurvey || mode === 'off' || view === null) return next(e)
-    const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
+    if (e.props.hasSurvey || mode === 'off') return next(e)
     const notice = await read($, noticeAtom)
+    if (view === null) {
+      // No game to draw (an older version's data, or no server yet): the notice alone, on one line.
+      // Every notice already names the game.
+      if (!notice) return next(e)
+      const { Box, Text } = $.ui.resolve(e)
+      const width = Math.max(20, e.props.bodyColumns)
+      return (
+        <Box key="band" flexDirection="column">
+          <Text key="row-notice" wrap="truncate">
+            {clip(notice, width - 2)}
+          </Text>
+        </Box>
+      )
+    }
+    const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
     const { Box, Text, Button } = $.ui.resolve(e)
     const els = { Text }
     const width = Math.max(20, e.props.bodyColumns)

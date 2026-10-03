@@ -58,6 +58,7 @@ describe('combat', () => {
       rarity: 'common',
       affixes: [],
       equippedBy: mage.id,
+      tradeableAt: null,
     }
     let s: GameState = injectEnemy(
       injectEnemy({ ...s0, roster, inventory: [mace] }, 'goblin_scout'),
@@ -123,6 +124,7 @@ describe('combat', () => {
         { id: 'swift', value: 2 },
       ],
       equippedBy: knight.id,
+      tradeableAt: null,
     }
     const equipped = { ...knight, equipment: { ...knight.equipment, weapon: 'iX' } }
     const s: GameState = {
