@@ -1,5 +1,6 @@
 import type { PluginState } from 'claude-code'
 import type {
+  Account,
   Auth,
   Batch,
   BatchAck,
@@ -21,7 +22,7 @@ import {
   step,
 } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
-import { toGameView } from './view'
+import { toAccountView, toGameView } from './view'
 
 export type EnginePublish = (patch: Partial<PluginState['promptfall']>) => Promise<void>
 
@@ -31,6 +32,8 @@ export type EngineDeps = {
   kv: KeyValue
   /** The store key of the device token; `deviceToken` for the in-process ledger. */
   tokenKey?: string
+  /** The server's label in the view; `in-process` by default. */
+  label?: string
   now: () => Promise<number>
   newBatchId: () => string
   /** Writes atoms; a closure over the session's `$`. */
@@ -56,6 +59,12 @@ export type GameHandle = {
   trade: <R extends MarketResult>(fn: TradeCall<R>) => Promise<R>
   /** Flushes, then applies what `account()` delivers. Throws `unreachable` during an outage. */
   sync: () => Promise<void>
+  /** Moves the machine to another server (`null`: the in-process ledger). */
+  switchServer: (url: string | null) => Promise<{ label: string; old: string; dropped: number }>
+  /** Starts the GitHub device flow; the session polls until it is approved. */
+  link: () => Promise<void>
+  /** Deletes this machine's Promptfall data but the lease, then starts over on the same server. */
+  reset: () => Promise<void>
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>
@@ -97,6 +106,8 @@ export class GameEngine {
   private seq = 0
   private token: string | null = null
   private account: string | null = null
+  private accountRecord: Account | null = null
+  private stopped = false
   private paused: string | null = null
   private outage: { since: number; attempt: number; expired: boolean } | null = null
   private firstRun = false
@@ -147,6 +158,7 @@ export class GameEngine {
     this.token = boot.deviceToken
     if (boot.deviceToken !== token) await this.deps.kv.set(this.tokenKey, boot.deviceToken)
     this.account = boot.account.accountId
+    this.accountRecord = boot.account
     this.committed = boot.state
     this.local = boot.state
     this.cursor = boot.cursor
@@ -394,9 +406,38 @@ export class GameEngine {
         return
       }
       this.returns = info.returns
+      this.accountRecord = info.account
       await this.rememberConfig(info.config)
-      this.receive(info.delivery)
+      this.receive(info.delivery, false)
+      await this.publish({ view: this.view() })
     })
+  }
+
+  /** A call to the server under the lock, no flush first: the link flow. */
+  call<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<T> {
+    return this.lock(async () => {
+      if (this.outage) throw new Error('unreachable')
+      const token = this.token
+      if (!token) throw new Error('not_started')
+      try {
+        return await fn(this.deps.client, { deviceToken: token })
+      } catch {
+        throw new Error('unreachable')
+      }
+    })
+  }
+
+  /** The account changed on the server (a link): the view shows it. */
+  setAccount(account: Account): void {
+    this.accountRecord = account
+    void this.publish({ view: this.view() })
+  }
+
+  /** This engine is replaced: its retries stop and it publishes nothing more. */
+  stop(): void {
+    this.stopped = true
+    this.outage = null
+    this.outageGen += 1
   }
 
   // ---------------------------------------------------------------------------
@@ -426,7 +467,7 @@ export class GameEngine {
     outage.attempt += 1
     const gen = this.outageGen
     this.deps.after(delay, () => {
-      if (gen !== this.outageGen || !this.outage) return
+      if (gen !== this.outageGen || !this.outage || this.stopped) return
       void this.lock(() => (retry === 'start' ? this.doStart() : this.doFlush()))
     })
   }
@@ -524,10 +565,17 @@ export class GameEngine {
 
   private view() {
     if (!this.local || !this.account || this.local.v !== SIM_VERSION) return null
-    return toGameView(this.local, this.account, this.firstRun)
+    const account = toAccountView(
+      this.accountRecord,
+      this.config,
+      this.deps.label ?? 'in-process',
+      this.returns,
+    )
+    return toGameView(this.local, this.account, this.firstRun, account)
   }
 
   private publish(patch: Partial<PluginState['promptfall']>): Promise<void> {
+    if (this.stopped) return this.queue
     this.queue = this.queue.then(() => this.deps.publish(patch)).catch(() => undefined)
     return this.queue
   }

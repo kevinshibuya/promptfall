@@ -6,4 +6,9 @@ import type { DialogState, Prefs } from '../types'
 // uses, as `atom({ plugin: 'promptfall', key }, initial)`, with these initials.
 
 export const PREFS_DEFAULT: Prefs = { collapsed: false, bandTab: 'party' }
-export const DIALOG_DEFAULT: DialogState = { itemPick: null, partyPick: [], paneNotice: null }
+export const DIALOG_DEFAULT: DialogState = {
+  itemPick: null,
+  partyPick: [],
+  paneNotice: null,
+  link: null,
+}

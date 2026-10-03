@@ -482,9 +482,9 @@ Contract suite additions:
 
 **Boundaries:** No market UI, no Market/Orders tabs (Task 9). Do not change the band or the lease.
 
-- [ ] `server.ts`, `Io.fetch`, the command arg, `switchServer`, the store setting; register tests red then green
-- [ ] Account tab without a view; link flow owned by the session; reset; dialog and register tests
-- [ ] README; run the acceptance check; commit `feat(plugin): HTTP client, server switching, GitHub link, reset`
+- [x] `server.ts`, `Io.fetch`, the command arg, `switchServer`, the store setting; register tests red then green
+- [x] Account tab without a view; link flow owned by the session; reset; dialog and register tests
+- [x] README; run the acceptance check; commit `feat(plugin): HTTP client, server switching, GitHub link, reset`
 
 ### Task 6: PR 1: docs, manual pass, pull request
 
