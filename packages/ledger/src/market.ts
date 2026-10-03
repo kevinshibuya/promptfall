@@ -10,7 +10,7 @@ import {
   type Order,
 } from '@promptfall/protocol'
 import { content, type GameState, type Goods, type Item, type TradeKind } from '@promptfall/sim'
-import { type AccountRecord, author, type Books, deliveryOf, hasRoom } from './books'
+import { type AccountRecord, author, type Books, deliveryOf, hasRoom, publicName } from './books'
 import {
   atLeast,
   EXPIRY_MS,
@@ -41,10 +41,6 @@ function refuse(reason: MarketRefusal): MarketResult {
 
 function open(ctx: MarketContext): boolean {
   return ctx.flags['market.enabled'] !== false
-}
-
-function nameOf(record: AccountRecord): string {
-  return record.account.displayName ?? record.account.linked?.login ?? 'adventurer'
 }
 
 // ---------------------------------------------------------------------------
@@ -266,7 +262,7 @@ export async function list(
   const listing: Listing = {
     id,
     sellerId: record.account.accountId,
-    sellerName: nameOf(record),
+    sellerName: publicName(record),
     goods,
     price: input.price,
     createdAt: ctx.now,

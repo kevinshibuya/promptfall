@@ -15,6 +15,20 @@ import type { Auth, Delivery, ServerClient } from '../client'
 import type { MarketResult } from '../market'
 import { Mirror } from '../mirror'
 import { compareSemver } from '../schemas'
+import {
+  BOARD_ROWS,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  type ChatMessage,
+  type ChatResult,
+  PRESENCE_TTL_MS,
+  type WorldSnapshot,
+  WorldSnapshotSchema,
+  weekStartOf,
+} from '../world'
 
 export type ContractClock = { now: () => Promise<number>; advance: (ms: number) => void }
 
@@ -93,6 +107,23 @@ function lastOrder(d: Delivery): string {
   const e = d.events.at(-1)?.event
   if (e?.t !== 'order_placed') throw new Error('no order_placed event')
   return e.orderId
+}
+
+async function snapshot(client: ServerClient, auth: Auth, since = 0): Promise<WorldSnapshot> {
+  const w = await client.world(auth, since)
+  if ('reason' in w) throw new Error('unauthorized')
+  return w
+}
+
+function posted(r: ChatResult): ChatMessage {
+  if (!r.ok) throw new Error(`refused: ${r.reason}`)
+  return r.message
+}
+
+async function boards(client: ServerClient, auth: Auth) {
+  const b = await client.leaderboards(auth)
+  if ('reason' in b) throw new Error('unauthorized')
+  return b
 }
 
 function lowerThan(version: string): string | null {
@@ -935,6 +966,169 @@ export function runServerContract(name: string, make: ContractMake): void {
         }),
       ).toEqual(no)
       expect(await client.fillOrder(u.auth, order, 'iU')).toEqual(no)
+    })
+    it('rule 25: presence counts heartbeats inside the TTL, one entry per account', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ashgrove', traderState(60))
+      const b = await trader('Brindle', traderState(61))
+      expect(await snapshot(client, a.auth)).toMatchObject({
+        online: 1,
+        zones: [{ zone: 1, count: 1 }],
+        here: [],
+      })
+      expect(await snapshot(client, b.auth)).toMatchObject({
+        online: 2,
+        zones: [{ zone: 1, count: 2 }],
+        here: ['Ashgrove'],
+      })
+      clock.advance(PRESENCE_TTL_MS)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 1, here: [] })
+      await snapshot(client, a.auth)
+      await snapshot(client, a.auth)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 2, here: ['Ashgrove'] })
+    })
+
+    it('rule 26: chat needs a link and an open channel', async (ctx) => {
+      const open = await market(ctx)
+      const u = await open.trader('Una', traderState(62), false)
+      expect(await open.client.chat(u.auth, 'hello')).toEqual({ ok: false, reason: 'not_linked' })
+      const closed = await market(ctx, { 'chat.enabled': false })
+      const a = await closed.trader('Ann', traderState(63))
+      expect(await closed.client.chat(a.auth, 'hello')).toEqual({
+        ok: false,
+        reason: 'chat_closed',
+      })
+      const w = await snapshot(closed.client, a.auth)
+      expect(w.flags['chat.enabled']).toBe(false)
+      expect(w.chat).toEqual([])
+    })
+
+    it('rule 27: length in UTF-16 units, trimming, control characters', async (ctx) => {
+      const { client, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(64))
+      const tooLong = { ok: false, reason: 'too_long' }
+      expect(await client.chat(a.auth, 'a'.repeat(CHAT_MAX_CHARS + 1))).toEqual(tooLong)
+      posted(await client.chat(a.auth, 'a'.repeat(CHAT_MAX_CHARS)))
+      expect(await client.chat(a.auth, '😀'.repeat(CHAT_MAX_CHARS / 2 + 1))).toEqual(tooLong)
+      posted(await client.chat(a.auth, '😀'.repeat(CHAT_MAX_CHARS / 2)))
+      WorldSnapshotSchema.parse(await snapshot(client, a.auth))
+      const empty = { ok: false, reason: 'empty' }
+      expect(await client.chat(a.auth, '   ')).toEqual(empty)
+      expect(await client.chat(a.auth, '\n\t')).toEqual(empty)
+      expect(posted(await client.chat(a.auth, '  hi  ')).text).toBe('hi')
+      const last = posted(await client.chat(a.auth, 'hi\u001b[31m'))
+      expect(last.text).toBe('hi[31m')
+      expect((await snapshot(client, a.auth)).chat.at(-1)).toEqual(last)
+    })
+
+    it('rule 28: a token bucket per account', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(65))
+      const limited = { ok: false, reason: 'rate_limited' }
+      for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) posted(await client.chat(a.auth, `m${i}`))
+      expect(await client.chat(a.auth, 'one more')).toEqual(limited)
+      clock.advance(CHAT_REFILL_MS)
+      posted(await client.chat(a.auth, 'refilled'))
+      expect(await client.chat(a.auth, 'again')).toEqual(limited)
+      clock.advance(CHAT_BUCKET_CAPACITY * CHAT_REFILL_MS)
+      for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) posted(await client.chat(a.auth, `n${i}`))
+      expect(await client.chat(a.auth, 'over')).toEqual(limited)
+    })
+
+    it('rule 29: the blocklist refuses words and masks names', async (ctx) => {
+      const { client, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(66))
+      posted(await client.chat(a.auth, 'hello'))
+      const before = (await snapshot(client, a.auth)).chat
+      expect(await client.chat(a.auth, 'what the heck')).toEqual({ ok: false, reason: 'blocked' })
+      expect((await snapshot(client, a.auth)).chat).toEqual(before)
+      const h = await trader('heck', traderState(67))
+      expect(posted(await client.chat(h.auth, 'hi')).name).toBe('adventurer')
+      await snapshot(client, h.auth)
+      expect((await snapshot(client, a.auth)).here).toEqual(['adventurer'])
+    })
+
+    it('rule 30: history keeps the last 200 and serves the last 50 without a mark', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(68))
+      const ids: number[] = []
+      const round = async () => {
+        for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) {
+          ids.push(posted(await client.chat(a.auth, `line ${ids.length + 1}`)).id)
+        }
+        clock.advance(CHAT_BUCKET_CAPACITY * CHAT_REFILL_MS)
+      }
+      while (ids.length < 60) await round()
+      const cold = (await snapshot(client, a.auth, 0)).chat
+      expect(cold.map((m) => m.id)).toEqual(ids.slice(-CHAT_SERVE))
+      const mark = ids[54] ?? 0
+      expect((await snapshot(client, a.auth, mark)).chat.map((m) => m.id)).toEqual(ids.slice(55))
+      while (ids.length < 210) await round()
+      expect((await snapshot(client, a.auth, 0)).chat.map((m) => m.id)).toEqual(
+        ids.slice(-CHAT_SERVE),
+      )
+      const first = ids[0] ?? 0
+      expect((await snapshot(client, a.auth, first)).chat.map((m) => m.id)).toEqual(
+        ids.slice(-CHAT_KEEP),
+      )
+    })
+
+    it('rule 31: the highest-zone board', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ashgrove', traderState(69, { highestZone: 5 }))
+      await a.inSync()
+      const b = await trader('Brindle', traderState(70))
+      const top = await boards(client, a.auth)
+      expect(top.highestZone.slice(0, 2)).toEqual([
+        { accountId: a.accountId, name: 'Ashgrove', value: 5 },
+        { accountId: b.accountId, name: 'Brindle', value: 1 },
+      ])
+      expect(top.damage).toEqual([])
+      expect(top.weekStart).toBe(weekStartOf(await clock.now()))
+      for (let z = 2; z <= 26; z++) await trader(`z${z}`, traderState(100 + z, { highestZone: z }))
+      const full = await boards(client, a.auth)
+      expect(full.highestZone).toHaveLength(BOARD_ROWS)
+      expect(full.highestZone[0]?.value).toBe(26)
+      expect(full.highestZone.some((r) => r.accountId === b.accountId)).toBe(false)
+
+      const closed = await market(ctx, { 'leaderboards.enabled': false })
+      const c = await closed.trader('Cora', traderState(71))
+      expect(await boards(closed.client, c.auth)).toMatchObject({ highestZone: [], damage: [] })
+
+      const fresh = await market(ctx)
+      const h = await fresh.trader('heck', traderState(72))
+      expect((await boards(fresh.client, h.auth)).highestZone).toEqual([
+        { accountId: h.accountId, name: 'adventurer', value: 1 },
+      ])
+      const boot = await fresh.client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const mirror = new Mirror(boot)
+      const commit = async () => {
+        const ack = await fresh.client.submit(mirror.batch([tick]), mirror.auth())
+        expect(ack.ok).toBe(true)
+        mirror.commit([tick])
+      }
+      await commit()
+      const row = async () =>
+        (await boards(fresh.client, mirror.auth())).highestZone.find(
+          (r) => r.accountId === boot.account.accountId,
+        )
+      expect((await row())?.name).toBe('adventurer')
+      const start = await fresh.client.linkStart(mirror.auth())
+      if ('reason' in start) throw new Error('unauthorized')
+      const linked = await fresh.client.linkPoll(mirror.auth(), start.code)
+      if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
+      await commit()
+      expect((await row())?.name).toBe(linked.account.linked?.login)
+    })
+
+    it('rule 32: presence off counts nobody', async (ctx) => {
+      const { client, trader } = await market(ctx, { 'presence.enabled': false })
+      const a = await trader('Ann', traderState(73))
+      const b = await trader('Bo', traderState(74))
+      const w = await snapshot(client, a.auth)
+      expect(w).toMatchObject({ online: 0, zones: [], here: [] })
+      expect(w.flags['presence.enabled']).toBe(false)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 0, zones: [], here: [] })
     })
   })
 }

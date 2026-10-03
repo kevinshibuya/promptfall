@@ -15,6 +15,7 @@ import {
   SIM_VERSION,
   step,
 } from '@promptfall/sim'
+import { isBlocked } from './blocklist'
 
 export type BatchRecord = { batchId: string; hash: string; seq: number }
 export type LogEntry = { n: number; event: ServerEvent }
@@ -40,6 +41,8 @@ export type AccountRecord = {
   /** Every event with `n > committedCursor`. */
   log: LogEntry[]
   returns: PendingReturn[]
+  /** The chat token bucket; absent means full. */
+  chat?: { tokens: number; refillAt: number }
 }
 
 export const BATCH_RING = 200
@@ -66,6 +69,18 @@ export function fullBuckets(): Record<BudgetKind, number> {
 /** True for a record written by this sim version; older records carry none of the phase 2 fields. */
 export function isCurrent(record: AccountRecord): boolean {
   return record.state.v === SIM_VERSION
+}
+
+/**
+ * The name others see: the display name without control characters, else
+ * `adventurer` when there is none, nothing is left, or it is blocklisted.
+ */
+export function publicName(record: AccountRecord): string {
+  const raw = record.account.displayName ?? record.account.linked?.login ?? null
+  if (raw === null) return 'adventurer'
+  const name = raw.replace(/\p{Cc}/gu, '')
+  if (name.trim() === '' || isBlocked(name)) return 'adventurer'
+  return name
 }
 
 export function newRecord(account: Account, state: GameState, now: number): AccountRecord {
