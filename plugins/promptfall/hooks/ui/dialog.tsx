@@ -1,5 +1,7 @@
 import { atom, type On, read, update } from 'claude-code'
 import type {
+  BoardsState,
+  ChatState,
   DialogState,
   DialogTab,
   GameView,
@@ -12,6 +14,8 @@ import type {
 } from '../../types'
 import type { GameHandle } from '../engine'
 import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
   DIALOG_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
@@ -20,7 +24,9 @@ import {
 } from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
+import { chatBody, postChat } from './chat'
 import { CLASS_LABEL, formatGold } from './format'
+import { boardsBody, loadBoards } from './leaderboards'
 import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
@@ -39,6 +45,8 @@ const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
@@ -49,6 +57,8 @@ const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
   { tab: 'orders', label: 'Orders', hotkey: 'r' },
   { tab: 'account', label: 'Account', hotkey: 'a' },
   { tab: 'odds', label: 'Odds', hotkey: 'o' },
+  { tab: 'chat', label: 'Chat', hotkey: 'c' },
+  { tab: 'leaderboards', label: 'Leaderboards', hotkey: 'b' },
 ]
 
 function percent(weight: number, total: number): string {
@@ -115,6 +125,14 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const updOrders: Updater<OrdersState> = async (fn) => {
       await update($, ordersAtom, (o) => fn(o ?? ORDERS_DEFAULT))
     }
+    const chat: ChatState = (await read($, chatAtom)) ?? CHAT_DEFAULT
+    const boards: BoardsState = (await read($, boardsAtom)) ?? BOARDS_DEFAULT
+    const updChat: Updater<ChatState> = async (fn) => {
+      await update($, chatAtom, (c) => fn(c ?? CHAT_DEFAULT))
+    }
+    const updBoards: Updater<BoardsState> = async (fn) => {
+      await update($, boardsAtom, (b) => fn(b ?? BOARDS_DEFAULT))
+    }
     const updDialog: Updater<DialogState> = async (fn) => {
       await update($, dialogAtom, (d) => fn(d ?? DIALOG_DEFAULT))
     }
@@ -135,6 +153,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       if (!running) return
       if (next === 'market') await loadMarket(running, market.query, updMarket, after)
       if (next === 'orders') await loadOrders(running, updOrders, after)
+      if (next === 'leaderboards') await loadBoards(running, updBoards, after)
     }
 
     const tabs = (
@@ -217,7 +236,21 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const body = []
 
     const running = game()
-    if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
+    if (tab === 'chat' && running) {
+      // Each draw of the Chat tab keeps the world poll fast while it is shown.
+      running.chatSeen(clientNow)
+      body.push(
+        ...chatBody(els, view, world, chat, {
+          setDraft: (text) => updChat((c) => ({ ...c, draft: text })),
+          post: async (text) => {
+            if (((await read($, chatAtom)) ?? chat).busy) return
+            await postChat(running, text, updChat, after)
+          },
+        }),
+      )
+    } else if (tab === 'leaderboards' && running) {
+      body.push(...boardsBody(els, view, world, boards))
+    } else if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
       const sell = dialog.sell
       const close = () => updDialog((d) => ({ ...d, sell: null }))
       const goods =

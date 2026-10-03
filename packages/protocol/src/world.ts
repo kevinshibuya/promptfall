@@ -131,5 +131,6 @@ export const BoardRowSchema: z.ZodType<BoardRow> = z.object({
 export const BoardsSchema: z.ZodType<Boards> = z.object({
   highestZone: z.array(BoardRowSchema).max(BOARD_ROWS),
   damage: z.array(BoardRowSchema).max(BOARD_ROWS),
-  weekStart: count,
+  // An integer, not a count: the week holding the first days of the epoch began in 1969.
+  weekStart: z.number().int(),
 })

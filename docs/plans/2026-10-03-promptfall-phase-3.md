@@ -449,10 +449,10 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** No band change. No boss. No new `$` namespace. The chat path never calls `trade` or `sync`.
 
-- [ ] Note, answered by the review from the d.ts (`plugins/promptfall/.claude-plugin/types/claude-code/index.d.ts`, `InputProps` at E:5159-5200): `Input` takes `value`, so the box is controlled and cleared through it; no remount, no `composeKey`. `ui/orders.tsx:228-238` is the pattern.
-- [ ] Types (`ChatState.draft`, `CHAT_DEFAULT`), atoms, tabs, command args; `dialog.test.ts` red for the Chat tab
-- [ ] `chat.tsx` with the compose, the flashes, the gates, mobile; `chatSeen` from the render
-- [ ] `leaderboards.tsx`; README; run the acceptance check; commit `feat(plugin): Chat and Leaderboards tabs, /promptfall chat|leaderboards`
+- [x] Note, answered by the review from the d.ts (`plugins/promptfall/.claude-plugin/types/claude-code/index.d.ts`, `InputProps` at E:5159-5200): `Input` takes `value`, so the box is controlled and cleared through it; no remount, no `composeKey`. `ui/orders.tsx:228-238` is the pattern.
+- [x] Types (`ChatState.draft`, `CHAT_DEFAULT`), atoms, tabs, command args; `dialog.test.ts` red for the Chat tab
+- [x] `chat.tsx` with the compose, the flashes, the gates, mobile; `chatSeen` from the render
+- [x] `leaderboards.tsx`; README; run the acceptance check; commit `feat(plugin): Chat and Leaderboards tabs, /promptfall chat|leaderboards`
 
 ### Task 7: PR 1: docs, manual pass part A, pull request
 

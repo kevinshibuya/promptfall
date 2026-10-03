@@ -1,6 +1,8 @@
 import type { On } from 'claude-code'
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView } from '../types'
+import { CHAT_READ_ONLY, chatBody } from './ui/chat'
+import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState, type Item } from './vendor/sim.js'
@@ -231,6 +233,12 @@ async function marketHarness(
     })
   }
   const sent: Sent[] = []
+  /** `worldFlags` overrides the snapshot's flags; `chatDown` and `batchesDown` throw on those routes. */
+  const net = {
+    worldFlags: null as Record<string, boolean> | null,
+    chatDown: false,
+    batchesDown: false,
+  }
   on('http.fetch', async (_$, e) => {
     const rest = e.url.slice(TEST_URL.length)
     const [path = '', rawQuery = ''] = rest.split('?')
@@ -247,7 +255,20 @@ async function marketHarness(
         result = await ledger.bootstrap(body)
         break
       case 'POST /v1/batches':
+        if (net.batchesDown) throw new Error('connect ECONNREFUSED')
         result = await ledger.submit(body, auth)
+        break
+      case 'GET /v1/world': {
+        const w = await ledger.world(auth, Number(query.since ?? 0))
+        result = net.worldFlags && !('reason' in w) ? { ...w, flags: net.worldFlags } : w
+        break
+      }
+      case 'POST /v1/chat':
+        if (net.chatDown) throw new Error('connect ECONNREFUSED')
+        result = await ledger.chat(auth, body.text)
+        break
+      case 'GET /v1/leaderboards':
+        result = await ledger.leaderboards(auth)
         break
       case 'GET /v1/account':
         result = await ledger.account(auth)
@@ -286,7 +307,7 @@ async function marketHarness(
     }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })
-  return { ledger, player, bot, sent }
+  return { ledger, player, bot, sent, net }
 }
 
 async function startOnTest(
@@ -318,10 +339,10 @@ async function startOnTest(
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
-  mock.clock(on, { now: 1_000_000 })
+  const clock = mock.clock(on, { now: 1_000_000 })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  return { ui, states }
+  return { ui, states, clock }
 }
 
 test('the Market tab renders the listings', async ($, on) => {
@@ -478,5 +499,182 @@ test('a session that is not playing still browses the market', async ($, on) => 
       /^buy-L/.test(b.key ?? ''),
     ),
   ).toBe(false)
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Chat and Leaderboards
+
+const RUN = {
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: false, columns: 120 },
+} as const
+
+const chatPosts = (sent: Sent[]) => sent.filter((r) => r.method === 'POST' && r.path === '/v1/chat')
+
+test('the Chat tab lists the messages newest at the bottom, with the compose box on both surfaces', async ($, on) => {
+  const { ledger, player, bot } = await marketHarness(on)
+  await ledger.chat({ deviceToken: bot.deviceToken }, 'first line')
+  await ledger.chat({ deviceToken: bot.deviceToken }, 'second line')
+  const { ui } = await startOnTest($, on, player)
+  await ui.unmount()
+  for (const surface of SURFACES) {
+    const pane = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await pane.press({ key: 'tab-chat' })
+    const texts = (await pane.findAll({ type: 'Text' })).map((t) => t.text)
+    const first = texts.indexOf('first line')
+    expect(first).toBeGreaterThanOrEqual(0)
+    expect(texts.indexOf('second line')).toBeGreaterThan(first)
+    expect(await pane.find({ text: 'Brindle:' })).toBeDefined()
+    expect(await pane.find({ key: 'chat-compose' })).toBeDefined()
+    await pane.unmount()
+  }
+})
+
+test('Enter posts the line, it shows before the next poll, and the box empties', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'chat-compose', text: 'hello', kind: 'change' })
+  await ui.input({ key: 'chat-compose', text: 'hello' })
+  expect(chatPosts(sent).map((r) => r.body)).toEqual([{ text: 'hello' }])
+  expect(await ui.find({ type: 'Text', text: 'hello' })).toBeDefined()
+  expect((await ui.find({ key: 'chat-compose' }))?.props.value).toBe('')
+  await ui.unmount()
+})
+
+test('a refusal flashes for 5 s; a thrown post flashes Server unreachable and sets no notice', async ($, on) => {
+  const { player, net } = await marketHarness(on)
+  const { ui, states, clock } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'chat-compose', text: 'a'.repeat(201) })
+  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeDefined()
+  await clock.advance(5_000)
+  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeUndefined()
+  net.chatDown = true
+  await ui.input({ key: 'chat-compose', text: 'anyone there?' })
+  expect(await ui.find({ text: 'Server unreachable' })).toBeDefined()
+  expect(states.get('notice') ?? null).toBeNull()
+  await ui.unmount()
+})
+
+test('in an outage Enter flashes Server unreachable and posts nothing', async ($, on) => {
+  const { player, sent, net } = await marketHarness(on)
+  const { ui, clock } = await startOnTest($, on, player)
+  net.batchesDown = true
+  await clock.advance(16_000)
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'chat-compose', text: 'hello' })
+  expect(await ui.find({ text: 'Server unreachable' })).toBeDefined()
+  expect(chatPosts(sent)).toHaveLength(0)
+  await ui.unmount()
+})
+
+test("the snapshot's closed chat wins over the bootstrap config; unlinked reads the link gate", async ($, on) => {
+  const a = await marketHarness(on)
+  a.net.worldFlags = { 'chat.enabled': false }
+  const { ui, states, clock } = await startOnTest($, on, a.player)
+  await clock.advance(15_000)
+  expect((states.get('view') as GameView).account.chatOpen).toBe(true)
+  await ui.press({ key: 'tab-chat' })
+  expect(await ui.find({ text: 'Chat is closed.' })).toBeDefined()
+  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an unlinked player reads the link gate in the Chat tab', async ($, on) => {
+  const a = await marketHarness(on, { linked: false })
+  const { ui } = await startOnTest($, on, a.player)
+  await ui.press({ key: 'tab-chat' })
+  expect(
+    await ui.find({ text: 'Link your GitHub account: press a for the Account tab' }),
+  ).toBeDefined()
+  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('without an Input the Chat tab reads that posting needs a terminal or the desktop app', () => {
+  const els = { Box: 'Box', Text: 'Text', Button: 'Button', Input: undefined } as unknown as Els
+  const world = {
+    snapshot: null,
+    fetchedAt: null,
+    stale: false,
+    messages: [{ id: 1, name: 'Brindle', text: 'hi', at: 1 }],
+    chatMark: 1,
+    clock: null,
+    committedDealt: null,
+  }
+  const view = {
+    account: {
+      linked: 'player',
+      server: 'http://test',
+      marketOpen: true,
+      chatOpen: true,
+      presenceOpen: true,
+      leaderboardsOpen: true,
+      bossOpen: true,
+      returns: 0,
+    },
+  } as GameView
+  const body = JSON.stringify(
+    chatBody(
+      els,
+      view,
+      world,
+      { draft: '', busy: false, error: null },
+      {
+        setDraft: async () => undefined,
+        post: async () => undefined,
+      },
+    ),
+  )
+  expect(body).toContain(CHAT_READ_ONLY)
+  expect(body).not.toContain('chat-compose')
+})
+
+test('a secondary session posts too', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui, states } = await startOnTest($, on, player, {
+    'promptfall:lease': { owner: 'other', until: 9_999_999_999_999 },
+  })
+  expect(states.get('mode')).toBe('secondary')
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'chat-compose', text: 'from the other tab' })
+  expect(chatPosts(sent)).toHaveLength(1)
+  expect(await ui.find({ type: 'Text', text: 'from the other tab' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the Leaderboards tab fetches on open, shows the zone counts and both boards, mine highlighted', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-leaderboards' })
+  expect(sent.some((r) => r.method === 'GET' && r.path === '/v1/leaderboards')).toBe(true)
+  expect(await ui.find({ text: 'Online by zone: z1 1' })).toBeDefined()
+  expect(await ui.find({ text: 'Highest zone' })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /^\d\. Brindle {2}zone 1$/ })).toBeDefined()
+  const mine = await ui.find({ type: 'Text', text: /^\d\. player {2}zone 1$/ })
+  expect(mine?.props.color).toBe('cyan')
+  expect(await ui.find({ text: 'no boss damage yet this week' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('closed leaderboards say so', async ($, on) => {
+  const a = await marketHarness(on, { flags: { 'leaderboards.enabled': false } })
+  const { ui } = await startOnTest($, on, a.player)
+  await ui.press({ key: 'tab-leaderboards' })
+  expect(await ui.find({ text: 'Leaderboards are closed.' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('/promptfall chat and /promptfall leaderboards open on those tabs', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const { ui, states } = await startOnTest($, on, player)
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'chat' })
+  expect(states.get('dialogTab')).toBe('chat')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'leaderboards' })
+  expect(states.get('dialogTab')).toBe('leaderboards')
+  expect(sent.some((r) => r.method === 'GET' && r.path === '/v1/leaderboards')).toBe(true)
   await ui.unmount()
 })

@@ -4337,7 +4337,8 @@ var BoardRowSchema = external_exports.object({
 var BoardsSchema = external_exports.object({
   highestZone: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
   damage: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
-  weekStart: count3
+  // An integer, not a count: the week holding the first days of the epoch began in 1969.
+  weekStart: external_exports.number().int()
 });
 
 // packages/protocol/src/responses.ts

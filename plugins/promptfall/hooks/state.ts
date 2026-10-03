@@ -1,4 +1,12 @@
-import type { DialogState, MarketState, OrdersState, Prefs, WorldState } from '../types'
+import type {
+  BoardsState,
+  ChatState,
+  DialogState,
+  MarketState,
+  OrdersState,
+  Prefs,
+  WorldState,
+} from '../types'
 
 // The session's values are declared in types/index.d.ts. The scan behind
 // `claude plugin validate` reads an atom only where it is declared in the
@@ -30,3 +38,5 @@ export const WORLD_DEFAULT: WorldState = {
   clock: null,
   committedDealt: null,
 }
+export const CHAT_DEFAULT: ChatState = { draft: '', busy: false, error: null }
+export const BOARDS_DEFAULT: BoardsState = { boards: null, busy: false, error: null }
