@@ -544,9 +544,9 @@ Then open the PR from `feat/phase-2` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No bots. No plugin changes. No new server event kinds beyond the nine.
 
-- [ ] `goods.ts` and the fee helpers with `market.test.ts` (red, then green)
-- [ ] Rules 14 to 24 in the suite (red); `market.ts` until green over the in-process ledger
-- [ ] Routes in the fake; the suite green over HTTP; commit `feat(ledger): market rules, orders, cooldowns, expiry and returns`
+- [x] `goods.ts` and the fee helpers with `market.test.ts` (red, then green)
+- [x] Rules 14 to 24 in the suite (red); `market.ts` until green over the in-process ledger
+- [x] Routes in the fake; the suite green over HTTP; commit `feat(ledger): market rules, orders, cooldowns, expiry and returns`
 
 ### Task 8: Bots
 
