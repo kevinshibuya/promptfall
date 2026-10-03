@@ -389,9 +389,9 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** Bots use `host.mint`, `host.credit` and `HttpClient` only; no `ledger.*` call, no `kv` write but `pf:bot:<i>`. No plugin changes. No boss logic.
 
-- [ ] `bot-config.ts`; `bots.ts` over `client` and `Mirror`; the batch and heartbeat cases red then green
-- [ ] Market actions with `fill`, chat lines, stipend, re-mint on an old sim version; the rest of the test; CLI wiring
-- [ ] Run the acceptance check; commit `feat(fake-server): bots are HTTP clients that batch, fill, chat and heartbeat`
+- [x] `bot-config.ts`; `bots.ts` over `client` and `Mirror`; the batch and heartbeat cases red then green
+- [x] Market actions with `fill`, chat lines, stipend, re-mint on an old sim version; the rest of the test; CLI wiring
+- [x] Run the acceptance check; commit `feat(fake-server): bots are HTTP clients that batch, fill, chat and heartbeat`
 
 ### Task 5: Plugin: the world poll, the World tab, in-process flags
 
