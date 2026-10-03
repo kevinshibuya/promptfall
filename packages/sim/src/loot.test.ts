@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
+import { clone } from './draft'
 import { rollDrops } from './loot'
-import { clone } from './progression'
 import { createInitialState } from './state'
 import type { Effect, GameState } from './types'
 

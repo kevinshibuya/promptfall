@@ -1,21 +1,11 @@
 import { content } from './content'
+import { draft, reject } from './draft'
 import { generateHero, recruitHero } from './heroes'
 import { rerollAffix, vendorValue } from './loot'
-import { clampHp, clone, drawWeighted, findHero } from './progression'
-import type { Effect, Event, GameState, StepResult } from './types'
+import { clampHp, drawWeighted, findHero } from './progression'
+import type { Event, GameState, StepResult } from './types'
 
 type Of<K extends Event['t']> = Extract<Event, { t: K }>
-
-function reject(state: GameState, event: Event, reason: string): StepResult {
-  return { state, effects: [{ k: 'rejected', event, reason }] }
-}
-
-function draft(state: GameState, mutate: (s: GameState, effects: Effect[]) => void): StepResult {
-  const s = clone(state)
-  const effects: Effect[] = []
-  mutate(s, effects)
-  return { state: s, effects }
-}
 
 export function tavernPrice(state: GameState): number {
   const { baseCost, costGrowthBp } = content.tavern

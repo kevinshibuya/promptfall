@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { hashState } from './hash'
 import { createInitialState } from './state'
 import { replay, step } from './step'
-import type { Event, GameState, Slot } from './types'
+import type { Event, GameState, Rarity, ServerEvent, Slot } from './types'
+import { RARITIES } from './types'
 
 // An xorshift32 independent of the sim's PRNG.
 function makeRandom(seed: number): (n: number) => number {
@@ -23,7 +24,41 @@ function pick<T>(r: (n: number) => number, list: readonly T[], fallback: T): T {
   return list.length > 0 ? (list[r(list.length)] ?? fallback) : fallback
 }
 
+// Server events the ledger could author: a credit, a purchase of a fresh item, a listing.
+function randomServerEvent(r: (n: number) => number, s: GameState): ServerEvent {
+  const roll = r(3)
+  if (roll === 0) return { t: 'credited', gold: 1 + r(500), reason: 'test' }
+  const itemId =
+    r(10) === 0
+      ? 'ijunk'
+      : pick(
+          r,
+          s.inventory.map((i) => i.id),
+          'i0',
+        )
+  if (roll === 1)
+    return { t: 'listed', listingId: `L${r(1000)}`, kind: 'item', id: itemId, fee: 1 + r(50) }
+  const rarity: Rarity = pick(r, RARITIES, 'rare')
+  return {
+    t: 'bought',
+    listingId: `L${r(1000)}`,
+    goods: {
+      kind: 'item',
+      item: {
+        id: `t${s.tick.toString(36)}x${r(1000)}`,
+        base: 'steel_longsword',
+        rarity,
+        affixes: [{ id: 'brutal', value: 1 + r(5) }],
+        equippedBy: null,
+        tradeableAt: r(100000),
+      },
+    },
+    price: 1 + r(300),
+  }
+}
+
 function randomEvent(r: (n: number) => number, s: GameState): Event {
+  if (r(100) < 4) return randomServerEvent(r, s)
   const heroIds = s.roster.map((h) => h.id)
   const itemIds = s.inventory.map((i) => i.id)
   // One id in ten is junk, so rejections are exercised too.

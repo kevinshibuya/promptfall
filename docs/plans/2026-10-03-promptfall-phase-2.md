@@ -335,10 +335,10 @@ PR 1: Tasks 1 to 6. PR 2: Tasks 7 to 10.
 
 **Boundaries:** No change to combat, progression rules, loot tables or content. No wall-clock comparison anywhere in the sim. Do not touch `packages/protocol`.
 
-- [ ] `draft.ts`; add the types; set `tradeableAt: null` in both constructors; bump `SIM_VERSION`; fix the type errors `pnpm typecheck` reports in `packages/sim`
-- [ ] Write `server-events.test.ts` (red), then `server-events.ts` and the `step.ts` registration
-- [ ] Extend the determinism generator; regenerate `GOLDEN_HASH` and note the new value in the commit message
-- [ ] Run the acceptance check; commit `feat(sim): server events, trade data and SIM_VERSION 2`
+- [x] `draft.ts`; add the types; set `tradeableAt: null` in both constructors; bump `SIM_VERSION`; fix the type errors `pnpm typecheck` reports in `packages/sim`
+- [x] Write `server-events.test.ts` (red), then `server-events.ts` and the `step.ts` registration
+- [x] Extend the determinism generator; regenerate `GOLDEN_HASH` and note the new value in the commit message
+- [x] Run the acceptance check; commit `feat(sim): server events, trade data and SIM_VERSION 2`
 
 ### Task 2: Protocol: cursor, market types, widened client, HttpClient
 
