@@ -215,14 +215,18 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `order_placed`, `order_refunded`, `order_filled`, `fee`. The sim applies a
   server event without judging it; one it cannot apply is a bug caught by the
   hash check, never a rejection. The batch schema accepts player events only.
-- A batch declares the cursor of the last server event its client applied. The
-  server replays the server events after the committed cursor up to the declared
-  one, then the batch's player events; `baseHash` is the last committed hash,
-  `resultHash` the hash after both. A cursor behind the committed one gets the
-  authoritative state back. Every authenticated response may carry the server
-  events pending past the client's cursor. The client re-steps its buffered
-  player events over server events as they arrive, so a locally seen spend can
-  turn into a rejection when a trade drained the gold first: the server wins.
+- A batch declares the cursor of the last server event its client applied,
+  and the server accepts it only when that is the account's latest: server
+  events are applied the moment the ledger authors them, so every trade is
+  validated against a state no later player event can undo. A batch behind the
+  latest cursor is answered with the pending server events and resubmitted
+  after the client applies them; one ahead of it gets the authoritative state
+  back. `baseHash` is the hash at the last commit, `resultHash` the hash after
+  the server events and the batch. Every authenticated response may carry the
+  server events pending past the last commit, each numbered so a client applies
+  it once. The client re-steps its buffered player events over server events as
+  they arrive, so a locally seen spend can turn into a rejection when a trade
+  drained the gold first: the server wins.
 - A market action flushes the client's buffer and waits for the ack before the
   request, so the ledger validates against state at most one round trip old.
   Only the primary session trades.
