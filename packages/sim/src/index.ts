@@ -11,7 +11,7 @@ export type {
 export { content } from './content'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
-export { vendorValue } from './loot'
+export { rollRewardItem, vendorValue } from './loot'
 export { heroStats } from './progression'
 export { createInitialState } from './state'
 export { replay, step } from './step'

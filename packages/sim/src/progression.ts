@@ -146,6 +146,8 @@ function pickWaveEnemy(s: GameState): string {
 
 export function onToolCall(s: GameState): void {
   s.turnToolCalls += 1
+  // Boss mode: the call still counts toward the turn boss, and nothing spawns.
+  if (s.boss) return
   const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3))
   const defId = pickWaveEnemy(s)
   if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, 'wave')
@@ -273,6 +275,11 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {
   if (livingParty(s).length > 0) return false
+  if (s.boss) {
+    // Boss mode: healed in place. No retreat, no wipe, the encounter and the pending party kept.
+    fullHealParty(s)
+    return true
+  }
   const retreatedTo = Math.max(1, s.zone - 1)
   effects.push({ k: 'wipe', retreatedTo })
   s.encounter = null

@@ -3,7 +3,8 @@ import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
 import { compareCodeUnits } from './rng'
-import type { Affix, Effect, GameState, Item, StepResult } from './types'
+import { createInitialState } from './state'
+import type { Affix, Effect, GameState, HeroClass, Item, StepResult } from './types'
 
 export function vendorValue(item: Item): number {
   const minZone = content.itemBases[item.base]?.minZone ?? 1
@@ -11,10 +12,18 @@ export function vendorValue(item: Item): number {
 }
 
 function rollItem(s: GameState, boss: boolean): Item | null {
+  return rollItemFor(
+    s,
+    boss,
+    partyHeroes(s).map((h) => h.cls),
+  )
+}
+
+/** The draw order of ordinary drops: rarity, then base, then affixes. */
+function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[]): Item | null {
   const zone = content.zones[s.zone - 1]
   if (!zone) return null
   const rarity = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights)
-  const classes = partyHeroes(s).map((h) => h.cls)
   const bases = Object.keys(content.itemBases)
     .sort(compareCodeUnits)
     .filter((id) => {
@@ -36,6 +45,17 @@ function rollItem(s: GameState, boss: boolean): Item | null {
     affixes.push({ id, value: min + draw(s, max - min + 1) })
   }
   return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
+}
+
+/** A boss-rarity item of the zone for a party of these classes, drawn from `seed` alone. `id` is '' for the caller to replace. */
+export function rollRewardItem(
+  seed: number,
+  zone: number,
+  classes: readonly HeroClass[],
+): Item | null {
+  const scratch: GameState = { ...createInitialState(seed), zone }
+  const item = rollItemFor(scratch, true, classes)
+  return item ? { ...item, id: '' } : null
 }
 
 /**
