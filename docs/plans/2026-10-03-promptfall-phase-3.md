@@ -481,8 +481,8 @@ Then open the PR from `feat/phase-3` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** Docs only. Do not merge.
 
-- [ ] Write part A; update the READMEs
-- [ ] Run the full check line; open the PR; stop
+- [x] Write part A; update the READMEs
+- [x] Run the full check line; open the PR; stop
 
 ### Task 8: Sim: boss mode, the three server events, SIM_VERSION 3
 
