@@ -23,7 +23,8 @@ should see. A step that shows something else is a red.
 7. **Recruit once.** On the Heroes tab (`h`), press `Recruit 200g`. With less than 200 gold a red
    line reads `Refused: not_enough_gold` and clears after 5 seconds. With enough, a new hero joins
    the roster and a toast names them.
-8. **Collapse the band.** Press `ctrl+x tab` to focus the band, then `c`. The band shrinks to one
+8. **Collapse the band.** Focus the band: press `ctrl+x`, let go of Ctrl, then press Tab (holding
+   Ctrl makes it `ctrl+tab`, which the band never sees and cmux may take), or click the band. Then `c`. The band shrinks to one
    line like `Promptfall · Z1 w3 · K60 B36 W40 · 12g`. `c` again restores 4 rows. `l` and `w`
    switch the hero rows to the loot log and the world line.
 9. **Narrow the terminal.** Resize the window under 100 columns. The band drops to its one-line
@@ -34,8 +35,11 @@ should see. A step that shows something else is a red.
     progress made meanwhile.
 11. **Second session.** Open another terminal in the same folder and run the same command as
     step 1. Its band is one line starting `playing in another session`, and it does not fight.
-    Quit the first session: quitting releases the lease, so within about 10 seconds the second
-    one takes over and its band grows back to 4 rows.
+    Type a prompt or `/promptfall` in that second session: it takes the game at once, and the
+    first one's band turns into the `playing in another session` line within 15 seconds. The
+    read-only dialog of a secondary session also has a `play here` button that does the same.
+    Quit the session that plays: quitting releases the lease, so within about 10 seconds the
+    other one takes over and its band grows back to 4 rows.
 12. **Persistence.** Quit both sessions and start one again. The band comes back at the same zone,
     gold and levels, with no welcome toast. Quitting flushes the last batch, so nothing is lost;
     only a crash loses the last 15 seconds.

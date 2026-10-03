@@ -33,6 +33,8 @@ export type GameHandle = {
   apply: (event: Event, at: number) => void
   canApply: () => boolean
   setOff: (off: boolean) => Promise<void>
+  /** The player is using this session: take the lease if another session holds it. */
+  claim: () => Promise<void>
   settled: () => Promise<void>
 }
 

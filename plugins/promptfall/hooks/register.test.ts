@@ -255,3 +255,41 @@ test('a prompt from the Remote Control bridge is a rest', async ($, on) => {
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'bridge' } })
   expect(hp()).toBeGreaterThan(10)
 })
+
+test('the session the player uses takes the lease back; Claude working elsewhere does not', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const mine = last.get('leaseOwner')
+  // This session stalled and an idle one in another tab took the lease.
+  data.set(LEASE, { owner: 'idle-tab', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  // Claude's own tool calls do not claim it.
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  expect(last.get('mode')).toBe('secondary')
+  // The player typing here does.
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  expect(last.get('mode')).toBe('primary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
+})
+
+test('a primary that lost the lease between renewals does not flush', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data, writes } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(11_000)
+  // Another session claims the lease after this one's renewal at 10 s, before its flush at 15 s.
+  data.set(LEASE, { owner: 'other-tab', until: 9_999_999_999_999 })
+  await time.advance(5_000)
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
+  expect(last.get('mode')).toBe('secondary')
+})

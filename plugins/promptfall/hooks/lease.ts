@@ -32,3 +32,19 @@ export async function release(kv: KeyValue, owner: string): Promise<void> {
   const held = await kv.get(LEASE_KEY)
   if (isLease(held) && held.owner === owner) await kv.delete(LEASE_KEY)
 }
+
+/**
+ * Takes the lease whoever holds it: the player is using this session, so it plays.
+ * The session that held it sees the change before its next flush and steps back.
+ */
+export async function claim(kv: KeyValue, owner: string, now: number): Promise<boolean> {
+  await kv.set(LEASE_KEY, { owner, until: now + LEASE_TTL_MS } satisfies Lease)
+  const after = await kv.get(LEASE_KEY)
+  return isLease(after) && after.owner === owner
+}
+
+/** Whether `owner` holds the lease right now. */
+export async function holds(kv: KeyValue, owner: string): Promise<boolean> {
+  const held = await kv.get(LEASE_KEY)
+  return isLease(held) && held.owner === owner
+}

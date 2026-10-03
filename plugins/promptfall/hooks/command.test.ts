@@ -51,18 +51,16 @@ test('/promptfall off hides the band but the game keeps playing', async ($, on) 
   expect(states.get('mode')).toBe('primary')
 })
 
-test('off and on leave a secondary session secondary', async ($, on) => {
+test('off in a secondary session hides the band without taking the lease; on takes it', async ($, on) => {
   const { states } = harness(on, {
     'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
   })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(states.get('mode')).toBe('secondary')
-  await $.command.run({ ...RUN, command: 'promptfall', args: 'on' })
-  expect(states.get('mode')).toBe('secondary')
   await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
   expect(states.get('mode')).toBe('off')
   await $.command.run({ ...RUN, command: 'promptfall', args: 'on' })
-  expect(states.get('mode')).toBe('secondary')
+  expect(states.get('mode')).toBe('primary')
 })
 
 test('/promptfall heroes opens the pane on the heroes tab', async ($, on) => {
@@ -80,4 +78,14 @@ test('/promptfall farm toggles the farm flag', async ($, on) => {
   const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'farm' })
   expect(r.text).toBe('Promptfall farm is on')
   expect((states.get('view') as { farm: boolean }).farm).toBe(true)
+})
+
+test('/promptfall in a secondary session takes the lease', async ($, on) => {
+  const { states } = harness(on, {
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('secondary')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'heroes' })
+  expect(states.get('mode')).toBe('primary')
 })
