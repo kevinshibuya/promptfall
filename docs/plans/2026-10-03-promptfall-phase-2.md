@@ -630,7 +630,7 @@ PR from `feat/phase-2-market` into `ai-staging` titled `Promptfall phase 2, PR 2
 
 **Boundaries:** Docs only. Do not merge.
 
-- [ ] Write part B; update the README; run the check line; open the PR; stop
+- [x] Write part B; update the README; run the check line; open the PR; stop
 
 ## Out of scope
 
