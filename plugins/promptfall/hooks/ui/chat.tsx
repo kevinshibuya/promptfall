@@ -43,7 +43,8 @@ export async function postChat(
   }
   await upd((s) => ({ ...s, draft: text, busy: true }))
   try {
-    const r = await game.chat(text)
+    // The cleaned text goes out: a padded paste can be long raw yet short once stripped.
+    const r = await game.chat(cleaned)
     if (r.ok) {
       await upd((s) => ({ ...s, draft: '', busy: false }))
       return

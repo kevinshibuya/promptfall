@@ -156,5 +156,10 @@ describe('presence on a fast clock', () => {
     const w = await ledger.world({ deviceToken: b.deviceToken }, 0)
     if ('reason' in w) throw new Error('unauthorized')
     expect(w.online).toBe(2)
+    // And no further: 45 real seconds at speed 10 is 450 virtual seconds since A's heartbeat.
+    t += 300_000
+    const later = await ledger.world({ deviceToken: b.deviceToken }, 0)
+    if ('reason' in later) throw new Error('unauthorized')
+    expect(later.online).toBe(1)
   })
 })
