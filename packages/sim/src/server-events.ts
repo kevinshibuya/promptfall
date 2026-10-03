@@ -1,6 +1,6 @@
 import { clone, draft, reject } from './draft'
 import { pushLog } from './heroes'
-import { findHero } from './progression'
+import { findHero, newId } from './progression'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -127,5 +127,54 @@ export function credited(state: GameState, event: Of<'credited'>): StepResult {
   return draft(state, (s, effects) => {
     s.gold += event.gold
     effects.push({ k: 'gold', amount: event.gold })
+  })
+}
+
+export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepResult {
+  if (state.boss !== null) return unapplicable(state, event, 'already_engaged')
+  return draft(state, (s) => {
+    const { hp } = event.stats
+    // The old encounter and queue go; a pending turn boss and the turn's tool calls stay.
+    s.encounter = {
+      enemies: [{ id: newId(s, 'e'), def: 'world_boss', kind: 'world_boss', hp, maxHp: hp }],
+      queue: [],
+      waveSize: 0,
+      spawnedInWave: 0,
+    }
+    s.boss = {
+      bossId: event.bossId,
+      name: event.name,
+      glyph: event.glyph,
+      stats: { ...event.stats },
+      dealt: 0,
+    }
+  })
+}
+
+export function bossDisengaged(state: GameState, event: Of<'boss_disengaged'>): StepResult {
+  if (state.boss?.bossId !== event.bossId) return unapplicable(state, event, 'not_engaged')
+  return draft(state, (s) => {
+    s.encounter = null
+    s.boss = null
+  })
+}
+
+export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
+  const goods = event.goods
+  if (goods) {
+    const full = noRoom(state, goods)
+    if (full) return unapplicable(state, event, full)
+  }
+  return draft(state, (s, effects) => {
+    s.gold += event.gold
+    if (goods) {
+      insert(s, goods)
+      const { base, rarity } =
+        goods.kind === 'item'
+          ? goods.item
+          : { base: goods.hero.template, rarity: goods.hero.rarity }
+      pushLog(s, { k: 'reward', base, rarity, gold: event.gold })
+    }
+    effects.push({ k: 'rewarded', bossId: event.bossId, goods: clone(goods), gold: event.gold })
   })
 }

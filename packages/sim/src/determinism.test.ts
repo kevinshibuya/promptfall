@@ -26,8 +26,41 @@ function pick<T>(r: (n: number) => number, list: readonly T[], fallback: T): T {
 
 // Server events the ledger could author: a credit, a purchase of a fresh item, a listing.
 function randomServerEvent(r: (n: number) => number, s: GameState): ServerEvent {
-  const roll = r(3)
+  const roll = r(6)
   if (roll === 0) return { t: 'credited', gold: 1 + r(500), reason: 'test' }
+  // While engaged, a second boss_engaged exercises already_engaged.
+  if (roll === 3) {
+    return {
+      t: 'boss_engaged',
+      bossId: `wb${r(1000)}`,
+      name: 'Wyrm',
+      glyph: '☠',
+      stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+    }
+  }
+  if (roll === 4) {
+    const bossId = r(10) === 0 ? 'wbjunk' : (s.boss?.bossId ?? 'wbjunk')
+    return { t: 'boss_disengaged', bossId }
+  }
+  if (roll === 5) {
+    if (r(2) === 0) return { t: 'rewarded', bossId: 'wb1', goods: null, gold: 1 + r(200) }
+    return {
+      t: 'rewarded',
+      bossId: 'wb1',
+      goods: {
+        kind: 'item',
+        item: {
+          id: `r${s.tick.toString(36)}x${r(1000)}`,
+          base: 'steel_longsword',
+          rarity: pick(r, RARITIES, 'rare'),
+          affixes: [],
+          equippedBy: null,
+          tradeableAt: null,
+        },
+      },
+      gold: 1 + r(200),
+    }
+  }
   const itemId =
     r(10) === 0
       ? 'ijunk'
@@ -58,7 +91,8 @@ function randomServerEvent(r: (n: number) => number, s: GameState): ServerEvent 
 }
 
 function randomEvent(r: (n: number) => number, s: GameState): Event {
-  if (r(100) < 4) return randomServerEvent(r, s)
+  // 8%: boss stretches last long enough for ticks to land on the boss.
+  if (r(100) < 8) return randomServerEvent(r, s)
   const heroIds = s.roster.map((h) => h.id)
   const itemIds = s.inventory.map((i) => i.id)
   // One id in ten is junk, so rejections are exercised too.

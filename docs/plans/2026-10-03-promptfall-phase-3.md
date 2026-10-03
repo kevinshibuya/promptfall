@@ -511,9 +511,9 @@ Then open the PR from `feat/phase-3` into `ai-staging` titled `Promptfall phase 
 
 **Boundaries:** No change to zone content, loot tables, drop rates or the pace target (`harness.test.ts` must stay green untouched). No wall-clock value in the sim. Do not touch `packages/protocol` or the ledger.
 
-- [ ] Types, `boss: null`, `SIM_VERSION 3`; fix the type errors in `packages/sim`
-- [ ] `boss.test.ts` red; `combat.ts`, `progression.ts`, `server-events.ts`, `step.ts` until green
-- [ ] `rollRewardItem` and its test; the determinism generator; the golden script and hash; commit `feat(sim): boss mode, world_boss enemy, boss and reward server events, SIM_VERSION 3`
+- [x] Types, `boss: null`, `SIM_VERSION 3`; fix the type errors in `packages/sim`
+- [x] `boss.test.ts` red; `combat.ts`, `progression.ts`, `server-events.ts`, `step.ts` until green
+- [x] `rollRewardItem` and its test; the determinism generator; the golden script and hash; commit `feat(sim): boss mode, world_boss enemy, boss and reward server events, SIM_VERSION 3`
 
 ### Task 9: Protocol: the three event schemas; contract rules 33 to 40
 
