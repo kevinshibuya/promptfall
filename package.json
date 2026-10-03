@@ -1,0 +1,24 @@
+{
+  "name": "promptfall",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "typecheck": "tsc -b packages/sim packages/protocol",
+    "test": "pnpm -r --filter './packages/*' test",
+    "vendor": "node scripts/vendor.mjs",
+    "vendor:check": "node scripts/vendor.mjs && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/vendor plugins/promptfall/hooks/version.ts)\""
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@types/node": "^22.0.0",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "^5.0.3"
+  }
+}
