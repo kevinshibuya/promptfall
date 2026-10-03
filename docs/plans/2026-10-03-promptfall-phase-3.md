@@ -307,9 +307,9 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** No ledger logic. Do not touch `servers/fake` or the plugin. Do not add a contract rule here.
 
-- [ ] `world.ts` with types, schemas, constants and `weekStartOf`; `world.test.ts`; `ServerClient`, `ROUTES`, `responses.ts`
-- [ ] `mirror.ts` and the `./mirror` export; the suite imports it; `pnpm --filter @promptfall/protocol test` still green
-- [ ] `http.test.ts` red for the three methods, then `http.ts` green; commit `feat(protocol): world snapshot, chat, leaderboards, Mirror in the package root`
+- [x] `world.ts` with types, schemas, constants and `weekStartOf`; `world.test.ts`; `ServerClient`, `ROUTES`, `responses.ts`
+- [x] `mirror.ts` and the `./mirror` export; the suite imports it; `pnpm --filter @promptfall/protocol test` still green
+- [x] `http.test.ts` red for the three methods, then `http.ts` green; commit `feat(protocol): world snapshot, chat, leaderboards, Mirror in the package root`
 
 ### Task 2: Ledger: presence, chat, leaderboards, flags, blocklist; contract rules 25 to 32
 

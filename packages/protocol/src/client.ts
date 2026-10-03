@@ -9,6 +9,7 @@ import type {
   Unauthorized,
 } from './market'
 import type { Batch } from './schemas'
+import type { Boards, ChatResult, WorldSnapshot } from './world'
 
 export type Auth = { deviceToken: string }
 
@@ -95,6 +96,10 @@ export interface ServerClient {
   cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>
   matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>
+  /** The world poll: stamps the caller present and answers the snapshot. `since` is the chat mark; 0 asks for the last 50. */
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>
+  chat(auth: Auth, text: string): Promise<ChatResult>
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized>
 }
 
 export type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end'
