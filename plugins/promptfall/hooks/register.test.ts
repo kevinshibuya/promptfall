@@ -7,7 +7,7 @@ import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState } from './vendor/sim.js'
 import { toAccountView, toGameView } from './view'
-import { WORLD_POLL_MS, WORLD_STALE_MS } from './world'
+import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
 /** Answers $.store from a map and records every write. */
 function store(on: On, seed: Record<string, unknown> = {}) {
@@ -984,4 +984,28 @@ test('a boss seen in the snapshot reaches the primary through its next flush, wi
   expect((last.get('view') as GameView).boss?.bossId).toBe(boss?.bossId)
   expect(behind.some((kinds) => kinds.includes('boss_engaged'))).toBe(true)
   expect(requests).not.toContain('GET /v1/account')
+})
+
+test('a reload during a live boss keeps the held snapshot, so the boss is not announced again', async () => {
+  const toasts: string[] = []
+  const held: WorldState = {
+    snapshot: snap({ boss: LIVE_BOSS }),
+    fetchedAt: 1,
+    stale: false,
+    messages: [],
+    chatMark: 0,
+    clock: null,
+    committedDealt: null,
+  }
+  const poller = new WorldPoller({
+    now: async () => 2,
+    every: () => ({ cancel: () => undefined }),
+    after: () => ({ cancel: () => undefined }),
+    publish: async () => undefined,
+    load: async () => held,
+    fetch: async () => snap({ boss: LIVE_BOSS }),
+    toast: (text) => toasts.push(text),
+  })
+  await poller.start()
+  expect(toasts).toEqual([])
 })

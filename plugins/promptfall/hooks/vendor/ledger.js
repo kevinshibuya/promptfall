@@ -317,7 +317,7 @@ async function world(ctx, record, since) {
     }
   }
   const boss = await loadBoss(ctx.books.kv);
-  if (boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && ctx.presence.has(id) && isCurrent(record) && !(id in boss.contributions)) {
+  if (boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
     engage(record, boss);
     await ctx.books.save(record);
     await ctx.books.kv.set(BOSS_KEY, boss);
@@ -541,6 +541,7 @@ async function contribute(ctx, record, prevDealt) {
   if (prevDealt === null || !next) return;
   const kv = ctx.books.kv;
   const boss = await loadBoss(kv);
+  if (ctx.flags["worldboss.enabled"] === false) return;
   if (!boss || boss.bossId !== next.bossId || !isLive(ctx, boss)) return;
   const delta = next.dealt - prevDealt;
   if (delta <= 0) return;

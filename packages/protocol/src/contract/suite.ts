@@ -1395,14 +1395,29 @@ export function runServerContract(name: string, make: ContractMake): void {
           a.mirror.receive((await infoOf(first.client, auth)).delivery)
         },
       }
-      await spawn(first.client, clock, [a])
+      const other = await first.host.mint({ state: traderState(95), name: 'Bo', linked: true })
+      const otherAuth = { deviceToken: other.deviceToken }
+      const b: Trader = {
+        auth: otherAuth,
+        accountId: other.accountId,
+        mirror: new Mirror(
+          await first.client.bootstrap({ clientVersion: '0.1.0', deviceToken: other.deviceToken }),
+        ),
+        async refresh() {
+          b.mirror.receive((await infoOf(first.client, otherAuth)).delivery)
+        },
+      }
+      await spawn(first.client, clock, [a, b])
       await commitTicks(first.client, a, 5)
       const before = await snapshot(first.client, auth)
+      expect(before.online).toBe(2)
       const second = await make(clock, { flags: {}, kv })
       const after = await snapshot(second.client, auth)
       expect(after.boss).toEqual(before.boss)
-      expect(after.boss?.hp).toBeLessThan(BOSS_BASE_HP)
+      expect(after.boss?.hp).toBeLessThan(2 * BOSS_BASE_HP)
+      // Presence lives in the host's memory: the new host counts only who polled it.
       expect(after.online).toBe(1)
+      expect((await snapshot(first.client, otherAuth)).online).toBe(2)
     })
   })
 }

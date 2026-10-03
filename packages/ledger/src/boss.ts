@@ -237,6 +237,8 @@ export async function contribute(
   if (prevDealt === null || !next) return
   const kv = ctx.books.kv
   const boss = await loadBoss(kv)
+  // The flag turned off is the window closing, as in advanceBoss, even before a poll settles it.
+  if (ctx.flags['worldboss.enabled'] === false) return
   if (!boss || boss.bossId !== next.bossId || !isLive(ctx, boss)) return
   const delta = next.dealt - prevDealt
   if (delta <= 0) return

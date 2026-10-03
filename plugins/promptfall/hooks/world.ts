@@ -80,7 +80,8 @@ export class WorldPoller {
     if (!this.started) {
       this.started = true
       const held = await this.deps.load()
-      if (held) this.state = { ...WORLD_DEFAULT, messages: held.messages }
+      // The held snapshot stays until the first poll, so a reload during a live boss does not toast it again.
+      if (held) this.state = { ...WORLD_DEFAULT, messages: held.messages, snapshot: held.snapshot }
       this.rearm(WORLD_POLL_MS)
     }
     await this.poll()
