@@ -367,8 +367,8 @@ PR 1: Tasks 1 to 7. PR 2: Tasks 8 to 12.
 
 **Boundaries:** No bot changes (Task 4). No plugin.
 
-- [ ] `flags.ts` with its test; `--flag` in the CLI
-- [ ] Routes; `server.test.ts`; the suite green over HTTP; run the acceptance check; commit `feat(fake-server): world, chat and leaderboards routes; --flag`
+- [x] `flags.ts` with its test; `--flag` in the CLI
+- [x] Routes; `server.test.ts`; the suite green over HTTP; run the acceptance check; commit `feat(fake-server): world, chat and leaderboards routes; --flag`
 
 ### Task 4: Bots as HTTP clients
 
