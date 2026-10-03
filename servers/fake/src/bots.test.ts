@@ -156,3 +156,28 @@ describe('bots over HTTP', () => {
     expect(key(a.all)).toEqual(key(b.all))
   }, 120_000)
 })
+
+describe('a failed bot start', () => {
+  it('leaves the ticks resolving and reports once', async () => {
+    const errors: string[] = []
+    const bots = startBots({
+      client: {} as never,
+      host: {
+        mint: async () => {
+          throw new Error('store is gone')
+        },
+        credit: async () => undefined,
+      },
+      kv: new MemoryKeyValue(),
+      seed: 1,
+      count: 2,
+      speed: 1,
+      schedule: () => ({ cancel: () => undefined }),
+      onError: (line) => errors.push(line),
+    })
+    await bots.tick()
+    await bots.tick()
+    bots.stop()
+    expect(errors).toEqual(['promptfall fake: bots failed to start: Error: store is gone'])
+  })
+})
