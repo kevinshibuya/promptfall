@@ -176,25 +176,23 @@ export function registerBand(on: On): void {
           <Text wrap="truncate">{padEnd(` ${clip(enemyText, enemyWidth - 2)}`, enemyWidth)}</Text>
         )
         if (view.boss) {
-          // Boss mode: the first slot is the world boss, the other two empty.
-          const label = `⚔ ${view.boss.glyph} ${view.boss.name}`
-          if (i > 0) enemySlot = <Text>{padEnd('', enemyWidth)}</Text>
-          else if (shown?.engaged) {
+          // Boss mode: the slot's first row is the boss's name, the second its bar (or what
+          // you dealt, when the snapshot has no such boss), the third empty.
+          const slotText = (text: string) => (
+            <Text wrap="truncate">{padEnd(` ${clip(text, enemyWidth - 2)}`, enemyWidth)}</Text>
+          )
+          if (i === 0) enemySlot = slotText(`⚔ ${view.boss.glyph} ${view.boss.name}`)
+          else if (i === 1 && shown?.engaged) {
             const hpText = `${formatCount(shown.shownHp)}/${formatCount(shown.boss.maxHp)}`
-            const labelWidth = Math.max(4, enemyWidth - hpText.length - 13)
             enemySlot = (
               <Box key="boss-slot" flexDirection="row">
-                <Text wrap="truncate">{` ${padEnd(label, labelWidth)} `}</Text>
+                <Text>{'   '}</Text>
                 {HpBar(els, shown.shownHp, shown.boss.maxHp)}
-                <Text wrap="truncate">{` ${hpText}`}</Text>
+                <Text wrap="truncate">{padEnd(` ${hpText}`, enemyWidth - 13)}</Text>
               </Box>
             )
-          } else {
-            const text = `${label} you ${formatCount(view.boss.dealt)}`
-            enemySlot = (
-              <Text wrap="truncate">{padEnd(` ${clip(text, enemyWidth - 2)}`, enemyWidth)}</Text>
-            )
-          }
+          } else if (i === 1) enemySlot = slotText(`  you ${formatCount(view.boss.dealt)}`)
+          else enemySlot = slotText('')
         }
         rows.push(
           <Box key={`row-${i}`} flexDirection="row">

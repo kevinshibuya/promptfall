@@ -98,13 +98,14 @@ export async function world(
         .map(([, entry]) => entry.name)
     }
   }
-  // The boss: an online, current account not engaged yet joins on its poll.
+  // The boss: an online, current account not engaged yet joins on its poll. With presence
+  // off nobody is ever stamped, so the poll itself counts as being online.
   const boss = await loadBoss(ctx.books.kv)
   if (
     boss &&
     ctx.flags['worldboss.enabled'] !== false &&
     isLive(ctx, boss) &&
-    ctx.presence.has(id) &&
+    (!presenceOn || ctx.presence.has(id)) &&
     isCurrent(record) &&
     !(id in boss.contributions)
   ) {

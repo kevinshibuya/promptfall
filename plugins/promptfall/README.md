@@ -96,8 +96,8 @@ Engaged, the party fights the boss instead of waves: tool calls spawn nothing (t
 toward the turn boss), a wiped party is healed in place with no retreat, and nothing drops, since
 the boss never dies on your side. The server counts the damage your committed batches dealt.
 
-The band shows it: the Party tab's first enemy row is the boss with its bar (the server's HP, less
-what your party dealt since the last poll), the status row ends in `boss 62% · 11m`, and the World
+The band shows it: the Party tab's enemy column is the boss, its name on the first row and its bar
+on the second (the server's HP, less what your party dealt since the last poll), the status row ends in `boss 62% · 11m`, and the World
 tab's second row reads `World boss <name> <bar> 62% · 11m left · you <damage>`. Toasts say when a
 boss appears and when it is down. While a boss is live every session polls the world every 5
 seconds.
@@ -105,7 +105,8 @@ seconds.
 Rewards land when the boss dies, or when its window ends: a guaranteed boss-rarity item for 200
 damage or more (5% of the base), and on a kill one bonus roll each for the top 3. Each reward
 toasts `Boss reward: <item> (<rarity>)` and shows as `boss reward <item> (+<gold>g)` in the loot
-log. An item with no free slot waits in the returns queue and arrives when one frees. The boss
+log. An item with no free slot toasts `Boss reward: <gold> gold` instead, waits in the returns
+queue, and arrives as a `returned` loot line when a slot frees. The boss
 board counts every hit, past the boss's remaining HP too.
 
 The world boss changed the sim, so the game is at sim version 3. A store or a fake snapshot from

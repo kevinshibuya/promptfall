@@ -354,21 +354,23 @@ test('in boss mode the first enemy slot is the boss with its bar; without the bo
   const boss = world.snapshot?.boss
   if (!boss || !view.boss) throw new Error('not in boss mode')
   expect(view.boss.bossId).toBe(boss.bossId)
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band() })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
   await ui.press({ key: 'tab-party' })
   expect(
-    await ui.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}`) }),
+    await ui.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}\\s*$`) }),
   ).toBeDefined()
   expect(await ui.find({ key: 'boss-slot' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /\/4,000$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Text', text: /\/4,000\s*$/ })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: /boss \d+% · / })).toBeDefined()
   await ui.unmount()
   net.boss = null
   await clock.advance(5_000)
-  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band() })
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
   expect(await again.find({ key: 'boss-slot' })).toBeUndefined()
+  // The name keeps the first row; what you dealt takes the bar's place on the second.
   expect(
-    await again.find({ type: 'Text', text: new RegExp(`${boss.name} you \\d+`) }),
+    await again.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}\\s*$`) }),
   ).toBeDefined()
+  expect(await again.find({ type: 'Text', text: /^ {3}you \d+/ })).toBeDefined()
   await again.unmount()
 })

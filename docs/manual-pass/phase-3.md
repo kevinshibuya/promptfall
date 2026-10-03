@@ -94,15 +94,17 @@ contract rule 35 instead.
 4. **It appears.** Within 15 seconds of the spawn (your session polls every 15 s until it has seen
    a boss, then every 5):
    - A toast reads `World boss <name> has appeared` (after Esc if the dialog is open).
-   - The Party tab's first enemy row reads `⚔ ☠ <name>` with a bar and `4,000/4,000` (1 online ×
-     4,000: you alone; more if a viewer account, such as a curl, polled inside the last 45 s).
-   - The status row ends in `boss 100% · 2m`.
+   - The Party tab's enemy column reads `⚔ <glyph> <name>` on its first row, and a bar with
+     `4,000/4,000` on its second (1 online × 4,000: you alone; more if a viewer account, such as a
+     curl, polled inside the last 45 s). The glyph and name depend on the grid point.
+   - The status row ends in `boss 100% · 1m` (a little under 2 minutes are left by the first
+     poll, and the minutes round down).
    - The World tab's row 2 reads the boss line with `you 0`.
 5. **Fight it.** `you` on the World tab rises by about 8 a tick (a fresh party). Heroes fall, and
    the whole party is healed in place on a wipe, with no retreat and no wipe toast. The bar falls
    between polls and corrects at each poll. No enemy spawns from the tool calls.
 6. **It withdraws.** At the 2-minute mark the status row's segment disappears, with no down
-   toast. Within 15 seconds:
+   toast. Within 20 seconds (the next poll settles it, the next flush delivers it):
    - One toast reads `Boss reward: <item> (<rarity>)`: you passed 200 (5% of the base) about 50 s
      into the turn.
    - The item is in the Inventory tab, and the loot log has one `boss reward ...` line.
@@ -117,7 +119,7 @@ contract rule 35 instead.
      every 2 real seconds).
    - Within 2 minutes a toast reads `<name> is down`, expected at about 75 to 95 seconds; the bar
      on the Party tab falls steadily between polls.
-   - Within 15 seconds after that: one `Boss reward: ...` toast and loot line if `you` passed 200
+   - Within 20 seconds after that: one `Boss reward: ...` toast and loot line if `you` passed 200
      before the kill. It does when the turn started before the spawn. With `you` under 200 there
      is no reward, which is the threshold working, not a red. There is no second reward (the
      bots hold the top 3). The band is back to waves.

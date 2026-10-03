@@ -24,6 +24,7 @@ import {
   engage,
   loadBoss,
   settleBoss,
+  toBossView,
 } from './boss'
 import { WORLD_BOSSES } from './boss-config'
 import { Ledger } from './ledger'
@@ -275,7 +276,7 @@ describe('the lifecycle', () => {
 })
 
 describe('the ledger', () => {
-  function ledgerAt(start: number) {
+  function ledgerAt(start: number, flags: Record<string, boolean> = {}) {
     let t = start
     let n = 0
     const kv = new MemoryKeyValue()
@@ -286,6 +287,7 @@ describe('the ledger', () => {
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
       linkApprover: async () => ({ login: 'player' }),
+      flags,
     })
     return {
       ledger,
@@ -367,5 +369,83 @@ describe('the ledger', () => {
     expect(stored.state.boss).toBeNull()
     expect(((await kv.get(BOSS_KEY)) as BossRecord).closed).toBe(true)
     expect(stored.state.inventory.some((i) => i.id.startsWith('r'))).toBe(true)
+  })
+})
+
+describe('flags and edges', () => {
+  it('with presence off, a poll engages the caller and the boss is sized for one', async () => {
+    let t = GRID - 1_000
+    let n = 0
+    const kv = new MemoryKeyValue()
+    const ledger = new Ledger({
+      kv,
+      now: async () => t,
+      minClientVersion: '0.1.0',
+      seedSource: () => 7,
+      tokenSource: () => `tok-${n++}`,
+      linkApprover: async () => ({ login: 'player' }),
+      flags: { 'presence.enabled': false },
+    })
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
+    const auth = { deviceToken: m.deviceToken }
+    t += 2_000
+    const w = await ledger.world(auth, 0)
+    if ('reason' in w) throw new Error('unauthorized')
+    expect(w.online).toBe(0)
+    expect(w.boss).toMatchObject({ maxHp: BOSS_BASE_HP, hp: BOSS_BASE_HP })
+    const record = (await kv.get(`pf:acct:${m.accountId}:record`)) as AccountRecord
+    expect(record.log.map((e) => e.event.t)).toEqual(['boss_engaged'])
+  })
+
+  it('with the flag off, a committed batch contributes nothing, and the snapshot hides the boss', async () => {
+    const { ctx } = context(GRID + 1_000, { 'worldboss.enabled': false })
+    const boss = bossRecord({
+      bossId: 'wbx',
+      spawnedAt: GRID,
+      endsAt: GRID + BOSS_WINDOW_MS,
+      contributions: { a: 0 },
+    })
+    await ctx.books.kv.set(BOSS_KEY, boss)
+    const record = await account(ctx, 'a', engagedState('wbx', 300))
+    await contribute(ctx, record, 0)
+    expect(await loadBoss(ctx.books.kv)).toEqual(boss)
+    expect(toBossView(ctx, boss, 'a')).toBeNull()
+  })
+
+  it('a batch committed after the window, before any settle, counts for nothing', async () => {
+    const { ctx } = context(GRID + BOSS_WINDOW_MS + 5)
+    const boss = bossRecord({
+      bossId: 'wbx',
+      spawnedAt: GRID,
+      endsAt: GRID + BOSS_WINDOW_MS,
+      contributions: { a: 0 },
+    })
+    await ctx.books.kv.set(BOSS_KEY, boss)
+    const record = await account(ctx, 'a', engagedState('wbx', 300))
+    await contribute(ctx, record, 0)
+    expect(await loadBoss(ctx.books.kv)).toEqual(boss)
+  })
+
+  it('the sweep settles an expired boss as the poll would', async () => {
+    let t = GRID - 1_000
+    let n = 0
+    const kv = new MemoryKeyValue()
+    const ledger = new Ledger({
+      kv,
+      now: async () => t,
+      minClientVersion: '0.1.0',
+      seedSource: () => 7,
+      tokenSource: () => `tok-${n++}`,
+      linkApprover: async () => ({ login: 'player' }),
+    })
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
+    await ledger.world({ deviceToken: m.deviceToken }, 0)
+    t += 2_000
+    await ledger.world({ deviceToken: m.deviceToken }, 0)
+    t += BOSS_WINDOW_MS
+    await ledger.host.sweep()
+    expect(((await kv.get(BOSS_KEY)) as BossRecord).closed).toBe(true)
+    const record = (await kv.get(`pf:acct:${m.accountId}:record`)) as AccountRecord
+    expect(record.log.map((e) => e.event.t)).toEqual(['boss_engaged', 'boss_disengaged'])
   })
 })
