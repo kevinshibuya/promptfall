@@ -274,7 +274,12 @@ describe('HttpClient', () => {
 
   it('a 500 is ServerError', async () => {
     const { http } = client({ error: 'internal' }, 500)
-    await expect(http.account(auth)).rejects.toMatchObject({ name: 'ServerError' })
+    await expect(http.account(auth)).rejects.toMatchObject({ name: 'ServerError', status: 500 })
+  })
+
+  it('a 400 is ServerError carrying its status', async () => {
+    const { http } = client({ error: 'schema', issues: [] }, 400)
+    await expect(http.account(auth)).rejects.toMatchObject({ name: 'ServerError', status: 400 })
   })
 
   it('a 200 body failing its schema is ServerError', async () => {

@@ -634,4 +634,6 @@ PR from `feat/phase-2-market` into `ai-staging` titled `Promptfall phase 2, PR 2
 
 ## Out of scope
 
+Phase 5 note (finding F of the PR #2 review): the real server reads `clientVersion` from the raw body leniently and answers `version_gate` before strict body validation, on bootstrap and on batches, so a lagging client is told to update and never answered 400. The client pauses on a 4xx to a submit with the update notice; 5xx, timeouts and unreadable bodies stay outages.
+
 Presence, chat, leaderboards, world bosses (phase 3); sprites and sound (phase 4); real GitHub device flow, Postgres, Redis, admin CLI, Docker, the long-poll stream, `revokedItemIds` population, the server-side lease (phase 5); rate limits on market routes; hero buy orders; migrations between sim versions; durable transactions on the in-process host (its store has no atomic multi-key write; phase 1 already accepts that).
