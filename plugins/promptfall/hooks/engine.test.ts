@@ -449,6 +449,8 @@ test('a trade with a non-empty buffer flushes first: the batch arrives before th
   expect(batchesAtCall).toBe(1)
   expect(client.acks[0]).toMatchObject({ ok: true })
   expect(r).toEqual({ ok: false, reason: 'not_linked' })
+})
+
 test('a flush that pauses the engine stops the trade', async () => {
   const { engine, client, at } = setup()
   await engine.start()
