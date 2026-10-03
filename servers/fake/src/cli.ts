@@ -1,10 +1,12 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
+import { HttpClient } from '@promptfall/protocol'
 import { startBots } from './bots'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
 import { parseFlags } from './flags'
+import { nodeFetch } from './node-fetch'
 import { createFakeServer } from './server'
 
 // `pnpm fake -- --port 7777` passes a leading `--`; `pnpm fake --port 7777` does not.
@@ -84,7 +86,8 @@ kv.flushSync()
 const bots =
   botCount > 0
     ? startBots({
-        ledger: server.ledger,
+        client: new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch }),
+        host: server.ledger.host,
         kv,
         seed,
         count: botCount,
