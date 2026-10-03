@@ -1,0 +1,174 @@
+import { content } from './content'
+import { generateHero, recruitHero } from './heroes'
+import { rerollAffix, vendorValue } from './loot'
+import { clampHp, clone, drawWeighted, findHero } from './progression'
+import type { Effect, Event, GameState, StepResult } from './types'
+
+type Of<K extends Event['t']> = Extract<Event, { t: K }>
+
+function reject(state: GameState, event: Event, reason: string): StepResult {
+  return { state, effects: [{ k: 'rejected', event, reason }] }
+}
+
+function draft(state: GameState, mutate: (s: GameState, effects: Effect[]) => void): StepResult {
+  const s = clone(state)
+  const effects: Effect[] = []
+  mutate(s, effects)
+  return { state: s, effects }
+}
+
+export function tavernPrice(state: GameState): number {
+  const { baseCost, costGrowthBp } = content.tavern
+  return Math.floor((baseCost * (10000 + costGrowthBp * state.recruits)) / 10000)
+}
+
+export function nextExpansionCost(state: GameState, which: 'inventory' | 'roster'): number | null {
+  const rule = content.expansions[which]
+  const start = which === 'inventory' ? 30 : 24
+  const cap = which === 'inventory' ? state.inventoryCap : state.rosterCap
+  if (cap >= rule.max) return null
+  return rule.costs[Math.floor((cap - start) / rule.step)] ?? null
+}
+
+export function equip(state: GameState, event: Of<'equip'>): StepResult {
+  const hero = findHero(state, event.heroId)
+  if (!hero) return reject(state, event, 'unknown_hero')
+  const item = state.inventory.find((i) => i.id === event.itemId)
+  if (!item) return reject(state, event, 'unknown_item')
+  const base = content.itemBases[item.base]
+  if (!base?.classes.includes(hero.cls)) return reject(state, event, 'class_mismatch')
+  if (item.equippedBy !== null && item.equippedBy !== hero.id) {
+    return reject(state, event, 'already_equipped')
+  }
+  return draft(state, (s) => {
+    const h = findHero(s, event.heroId)
+    const it = s.inventory.find((i) => i.id === event.itemId)
+    if (!h || !it) return
+    // An item worn in another slot of the same hero cannot happen: slots are per base.
+    const oldId = h.equipment[base.slot]
+    if (oldId && oldId !== it.id) {
+      const old = s.inventory.find((i) => i.id === oldId)
+      if (old) old.equippedBy = null
+    }
+    h.equipment[base.slot] = it.id
+    it.equippedBy = h.id
+    clampHp(s, h)
+  })
+}
+
+export function unequip(state: GameState, event: Of<'unequip'>): StepResult {
+  const hero = findHero(state, event.heroId)
+  if (!hero) return reject(state, event, 'unknown_hero')
+  if (!hero.equipment[event.slot]) return reject(state, event, 'slot_empty')
+  return draft(state, (s) => {
+    const h = findHero(s, event.heroId)
+    if (!h) return
+    const it = s.inventory.find((i) => i.id === h.equipment[event.slot])
+    if (it) it.equippedBy = null
+    h.equipment[event.slot] = null
+    clampHp(s, h)
+  })
+}
+
+export function vendor(state: GameState, event: Of<'vendor'>): StepResult {
+  const item = state.inventory.find((i) => i.id === event.itemId)
+  if (!item) return reject(state, event, 'unknown_item')
+  if (item.equippedBy !== null) return reject(state, event, 'item_equipped')
+  return draft(state, (s) => {
+    s.inventory = s.inventory.filter((i) => i.id !== event.itemId)
+    s.gold += vendorValue(item)
+  })
+}
+
+export function reforge(state: GameState, event: Of<'reforge'>): StepResult {
+  const item = state.inventory.find((i) => i.id === event.itemId)
+  if (!item) return reject(state, event, 'unknown_item')
+  const index = event.affixIndex
+  if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
+    return reject(state, event, 'bad_affix_index')
+  }
+  const cost = content.rarity[item.rarity].reforgeCost
+  if (state.gold < cost) return reject(state, event, 'not_enough_gold')
+  return draft(state, (s) => {
+    const it = s.inventory.find((i) => i.id === event.itemId)
+    if (!it) return
+    s.gold -= cost
+    rerollAffix(s, it, index)
+    const wearer = it.equippedBy ? findHero(s, it.equippedBy) : undefined
+    if (wearer) clampHp(s, wearer)
+  })
+}
+
+export function setParty(state: GameState, event: Of<'set_party'>): StepResult {
+  const ids = event.heroIds
+  for (const id of ids) if (!findHero(state, id)) return reject(state, event, 'unknown_hero')
+  if (new Set(ids).size !== ids.length) return reject(state, event, 'duplicate_hero')
+  return draft(state, (s, effects) => {
+    const party: [string, string, string] = [ids[0], ids[1], ids[2]]
+    if (s.encounter === null && s.wave === 1 && s.stats.kills === 0) {
+      s.party = party
+      s.pendingParty = null
+      effects.push({ k: 'party_applied', heroIds: [...party] })
+    } else {
+      s.pendingParty = party
+    }
+  })
+}
+
+export function recruit(state: GameState, event: Of<'recruit'>): StepResult {
+  const price = tavernPrice(state)
+  if (state.gold < price) return reject(state, event, 'not_enough_gold')
+  if (state.roster.length >= state.rosterCap) return reject(state, event, 'roster_full')
+  return draft(state, (s, effects) => {
+    s.gold -= price
+    s.recruits += 1
+    const rarity = drawWeighted(s, content.tavern.odds)
+    recruitHero(s, generateHero(s, rarity), 'tavern', effects)
+  })
+}
+
+export function dismiss(state: GameState, event: Of<'dismiss'>): StepResult {
+  const hero = findHero(state, event.heroId)
+  if (!hero) return reject(state, event, 'unknown_hero')
+  if (state.party.includes(hero.id) || state.pendingParty?.includes(hero.id)) {
+    return reject(state, event, 'in_party')
+  }
+  if (state.roster.filter((h) => h.cls === hero.cls).length <= 1) {
+    return reject(state, event, 'last_of_class')
+  }
+  return draft(state, (s) => {
+    for (const it of s.inventory) if (it.equippedBy === hero.id) it.equippedBy = null
+    s.roster = s.roster.filter((h) => h.id !== hero.id)
+    s.gold += content.rarity[hero.rarity].vendorGoldPerZone * 2
+  })
+}
+
+export function setFarm(state: GameState, event: Of<'set_farm'>): StepResult {
+  return draft(state, (s) => {
+    s.farm = event.on === true
+  })
+}
+
+function expand(
+  state: GameState,
+  event: Of<'expand_inventory'> | Of<'expand_roster'>,
+  which: 'inventory' | 'roster',
+): StepResult {
+  const cost = nextExpansionCost(state, which)
+  if (cost === null) return reject(state, event, 'at_max')
+  if (state.gold < cost) return reject(state, event, 'not_enough_gold')
+  const step = content.expansions[which].step
+  return draft(state, (s) => {
+    s.gold -= cost
+    if (which === 'inventory') s.inventoryCap += step
+    else s.rosterCap += step
+  })
+}
+
+export function expandInventory(state: GameState, event: Of<'expand_inventory'>): StepResult {
+  return expand(state, event, 'inventory')
+}
+
+export function expandRoster(state: GameState, event: Of<'expand_roster'>): StepResult {
+  return expand(state, event, 'roster')
+}
