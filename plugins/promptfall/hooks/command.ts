@@ -6,8 +6,8 @@ export const PANE_ID = 'promptfall'
 
 export const COMMAND = {
   name: 'promptfall',
-  description: 'Promptfall: open the game, or off / on / farm',
-  argumentHint: '[inventory|heroes|account|odds|off|on|farm]',
+  description: 'Promptfall: open the game, or off / on / farm / server',
+  argumentHint: '[inventory|heroes|account|odds|off|on|farm|server <url>|server local]',
   immediate: true,
 } as const
 
@@ -17,9 +17,18 @@ const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
 
+const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
+
+/** `server local` → null; `server <url>` → the URL; anything else → undefined. */
+function serverTarget(rest: string): string | null | undefined {
+  if (rest.toLowerCase() === 'local') return null
+  return /^https?:\/\/\S+$/i.test(rest) ? rest : undefined
+}
+
 export function registerCommand(on: On, game: () => GameHandle | null): void {
   on('command.run', { command: 'promptfall' }, async ($, e) => {
-    const arg = e.args.trim().toLowerCase()
+    const raw = e.args.trim()
+    const arg = raw.toLowerCase()
     // Typing the command means the player is in this session: it takes the lease.
     if (arg !== 'off') await game()?.claim()
 
@@ -29,6 +38,20 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
       if (running) await running.setOff(off)
       else await update($, modeAtom, () => (off ? 'off' : 'primary') as Mode)
       return { text: off ? 'Promptfall band is off for this session' : 'Promptfall band is on' }
+    }
+
+    if (arg === 'server' || arg.startsWith('server ')) {
+      const target = serverTarget(raw.slice('server'.length).trim())
+      if (target === undefined) return { text: SERVER_USAGE }
+      const running = game()
+      if (!running) return { text: 'Promptfall is not playing in this session' }
+      const r = await running.switchServer(target)
+      return {
+        text:
+          r.dropped > 0
+            ? `Promptfall now plays on ${r.label}; ${r.dropped} unsent events on ${r.old} were dropped`
+            : `Promptfall now plays on ${r.label}`,
+      }
     }
 
     if (arg === 'farm') {

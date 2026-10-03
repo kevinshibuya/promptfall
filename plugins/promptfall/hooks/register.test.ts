@@ -1,5 +1,9 @@
 import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
+import type { GameView } from '../types'
+import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { Ledger } from './vendor/ledger.js'
+import { MemoryKeyValue } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState } from './vendor/sim.js'
 
 /** Answers $.store from a map and records every write. */
@@ -298,4 +302,177 @@ test('a primary that lost the lease between renewals does not flush', async ($, 
   await time.advance(5_000)
   expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
   expect(last.get('mode')).toBe('secondary')
+})
+
+const RUN = {
+  origin: { kind: 'composer' },
+  presentation: { isFullscreen: false, columns: 120 },
+} as const
+
+const PANE = {
+  component: 'Pane' as const,
+  requestId: 'promptfall',
+  props: {
+    title: 'Promptfall',
+    isFocused: true,
+    bodyColumns: 100,
+    placement: 'inline' as const,
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+}
+
+const URL_A = 'http://127.0.0.1:1'
+
+/** A remote server: the vendored ledger behind a mocked `$.http.fetch`, which throws while `down`. */
+function remote(on: On) {
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => 1_000_000,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: async () => ({ login: 'remote-player' }),
+  })
+  const net = { down: false, calls: 0 }
+  on('http.fetch', async (_$, e) => {
+    net.calls += 1
+    if (net.down) throw new Error('connect ECONNREFUSED')
+    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0]
+    const method = e.init?.method ?? 'GET'
+    const header = e.init?.headers?.authorization ?? ''
+    const auth = { deviceToken: header.replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    let result: unknown
+    if (method === 'POST' && path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
+    else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
+    else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
+  })
+  return net
+}
+
+test('/promptfall server plays on the URL; a throwing fetch shows the notice and the band keeps ticking', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect(r).toMatchObject({ text: `Promptfall now plays on ${URL_A}` })
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect(typeof data.get(`promptfall:token:${URL_A}`)).toBe('string')
+  expect(last.get('server')).toBe(URL_A)
+  const view = last.get('view') as GameView
+  expect(view.account.server).toBe(URL_A)
+  expect(view.gold).toBe(0)
+  expect(net.calls).toBeGreaterThan(0)
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 5; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  expect(last.get('mode')).toBe('primary')
+  const before = JSON.stringify(last.get('view'))
+  await time.advance(10_000)
+  expect(JSON.stringify(last.get('view'))).not.toBe(before)
+})
+
+test('a session whose store points at an unreachable server rides the outage and recovers', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  net.down = true
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  expect(last.get('view') ?? null).toBeNull()
+  net.down = false
+  await time.advance(2_000)
+  expect(last.get('notice')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+})
+
+test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  await $.tool.call({ tool: 'Bash', command: 'ls' })
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect((r as { text: string }).text).toMatch(
+    /^Promptfall now plays on in-process; \d+ unsent events on http:\/\/127\.0\.0\.1:1 were dropped$/,
+  )
+  expect(data.has('promptfall:server')).toBe(false)
+  expect(last.get('server')).toBeNull()
+  expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const calls = net.calls
+  await time.advance(60_000)
+  expect(net.calls).toBe(calls)
+})
+
+test('the link flow against the in-process ledger shows Linked as player', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'link-github' })
+  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeDefined()
+  await time.advance(5_000)
+  expect((last.get('view') as GameView).account.linked).toBe('player')
+  expect(await ui.find({ text: /Linked as player/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the reset on a v1 store starts a fresh account and keeps the lease', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const old = { ...createInitialState(5), v: 1 }
+  const { data } = store(on, {
+    'promptfall:deviceToken': 'token-1',
+    'promptfall:pf:token:token-1': 'acct-1',
+    'promptfall:pf:acct:acct-1:record': {
+      account: { accountId: 'acct-1', seed: 5, createdAt: 0, displayName: null, linked: null },
+      state: old,
+      seq: 3,
+      refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      committed: [],
+    },
+  })
+  const last = states(on)
+  engineBottom(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(OLD_VERSION_NOTICE)
+  expect(last.get('view') ?? null).toBeNull()
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  expect(await ui.find({ text: /Server: in-process/ })).toBeDefined()
+  await ui.press({ key: 'reset' })
+  const view = last.get('view') as GameView
+  expect(view).toBeTruthy()
+  expect(view.accountId).not.toBe('acct-1')
+  expect(last.get('mode')).toBe('primary')
+  // A fresh account: the welcome replaces the old-version notice.
+  expect(last.get('notice')).toBe('Welcome to Promptfall. /promptfall heroes to meet your party')
+  expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
+  expect(data.has('promptfall:lease')).toBe(true)
+  await ui.unmount()
 })

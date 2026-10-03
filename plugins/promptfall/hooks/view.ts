@@ -1,4 +1,13 @@
-import type { EnemyView, GameView, HeroView, ItemView, LootView, RosterHeroView } from '../types'
+import type {
+  AccountView,
+  EnemyView,
+  GameView,
+  HeroView,
+  ItemView,
+  LootView,
+  RosterHeroView,
+} from '../types'
+import type { Account, ServerConfig } from './vendor/protocol.js'
 import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
 
 const LOOT_LINES = 12
@@ -68,7 +77,27 @@ function itemView(item: Item): ItemView {
 }
 
 /** Everything the band and the dialog draw, derived from the state alone. */
-export function toGameView(state: GameState, accountId: string, firstRun: boolean): GameView {
+/** The dialog's account line: the GitHub login, the server, whether the market is open, returns waiting. */
+export function toAccountView(
+  account: Account | null,
+  config: ServerConfig | null,
+  server: string,
+  returns: number,
+): AccountView {
+  return {
+    linked: account?.linked?.login ?? null,
+    server,
+    marketOpen: config?.flags['market.enabled'] ?? true,
+    returns,
+  }
+}
+
+export function toGameView(
+  state: GameState,
+  accountId: string,
+  firstRun: boolean,
+  account: AccountView,
+): GameView {
   const heroes: HeroView[] = []
   for (const id of state.party) {
     const hero = state.roster.find((h) => h.id === id)
@@ -131,5 +160,6 @@ export function toGameView(state: GameState, accountId: string, firstRun: boolea
     nextRosterCost: expansionCost(state.rosterCap, 24, content.expansions.roster),
     accountId,
     firstRun,
+    account,
   }
 }

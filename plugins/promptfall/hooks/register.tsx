@@ -3,16 +3,16 @@ import { atom, read, update } from 'claude-code'
 import type { Mode } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
-import { acquire, claim, holds, release } from './lease'
+import { acquire, claim, holds, LEASE_KEY, release } from './lease'
+import { type ResolvedServer, resolveClient } from './server'
 import { DIALOG_DEFAULT } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
-import { Ledger } from './vendor/ledger.js'
-import type { MarketResult } from './vendor/protocol.js'
+import type { FetchLike, LinkPoll, MarketResult, Unauthorized } from './vendor/protocol.js'
 import { content, type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
-import { heroName, toGameView } from './view'
+import { heroName, toAccountView, toGameView } from './view'
 
 type Timer = { cancel: () => void }
 
@@ -27,7 +27,15 @@ type Io = {
   leaseOwner: () => Promise<string | null>
   mode: () => Promise<Mode>
   paneNotice: (text: string | null) => Promise<void>
+  /** Shows or clears the device-flow code in the dialog. */
+  dialogLink: (link: { code: string; url: string } | null) => Promise<void>
+  fetch: FetchLike
 }
+
+/** The store key of the machine's server setting: a URL, or absent for the in-process ledger. */
+const SERVER_KEY = 'server'
+/** How many polls a link waits for approval before giving up (15 minutes at 5 s). */
+const LINK_POLLS = 180
 
 const TURN_CADENCE_MS = 2000
 const IDLE_CADENCE_MS = 5000
@@ -66,9 +74,11 @@ function effectToast(effect: Effect): string | null {
  * a hot reload starts it over; the session's atoms and the store carry on.
  */
 class GameSession implements GameHandle {
-  readonly engine: GameEngine
+  engine: GameEngine
   private readonly kv: StoreKeyValue
-  private readonly server: Ledger
+  private server: ResolvedServer
+  private setting: string | null = null
+  private linkGen = 0
   private role: 'primary' | 'secondary' = 'secondary'
   private off = false
   private owner = ''
@@ -81,18 +91,21 @@ class GameSession implements GameHandle {
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
-    this.server = new Ledger({
+    this.server = this.resolve(null)
+    this.engine = this.makeEngine()
+  }
+
+  private resolve(setting: string | null): ResolvedServer {
+    return resolveClient(setting, { kv: this.kv, now: this.io.now, fetch: this.io.fetch })
+  }
+
+  private makeEngine(): GameEngine {
+    const io = this.io
+    return new GameEngine({
+      client: this.server.client,
       kv: this.kv,
-      now: io.now,
-      speed: 1,
-      minClientVersion: CLIENT_VERSION,
-      seedSource: () => Number.parseInt(crypto.randomUUID().slice(0, 8), 16),
-      tokenSource: () => crypto.randomUUID(),
-      linkApprover: async () => ({ login: 'player' }),
-    })
-    this.engine = new GameEngine({
-      client: this.server,
-      kv: this.kv,
+      tokenKey: this.server.tokenKey,
+      label: this.server.label,
       now: io.now,
       newBatchId: () => crypto.randomUUID(),
       publish: (patch) => {
@@ -109,7 +122,24 @@ class GameSession implements GameHandle {
     })
   }
 
+  /** Points the session at a server: a fresh client and engine; the old engine stops. */
+  private useServer(setting: string | null): void {
+    this.engine.stop()
+    this.linkGen += 1
+    this.setting = setting
+    this.server = this.resolve(setting)
+    this.engine = this.makeEngine()
+  }
+
+  private async readSetting(): Promise<string | null> {
+    const raw = await this.kv.get(SERVER_KEY)
+    return typeof raw === 'string' && raw !== '' ? raw : null
+  }
+
   async start(): Promise<void> {
+    const setting = await this.readSetting()
+    if (setting !== null) this.useServer(setting)
+    await this.io.publish({ server: setting })
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
     this.off = (await this.io.mode()) === 'off'
     await this.io.publish({ leaseOwner: this.owner })
@@ -152,6 +182,76 @@ class GameSession implements GameHandle {
   sync(): Promise<void> {
     if (this.role !== 'primary') return this.refresh()
     return this.engine.sync()
+  }
+
+  /**
+   * Flushes once on the old server; in an outage the unsent events cannot go
+   * anywhere, so they are dropped and counted. Then the new client starts.
+   */
+  async switchServer(url: string | null): Promise<{ label: string; old: string; dropped: number }> {
+    const old = this.server.label
+    let dropped = 0
+    if (this.role === 'primary') {
+      await this.engine.flush()
+      if (this.engine.isUnreachable()) dropped = this.engine.unsentCount()
+    }
+    if (url === null) await this.kv.delete(SERVER_KEY)
+    else await this.kv.set(SERVER_KEY, url)
+    await this.restart(url)
+    return { label: this.server.label, old, dropped }
+  }
+
+  /** A fresh engine on `setting`, started as primary or refreshed as secondary. */
+  private async restart(setting: string | null): Promise<void> {
+    this.useServer(setting)
+    await this.io.publish({ server: setting, notice: null, view: null })
+    if (this.role === 'primary') await this.becomePrimary()
+    else await this.becomeSecondary()
+  }
+
+  /** Starts the device flow; polling is the session's, so it outlives a closed dialog. */
+  async link(): Promise<void> {
+    if (this.role !== 'primary') throw new Error('not_primary')
+    const engine = this.engine
+    const start = await engine.call((client, auth) => client.linkStart(auth))
+    if ('reason' in start) return
+    const gen = ++this.linkGen
+    await this.io.dialogLink({ code: start.code, url: start.url })
+    let polls = 0
+    const poll = async () => {
+      if (gen !== this.linkGen) return
+      polls += 1
+      let r: LinkPoll | Unauthorized
+      try {
+        r = await engine.call((client, auth) => client.linkPoll(auth, start.code))
+      } catch {
+        r = { status: 'pending' }
+      }
+      if (gen !== this.linkGen) return
+      if ('status' in r && r.status === 'linked') {
+        this.linkGen += 1
+        engine.setAccount(r.account)
+        await this.io.dialogLink(null)
+        return
+      }
+      if ('reason' in r || polls >= LINK_POLLS) {
+        await this.io.dialogLink(null)
+        return
+      }
+      this.io.after(start.intervalMs, () => void poll())
+    }
+    this.io.after(start.intervalMs, () => void poll())
+  }
+
+  /** Deletes every Promptfall key but the lease, then starts over on the same server. */
+  async reset(): Promise<void> {
+    await this.claim()
+    this.engine.stop()
+    const setting = this.setting
+    for (const key of await this.kv.keys()) if (key !== LEASE_KEY) await this.kv.delete(key)
+    if (setting !== null) await this.kv.set(SERVER_KEY, setting)
+    await this.io.dialogLink(null)
+    await this.restart(setting)
   }
 
   setCadence(ms: number): void {
@@ -199,7 +299,7 @@ class GameSession implements GameHandle {
       return
     }
     // The in-process ledger's only sweep: expiries and returns before each timed flush.
-    await this.server.host.sweep()
+    await this.server.host?.sweep()
     await this.engine.flushIfIdle()
   }
 
@@ -227,6 +327,12 @@ class GameSession implements GameHandle {
   }
 
   private async renew(): Promise<void> {
+    // The server setting is machine-wide: a secondary follows a switch made elsewhere.
+    const setting = await this.readSetting()
+    if (setting !== this.setting && this.role === 'secondary') {
+      this.useServer(setting)
+      await this.io.publish({ server: setting })
+    }
     const ok = await acquire(this.kv, this.owner, await this.io.now())
     if (ok && this.role === 'secondary') await this.becomePrimary()
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
@@ -238,11 +344,14 @@ class GameSession implements GameHandle {
    * nothing, and the delivery applied on top of the committed state.
    */
   private async refresh(): Promise<void> {
-    const token = await this.kv.get('deviceToken')
+    const token = await this.kv.get(this.server.tokenKey)
     if (typeof token !== 'string') return
-    let boot: Awaited<ReturnType<Ledger['bootstrap']>>
+    let boot: Awaited<ReturnType<ResolvedServer['client']['bootstrap']>>
     try {
-      boot = await this.server.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
+      boot = await this.server.client.bootstrap({
+        clientVersion: CLIENT_VERSION,
+        deviceToken: token,
+      })
     } catch {
       return
     }
@@ -254,7 +363,8 @@ class GameSession implements GameHandle {
       boot.state,
       boot.delivery.events.map((e) => e.event),
     ).state
-    await this.io.publish({ view: toGameView(state, boot.account.accountId, false) })
+    const account = toAccountView(boot.account, boot.config, this.server.label, 0)
+    await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
   private onEffects(effects: Effect[]): void {
@@ -280,6 +390,7 @@ const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const leaseOwnerAtom = atom({ plugin: 'promptfall', key: 'leaseOwner' } as const, null)
 const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
+const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 
 let game: GameSession | null = null
 
@@ -302,6 +413,7 @@ export const register: Register = (on) => {
           get: (key) => $.store.get(key),
           set: (key, value) => $.store.set(key, value),
           delete: (key) => $.store.delete(key),
+          keys: () => $.store.keys(),
         },
         publish: async (patch) => {
           if (patch.view !== undefined) await update($, viewAtom, () => patch.view ?? null)
@@ -310,6 +422,7 @@ export const register: Register = (on) => {
           if (patch.leaseOwner !== undefined) {
             await update($, leaseOwnerAtom, () => patch.leaseOwner ?? null)
           }
+          if (patch.server !== undefined) await update($, serverAtom, () => patch.server ?? null)
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -317,6 +430,11 @@ export const register: Register = (on) => {
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
         },
+        dialogLink: async (link) => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+        },
+        fetch: (url, init) =>
+          $.http.fetch(url, init).then((r) => ({ status: r.status, ok: r.ok, text: r.text })),
       })
       game = session
       await session.start()
@@ -334,6 +452,7 @@ export const register: Register = (on) => {
           get: (key) => $.store.get(key),
           set: (key, value) => $.store.set(key, value),
           delete: (key) => $.store.delete(key),
+          keys: () => $.store.keys(),
         },
         publish: async (patch) => {
           if (patch.view !== undefined) await update($, viewAtom, () => patch.view ?? null)
@@ -342,6 +461,7 @@ export const register: Register = (on) => {
           if (patch.leaseOwner !== undefined) {
             await update($, leaseOwnerAtom, () => patch.leaseOwner ?? null)
           }
+          if (patch.server !== undefined) await update($, serverAtom, () => patch.server ?? null)
         },
         toast: (text) => $.ui.toast(text),
         leaseOwner: () => read($, leaseOwnerAtom),
@@ -349,6 +469,11 @@ export const register: Register = (on) => {
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
         },
+        dialogLink: async (link) => {
+          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+        },
+        fetch: (url, init) =>
+          $.http.fetch(url, init).then((r) => ({ status: r.status, ok: r.ok, text: r.text })),
       })
       game = session
       await session.start()
