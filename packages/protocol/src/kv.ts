@@ -2,6 +2,8 @@ export interface KeyValue {
   get(key: string): Promise<unknown>
   set(key: string, value: unknown): Promise<void>
   delete(key: string): Promise<void>
+  /** Optional: persist everything written since the last flush, atomically where the host can. The ledger calls it after every mutating operation. */
+  flush?(): Promise<void>
 }
 
 /** In-memory KeyValue. Values round-trip through JSON, as they would through a store file. */
