@@ -152,8 +152,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   1,000,000 gold. Listing fee 2 percent of the asking price, minimum 1 gold,
   paid on listing and kept on cancel and expiry. Sale fee 5 percent of the
   price, `floor(price × 500 / 10000)`, on listings and on buy-order fills alike.
-- A listing can be cancelled any time before it sells. A listed item or hero
-  leaves the inventory or roster and frees its slot.
+- A listing can be cancelled any time before it sells, market open or closed,
+  and so can a buy order. A listed item or hero leaves the inventory or roster
+  and frees its slot.
 - Expiry and cancel return the item or hero. With no free slot it waits in
   returns and is delivered the moment a slot frees. Returns are never vendored;
   auto-vendoring is for drops only.
@@ -212,9 +213,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   travel in batches: combat, rests, equips, vendoring. Server events are
   authored only by the ledger and are the effects of trades on an account's
   inventory, roster and gold: `listed`, `returned`, `sold`, `bought`,
-  `order_placed`, `order_refunded`, `order_filled`, `fee`. The sim applies a
-  server event without judging it; one it cannot apply is a bug caught by the
-  hash check, never a rejection. The batch schema accepts player events only.
+  `order_placed`, `order_refunded`, `order_filled`, `order_sold`, `credited`.
+  The sim applies a server event without judging it; one it cannot apply is a
+  bug caught by the hash check, never a rejection. The batch schema accepts
+  player events only.
 - A batch declares the cursor of the last server event its client applied,
   and the server accepts it only when that is the account's latest: server
   events are applied the moment the ledger authors them, so every trade is
@@ -276,7 +278,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
 - `@promptfall/ledger` is the server core: account records, batch replay and
   the market rules as pure functions over an injected clock and key-value
-  store, with expiries run through `sweep(now)`. Three hosts run it: the
+  store, with expiries enforced on every market call and swept by the host.
+  Three hosts run it: the
   in-process fake, the HTTP fake and the real server. A host adds transport,
   persistence and, for the HTTP fake, bots; it never adds rules.
 - Phase 1: an in-process fake inside the plugin, no infrastructure, persisting
