@@ -544,13 +544,19 @@ test('Enter posts the line, it shows before the next poll, and the box empties',
 })
 
 test('a refusal flashes for 5 s; a thrown post flashes Server unreachable and sets no notice', async ($, on) => {
-  const { player, net } = await marketHarness(on)
+  const { player, net, sent } = await marketHarness(on)
   const { ui, states, clock } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-chat' })
   await ui.input({ key: 'chat-compose', text: 'a'.repeat(201) })
   expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeDefined()
   await clock.advance(5_000)
   expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeUndefined()
+  // Past the wire limit (2000): refused here as too long, not sent and read as an outage.
+  const posts = chatPosts(sent).length
+  await ui.input({ key: 'chat-compose', text: 'b'.repeat(2001) })
+  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeDefined()
+  expect(chatPosts(sent)).toHaveLength(posts)
+  await clock.advance(5_000)
   net.chatDown = true
   await ui.input({ key: 'chat-compose', text: 'anyone there?' })
   expect(await ui.find({ text: 'Server unreachable' })).toBeDefined()

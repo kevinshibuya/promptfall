@@ -171,6 +171,8 @@ export function startBots(options: BotOptions): Bots {
       })
     }
   })()
+  // Awaited in every tick; this keeps a failed start from being an unhandled rejection first.
+  ready.catch(() => undefined)
 
   /** One batch of idle play: ticks, a tool call every few, a rest and a turn end now and then. */
   function playEvents(bot: Bot): PlayerEvent[] {
@@ -337,7 +339,13 @@ export function startBots(options: BotOptions): Bots {
   }
 
   async function tick(): Promise<void> {
-    await ready
+    try {
+      await ready
+    } catch (error) {
+      // A failed start leaves the bots idle; the fake keeps serving.
+      log(`bots failed to start: ${String(error)}`)
+      return
+    }
     const bot = bots[turn % Math.max(1, bots.length)]
     turn += 1
     if (!bot) return
