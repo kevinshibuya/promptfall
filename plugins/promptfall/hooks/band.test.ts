@@ -689,3 +689,12 @@ test('on the desktop the party line wraps whole segments: no hero cut, the boss 
     await ui.unmount()
   }
 })
+
+test('on the desktop the stage sits in a column, so its frame takes the band width', async ($, on) => {
+  // In a row Box the desktop draws an interactive Svg's frame at the default 300 × 150 points.
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  expect((await ui.find({ key: 'row-stage' }))?.props.flexDirection).toBe('column')
+  await ui.unmount()
+})

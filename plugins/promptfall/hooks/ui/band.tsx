@@ -382,7 +382,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     if (party && layout.kind === 'full') {
       return (
         <Box key="band" flexDirection="column">
-          <Box key="row-stage" flexDirection="row">
+          {/* On the desktop a row would leave the stage's frame at its default 300 points. */}
+          <Box key="row-stage" flexDirection={e.surface === 'terminal' ? 'row' : 'column'}>
             {stage}
           </Box>
           {PartyLine(els, view, world, width, e.surface !== 'terminal')}
