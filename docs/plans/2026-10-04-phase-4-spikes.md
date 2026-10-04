@@ -32,7 +32,7 @@ Run on 2026-10-04 by the implementing session (Claude Code 2.1.289), on the two 
 | Ghostty | | | | | | | n/a | n/a |
 | iTerm2 | | | n/a | | n/a | | n/a | n/a |
 | tmux in Ghostty | | | | | | | n/a | n/a |
-| Desktop app | n/a | n/a | n/a | n/a | n/a | n/a | | |
+| Desktop app | n/a | n/a | n/a | n/a | n/a | n/a | yes, as an interactive frame and as an image | as a frame: yes, every new source reloads it with a blank frame; as an image: no blank, the motions keep their phase (begin offsets) |
 
 Notes:
 
@@ -54,5 +54,6 @@ Result, applied in Task 6:
 
 - `IMAGE_SCALE = 6`: the smallest scale that reads crisp in the Ghostty engine. A 160 × 34 frame at 6 is 783,360 bytes, under `IMAGE_MAX_BYTES`; its blits averaged 1.8 ms.
 - `SVG_SMIL = true`: provisional. `SvgProps.isInteractive` documents SMIL as running in the sandboxed frame; the desktop row above stays Kevin's to confirm, and `false` switches the desktop to the redraw fallback.
+- Result, desktop (2026-10-04, the desktop pass of `docs/plans/2026-10-04-promptfall-phase-4-desktop.md`, Claude.app 2.19675.0): `SVG_SMIL = true` confirmed on the real band (bob, lunge, flash, numbers and fade-in seen in frame bursts). The stage is drawn as an image (`SVG_INTERACTIVE = false`): the interactive frame drew 4 blank stages in a 20 s burst, the image none.
 - `PROBE_ALT_DENY = 'the Image draws its alt here: the terminal draws no placeholder images'`, matched as a prefix of the deny (narrowing 24 in the plan).
 - The probe rule stands on both surfaces run: Ghostty's engine answers `{}`, Terminal.app denies naming the alt. No terminal that draws no pixels answered `{}`, so the renderer default stays `auto`.
