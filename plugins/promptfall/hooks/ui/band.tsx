@@ -267,7 +267,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           const cap = (e.props.maxRows - DESKTOP_TEXT_ROWS) * DESKTOP_ROW_PX
           const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
           const fit =
-            natural > cap
+            // Under two rows left there is nothing to fit to: the desktop scrolls the band instead.
+            natural > cap && cap >= DESKTOP_ROW_PX * 2
               ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
               : {}
           stage = (

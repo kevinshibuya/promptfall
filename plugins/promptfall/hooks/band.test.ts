@@ -740,3 +740,16 @@ test('on the desktop a boss stage is scaled down to fit the band, the rest stage
   expect(small?.props.width).toBeUndefined()
   await rest.unmount()
 })
+
+test('on a desktop band of three rows the boss stage keeps a positive size', async ($, on) => {
+  const { shown } = harness(on)
+  shown.view = boss()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 3) })
+  const stage = await ui.find({ type: 'Svg' })
+  expect(stage).toBeDefined()
+  for (const v of [stage?.props.width, stage?.props.height]) {
+    if (v !== undefined) expect(Number(v)).toBeGreaterThan(0)
+  }
+  await ui.unmount()
+})
