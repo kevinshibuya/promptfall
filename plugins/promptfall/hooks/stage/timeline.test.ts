@@ -164,3 +164,18 @@ test('an id that comes back as another enemy is a new actor: the world boss is n
   expect(known?.kind).toBe('world_boss')
   expect(t.active(2_000).some((m) => m.kind === 'spawn' && m.actor === 'e25')).toBe(true)
 })
+
+test('an enemy that comes back after leaving is live again: no dissolve, not departed', () => {
+  // A resync can bring back an enemy the local prediction had killed, same id and def.
+  const t = new StageTimeline()
+  const w = wave()
+  t.observe(w, 1_000)
+  const gone = wave()
+  gone.enemies = gone.enemies.filter((e) => e.id !== 'e3')
+  t.observe(gone, 2_000)
+  expect(t.isDeparted('e3')).toBe(true)
+  t.observe(w, 2_100)
+  expect(t.isDeparted('e3')).toBe(false)
+  expect(t.active(2_100).some((m) => m.actor === 'e3' && m.kind === 'dissolve')).toBe(false)
+  expect(t.known().find((k) => k.id === 'e3')?.slot).toBe(2)
+})

@@ -80,7 +80,15 @@ export class StageTimeline {
     for (const enemy of view.enemies) {
       const known = this.entries.get(enemy.id)
       const spriteId = enemySpriteId(enemy)
-      if (known && known.spriteId === spriteId && known.kind === enemy.kind) continue
+      if (known && known.spriteId === spriteId && known.kind === enemy.kind) {
+        // Back after leaving (a resync can revive an enemy the prediction killed): live again.
+        if (this.departed.delete(enemy.id)) {
+          this.motions = this.motions.filter(
+            (m) => !(m.actor === enemy.id && (m.kind === 'dissolve' || m.kind === 'drop')),
+          )
+        }
+        continue
+      }
       if (known) {
         // The id came back as another enemy (a primary's prediction replayed under boss_engaged
         // can hand the boss the id its predicted slime had): a new actor in the same slot.
