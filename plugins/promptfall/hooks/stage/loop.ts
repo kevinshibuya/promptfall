@@ -13,7 +13,8 @@ import { EVENT_FRAME_MS, IDLE_FRAME_MS, IMAGE_SCALE, SVG_FALLBACK_FRAME_MS } fro
 
 export type StageSite = {
   requestId: string
-  key: 'stage'
+  /** The element's key: `stage` for the Raster, `stageKey(box)` for the Image. */
+  key: string
   layout: Layout
   renderer: 'raster' | 'image' | 'svg'
   /** The band's props the layout came from, so a tick can tell when it no longer holds. */
@@ -30,9 +31,30 @@ export type LoopIo = {
   settings: () => Promise<Settings>
 }
 
+/**
+ * The stage Image's key, one per size. A keyed Image that grows in place keeps the terminal's
+ * placement of its first size (seen in Ghostty: an 8-row stage grown to 17 rows drew at 8 rows'
+ * height), so a new size mounts a new Image.
+ */
+export function stageKey(box: { columns: number; rows: number }): string {
+  return `stage-${box.columns}x${box.rows}`
+}
+
+/** Past a bob boundary by this much, so a tick never samples the phase it just drew. */
+const PHASE_SLACK_MS = 15
+
+/**
+ * At rest, the delay to just past the next bob boundary. Re-arming a flat IDLE_FRAME_MS let the
+ * ticks drift across the boundaries the bob flips on, so the bob sometimes held for a second.
+ */
+export function restDelay(now: number): number {
+  return IDLE_FRAME_MS - (now % IDLE_FRAME_MS) + PHASE_SLACK_MS
+}
+
 function same(a: StageSite, b: StageSite): boolean {
   return (
     a.requestId === b.requestId &&
+    a.key === b.key &&
     a.renderer === b.renderer &&
     sameLayout(a.layout, b.layout) &&
     a.props.bodyColumns === b.props.bodyColumns &&
@@ -133,6 +155,10 @@ export class StageLoop {
     let next: number | null = null
     try {
       next = await this.frame(gen)
+    } catch {
+      // A frame that throws (a rejected call through `$`) must not end the loop: nothing would
+      // re-arm it until the next mount or wake. Try again at the next bob boundary.
+      next = restDelay(await this.io.now().catch(() => 0))
     } finally {
       this.inFlight = false
     }
@@ -176,7 +202,7 @@ export class StageLoop {
     const settled = settings.motion === 'still' && !busy
     const skip = settled && !this.wasBusy && actors === this.lastActors
     this.wasBusy = busy
-    if (skip) return IDLE_FRAME_MS
+    if (skip) return restDelay(now)
 
     const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
     const box = layout.box
@@ -192,6 +218,6 @@ export class StageLoop {
       this.stopped = true
       return null
     }
-    return busy ? EVENT_FRAME_MS : IDLE_FRAME_MS
+    return busy ? EVENT_FRAME_MS : restDelay(now)
   }
 }

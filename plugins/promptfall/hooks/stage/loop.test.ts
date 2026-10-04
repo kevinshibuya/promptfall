@@ -12,12 +12,16 @@ type Harness = {
   loop: StageLoop
   timeline: StageTimeline
   blits: UiBlitArgs[]
+  /** The clock's time at each blit. */
+  times: number[]
   invalidations: { at: number }[]
   state: {
     view: GameView | null
     settings: Settings
     answer: UiBlitResult
     onView: (() => void) | null
+    /** The next blits reject, as a failed call through `$` would. */
+    rejects: number
   }
 }
 
@@ -43,6 +47,10 @@ function fakeClock(start = 1_000_000) {
     for (let i = 0; i < 50; i++) await Promise.resolve()
   }
   return {
+    /** Moves time on without running timers: the cost of an await. */
+    spend: (ms: number) => {
+      t += ms
+    },
     now: async () => t,
     after: (ms: number, fn: () => void) => {
       const timer = { due: t + ms, fn, cancelled: false }
@@ -70,16 +78,18 @@ function fakeClock(start = 1_000_000) {
   }
 }
 
-type Clock = Pick<LoopIo, 'now' | 'after'>
+type Clock = Pick<LoopIo, 'now' | 'after'> & { spend?: (ms: number) => void }
 
-function harness(clock: Clock): Harness {
+function harness(clock: Clock, blitMs = 0): Harness {
   const blits: UiBlitArgs[] = []
+  const times: number[] = []
   const invalidations: { at: number }[] = []
   const state: Harness['state'] = {
     view: wave(),
     settings: SETTINGS_DEFAULT,
     answer: {},
     onView: null,
+    rejects: 0,
   }
   let now = 0
   const io: LoopIo = {
@@ -90,6 +100,12 @@ function harness(clock: Clock): Harness {
     after: clock.after,
     blit: async (args) => {
       blits.push(args)
+      times.push(await clock.now())
+      if (state.rejects > 0) {
+        state.rejects -= 1
+        throw new Error('blit failed')
+      }
+      clock.spend?.(blitMs)
       return state.answer
     },
     invalidate: () => invalidations.push({ at: now }),
@@ -102,7 +118,7 @@ function harness(clock: Clock): Harness {
   }
   const timeline = new StageTimeline()
   timeline.observe(wave(), 1_000_000)
-  return { loop: new StageLoop(io, timeline), timeline, blits, invalidations, state }
+  return { loop: new StageLoop(io, timeline), timeline, blits, times, invalidations, state }
 }
 
 const hit = { k: 'hit' as const, by: 'h1', target: 'e1', amount: 5 }
@@ -199,4 +215,24 @@ test('an svg site invalidates at the fallback rate while busy and never at rest'
   await clock.advance(SVG_FALLBACK_FRAME_MS * 3)
   expect(h.invalidations.length).toBeGreaterThanOrEqual(3)
   expect(h.blits).toHaveLength(0)
+})
+
+test('at rest each blit draws the next bob phase, never the same one twice', async () => {
+  // Each blit costs 60 ms: a flat 500 ms re-arm drifts across the boundaries and repeats a phase.
+  const clock = fakeClock(1_000_037)
+  const h = harness(clock, 60)
+  h.loop.mount(site())
+  await clock.advance(6_000)
+  const phases = h.times.map((t) => Math.floor(t / IDLE_FRAME_MS) % 2)
+  expect(phases.length).toBeGreaterThanOrEqual(10)
+  for (let i = 1; i < phases.length; i++) expect(phases[i]).not.toBe(phases[i - 1])
+})
+
+test('a blit that rejects does not end the loop', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.rejects = 2
+  h.loop.mount(site())
+  await clock.advance(3_000)
+  expect(h.blits.length).toBeGreaterThanOrEqual(5)
 })

@@ -4,7 +4,7 @@ import type { GameHandle } from '../engine'
 import { IN_PROCESS } from '../server'
 import { encode } from '../sprites/base64'
 import { type Layout, layoutFor } from '../stage/layout'
-import { stageFrame } from '../stage/loop'
+import { stageFrame, stageKey } from '../stage/loop'
 import { stageAt } from '../stage/model'
 import { renderSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
@@ -308,7 +308,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             })
             stage = (
               <Image
-                key="stage"
+                key={stageKey(box)}
                 source={frame.source}
                 columns={box.columns}
                 rows={box.rows}
@@ -316,7 +316,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
               />
             )
           }
-          loop?.mount({ requestId: e.requestId, key: 'stage', layout, renderer, props: e.props })
+          const key = renderer === 'image' ? stageKey(box) : 'stage'
+          loop?.mount({ requestId: e.requestId, key, layout, renderer, props: e.props })
         }
       }
     } else {
@@ -332,7 +333,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       return (
         <Box key="row-status" flexDirection="row">
           <Text wrap="truncate">
-            {padEnd(status, rowWidth - STATUS_TABS_WIDTH - (probe ? 1 : 0))}
+            {`${padEnd(status, rowWidth - STATUS_TABS_WIDTH - 1 - (probe ? 1 : 0))} `}
           </Text>
           <Button
             key="tab-party"

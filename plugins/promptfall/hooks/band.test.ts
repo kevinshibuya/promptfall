@@ -489,16 +489,38 @@ test('110 columns is compact with the enemy slots; 99 is one row', async ($, on)
   await narrow.unmount()
 })
 
-test('the image renderer draws an Image with an alt; unknown draws the probe instead', async ($, on) => {
+test('the image renderer draws an Image with an alt, keyed by its size', async ($, on) => {
   const { data } = harness(on)
   settings(data, { renderer: 'image' })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  const stage = await ui.find({ key: 'stage' })
+  const stage = await ui.find({ key: 'stage-120x8' })
   expect(stage?.type).toBe('Image')
   expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 8])
   expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
   await ui.unmount()
+})
+
+test('a boss growing the image stage mounts a new Image, and the loop blits to it', async ($, on) => {
+  // Ghostty kept a grown keyed Image at its first placement's height: each size is its own key.
+  const { data, shown, clock, blits } = harness(on)
+  settings(data, { renderer: 'image' })
+  shown.view = wave()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(await ui.find({ key: 'stage-120x8' })).toBeDefined()
+  shown.view = boss()
+  await clock.advance(1_000)
+  await ui.unmount()
+  const grown = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(await grown.find({ key: 'stage-120x8' })).toBeUndefined()
+  expect((await grown.find({ key: 'stage-120x17' }))?.props.rows).toBe(17)
+  const before = blits.length
+  await clock.advance(1_000)
+  const after = blits.slice(before)
+  expect(after.length).toBeGreaterThan(0)
+  for (const b of after) expect(b).toMatchObject({ key: 'stage-120x17', rows: 17 })
+  await grown.unmount()
 })
 
 test('while the renderer is unknown the stage rows are empty and the status row probes', async ($, on) => {
