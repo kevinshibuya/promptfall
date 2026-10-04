@@ -698,3 +698,17 @@ test('on the desktop the stage sits in a column, so its frame takes the band wid
   expect((await ui.find({ key: 'row-stage' }))?.props.flexDirection).toBe('column')
   await ui.unmount()
 })
+
+test('on the desktop the party line names are whole, not padded or cut', async ($, on) => {
+  const { states } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const view = states.get('view') as GameView
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  const hero = view.heroes[0]
+  if (!hero) throw new Error('no hero')
+  const segment = (await ui.find({ key: 'seg-0' }))?.text ?? ''
+  expect(segment).toContain(`${hero.name} L${hero.level}`)
+  expect(segment).not.toContain('  ')
+  expect((await ui.find({ key: 'hero-0' }))?.props.wrap).not.toBe('truncate')
+  await ui.unmount()
+})

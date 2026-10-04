@@ -46,15 +46,26 @@ export function PartyLine(
 ) {
   const { Box, Text } = els
   const heroes = view.heroes.slice(0, 3).flatMap((hero, i) => {
+    // Wrapped (proportional text), a name is whole and nothing is padded into columns.
     const parts = [
       ...(i > 0 ? [<Text key={`sep-${i}`}>{SEPARATOR}</Text>] : []),
-      <Text key={`hero-${i}`} dimColor={!hero.alive} wrap="truncate">
-        {`${padEnd(clip(hero.name, 8), 8)} L${padEnd(String(hero.level), 2)} `}
-      </Text>,
+      wrap ? (
+        <Text key={`hero-${i}`} dimColor={!hero.alive}>
+          {`${hero.name} L${hero.level} `}
+        </Text>
+      ) : (
+        <Text key={`hero-${i}`} dimColor={!hero.alive} wrap="truncate">
+          {`${padEnd(clip(hero.name, 8), 8)} L${padEnd(String(hero.level), 2)} `}
+        </Text>
+      ),
       HpBar(els, hero.hp, hero.maxHp, PARTY_BAR),
-      <Text key={`hp-${i}`} wrap="truncate">
-        {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR)}
-      </Text>,
+      wrap ? (
+        <Text key={`hp-${i}`}>{` ${hero.hp}/${hero.maxHp}`}</Text>
+      ) : (
+        <Text key={`hp-${i}`} wrap="truncate">
+          {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR)}
+        </Text>
+      ),
     ]
     return wrap
       ? [
