@@ -257,7 +257,7 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 - [x] The module, the two JSON files, the gitignore line; `claude plugin validate spikes/phase-4`
 - [x] The findings doc with the table and the decision rules; commit `docs(phase-4): spike plugin and findings sheet`
-- [ ] Ask Kevin to run the five surfaces; record the findings in the doc; commit `docs(phase-4): spike findings` — partial: cmux (Ghostty's engine) and Terminal.app run and recorded by the implementing session on 2026-10-04 and applied; iTerm2, tmux, standalone Ghostty and the desktop app are not installed on this Mac and stay Kevin's (the manual pass covers them)
+- [ ] Ask Kevin to run the five surfaces; record the findings in the doc; commit `docs(phase-4): spike findings`. Partial: cmux (Ghostty's engine) and Terminal.app run and recorded by the implementing session on 2026-10-04 and applied; iTerm2, tmux, standalone Ghostty and the desktop app are not installed on this Mac and stay Kevin's (the manual pass covers them)
 
 ### Task 2: Sim: the `hit` effect; the view carries ids and rarity
 
@@ -463,7 +463,7 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No merge. No new features. Nothing from PR 2.
 
-- [ ] `docs/manual-pass/phase-4.md` part A; README status; tick the tasks
+- [x] `docs/manual-pass/phase-4.md` part A; README status; tick the tasks
 - [ ] `codex-computer-use` check; the full check line; push; open the PR; stop
 
 ## Spec conflicts and narrowings
