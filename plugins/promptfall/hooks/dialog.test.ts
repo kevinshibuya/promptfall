@@ -764,6 +764,22 @@ for (const surface of SURFACES) {
   })
 }
 
+test('an Account press merges into the stored settings, not an older copy in this session', async ($, on) => {
+  const { data } = harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // Another session turned sound on after this one loaded its settings.
+  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'setting-motion' })
+  expect(data.get('promptfall:settings')).toEqual({
+    sound: true,
+    motion: 'still',
+    renderer: 'auto',
+  })
+  await ui.unmount()
+})
+
 // ---------------------------------------------------------------------------
 // List sprites
 

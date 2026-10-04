@@ -664,7 +664,8 @@ export const register: Register = (on) => {
         blit: (args) => $.ui.blit(args),
         invalidate: () => $.ui.invalidate('ui.render'),
         view: () => read($, viewAtom),
-        settings: async () => (await read($, settingsAtom)) ?? SETTINGS_DEFAULT,
+        // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
+        settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
       })
       game = session
@@ -731,7 +732,8 @@ export const register: Register = (on) => {
         blit: (args) => $.ui.blit(args),
         invalidate: () => $.ui.invalidate('ui.render'),
         view: () => read($, viewAtom),
-        settings: async () => (await read($, settingsAtom)) ?? SETTINGS_DEFAULT,
+        // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
+        settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
       })
       game = session

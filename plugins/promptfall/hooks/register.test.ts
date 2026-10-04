@@ -1228,6 +1228,15 @@ test('sound off plays nothing on an epic drop', async ($, on) => {
   expect(plays).toEqual([])
 })
 
+test('sound turned on in another session reaches the primary without a restart', async ($, on) => {
+  const { time, plays, data } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // Another session's /promptfall sound on writes the machine's store, not this session's atom.
+  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  await time.advance(5_000)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: CUE_GAIN }])
+})
+
 test('a secondary plays nothing', async ($, on) => {
   const { time, plays, last } = sounding(on, {
     ...record(dropping('epic')),

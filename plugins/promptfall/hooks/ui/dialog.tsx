@@ -22,6 +22,7 @@ import {
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   PREFS_DEFAULT,
+  parseSettings,
   SETTINGS_DEFAULT,
   SETTINGS_KEY,
   WORLD_DEFAULT,
@@ -705,10 +706,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         </Box>,
       )
       // Per machine, like the commands: the store holds them, the atom mirrors them.
-      const settings: Settings = (await read($, settingsAtom)) ?? SETTINGS_DEFAULT
+      // The atom keeps this render subscribed; the store is the truth (another session may write it).
+      await read($, settingsAtom)
+      const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       const renderer = await read($, rendererAtom)
       const setSettings = async (patch: Partial<Settings>) => {
-        const next = { ...settings, ...patch }
+        // Merge into the store, not this render's copy: another session may have changed it.
+        const next = { ...parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)), ...patch }
         await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
         await update($, settingsAtom, () => next)
       }

@@ -19,7 +19,13 @@ import {
   SVG_INTERACTIVE,
   SVG_SMIL,
 } from '../stage/tuning'
-import { PREFS_DEFAULT, SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
+import {
+  PREFS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
+  WORLD_DEFAULT,
+} from '../state'
 import { gates } from '../view'
 import { type ShownBoss, shownBoss } from './boss'
 import { CLASS_INITIAL, clip, formatCount, formatGold, padEnd, padStart, waveLabel } from './format'
@@ -194,7 +200,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     }
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
     const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
-    const settings: Settings = (await read($, settingsAtom)) ?? SETTINGS_DEFAULT
+    // Per machine: the store is the truth, so a motion change in another session reaches this
+    // band; the atom keeps this render subscribed to this session's own changes.
+    await read($, settingsAtom)
+    const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
     const now = await $.clock.now()
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
