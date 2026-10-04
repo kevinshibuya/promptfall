@@ -668,3 +668,24 @@ test('in boss mode the party line fits its width: the boss name gives way, not t
     await ui.unmount()
   }
 })
+
+test('on the desktop the party line wraps whole segments: no hero cut, the boss keeps its name and bar', async ($, on) => {
+  const { shown } = harness(on)
+  const view = worldBoss()
+  view.boss = { bossId: BOSS.bossId, name: BOSS.name, glyph: BOSS.glyph, dealt: 0 }
+  view.heroes = view.heroes.map((h) => ({ ...h, hp: 15, maxHp: 69 }))
+  shown.view = view
+  shown.world = bossWorld({ ...BOSS, maxHp: 52_000, hp: 42_604 }, null)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (const width of [60, 95]) {
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(width, 12) })
+    const party = await ui.find({ key: 'row-party' })
+    expect(party?.props.flexWrap).toBe('wrap')
+    const line = party?.text ?? ''
+    expect(line.match(/15\/69/g)).toHaveLength(3)
+    for (const hero of view.heroes) expect(line).toContain(hero.name.slice(0, 8))
+    expect(line).toContain(`⚔ ${BOSS.name.slice(0, 11)}`)
+    expect(line).toContain('42,604/52,000')
+    await ui.unmount()
+  }
+})

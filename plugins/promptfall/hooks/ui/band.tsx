@@ -385,7 +385,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           <Box key="row-stage" flexDirection="row">
             {stage}
           </Box>
-          {PartyLine(els, view, world, width)}
+          {PartyLine(els, view, world, width, e.surface !== 'terminal')}
           {statusRow(width)}
         </Box>
       )

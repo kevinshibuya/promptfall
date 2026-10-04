@@ -33,29 +33,43 @@ const PARTY_BAR = 6
 /**
  * The line under the stage: `<name> L<level> <bar> <hp>/<max>` per hero, joined by ` · `, then
  * the front enemy (or, in boss mode, the world boss with its predicted bar) right-aligned in
- * what is left of `width`.
+ * what is left of `width`. With `wrap` (the Svg surfaces, whose text is proportional and whose
+ * band grows) each hero and the enemy is a whole segment, and a segment that does not fit starts
+ * the next row: no hero is cut and the boss keeps its name and bar.
  */
 export function PartyLine(
   els: Els & Pick<Elements['terminal'], 'Box'>,
   view: GameView,
   world: WorldState,
   width: number,
+  wrap = false,
 ) {
   const { Box, Text } = els
-  const heroes = view.heroes.slice(0, 3).flatMap((hero, i) => [
-    ...(i > 0 ? [<Text key={`sep-${i}`}>{SEPARATOR}</Text>] : []),
-    <Text key={`hero-${i}`} dimColor={!hero.alive} wrap="truncate">
-      {`${padEnd(clip(hero.name, 8), 8)} L${padEnd(String(hero.level), 2)} `}
-    </Text>,
-    HpBar(els, hero.hp, hero.maxHp, PARTY_BAR),
-    <Text key={`hp-${i}`} wrap="truncate">
-      {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR)}
-    </Text>,
-  ])
-  const room = Math.max(0, width - (HERO_SEGMENT * 3 + SEPARATOR.length * 3))
+  const heroes = view.heroes.slice(0, 3).flatMap((hero, i) => {
+    const parts = [
+      ...(i > 0 ? [<Text key={`sep-${i}`}>{SEPARATOR}</Text>] : []),
+      <Text key={`hero-${i}`} dimColor={!hero.alive} wrap="truncate">
+        {`${padEnd(clip(hero.name, 8), 8)} L${padEnd(String(hero.level), 2)} `}
+      </Text>,
+      HpBar(els, hero.hp, hero.maxHp, PARTY_BAR),
+      <Text key={`hp-${i}`} wrap="truncate">
+        {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR)}
+      </Text>,
+    ]
+    return wrap
+      ? [
+          <Box key={`seg-${i}`} flexDirection="row">
+            {parts}
+          </Box>,
+        ]
+      : parts
+  })
+  // Wrapped, the enemy segment is as wide as it needs, up to a row of its own.
+  const room = wrap ? width : Math.max(0, width - (HERO_SEGMENT * 3 + SEPARATOR.length * 3))
+  const fit = (text: string) => (wrap ? clip(text, room) : padStart(clip(text, room), room))
   let enemy = (
     <Text key="enemy" wrap="truncate">
-      {room > 0 ? padStart(clip(frontEnemy(view), room), room) : ''}
+      {room > 0 ? fit(frontEnemy(view)) : ''}
     </Text>
   )
   if (view.boss) {
@@ -69,7 +83,7 @@ export function PartyLine(
     const nameRoom = room - 3 - PARTY_BAR - [...hp].length
     if (shown?.engaged && nameRoom >= 4) {
       const label = `⚔ ${clip(view.boss.name, Math.min(12, nameRoom))} `
-      const pad = Math.max(0, room - [...label].length - PARTY_BAR - [...hp].length)
+      const pad = wrap ? 0 : Math.max(0, room - [...label].length - PARTY_BAR - [...hp].length)
       enemy = (
         <Box key="enemy" flexDirection="row">
           <Text wrap="truncate">{' '.repeat(pad) + label}</Text>
@@ -80,17 +94,27 @@ export function PartyLine(
     } else if (shown?.engaged) {
       enemy = (
         <Text key="enemy" wrap="truncate">
-          {padStart(clip(`⚔${hp}`, room), room)}
+          {fit(`⚔${hp}`)}
         </Text>
       )
     } else {
       const text = `${name}you ${formatCount(view.boss.dealt)}`
       enemy = (
         <Text key="enemy" wrap="truncate">
-          {padStart(clip(text, room), room)}
+          {fit(text)}
         </Text>
       )
     }
+  }
+  if (wrap) {
+    return (
+      <Box key="row-party" flexDirection="row" flexWrap="wrap">
+        {heroes}
+        <Box key="seg-enemy" flexDirection="row" paddingLeft={3}>
+          {enemy}
+        </Box>
+      </Box>
+    )
   }
   return (
     <Box key="row-party" flexDirection="row">

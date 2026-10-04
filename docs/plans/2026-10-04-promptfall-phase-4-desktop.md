@@ -149,8 +149,8 @@ Three existing tests loop over both surfaces and change on the desktop; split th
 
 **Boundaries:** No terminal change. No change to the segment contents, only to their placement.
 
-- [ ] The desktop party-line tests red; the wrap; the row counts in the Task 2 tests; green
-- [ ] Run the check; commit `fix(band): the party line wraps on the desktop`
+- [x] The desktop party-line tests red; the wrap; the row counts in the Task 2 tests; green
+- [x] Run the check; commit `fix(band): the party line wraps on the desktop`
 
 ### Task 3: Dialog rows drop the glyph where a sprite draws
 
