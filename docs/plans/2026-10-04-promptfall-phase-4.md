@@ -500,6 +500,8 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 30. **The Svg's lunge keeps the idle art.** SMIL has no cheap sprite swap; PR 1 aliases every attack pose to the idle art, so nothing shows. PR 2 decides when real attack poses land.
 31. **Smaller additions.** `stage/scenarios.ts` holds the golden scenarios that `golden.test.ts` and `scripts/stage-goldens.ts` share; `parseSettings` and `settingCommand` live in `state.ts`; a desktop attach reads the settings too (for the motion setting); `types/index.d.ts` aliases `Settings` and `Renderer` outside the `claude-code` augmentation, where `Settings` names the engine's own export; a forced renderer reads `Renderer: raster (from next start)` on the Account tab.
 
+The desktop's stage, sizing and pass were reworked after the manual pass: see `docs/plans/2026-10-04-promptfall-phase-4-desktop.md` and ADR 0004.
+
 ## Out of scope
 
 PR 2 (the style sheet, the ~124 sprites, the CC0 cue clips, hand cleanup); per-zone backdrops beyond the ground strip; sextant or braille rendering; sprites on the Loot and World tabs, the collapsed row, toasts or chat; a volume control; cues on Linux or Windows (the engine plays nothing there); equipment drawn on heroes; heal or buff motion; a headless browser smoke for the Svg (none exists in the repo; the goldens' `.svg` files and the desktop check through `codex-computer-use` stand in); attack poses as separate art (PR 1 aliases them to the idle art); caching the Svg string across re-renders (negative `begin` offsets make a re-render resume mid-motion, so the cache would only save work).

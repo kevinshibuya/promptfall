@@ -390,11 +390,17 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   wave, gold, last drop). The stage grows to 12 rows for a turn boss and 17 for a
   zone or world boss, at the boss's spawn, and shrinks back after its death
   dissolve and drop pop. Kitty and Ghostty draw it as an Image, every other
-  terminal as a half-block Raster, desktop, VS Code and mobile as an Svg, one
-  geometry for all. Compact 4-row stage (side by side with three hero rows and
-  the status row, sprites downsampled) when `maxRows` is under what the full
-  stage needs or `bodyColumns` is 100 to 115. One line when `bodyColumns` is
-  under 100 or `maxRows` is under 4. Hidden while `hasSurvey`. Loot and World
+  terminal as a half-block Raster, desktop, VS Code and mobile as an Svg: one
+  art geometry for all, in cells on terminals and scaled on the Svg surfaces
+  (ADR 0004). On terminals: compact 4-row stage (side by side with three hero
+  rows and the status row, sprites downsampled) when `maxRows` is under what
+  the full stage needs or `bodyColumns` is 100 to 115; one line when
+  `bodyColumns` is under 100 or `maxRows` is under 4. On the Svg surfaces:
+  always the full stage, the art `clamp(bodyColumns, 116, 160)` pixels wide
+  scaled to the band's width, growing to the boss heights whatever `maxRows`
+  says (the desktop itself keeps an Svg under about 150 points tall), and the
+  party line wraps by segment; the band collapses only by hand or as a
+  secondary. Hidden while `hasSurvey`. Loot and World
   tabs stay 4 rows of text. Every Image and Svg has an alt summarising the scene.
 - Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
   or cast pose), hit flash, death dissolve, spawn fade-in, floating damage

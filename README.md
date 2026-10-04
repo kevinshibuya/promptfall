@@ -15,7 +15,7 @@ carries presence and the chat tail, chat with a word list and a rate limit, high
 boss-damage leaderboards, bots that play through the public HTTP API like a player, and a world
 boss every 3 hours that every online party fights together (sim version 3).
 Phase 4, PR 1 is the art engine: a pixel-art battle stage on the band's Party tab (an `Image` in
-Ghostty and kitty, half-block `Raster` cells in other terminals, an `Svg` with SMIL on the desktop),
+Ghostty and kitty, half-block `Raster` cells in other terminals, an `Svg` with SMIL on the desktop, always the full stage scaled to the band),
 four sound cues, sprites in the dialog's lists, and the art pipeline that builds them, all on the
 concept sheets as placeholders. Phase 4, PR 2 (the real art) and phase 5 (the real server) each get
 their own plan when their turn comes.

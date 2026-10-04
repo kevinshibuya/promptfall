@@ -241,8 +241,8 @@ n/a lines under the section: "n/a: the renderer probe, the Account tab's `Render
 
 **Boundaries:** No change to ADR 0004 (its facts hold against Tasks 1 to 4; if Task 1's R-fit was taken, the ADR already names it as the fallback and needs no edit). No code.
 
-- [ ] Spec §10; the Desktop section; README line; the PR 1 plan pointer
-- [ ] Run the check; commit `docs(phase-4): the desktop stage in the spec, the manual pass and the README`
+- [x] Spec §10; the Desktop section; README line; the PR 1 plan pointer
+- [x] Run the check; commit `docs(phase-4): the desktop stage in the spec, the manual pass and the README`
 
 ### Task 6: The desktop pass loop, the SMIL row, `SVG_SMIL`
 
