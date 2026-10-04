@@ -267,9 +267,13 @@ export const register: Register = (on) => {
         <Text>
           blit to an unmounted key: {results.nothing === '' ? 'pending' : results.nothing}
         </Text>
-        {SCALES.map((scale, i) => (
+        {SCALES.map((_, i) => (
+          <Text>{line(results.scales[i] as Run)}</Text>
+        ))}
+        <Text>{line(results.raster)}</Text>
+        {[...SCALES.entries()].reverse().map(([i, scale]) => (
           <Box flexDirection="column">
-            <Text>{line(results.scales[i] as Run)}</Text>
+            <Text>scale {String(scale)}</Text>
             <Image
               key={`scale${scale}`}
               source={INITIAL_CHECKS[i] ?? PROBE_A}
@@ -283,7 +287,6 @@ export const register: Register = (on) => {
           <Image key="alpha" source={ALPHA_CHECK} columns={2} rows={1} alt="a" />
           <Text> alpha: the gaps in the red squares should show the terminal background</Text>
         </Box>
-        <Text>{line(results.raster)}</Text>
         <Raster key="raster" columns={RASTER_COLUMNS} rows={RASTER_ROWS} cells={INITIAL_CELLS} />
       </Box>
     )
