@@ -2,7 +2,7 @@ import type { GameView, ListingView, MarketQuery, MarketState, WorldState } from
 import type { GameHandle } from '../engine'
 import { content } from '../vendor/sim.js'
 import { listingView } from '../view'
-import { CLASS_LABEL, formatGold } from './format'
+import { CLASS_LABEL, formatGold, type TextFit } from './format'
 import { RARITY_COLOR } from './parts'
 import { fitRow, type ListSprite } from './sprites'
 import {
@@ -93,6 +93,7 @@ export function marketBody(
   width: number,
   /** The sprite at the head of a listing row (the item's, or the hero class's) and its columns. */
   listSprite: (listing: ListingView) => ListingSprite = () => ({ element: null, columns: 0 }),
+  fit: TextFit = 'truncate',
 ) {
   const { Box, Text, Button } = els
   const q = market.query
@@ -198,29 +199,37 @@ export function marketBody(
   for (const l of page.listings) {
     const mine = l.sellerId === view.accountId
     const sprite = listSprite(l)
-    const fit = fitRow(
+    const shaped = fitRow(
       `${l.name} (${l.rarity})`,
       l.detail,
-      width - (sprite.element && sprite.columns > 0 ? sprite.columns + 1 : 0),
+      // Wrapped text is never clipped by cells: the desktop's proportional text fits more.
+      fit === 'wrap'
+        ? Number.POSITIVE_INFINITY
+        : width - (sprite.element && sprite.columns > 0 ? sprite.columns + 1 : 0),
     )
     body.push(
       <Box key={`listing-${l.id}`} flexDirection="row" gap={1}>
         {sprite.element}
         <Box key={`listing-body-${l.id}`} flexDirection="column">
-          <Box key={`listing-name-${l.id}`} flexDirection="row" gap={1}>
-            <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">
-              {fit.name}
+          <Box
+            key={`listing-name-${l.id}`}
+            flexDirection="row"
+            flexWrap={fit === 'wrap' ? 'wrap' : undefined}
+            gap={1}
+          >
+            <Text color={RARITY_COLOR[l.rarity]} wrap={fit}>
+              {shaped.name}
             </Text>
-            {fit.secondary && !fit.below ? (
-              <Text dimColor wrap="truncate">
-                {fit.secondary}
+            {shaped.secondary && !shaped.below ? (
+              <Text dimColor wrap={fit}>
+                {shaped.secondary}
               </Text>
             ) : null}
           </Box>
-          {fit.below ? (
+          {shaped.below ? (
             <Box key={`listing-detail-${l.id}`} paddingLeft={2}>
-              <Text dimColor wrap="truncate">
-                {fit.secondary}
+              <Text dimColor wrap={fit}>
+                {shaped.secondary}
               </Text>
             </Box>
           ) : null}
@@ -231,7 +240,7 @@ export function marketBody(
             gap={1}
             paddingLeft={2}
           >
-            <Text wrap="truncate">{`${l.sellerName} · ${formatGold(l.price)}`}</Text>
+            <Text wrap={fit}>{`${l.sellerName} · ${formatGold(l.price)}`}</Text>
             {mine ? (
               <Text dimColor>yours</Text>
             ) : readOnly || gate ? null : (

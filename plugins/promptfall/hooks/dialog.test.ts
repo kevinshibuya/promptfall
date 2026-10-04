@@ -7,6 +7,7 @@ import { artFrame } from './stage/compose'
 import { encodeRaster } from './stage/raster'
 import { DESKTOP_LIST_SPRITE_COLUMNS } from './stage/tuning'
 import { CHAT_READ_ONLY, chatBody } from './ui/chat'
+import { ordersBody } from './ui/orders'
 import { listSpriteColumns } from './ui/sprites'
 import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
@@ -939,10 +940,7 @@ test('the list sprite takes 2, 8 or the desktop columns in a row, 0 where none d
   expect(listSpriteColumns('raster', 'desktop', sword)).toBe(DESKTOP_LIST_SPRITE_COLUMNS)
 })
 
-for (const [surface, renderer, sprite] of [
-  ['desktop', 'raster', DESKTOP_LIST_SPRITE_COLUMNS],
-  ['terminal', 'raster', 8],
-] as const) {
+for (const [surface, renderer, sprite] of [['terminal', 'raster', 8]] as const) {
   test(`inventory and hero rows fit a 40-column pane on ${surface}`, async ($, on) => {
     const { data, states } = harness(on, narrowState())
     data.set('promptfall:settings', RENDERER(renderer))
@@ -977,16 +975,87 @@ test('market listing rows fit a 30-column pane', async ($, on) => {
   const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
   await ui.unmount()
   const thin = { ...NARROW, props: { ...NARROW.props, bodyColumns: 30 } }
-  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...thin })
-  await desk.press({ key: 'tab-market' })
-  const rows = (await desk.findAll({ type: 'Box' })).filter((b) =>
+  const term = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...thin })
+  await term.press({ key: 'tab-market' })
+  const rows = (await term.findAll({ type: 'Box' })).filter((b) =>
     String(b.props.key ?? '').startsWith('listing-'),
   )
   expect(rows.length).toBeGreaterThan(0)
   for (const r of rows) {
-    for (const cells of rowCells(r as Node)) {
-      expect(cells).toBeLessThanOrEqual(30 - (DESKTOP_LIST_SPRITE_COLUMNS + 1))
-    }
+    for (const cells of rowCells(r as Node)) expect(cells).toBeLessThanOrEqual(30 - (8 + 1))
   }
-  await desk.unmount()
+  await term.unmount()
+})
+
+test('on the desktop list rows wrap their text instead of cutting it', async ($, on) => {
+  const { data, states } = harness(on, narrowState())
+  data.set('promptfall:settings', RENDERER('raster'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...NARROW })
+  const item = await ui.find({ key: 'item-name-ilong' })
+  expect(item?.props.flexWrap).toBe('wrap')
+  expect(item?.text ?? '').toContain('Iron Sword (rare, weapon)')
+  expect(item?.text ?? '').not.toContain('…')
+  await ui.press({ key: 'tab-heroes' })
+  const hero = (states.get('view') as GameView).roster[0]
+  if (!hero) throw new Error('no hero')
+  const name = await ui.find({ key: `hero-name-${hero.id}` })
+  expect(name?.props.flexWrap).toBe('wrap')
+  expect(name?.text ?? '').toContain(hero.name)
+  expect(name?.text ?? '').not.toContain('…')
+  await ui.unmount()
+})
+
+test('orders and chat rows wrap on the desktop and truncate on a terminal', () => {
+  const els = { Box: 'Box', Text: 'Text', Button: 'Button', Input: undefined } as unknown as Els
+  const view = { account: { linked: 'player', chatOpen: true, marketOpen: true } } as GameView
+  const orders = {
+    busy: false,
+    error: null,
+    form: null,
+    mine: {
+      returns: 0,
+      listings: [{ id: 'L1', name: 'Steel Longsword', rarity: 'rare', price: 120, expiresAt: 9 }],
+      orders: [
+        {
+          id: 'O1',
+          name: 'Steel Longsword',
+          minRarity: 'rare',
+          affix: null,
+          maxPrice: 1,
+          expiresAt: 9,
+        },
+      ],
+    },
+  } as unknown as Parameters<typeof ordersBody>[4]
+  const actions = {} as Parameters<typeof ordersBody>[7]
+  const rows = (fit: 'wrap' | 'truncate') =>
+    JSON.stringify(
+      ordersBody(els, (() => null) as never, view, null, orders, true, () => 60_000, actions, fit),
+    )
+  expect(rows('wrap')).not.toContain('"truncate"')
+  expect(rows('wrap')).toContain('"flexWrap":"wrap"')
+  expect(rows('truncate')).toContain('"truncate"')
+  const world = {
+    snapshot: null,
+    fetchedAt: null,
+    stale: false,
+    messages: [{ id: 1, name: 'Brindle', text: 'a long line about the boss', at: 1 }],
+    chatMark: 1,
+    clock: null,
+    committedDealt: null,
+  }
+  const chat = (fit: 'wrap' | 'truncate') =>
+    JSON.stringify(
+      chatBody(
+        els,
+        view,
+        world,
+        { draft: '', busy: false, error: null },
+        { setDraft: async () => undefined, post: async () => undefined },
+        fit,
+      ),
+    )
+  expect(chat('wrap')).not.toContain('"truncate"')
+  expect(chat('truncate')).toContain('"truncate"')
 })
