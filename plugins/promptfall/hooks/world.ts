@@ -167,6 +167,8 @@ export class WorldPoller {
     if (epoch !== this.epoch) return
     const last = answer.chat.at(-1)
     const transition = bossTransition(this.state.snapshot?.boss, answer.boss)
+    // A boss already up at the first poll is news for the toast, not a fight starting: no cue.
+    const polledBefore = this.state.snapshot !== null
     this.state = {
       snapshot: answer,
       fetchedAt: now,
@@ -185,7 +187,7 @@ export class WorldPoller {
     await this.deps.publish(this.state)
     if (transition) {
       this.deps.toast?.(transition.text)
-      if (transition.kind === 'appeared') this.deps.cue?.('boss')
+      if (transition.kind === 'appeared' && polledBefore) this.deps.cue?.('boss')
     }
     this.rearm(this.cadence(now))
   }

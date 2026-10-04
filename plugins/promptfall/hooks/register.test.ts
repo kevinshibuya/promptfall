@@ -1257,6 +1257,17 @@ test('/promptfall off hides the band, not the cues', async ($, on) => {
   expect(plays.map((p) => p.asset)).toEqual(['cues/drop.wav'])
 })
 
+test('a world boss already up when the session starts plays no cue', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  net.world = () => snap({ boss: LIVE_BOSS })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toEqual([])
+})
+
 test('the world boss appearing plays the boss cue; going down plays none', async ($, on) => {
   const { time, plays } = sounding(on, SOUND_ON)
   const net = worldNet(on)
