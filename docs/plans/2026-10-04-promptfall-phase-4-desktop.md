@@ -294,7 +294,7 @@ SMIL from run 1's rest frames: `SMIL moves` is `yes` when consecutive rest frame
 
 **Boundaries:** No merge, no review trigger, no label changes.
 
-- [ ] Body edit; the results comment; the comment id noted in chat
+- [x] Body edit; the results comment; the comment id noted in chat
 
 ### Task 8: The evidence page
 
@@ -318,9 +318,9 @@ Evidence page: <artifact url>"`. Stop the fake. Tell Kevin the URL and offer the
 
 **Boundaries:** A new artifact, never a publish to the directions page's URL. No source edits. A surface whose session cannot be driven after two attempts gets a section with a still (a `screencapture` of the window) and the sentence "clip not recorded: <why>", not a stall. The desktop clips come from Task 6; the desktop is not relaunched here.
 
-- [ ] `rec.sh`, `gif.sh`; the five terminal clips and the Ghostty boss cut; sizes checked
-- [ ] `quickstart`; the design and capabilities guidance; `index.html`; publish; assets; the URLs in the page; republish
-- [ ] The comment patched with the URL; the fake stopped; the URL and the pin offer in chat
+- [x] `rec.sh`, `gif.sh`; the five terminal clips (no separate Ghostty boss cut: the world boss fell before Ghostty drew the full stage; both desktop clips show bosses); sizes checked
+- [x] `quickstart`; the design guidance; `index.html`; published with the clips as the page's own files rather than uploaded assets (no capability needed, and an `assets` page is organization-internal only): https://claude.ai/artifact/FqaguFdQz7mToiP2MvSXeD
+- [x] The comment patched with the URL; the fake stopped; the URL and the pin offer in chat
 
 ## Spec conflicts and narrowings
 
