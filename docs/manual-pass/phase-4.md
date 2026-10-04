@@ -73,6 +73,10 @@ The desktop pass runs against the HTTP fake, whose bots fill the market and chat
 fake has no other players). The desktop never uses the terminal thresholds: it always draws the
 full stage, scaled to the band (ADR 0004). A plugin change only reaches a NEW desktop session.
 
+To load the plugin in the desktop app: `launchctl setenv CLAUDE_CODE_PLUGIN_DIRS "$PWD/plugins/promptfall"`
+from the repository root, then quit and reopen Claude.app. Afterwards `launchctl unsetenv
+CLAUDE_CODE_PLUGIN_DIRS` and quit and reopen it again.
+
 15. **Start.** `pnpm fake --port 7777 --data .promptfall/fake-desktop.json --player-name <you> --boss-in 300` in a terminal. In Claude.app a NEW Code session in the repo (the "+" beside the "promptfall" project group). `/promptfall server http://127.0.0.1:7777`: the reply names the server. `/promptfall account`, `Link GitHub`: `Linked as <you>` within about 5 s. Known: the composer prints "/promptfall isn't a command here." under each `/promptfall` command although the command ran (the reply shows); the desktop's command list does not know plugin commands.
 16. **The stage at rest.** The band is the full stage as wide as the band (an SVG: heroes on the right on the ground strip), then the party line, then the status row. Narrow the window to about 860 points: still the full stage, smaller; never the compact or one-row band. The party line's segments wrap: no hero name is cut, and an enemy segment that does not fit starts a second row.
 17. **A fight.** Enemies fade in at the left; on each round attackers lunge, the hit actor flashes white, a number rises; a dead enemy fades away and its drop pops out. At rest the sprites bob (SMIL; with `SVG_SMIL = false` there is no bob at rest and the motions redraw about 6 times a second instead). Click `loot` then `party`, and press the collapse control twice, while a motion runs: the motion does not jump back to its start.

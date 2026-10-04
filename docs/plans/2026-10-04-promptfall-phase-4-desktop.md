@@ -277,7 +277,7 @@ SMIL from run 1's rest frames: `SMIL moves` is `yes` when consecutive rest frame
 
 - [x] Preconditions; `pass-run1/prompt.md`; run 1; `scout` summary; the step table
 - [x] Triage; fixes with tests and commits; "Known:" lines; the spikes row and `SVG_SMIL`; commit `docs(phase-4): desktop spike row and pass results` (with the `fix(stage)` commit first if SMIL is off)
-- [ ] Re-runs up to the cap; the table final; media checked under 15 MB; `/promptfall server local`; unset the env; relaunch Claude.app; run the check on the last commit
+- [x] Re-runs up to the cap (run 2 by the main session: the GPT lanes hit their 5-hour limit in run 1); the table final; media checked under 15 MB; `/promptfall server local`; unset the env; relaunch Claude.app; run the check on the last commit
 
 ### Task 7: PR #6: body and the results comment
 
