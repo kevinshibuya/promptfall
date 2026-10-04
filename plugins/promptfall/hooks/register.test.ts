@@ -1057,7 +1057,9 @@ test('the probe settles on image when the blit is taken', async ($, on) => {
 })
 
 test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
-  const { time, last } = probing(on, { deny: PROBE_ALT_DENY })
+  const { time, last } = probing(on, {
+    deny: `${PROBE_ALT_DENY} (env: terminal=Apple_Terminal, not asked yet, no answer)`,
+  })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
@@ -1066,7 +1068,9 @@ test("the probe settles on raster on the alt's deny, and stays unknown on any ot
 })
 
 test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
-  const { time, last, blits } = probing(on, { deny: 'nothing mounted' })
+  const { time, last, blits } = probing(on, {
+    deny: 'no Image of its own is mounted under key "probe" in band-probe',
+  })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)

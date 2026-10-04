@@ -257,7 +257,7 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 - [x] The module, the two JSON files, the gitignore line; `claude plugin validate spikes/phase-4`
 - [x] The findings doc with the table and the decision rules; commit `docs(phase-4): spike plugin and findings sheet`
-- [ ] Ask Kevin to run the five surfaces; record the findings in the doc; commit `docs(phase-4): spike findings`
+- [ ] Ask Kevin to run the five surfaces; record the findings in the doc; commit `docs(phase-4): spike findings` — partial: cmux (Ghostty's engine) and Terminal.app run and recorded by the implementing session on 2026-10-04 and applied; iTerm2, tmux, standalone Ghostty and the desktop app are not installed on this Mac and stay Kevin's (the manual pass covers them)
 
 ### Task 2: Sim: the `hit` effect; the view carries ids and rarity
 
@@ -390,7 +390,7 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No sound, no Account tab change, no command change (Task 7). No dialog change (Task 8). The geometry comes from Task 4; the band computes none of its own. `blocked: spike findings needed` at the first checkbox if `docs/plans/2026-10-04-phase-4-spikes.md` has an empty findings table.
 
-- [ ] Tuning from the spike findings; `Renderer`, `Settings`, `PluginState`, `SETTINGS_DEFAULT`; `loop.ts` with `loop.test.ts` red then green — blocked: spike findings needed for the tuning values (`IMAGE_SCALE`, `SVG_SMIL`, `PROBE_ALT_DENY` is a placeholder); the rest of this checkbox is done
+- [x] Tuning from the spike findings; `Renderer`, `Settings`, `PluginState`, `SETTINGS_DEFAULT`; `loop.ts` with `loop.test.ts` red then green (`IMAGE_SCALE = 6`, `PROBE_ALT_DENY` as a prefix; `SVG_SMIL = true` provisional until the desktop row is filled)
 - [x] `PartyLine`; the Party tab with the stage, compact and collapsed layouts, the probe; `band.test.ts` red then green on both surfaces
 - [x] io additions, `GameHandle.stage`, `GameSession` wiring, `reset()`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): the stage in the band on raster, image and svg`
 
@@ -491,6 +491,14 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 21. **The desktop fallback (`SVG_SMIL` false) drops the idle bob**: redraws at 6 a second only while a motion is live. The record allows "redraws at most 6 a second" and the bob at rest would be redraws for nothing.
 22. **The settings commands claim the lease** like every other subcommand, so the session that typed `/promptfall sound on` is the primary that plays; the Account tab's rows run in the session that opened the dialog, which claimed it too.
 23. **Glossary names.** CONTEXT.md avoids "scene" and "icon": the code says `StageModel`, `stageAt`, `small` and `ListSprite` where the record says scene and icon.
+24. **The probe matches the alt deny as a prefix.** The engine's deny for a terminal without pictures ends with its cause in parentheses, which differs per terminal (`(env: terminal=Apple_Terminal, not asked yet, no answer)`), so `PROBE_ALT_DENY` is the fixed part, `the Image draws its alt here: the terminal draws no placeholder images`, and the probe settles on raster when the deny starts with it.
+25. **The spike ran on two surfaces before Kevin's run.** The implementing session drove cmux (Ghostty's engine) through its CLI and Terminal.app through AppleScript, recorded both rows, and set `IMAGE_SCALE = 6` from a window capture of the scales. iTerm2, tmux, standalone Ghostty and the desktop app are not installed on that Mac; their rows, and `SVG_SMIL` (kept `true`, as `SvgProps.isInteractive` documents SMIL), wait for Kevin's manual pass.
+26. **`StageSite` carries the band's props** (`{ bodyColumns, maxRows }`), so a tick can recompute the layout with `layoutFor` as the contract says; the contract's site had no props to compute it from.
+27. **`onEffects` carries the event time.** `GameEngine`'s dep is `onEffects(effects, at?)`: `apply` passes the event's `at`, a delivery passes nothing and the session uses the last `at`. The timeline is fed synchronously, before the render that observes the same step's view.
+28. **`ListSprite` takes the row's key as a sixth argument.** `Raster` requires a key unique in its tree, and one sprite repeats across rows.
+29. **A batch plays each distinct cue once, in effect order** (a kill that drops an Epic and levels a hero plays `drop` and `level_up`); clips overlap rather than queue.
+30. **The Svg's lunge keeps the idle art.** SMIL has no cheap sprite swap; PR 1 aliases every attack pose to the idle art, so nothing shows. PR 2 decides when real attack poses land.
+31. **Smaller additions.** `stage/scenarios.ts` holds the golden scenarios that `golden.test.ts` and `scripts/stage-goldens.ts` share; `parseSettings` and `settingCommand` live in `state.ts`; a desktop attach reads the settings too (for the motion setting); `types/index.d.ts` aliases `Settings` and `Renderer` outside the `claude-code` augmentation, where `Settings` names the engine's own export; a forced renderer reads `Renderer: raster (from next start)` on the Account tab.
 
 ## Out of scope
 

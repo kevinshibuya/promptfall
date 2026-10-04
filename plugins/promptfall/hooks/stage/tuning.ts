@@ -34,18 +34,19 @@ export const IDLE_BOB_PX = 1
 
 // Surfaces and budgets.
 export const PROBE_DELAY_MS = 300
-/** Task 6 sets it from the spike findings. */
-export const IMAGE_SCALE = 1
+/** The smallest pre-upscale that reads crisp in Ghostty (spike findings, 2026-10-04). */
+export const IMAGE_SCALE = 6
 export const IMAGE_MAX_BYTES = 1_048_576
-/** Task 6 sets it from the spike findings. */
+/** The desktop runs SMIL in an `isInteractive` Svg (SvgProps; the desktop spike row confirms). */
 export const SVG_SMIL = true
 export const SVG_FALLBACK_FRAME_MS = 167
 /**
- * The deny a blit answers for an Image drawing its alt, verbatim; only it settles the probe on
- * raster. Task 6 sets it from the spike findings (docs/plans/2026-10-04-phase-4-spikes.md).
- * PENDING: a placeholder until the findings are in; it matches no real deny.
+ * The start of the deny a blit answers where the terminal draws no pictures; only it settles the
+ * probe on raster. The engine appends the cause in parentheses, which varies by terminal
+ * (`(env: terminal=Apple_Terminal, not asked yet, no answer)`), so the probe matches the prefix.
  */
-export const PROBE_ALT_DENY = 'PENDING: spike finding'
+export const PROBE_ALT_DENY =
+  'the Image draws its alt here: the terminal draws no placeholder images'
 export const SVG_MAX_CHARS = 131_072
 export const RASTER_MAX_PAIRS = 1024
 

@@ -288,9 +288,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
                 void (async () => {
                   const r = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B })
                   probePending = false
-                  // Only the alt's own deny settles on raster; any other leaves it unknown.
+                  // Only the no-pictures deny settles on raster; any other leaves it unknown.
                   if (r.deny === undefined) await update($, rendererAtom, () => 'image')
-                  else if (r.deny === PROBE_ALT_DENY) await update($, rendererAtom, () => 'raster')
+                  else if (r.deny.startsWith(PROBE_ALT_DENY))
+                    await update($, rendererAtom, () => 'raster')
                 })()
               })
             }
