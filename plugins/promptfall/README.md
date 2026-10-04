@@ -178,3 +178,31 @@ pnpm exec tsc -p plugins/promptfall
 `tsc -p plugins/promptfall` needs the engine's declarations, which an interactive
 `claude --plugin-dir plugins/promptfall` lays under `.claude-plugin/types/` on first load. They
 are generated per Claude Code version and stay uncommitted.
+
+### Sprites
+
+The art lives in `art/` at the repository root and becomes one generated module,
+`hooks/sprites/generated.ts`. Never edit that file: run `pnpm sprites` and commit the result. CI
+fails when it is stale (`pnpm sprites:check`).
+
+- `art/manifest.json` has one entry per sprite id: `hero:<class>`, `hero_attack:<class>`,
+  `enemy:<content id>`, `world_boss:<name key>`, `item:<item base>`, and `fallback`. An entry
+  names its PNG with `file` (true size, under `art/`) or `alias` (a stem under `art/concept/`,
+  which marks it a placeholder), a `style` (`nes` or `snes`), a `rarityColor` for heroes (the
+  exact source colour that takes the hero's rarity colour), and an optional `fit: { height }`.
+  The build fails on a missing or extra content id.
+- `art/palettes/nes.json` is the 64-entry NES master palette (the FCEUX table, duplicates kept so
+  the indices match). `art/palettes/snes.json` is the shared 64-colour SNES master, written by
+  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` stem.
+- Every opaque pixel snaps to its style's master palette. An `nes` sprite may then hold at most 4
+  colours and fit 16 × 16 (smaller art is padded, bottom-centred). An `snes` sprite may hold at
+  most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.
+- The build also writes a `compact` variant (8 px tall) of every sprite and an 8 × 4 `small`
+  variant of every item, for the compact stage and the half-block lists.
+- `pnpm slice <sheet.png> <out-dir> --grid 4x3 [--row r] --colours n (--size 16 | --fit 48x34)
+  [--names a,b,c]` cuts a magenta-keyed sheet into one PNG per cell. The phase 4 concept sheets in
+  `docs/plans/phase-4-concepts/` were cut this way into `art/concept/`.
+- In PR 1 every sprite is an alias: enemies use the concept monster of their archetype, zone and
+  world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
+  slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
+  counts them.

@@ -308,9 +308,9 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No stage or band code. No change to the sim's content. Nothing third-party under `art/`. `slice.py` stays as the record left it.
 
-- [ ] Dependencies and scripts; `slice-sheet.ts`; slice the two sheets; the fallback and item placeholders; `art/manifest.json`, the two palettes; the biome exclusion
-- [ ] `sprites.ts` with `sprites.test.ts` red then green; `pnpm sprites` emits `generated.ts`; CI line
-- [ ] `types.ts`, `base64.ts`, `index.ts`; `sprites.test.ts` in the plugin; README; run the acceptance check; commit `feat(sprites): art pipeline, palette checks, generated sprite module on the concept sheets`
+- [x] Dependencies and scripts; `slice-sheet.ts`; slice the two sheets; the fallback and item placeholders; `art/manifest.json`, the two palettes; the biome exclusion
+- [x] `sprites.ts` with `sprites.test.ts` red then green; `pnpm sprites` emits `generated.ts`; CI line
+- [x] `types.ts`, `base64.ts`, `index.ts`; `sprites.test.ts` in the plugin; README; run the acceptance check; commit `feat(sprites): art pipeline, palette checks, generated sprite module on the concept sheets`
 
 ### Task 4: The stage model: layout, timeline, model, compositor
 
