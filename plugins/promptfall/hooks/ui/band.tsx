@@ -305,7 +305,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             </Box>
           )
           loop?.mount(null)
-          if (settings.renderer === 'auto') {
+          // A renderer forced at session start set the atom; one forced later applies from the next
+          // start, so this session still probes.
+          {
             const { Image } = els
             probe = <Image key="probe" source={PROBE_A} columns={1} rows={1} alt=" " />
             if (!probePending) {

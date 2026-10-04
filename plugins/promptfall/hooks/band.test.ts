@@ -753,3 +753,13 @@ test('on a desktop band of three rows the boss stage keeps a positive size', asy
   }
   await ui.unmount()
 })
+
+test('forcing a renderer before the probe answers keeps the probe going for this session', async ($, on) => {
+  const { data } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // /promptfall renderer raster applies from the next start; this session still has to decide.
+  data.set('promptfall:settings', { ...SETTINGS_DEFAULT, renderer: 'raster' })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(await ui.find({ key: 'probe' })).toBeDefined()
+  await ui.unmount()
+})
