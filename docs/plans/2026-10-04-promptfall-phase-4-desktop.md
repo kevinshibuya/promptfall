@@ -24,19 +24,22 @@
 
 Task 1 fills this table from the real desktop app before any code changes; Tasks 2 and 4 branch on it. Until then every cell reads `unmeasured`.
 
+Measured 2026-10-04 from the screenshots under `.promptfall/evidence/desktop-2026-10-04/live-check/` (the codex run hit the GPT usage limit after taking every capture and before writing its report; a `scout` measured the captures by eye, about ±2 pt; the main session checked `probe-w-1440.png` and `probe-r-1440.png` itself). Capture scale 2.
+
 | Fact | 1440 × 823 points (95 × 12) | 864 × 823 points (60 × 12) |
 | --- | --- | --- |
-| Band body width in points, and points per `bodyColumn` (width ÷ bodyColumns) | unmeasured | unmeasured |
-| Svg A (no `width` prop, `isInteractive` true, markup 4000 × 500): drawn width × height in points; aspect kept (the diagonal meets the corners)? | unmeasured | unmeasured |
-| Svg A′ (as A with `isInteractive` false): drawn width × height; aspect kept? | unmeasured | unmeasured |
-| Svg B (`width={4000}` prop, `isInteractive` true, same markup, drawn last): drawn width × height; cut at the band's right edge, scrolled, or scaled? | unmeasured | unmeasured |
-| R probe (one Svg at the zone-boss geometry, viewBox 116 × 34, markup width `bodyColumns × 16`, `isInteractive` true, then two text rows and an `END` row): is `END` visible with no `n more` row and no scrolling inside the band? | unmeasured | unmeasured |
-| Rows r01 to r24 (information only, not a branch input): all visible / cut after row N / the band scrolls | unmeasured | unmeasured |
-| The band's `bodyColumns × maxRows` while the `/promptfall` pane is docked | unmeasured | n/a |
-| Text row height in points (r02 baseline − r01 baseline) | unmeasured | unmeasured |
-| Docked pane readout `[pane <placement> <bodyColumns>]`, the pane body width in points, points per pane column | unmeasured | n/a |
-| Pane probe: one Text of `bodyColumns − 1` `█` characters then `|`: on one line with the `|` visible at the pane's right edge? six Buttons in a `flexWrap="wrap"` Box wrap to a second line? | unmeasured | n/a |
-| Party-line probe: in the band, a `Box flexDirection="row" flexWrap="wrap"` of four fixed-width Texts (27, 27, 27, 20 `█` characters with `·` separators): do segments that do not fit move to a second row? | unmeasured | unmeasured |
+| Band body width; points per `bodyColumn` | 768 pt; 8.1 | 494 pt; 8.2 |
+| Svg A (no `width`, interactive, markup 4000 × 500) | 752 × 94 pt, aspect kept, band width less 8 pt padding a side | 478 × 60 pt, aspect kept |
+| Svg A′ (as A, image) | 752 × 94 pt, aspect kept | 478 × 60 pt, aspect kept |
+| Svg B (`width={4000}`, interactive) | 752 × 94 pt: scaled to fit, not cut, no sideways scroll | 478 × 60 pt, scaled to fit |
+| R probe (zone-boss geometry 116 × 34, markup `95 × 16` px wide) | drawn 512 × 149 pt, centred: the desktop caps an Svg at about 150 pt tall and keeps its aspect; `party`, `status` visible, `END` cut at the band's bottom, reachable by scrolling inside the band (no `n more` row, no scrollbar) | 478 × 140 pt (band width; under the cap); `END` reachable by scrolling |
+| Rows r01 to r24 (information only) | r01 to r10 visible, r11 cut, the rest by scrolling: the band's visible area is capped at about 248 pt; text rows are 19 pt | same: 248 pt cap, 19 pt rows |
+| Band `bodyColumns × maxRows` with the pane docked | `95 × 12` (the band shifts left, same width) | n/a |
+| Docked pane readout; width; points per pane column | `[pane dock 33]`; 266 pt inside; 8.1 | n/a |
+| Pane probe: `█` × 32 then `|` | wraps to a second row (`|` visible there): a `█` is about 13 pt, 1.6 columns, in the desktop's proportional font; the buttons wrap 3 + 3 | n/a |
+| Party-line probe (27, 27, 27, 20 `█` runs in a wrapping row) | wraps: runs 1 and 2 on row 1, runs 3 and 4 on row 2 | wraps: one run per row |
+
+**Letters:** **S1** (Svg A scales to the band with its aspect kept at both widths). **R-grow, with the desktop's own cap**: the desktop caps an Svg at about 150 pt tall (the boss stage draws narrower than the band, aspect kept) and the band's visible area at about 248 pt with scrolling beyond; the full stage plus its text rows stays under 248 pt (rest 104 + 57, boss 150 + 57 at 95 columns), so the plugin adds no height handling and R-fit is not needed (deviation from the branch rule: the R probe's `END` was cut because the probe stacked a readout row, three buttons and three text rows under the Svg, about 280 pt, not because the real band overflows). **P-cells**: `bodyColumns` measures the pane and the band at 8.1 pt a column at both widths; text is proportional, so a clip by `bodyColumns` characters fits ordinary text and overruns only for wide glyphs such as `█` (Task 4 relies on wrapping, not on the clip alone); `DESKTOP_LIST_SPRITE_COLUMNS = 2` (16 px ÷ 8.1). **W-wrap**: the desktop wraps a `flexWrap="wrap"` row by segment.
 
 **Branches decided by the table** (Task 1 writes the chosen letters under the table):
 - Width: **S1** when Svg A (the `SVG_SMIL` path: interactive) draws at the band's width with its aspect kept (height = width ÷ 8 within 2 points) at both window widths; otherwise **S2**. Svg A′ is recorded for the `SVG_SMIL = false` fallback: if Task 6 flips `SVG_SMIL`, the S letter is re-decided from A′ and Task 2's sizing follows it in the same fix commit.
@@ -75,9 +78,9 @@ Task 1 fills this table from the real desktop app before any code changes; Tasks
 
 **Boundaries:** No permanent code change. No fix for anything the readout shows. If the codex run is BLOCKED (plugin not loaded, no band at all), check `launchctl getenv CLAUDE_CODE_PLUGIN_DIRS` prints the plugins path and that the session is new; a second BLOCKED stops the task with `blocked: desktop live check cannot run (<report line>)`. If Svg A and Svg B behave the same way and both scale, S1 still wins (it needs no measured constant). If the 1440 and 864 captures disagree on a branch, stop with `blocked: live check disagrees between widths (<cells>)` and put both screenshots in front of Kevin.
 
-- [ ] Temporary readouts in `band.tsx` and `dialog.tsx`; the prompt under `live-check/`; `~/.claude/bin/codex-usage.sh` under 90 %; the codex run
-- [ ] `scout` summarises the report; the two branch-deciding numbers checked by hand against the screenshots; the table and the letters written; R-fit, if it is the result, said in chat with its screenshot
-- [ ] `git checkout --` the two readout files; run the check; commit `docs(phase-4): desktop live check results`
+- [x] Temporary readouts in `band.tsx` and `dialog.tsx`; the prompt under `live-check/`; `~/.claude/bin/codex-usage.sh` under 90 %; the codex run (hit the GPT limit after the captures)
+- [x] `scout` measured the captures; the branch-deciding captures checked by hand; the table and the letters written
+- [x] `git checkout --` the two readout files; run the check; commit `docs(phase-4): desktop live check results`
 
 ### Task 2: The desktop always draws the full stage, scaled to the band
 
