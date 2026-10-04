@@ -61,15 +61,27 @@ export function PartyLine(
   if (view.boss) {
     const shown = shownBoss(view, world)
     const name = `⚔ ${clip(view.boss.name, 12)} `
-    if (shown?.engaged) {
-      const hp = ` ${formatCount(shown.shownHp)}/${formatCount(shown.boss.maxHp)}`
-      const pad = Math.max(0, room - [...name].length - PARTY_BAR - [...hp].length)
+    const hp = shown?.engaged
+      ? ` ${formatCount(shown.shownHp)}/${formatCount(shown.boss.maxHp)}`
+      : ''
+    // `⚔ ` + the name + a space + the bar + the hp: the name gives way first, so the segment never
+    // runs past `room` and squeezes the hero segments; with no room for a name, no bar either.
+    const nameRoom = room - 3 - PARTY_BAR - [...hp].length
+    if (shown?.engaged && nameRoom >= 4) {
+      const label = `⚔ ${clip(view.boss.name, Math.min(12, nameRoom))} `
+      const pad = Math.max(0, room - [...label].length - PARTY_BAR - [...hp].length)
       enemy = (
         <Box key="enemy" flexDirection="row">
-          <Text wrap="truncate">{' '.repeat(pad) + name}</Text>
+          <Text wrap="truncate">{' '.repeat(pad) + label}</Text>
           {HpBar(els, shown.shownHp, shown.boss.maxHp, PARTY_BAR)}
           <Text wrap="truncate">{hp}</Text>
         </Box>
+      )
+    } else if (shown?.engaged) {
+      enemy = (
+        <Text key="enemy" wrap="truncate">
+          {padStart(clip(`⚔${hp}`, room), room)}
+        </Text>
       )
     } else {
       const text = `${name}you ${formatCount(view.boss.dealt)}`

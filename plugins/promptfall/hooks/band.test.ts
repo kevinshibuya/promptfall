@@ -1,7 +1,7 @@
 import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
-import { boss, turnBoss, wave } from './stage/fixtures'
+import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
 import { DISSOLVE_MS, DROP_MS, SVG_SMIL } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { bossSegment, worldRows } from './ui/band'
@@ -54,10 +54,12 @@ function harness(on: On) {
     return { value: undefined }
   })
   // A view the band and the stage loop read in place of the game's own, when set.
-  const shown: { view: GameView | null } = { view: null }
-  on('state.get', (_$, e, next) =>
-    e.key === 'view' && shown.view ? { value: { value: shown.view, version: 1 } } : next(e),
-  )
+  const shown: { view: GameView | null; world: WorldState | null } = { view: null, world: null }
+  on('state.get', (_$, e, next) => {
+    if (e.key === 'view' && shown.view) return { value: { value: shown.view, version: 1 } }
+    if (e.key === 'world' && shown.world) return { value: { value: shown.world, version: 1 } }
+    return next(e)
+  })
   return { data, states, clock, blits, invalidations, plays, shown }
 }
 
@@ -605,4 +607,23 @@ test('a survey hides the stage and nothing blits', async ($, on) => {
   await clock.advance(5_000)
   expect(blits).toHaveLength(0)
   await ui.unmount()
+})
+
+test('in boss mode the party line fits its width: the boss name gives way, not the heroes', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, { renderer: 'raster' })
+  const view = worldBoss()
+  view.boss = { bossId: BOSS.bossId, name: BOSS.name, glyph: BOSS.glyph, dealt: 0 }
+  view.heroes = view.heroes.map((h) => ({ ...h, hp: 15, maxHp: 69 }))
+  shown.view = view
+  shown.world = bossWorld({ ...BOSS, maxHp: 52_000, hp: 42_604 }, null)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (const width of [122, 140, 160]) {
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(width, 30) })
+    const line = (await ui.find({ key: 'row-party' }))?.text ?? ''
+    expect([...line].length).toBeLessThanOrEqual(width)
+    expect(line.match(/15\/69/g)).toHaveLength(3)
+    expect(line).toContain('42,604/52,000')
+    await ui.unmount()
+  }
 })
