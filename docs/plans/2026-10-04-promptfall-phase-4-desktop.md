@@ -275,8 +275,8 @@ SMIL from run 1's rest frames: `SMIL moves` is `yes` when consecutive rest frame
 
 **Boundaries:** No fix without a failing test. No second cap. No change to terminal behaviour unless a desktop fix's test also covers the terminal case it touches. A codex limit hit stops every GPT lane until the reset it reports: finish the triage of what is in hand, record the reset time in chat, and continue with Task 7 on the runs that happened.
 
-- [ ] Preconditions; `pass-run1/prompt.md`; run 1; `scout` summary; the step table
-- [ ] Triage; fixes with tests and commits; "Known:" lines; the spikes row and `SVG_SMIL`; commit `docs(phase-4): desktop spike row and pass results` (with the `fix(stage)` commit first if SMIL is off)
+- [x] Preconditions; `pass-run1/prompt.md`; run 1; `scout` summary; the step table
+- [x] Triage; fixes with tests and commits; "Known:" lines; the spikes row and `SVG_SMIL`; commit `docs(phase-4): desktop spike row and pass results` (with the `fix(stage)` commit first if SMIL is off)
 - [ ] Re-runs up to the cap; the table final; media checked under 15 MB; `/promptfall server local`; unset the env; relaunch Claude.app; run the check on the last commit
 
 ### Task 7: PR #6: body and the results comment
