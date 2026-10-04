@@ -150,8 +150,9 @@ it drops loot.
 - **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
   Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
   numbers as text. The desktop app draws it as an `Svg`, always the full stage: the art 116 to
-  160 pixels wide, scaled to the band's width (ADR 0004). The desktop keeps an `Svg` under about
-  150 points tall, so a boss stage there draws narrower than the band.
+  160 pixels wide, scaled to the band's width (ADR 0004). The desktop scrolls a band taller than
+  its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
+  band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.

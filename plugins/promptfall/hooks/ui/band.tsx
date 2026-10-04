@@ -10,7 +10,10 @@ import { renderSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
   COMPACT_STAGE_COLUMNS,
+  DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
+  DESKTOP_ROW_PX,
+  DESKTOP_TEXT_ROWS,
   PROBE_ALT_DENY,
   PROBE_DELAY_MS,
   SVG_INTERACTIVE,
@@ -250,8 +253,22 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             motion: settings.motion,
           })
           const { Svg } = els
+          // At the band's width a boss stage is taller than the band the desktop shows whole, and
+          // the desktop scrolls the rest away: scale it down to the rows left (ADR 0004).
+          const cap = (e.props.maxRows - DESKTOP_TEXT_ROWS) * DESKTOP_ROW_PX
+          const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
+          const fit =
+            natural > cap
+              ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
+              : {}
           stage = (
-            <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_INTERACTIVE} />
+            <Svg
+              key="stage"
+              source={source}
+              alt={model.alt}
+              isInteractive={SVG_INTERACTIVE}
+              {...fit}
+            />
           )
         }
         loop?.mount(

@@ -54,6 +54,14 @@ export const SVG_FALLBACK_FRAME_MS = 167
 export const DESKTOP_COLUMN_PX_CEILING = 16
 /** The columns a 16 px list sprite takes in a desktop row: 16 px at about 8 points a column. */
 export const DESKTOP_LIST_SPRITE_COLUMNS = 2
+/** The desktop's points per band column and per text row (live check and pass, 2026-10-04). */
+export const DESKTOP_COLUMN_PX = 8
+export const DESKTOP_ROW_PX = 19
+/**
+ * The desktop band's text rows under the stage: the party line, which wraps to two rows when the
+ * enemy segment does not fit, and the status row. The desktop scrolls a band past `maxRows` rows.
+ */
+export const DESKTOP_TEXT_ROWS = 3
 /**
  * The start of the deny a blit answers where the terminal draws no pictures; only it settles the
  * probe on raster. The engine appends the cause in parentheses, which varies by terminal

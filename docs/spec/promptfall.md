@@ -398,7 +398,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `bodyColumns` is under 100 or `maxRows` is under 4. On the Svg surfaces:
   always the full stage, the art `clamp(bodyColumns, 116, 160)` pixels wide
   scaled to the band's width, growing to the boss heights whatever `maxRows`
-  says (the desktop itself keeps an Svg under about 150 points tall), and the
+  says, scaled down where a boss stage would pass the rows the surface shows
+  whole (the desktop scrolls the rest), and the
   party line wraps by segment; the band collapses only by hand or as a
   secondary. Hidden while `hasSurvey`. Loot and World
   tabs stay 4 rows of text. Every Image and Svg has an alt summarising the scene.

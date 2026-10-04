@@ -2,7 +2,14 @@ import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
-import { DESKTOP_COLUMN_PX_CEILING, DISSOLVE_MS, DROP_MS, SVG_INTERACTIVE } from './stage/tuning'
+import {
+  DESKTOP_COLUMN_PX_CEILING,
+  DESKTOP_ROW_PX,
+  DESKTOP_TEXT_ROWS,
+  DISSOLVE_MS,
+  DROP_MS,
+  SVG_INTERACTIVE,
+} from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { bossSegment, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
@@ -713,4 +720,23 @@ test('on the desktop the party line names are whole, not padded or cut', async (
   expect(segment).not.toContain('  ')
   expect((await ui.find({ key: 'hero-0' }))?.props.wrap).not.toBe('truncate')
   await ui.unmount()
+})
+
+test('on the desktop a boss stage is scaled down to fit the band, the rest stage is not', async ($, on) => {
+  const { shown } = harness(on)
+  shown.view = boss()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  const stage = await ui.find({ type: 'Svg' })
+  // 12 rows of 19 points, less the party line (two rows when it wraps) and the status row.
+  const cap = (12 - DESKTOP_TEXT_ROWS) * DESKTOP_ROW_PX
+  expect(stage?.props.height).toBe(Math.round(cap))
+  expect(stage?.props.width).toBe(Math.floor((cap * 116) / 34))
+  await ui.unmount()
+  shown.view = wave()
+  const rest = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  const small = await rest.find({ type: 'Svg' })
+  expect(small?.props.height).toBeUndefined()
+  expect(small?.props.width).toBeUndefined()
+  await rest.unmount()
 })
