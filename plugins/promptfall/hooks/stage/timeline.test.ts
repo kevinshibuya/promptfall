@@ -148,3 +148,19 @@ test('isBusy is false once every motion ends', () => {
   expect(t.isBusy(end - 1)).toBe(true)
   expect(t.isBusy(end)).toBe(false)
 })
+
+test('an id that comes back as another enemy is a new actor: the world boss is not drawn as the slime', () => {
+  // A primary session predicts ahead of the server: once boss_engaged is replayed under its
+  // ticks, the boss can take the id the predicted slime had.
+  const t = new StageTimeline()
+  const slime = wave()
+  slime.enemies = [{ ...slime.enemies[2]!, id: 'e25' }]
+  t.observe(slime, 1_000)
+  const engaged = worldBoss()
+  engaged.enemies = [{ ...engaged.enemies[0]!, id: 'e25' }]
+  t.observe(engaged, 2_000)
+  const known = t.known().find((k) => k.id === 'e25')
+  expect(known?.spriteId).toBe('world_boss:the_promptwyrm')
+  expect(known?.kind).toBe('world_boss')
+  expect(t.active(2_000).some((m) => m.kind === 'spawn' && m.actor === 'e25')).toBe(true)
+})

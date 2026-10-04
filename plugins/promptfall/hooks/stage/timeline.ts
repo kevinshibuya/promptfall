@@ -78,11 +78,24 @@ export class StageTimeline {
     }
 
     for (const enemy of view.enemies) {
-      if (this.entries.has(enemy.id)) continue
+      const known = this.entries.get(enemy.id)
+      const spriteId = enemySpriteId(enemy)
+      if (known && known.spriteId === spriteId && known.kind === enemy.kind) continue
+      if (known) {
+        // The id came back as another enemy (a primary's prediction replayed under boss_engaged
+        // can hand the boss the id its predicted slime had): a new actor in the same slot.
+        this.departed.delete(enemy.id)
+        this.motions = this.motions.filter((m) => m.actor !== enemy.id)
+        this.entries.set(enemy.id, { ...known, spriteId, kind: enemy.kind, name: enemy.name })
+        if (this.observed) {
+          this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
+        }
+        continue
+      }
       const slot = this.freeSlot()
       this.entries.set(enemy.id, {
         id: enemy.id,
-        spriteId: enemySpriteId(enemy),
+        spriteId,
         kind: enemy.kind,
         slot,
         name: enemy.name,
