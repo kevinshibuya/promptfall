@@ -262,3 +262,38 @@ test('a blit that rejects does not end the loop', async () => {
   await clock.advance(3_000)
   expect(h.blits.length).toBeGreaterThanOrEqual(5)
 })
+
+test('a new site mounted while a slow frame is in flight still gets its frames', async () => {
+  const clock = fakeClock()
+  const blits: UiBlitArgs[] = []
+  let slowNext = false
+  let loop: StageLoop | null = null
+  const io: LoopIo = {
+    now: clock.now,
+    after: clock.after,
+    blit: async (args) => {
+      blits.push(args)
+      return {}
+    },
+    invalidate: () => undefined,
+    view: async () => {
+      if (!slowNext) return wave()
+      slowNext = false
+      // The render mounts another site while this frame waits longer than a frame.
+      loop?.mount(site('raster', wave(), { bodyColumns: 140, maxRows: 20 }))
+      return new Promise<GameView>((resolve) => clock.after(150, () => resolve(wave())))
+    },
+    settings: async () => SETTINGS_DEFAULT,
+  }
+  const timeline = new StageTimeline()
+  timeline.observe(wave(), 1_000_000)
+  loop = new StageLoop(io, timeline)
+  loop.mount(site())
+  slowNext = true
+  await clock.advance(400)
+  const before = blits.length
+  timeline.onEffects([hit], await clock.now())
+  await clock.advance(2_000)
+  expect(blits.length).toBeGreaterThan(before)
+  expect(blits.length).toBeGreaterThan(0)
+})

@@ -151,7 +151,12 @@ export class StageLoop {
   }
 
   private async tick(gen: number): Promise<void> {
-    if (gen !== this.gen || this.inFlight) return
+    if (gen !== this.gen) return
+    if (this.inFlight) {
+      // A frame of an older site is still awaiting: run this one when it ends, or no timer is left.
+      this.rerun = true
+      return
+    }
     this.inFlight = true
     this.rerun = false
     let next: number | null = null
@@ -164,7 +169,12 @@ export class StageLoop {
     } finally {
       this.inFlight = false
     }
-    if (gen !== this.gen || next === null) return
+    if (gen !== this.gen) {
+      // A mount started a newer generation while this frame ran; its tick may have been skipped.
+      if (this.rerun && this.site !== null && !this.stopped && this.timer === null) this.arm(0)
+      return
+    }
+    if (next === null) return
     this.arm(this.rerun ? 0 : next)
   }
 
