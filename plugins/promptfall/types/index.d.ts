@@ -33,6 +33,8 @@ export type EnemyView = {
 export type LootView = { text: string; rarity: string }
 export type ItemView = {
   id: string
+  /** The item base's content id: the sprite key. */
+  base: string
   name: string
   glyph: string
   slot: string
@@ -117,6 +119,10 @@ export type ListingView = {
   sellerName: string
   price: number
   expiresAt: number
+  /** An item listing's base, else null: the sprite key. */
+  base: string | null
+  /** A hero listing's class, else null: the sprite key. */
+  cls: string | null
 }
 export type OrderView = {
   id: string

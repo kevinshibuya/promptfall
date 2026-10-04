@@ -63,6 +63,8 @@ export function listingView(listing: Listing): ListingView {
   if (g.kind === 'item') {
     return {
       ...common,
+      base: g.item.base,
+      cls: null,
       name: tradeName('item', g.item.base),
       rarity: g.item.rarity,
       detail: affixLine(g.item) || 'no affixes',
@@ -71,6 +73,8 @@ export function listingView(listing: Listing): ListingView {
   const traits = g.hero.traits.map((t) => content.traits[t.id]?.name ?? t.id).join(', ')
   return {
     ...common,
+    base: null,
+    cls: g.hero.cls,
     name: heroName(g.hero.template, g.hero.epithet),
     rarity: g.hero.rarity,
     detail: [g.hero.cls, traits].filter(Boolean).join(' · '),
@@ -117,6 +121,7 @@ function itemView(item: Item): ItemView {
   const base = content.itemBases[item.base]
   return {
     id: item.id,
+    base: item.base,
     name: base?.name ?? item.base,
     glyph: base?.glyph ?? '?',
     slot: base?.slot ?? 'weapon',

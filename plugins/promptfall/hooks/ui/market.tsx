@@ -1,9 +1,10 @@
-import type { GameView, MarketQuery, MarketState, WorldState } from '../../types'
+import type { GameView, ListingView, MarketQuery, MarketState, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { content } from '../vendor/sim.js'
 import { listingView } from '../view'
 import { CLASS_LABEL, formatGold } from './format'
 import { RARITY_COLOR } from './parts'
+import type { ListSprite } from './sprites'
 import {
   type After,
   type Els,
@@ -85,6 +86,8 @@ export function marketBody(
   market: MarketState,
   readOnly: boolean,
   actions: MarketActions,
+  /** The sprite at the head of a listing row: the item's, or the hero class's. */
+  listSprite: (listing: ListingView) => ReturnType<typeof ListSprite> = () => null,
 ) {
   const { Box, Text, Button } = els
   const q = market.query
@@ -190,20 +193,23 @@ export function marketBody(
   for (const l of page.listings) {
     const mine = l.sellerId === view.accountId
     body.push(
-      <Box key={`listing-${l.id}`} flexDirection="column">
-        <Box key={`listing-name-${l.id}`} flexDirection="row" gap={1}>
-          <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">{`${l.name} (${l.rarity})`}</Text>
-          <Text dimColor wrap="truncate">
-            {l.detail}
-          </Text>
-        </Box>
-        <Box key={`listing-meta-${l.id}`} flexDirection="row" gap={1} paddingLeft={2}>
-          <Text wrap="truncate">{`${l.sellerName} · ${formatGold(l.price)}`}</Text>
-          {mine ? (
-            <Text dimColor>yours</Text>
-          ) : readOnly || gate ? null : (
-            <Button key={`buy-${l.id}`} label="buy" onPress={() => actions.ask(l.id)} />
-          )}
+      <Box key={`listing-${l.id}`} flexDirection="row" gap={1}>
+        {listSprite(l)}
+        <Box key={`listing-body-${l.id}`} flexDirection="column">
+          <Box key={`listing-name-${l.id}`} flexDirection="row" gap={1}>
+            <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">{`${l.name} (${l.rarity})`}</Text>
+            <Text dimColor wrap="truncate">
+              {l.detail}
+            </Text>
+          </Box>
+          <Box key={`listing-meta-${l.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+            <Text wrap="truncate">{`${l.sellerName} · ${formatGold(l.price)}`}</Text>
+            {mine ? (
+              <Text dimColor>yours</Text>
+            ) : readOnly || gate ? null : (
+              <Button key={`buy-${l.id}`} label="buy" onPress={() => actions.ask(l.id)} />
+            )}
+          </Box>
         </Box>
       </Box>,
     )

@@ -1,6 +1,10 @@
 import type { On } from 'claude-code'
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView } from '../types'
+import { decode } from './sprites/base64'
+import { spriteFor } from './sprites/index'
+import { artFrame } from './stage/compose'
+import { encodeRaster } from './stage/raster'
 import { CHAT_READ_ONLY, chatBody } from './ui/chat'
 import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
@@ -192,7 +196,13 @@ function parseQuery(raw: string): Record<string, string> {
  */
 async function marketHarness(
   on: On,
-  options: { linked?: boolean; flags?: Record<string, boolean>; listings?: number } = {},
+  options: {
+    linked?: boolean
+    flags?: Record<string, boolean>
+    listings?: number
+    /** The bot also lists a fourth hero, out of its party. */
+    heroListing?: boolean
+  } = {},
 ) {
   let now = 1_000_000
   let n = 0
@@ -210,11 +220,17 @@ async function marketHarness(
     name: 'player',
     linked: options.linked ?? true,
   })
+  const botState = createInitialState(62)
+  const spare = botState.roster[0]
   const bot = await ledger.host.mint({
     state: {
-      ...createInitialState(62),
+      ...botState,
       gold: 50_000,
       inventory: Array.from({ length: options.listings ?? 3 }, (_, i) => rareItem(`iB${i}`)),
+      roster:
+        options.heroListing && spare
+          ? [...botState.roster, { ...spare, id: 'hB', rarity: 'rare' as const }]
+          : botState.roster,
     },
     name: 'Brindle',
     linked: true,
@@ -224,6 +240,10 @@ async function marketHarness(
     for (let i = 0; i < (options.listings ?? 3); i++) {
       now += 1
       await ledger.list(botAuth, { kind: 'item', id: `iB${i}`, price: 100 + i })
+    }
+    if (options.heroListing) {
+      now += 1
+      await ledger.list(botAuth, { kind: 'hero', id: 'hB', price: 500 })
     }
     await ledger.placeOrder(botAuth, {
       base: 'steel_longsword',
@@ -728,3 +748,85 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
+
+// ---------------------------------------------------------------------------
+// List sprites
+
+const RENDERER = (renderer: string) => ({ sound: false, motion: 'full', renderer })
+
+/** The 8 × 2 Raster an item row draws on a half-block terminal. */
+const smallCells = (base: string) => {
+  const small = spriteFor('item', base).small
+  if (!small) throw new Error('no small art')
+  return encodeRaster(artFrame(small), [])
+}
+
+test('an inventory row on a half-block terminal leads with the 8 × 2 item sprite', async ($, on) => {
+  const { data } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('raster'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  const sprite = await ui.find({ key: 'sprite-iseed' })
+  expect(sprite?.type).toBe('Raster')
+  expect([sprite?.props.columns, sprite?.props.rows]).toEqual([8, 2])
+  expect([...decode(String(sprite?.props.cells))]).toEqual([...decode(smallCells('iron_sword'))])
+  await ui.unmount()
+})
+
+test('an inventory row draws an Image of 2 × 1 where pictures draw, an Svg on the desktop', async ($, on) => {
+  const { data } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('image'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  const image = await ui.find({ type: 'Image' })
+  expect([image?.props.columns, image?.props.rows]).toEqual([2, 1])
+  expect(image?.props.alt).toBe('Iron Sword')
+  await ui.unmount()
+  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
+  const svg = await desk.find({ type: 'Svg' })
+  expect(svg?.props.alt).toBe('Iron Sword')
+  expect(String(svg?.props.source)).toMatch(/^<svg/)
+  await desk.unmount()
+})
+
+test('a heroes row keeps its glyph on half-blocks and leads with an Svg on the desktop', async ($, on) => {
+  const { data, states } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('raster'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const hero = (states.get('view') as GameView).roster[0]
+  if (!hero) throw new Error('no hero')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-heroes' })
+  expect(await ui.find({ key: `sprite-${hero.id}` })).toBeUndefined()
+  expect(
+    await ui.find({ text: new RegExp(`^\\${hero.glyph} ${hero.name.split(' ')[0]}`) }),
+  ).toBeDefined()
+  await ui.unmount()
+  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
+  expect((await desk.findAll({ type: 'Svg' })).some((s) => s.props.alt === hero.name)).toBe(true)
+  await desk.unmount()
+})
+
+test('market listings lead with the item or the hero class sprite', async ($, on) => {
+  const { player } = await marketHarness(on, { heroListing: true })
+  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
+  await ui.press({ key: 'tab-market' })
+  // Items: the 8 × 2 half-block sprite.
+  expect(await ui.findAll({ type: 'Raster' })).toHaveLength(3)
+  // Heroes: nothing on half-blocks.
+  await ui.press({ key: 'market-kind' })
+  expect(await ui.find({ text: /\(rare\)/ })).toBeDefined()
+  expect(await ui.findAll({ type: 'Raster' })).toHaveLength(0)
+  await ui.unmount()
+  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
+  const heroes = await desk.findAll({ type: 'Svg' })
+  expect(heroes).toHaveLength(1)
+  await desk.press({ key: 'market-kind' })
+  const items = await desk.findAll({ type: 'Svg' })
+  expect(items.map((s) => s.props.alt)).toEqual([
+    'Steel Longsword',
+    'Steel Longsword',
+    'Steel Longsword',
+  ])
+  await desk.unmount()
+})

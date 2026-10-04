@@ -181,6 +181,11 @@ export function renderSvg(
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"><defs>${flashFilter}${defs.join('')}</defs>${body.join('')}</svg>`
 }
 
+/** One art alone at its own size, in its own colours: the dialog's list sprites. */
+export function artSvg(art: SpriteArt): string {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${art.width} ${art.height}" width="${art.width}" height="${art.height}" shape-rendering="crispEdges">${artPaths(art, null)}</svg>`
+}
+
 /** A number as SVG text: top-left at (x, y), the baseline under the 5 px glyph. */
 function text(s: string, x: number, y: number, rgb: number, anim: string, extra = ''): string {
   return `<text x="${x}" y="${y + GLYPH_HEIGHT}" fill="${hex(rgb)}" font-family="monospace" font-size="6" font-weight="bold"${extra}>${anim}${s}</text>`

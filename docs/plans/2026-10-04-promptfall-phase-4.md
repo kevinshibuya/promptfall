@@ -442,8 +442,8 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No change to the Orders, Sell, Chat, Leaderboards or Odds tabs. No band change.
 
-- [ ] `sprites.tsx`; the three view fields in `types` and `view.ts`
-- [ ] Inventory, Heroes, Market rows; `dialog.test.ts` red then green; README; run the acceptance check; commit `feat(plugin): item and hero sprites in the Inventory, Heroes and Market lists`
+- [x] `sprites.tsx`; the three view fields in `types` and `view.ts`
+- [x] Inventory, Heroes, Market rows; `dialog.test.ts` red then green; README; run the acceptance check; commit `feat(plugin): item and hero sprites in the Inventory, Heroes and Market lists`
 
 ### Task 9: PR 1: manual pass part A, docs, pull request
 

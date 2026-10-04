@@ -14,6 +14,7 @@ import type {
   WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
+import { spriteFor } from '../sprites/index'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
@@ -34,6 +35,7 @@ import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
 import { openSell, sellBody, sellTrade } from './sell'
+import { ListSprite } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
 
@@ -115,6 +117,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const view: GameView | null = await read($, viewAtom)
     const mode: Mode = (await read($, modeAtom)) ?? 'primary'
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
+    const listRenderer = await read($, rendererAtom)
     const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
     const notice = await read($, noticeAtom)
     const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
@@ -298,12 +301,29 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'market' && running) {
       body.push(
-        ...marketBody(els, pick, view, world, market, readOnly, {
-          setQuery: (q) => loadMarket(running, q, updMarket, after),
-          ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
-          confirm: async () =>
-            confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
-        }),
+        ...marketBody(
+          els,
+          pick,
+          view,
+          world,
+          market,
+          readOnly,
+          {
+            setQuery: (q) => loadMarket(running, q, updMarket, after),
+            ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
+            confirm: async () =>
+              confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
+          },
+          (l) =>
+            ListSprite(
+              table,
+              listRenderer,
+              e.surface,
+              l.kind === 'item' ? spriteFor('item', l.base ?? '') : spriteFor('hero', l.cls ?? ''),
+              l.name,
+              `sprite-${l.id}`,
+            ),
+        ),
       )
     } else if (tab === 'orders' && running) {
       body.push(
@@ -360,76 +380,87 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
         // Two rows per item, so a docked pane never truncates a button.
         body.push(
-          <Box key={`item-${item.id}`} flexDirection="column">
-            <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
-              <Text
-                color={RARITY_COLOR[item.rarity]}
-                dimColor={item.rarity === 'common'}
-                wrap="truncate"
-              >
-                {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
-              </Text>
-              {item.affixes.length > 0 ? (
-                <Text dimColor wrap="truncate">
-                  {item.affixes.join(', ')}
+          <Box key={`item-${item.id}`} flexDirection="row" gap={1}>
+            {ListSprite(
+              table,
+              listRenderer,
+              e.surface,
+              spriteFor('item', item.base),
+              item.name,
+              `sprite-${item.id}`,
+            )}
+            <Box key={`item-body-${item.id}`} flexDirection="column">
+              <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
+                <Text
+                  color={RARITY_COLOR[item.rarity]}
+                  dimColor={item.rarity === 'common'}
+                  wrap="truncate"
+                >
+                  {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
                 </Text>
-              ) : null}
-            </Box>
-            <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
-              {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`equip-${item.id}`}
-                  label="equip"
-                  onPress={() =>
-                    setDialog({
-                      itemPick: dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
-                    })
-                  }
-                />
-              )}
-              {readOnly || !item.equippedBy ? null : (
-                <Button
-                  key={`unequip-${item.id}`}
-                  label="unequip"
-                  onPress={() => {
-                    const heroId = item.equippedBy
-                    const slot = item.slot
-                    if (
-                      heroId &&
-                      (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
-                    ) {
-                      return act({ t: 'unequip', heroId, slot })
+                {item.affixes.length > 0 ? (
+                  <Text dimColor wrap="truncate">
+                    {item.affixes.join(', ')}
+                  </Text>
+                ) : null}
+              </Box>
+              <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+                {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
+                {readOnly || item.equippedBy ? null : (
+                  <Button
+                    key={`equip-${item.id}`}
+                    label="equip"
+                    onPress={() =>
+                      setDialog({
+                        itemPick:
+                          dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
+                      })
                     }
-                  }}
-                />
-              )}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`vendor-${item.id}`}
-                  label={`vendor ${item.vendorValue}g`}
-                  onPress={() => act({ t: 'vendor', itemId: item.id })}
-                />
-              )}
-              {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
-                <Button
-                  key={`sell-${item.id}`}
-                  label="sell"
-                  onPress={() => openSell(running, 'item', item.id, updDialog)}
-                />
-              )}
-              {readOnly || item.affixes.length === 0 ? null : (
-                <Button
-                  key={`reforge-${item.id}`}
-                  label={`reforge ${item.reforgeCost}g`}
-                  onPress={() =>
-                    setDialog({
-                      itemPick:
-                        dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
-                    })
-                  }
-                />
-              )}
+                  />
+                )}
+                {readOnly || !item.equippedBy ? null : (
+                  <Button
+                    key={`unequip-${item.id}`}
+                    label="unequip"
+                    onPress={() => {
+                      const heroId = item.equippedBy
+                      const slot = item.slot
+                      if (
+                        heroId &&
+                        (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
+                      ) {
+                        return act({ t: 'unequip', heroId, slot })
+                      }
+                    }}
+                  />
+                )}
+                {readOnly || item.equippedBy ? null : (
+                  <Button
+                    key={`vendor-${item.id}`}
+                    label={`vendor ${item.vendorValue}g`}
+                    onPress={() => act({ t: 'vendor', itemId: item.id })}
+                  />
+                )}
+                {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
+                  <Button
+                    key={`sell-${item.id}`}
+                    label="sell"
+                    onPress={() => openSell(running, 'item', item.id, updDialog)}
+                  />
+                )}
+                {readOnly || item.affixes.length === 0 ? null : (
+                  <Button
+                    key={`reforge-${item.id}`}
+                    label={`reforge ${item.reforgeCost}g`}
+                    onPress={() =>
+                      setDialog({
+                        itemPick:
+                          dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
+                      })
+                    }
+                  />
+                )}
+              </Box>
             </Box>
           </Box>,
         )
@@ -491,6 +522,14 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
         body.push(
           <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
+            {ListSprite(
+              table,
+              listRenderer,
+              e.surface,
+              spriteFor('hero', hero.cls),
+              hero.name,
+              `sprite-${hero.id}`,
+            )}
             <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
               {`${hero.glyph} ${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
             </Text>

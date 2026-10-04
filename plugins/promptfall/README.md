@@ -247,3 +247,6 @@ fails when it is stale (`pnpm sprites:check`).
   world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
   slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
   counts them.
+- The Inventory, Heroes and Market lists lead each row with its sprite: an `Svg` on the desktop,
+  a 2-cell `Image` where pictures draw, and the 8 × 4 item sprite as half-blocks elsewhere (heroes
+  keep their glyph there).
