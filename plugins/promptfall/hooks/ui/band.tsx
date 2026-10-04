@@ -13,6 +13,7 @@ import {
   DESKTOP_COLUMN_PX_CEILING,
   PROBE_ALT_DENY,
   PROBE_DELAY_MS,
+  SVG_INTERACTIVE,
   SVG_SMIL,
 } from '../stage/tuning'
 import { PREFS_DEFAULT, SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
@@ -249,7 +250,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             motion: settings.motion,
           })
           const { Svg } = els
-          stage = <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_SMIL} />
+          stage = (
+            <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_INTERACTIVE} />
+          )
         }
         loop?.mount(
           SVG_SMIL

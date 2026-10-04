@@ -37,8 +37,14 @@ export const PROBE_DELAY_MS = 300
 /** The smallest pre-upscale that reads crisp in Ghostty (spike findings, 2026-10-04). */
 export const IMAGE_SCALE = 6
 export const IMAGE_MAX_BYTES = 1_048_576
-/** The desktop runs SMIL in an `isInteractive` Svg (SvgProps; the desktop spike row confirms). */
+/** The desktop runs SMIL in the stage Svg (desktop pass, 2026-10-04: the bob, lunge, flash and numbers play). */
 export const SVG_SMIL = true
+/**
+ * The desktop stage Svg is an image, not an interactive frame: SMIL runs in both, but a frame
+ * reloads on every new source and shows a blank frame at each redraw (desktop pass, 2026-10-04:
+ * 4 blanks in 20 s as a frame, none as an image).
+ */
+export const SVG_INTERACTIVE = false
 export const SVG_FALLBACK_FRAME_MS = 167
 /**
  * The stage Svg's markup width per band column off the terminal. The desktop draws about 8 points

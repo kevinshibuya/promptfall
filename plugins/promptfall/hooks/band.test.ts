@@ -2,7 +2,7 @@ import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
-import { DESKTOP_COLUMN_PX_CEILING, DISSOLVE_MS, DROP_MS, SVG_SMIL } from './stage/tuning'
+import { DESKTOP_COLUMN_PX_CEILING, DISSOLVE_MS, DROP_MS, SVG_INTERACTIVE } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { bossSegment, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
@@ -556,7 +556,9 @@ test('the desktop draws an Svg with its alt', async ($, on) => {
   // The desktop's Svg keeps no key: find it by type.
   const stage = await ui.find({ type: 'Svg' })
   expect(stage?.type).toBe('Svg')
-  expect(stage?.props.isInteractive).toBe(SVG_SMIL)
+  // An image: SMIL runs in it and a new source swaps in without the frame's blank reload.
+  expect(stage?.props.isInteractive).toBe(SVG_INTERACTIVE)
+  expect(SVG_INTERACTIVE).toBe(false)
   expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
   await ui.unmount()
 })
