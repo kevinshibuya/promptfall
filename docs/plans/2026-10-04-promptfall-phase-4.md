@@ -464,7 +464,7 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 **Boundaries:** No merge. No new features. Nothing from PR 2.
 
 - [x] `docs/manual-pass/phase-4.md` part A; README status; tick the tasks
-- [ ] `codex-computer-use` check; the full check line; push; open the PR; stop
+- [x] `codex-computer-use` check; the full check line; push; open the PR; stop. The codex run on Terminal.app passed the layouts and failed the colours: Terminal.app paints Raster cells in black and grey, an engine and terminal limit (the same cells draw in colour in Ghostty's engine); recorded in the manual pass
 
 ## Spec conflicts and narrowings
 
