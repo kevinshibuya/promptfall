@@ -427,7 +427,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         )
         // Two rows per item, so a docked pane never truncates a button.
         body.push(
-          <Box key={`item-${item.id}`} flexDirection="row" gap={1}>
+          <Box key={`item-${item.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
             {itemSprite}
             <Box key={`item-body-${item.id}`} flexDirection="column">
               <Box
@@ -594,7 +594,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         )
         // Two rows per hero, like the items: the name, then its actions, which wrap in a narrow pane.
         body.push(
-          <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
+          <Box key={`hero-${hero.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
             {heroSprite}
             <Box key={`hero-body-${hero.id}`} flexDirection="column">
               <Box

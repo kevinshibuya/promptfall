@@ -208,7 +208,7 @@ export function marketBody(
         : width - (sprite.element && sprite.columns > 0 ? sprite.columns + 1 : 0),
     )
     body.push(
-      <Box key={`listing-${l.id}`} flexDirection="row" gap={1}>
+      <Box key={`listing-${l.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
         {sprite.element}
         <Box key={`listing-body-${l.id}`} flexDirection="column">
           <Box

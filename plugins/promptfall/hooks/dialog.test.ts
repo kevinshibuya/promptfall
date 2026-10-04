@@ -1059,3 +1059,33 @@ test('orders and chat rows wrap on the desktop and truncate on a terminal', () =
   expect(chat('wrap')).not.toContain('"truncate"')
   expect(chat('truncate')).toContain('"truncate"')
 })
+
+test('a list row puts its sprite at the top, beside the name, not in the middle of a wrapped block', async ($, on) => {
+  const { data, states } = harness(on, narrowState())
+  data.set('promptfall:settings', RENDERER('raster'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...NARROW })
+    expect((await ui.find({ key: 'item-ilong' }))?.props.alignItems).toBe('flex-start')
+    await ui.press({ key: 'tab-heroes' })
+    const hero = (states.get('view') as GameView).roster[0]
+    if (!hero) throw new Error('no hero')
+    expect((await ui.find({ key: `hero-${hero.id}` }))?.props.alignItems).toBe('flex-start')
+    await ui.press({ key: 'tab-inventory' })
+    await ui.unmount()
+  }
+})
+
+test('a market listing row puts its sprite at the top', async ($, on) => {
+  const { player } = await marketHarness(on, { affixed: true })
+  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
+  await ui.unmount()
+  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...NARROW })
+  await desk.press({ key: 'tab-market' })
+  const rows = (await desk.findAll({ type: 'Box' })).filter((b) =>
+    /^listing-[^-]+$/.test(String(b.props.key ?? '')),
+  )
+  expect(rows.length).toBeGreaterThan(0)
+  for (const r of rows) expect(r.props.alignItems).toBe('flex-start')
+  await desk.unmount()
+})
