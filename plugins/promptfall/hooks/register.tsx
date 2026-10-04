@@ -1,16 +1,21 @@
-import type { Register } from 'claude-code'
+import type { Register, RenderSurface, UiBlitArgs, UiBlitResult } from 'claude-code'
 import { atom, read, update } from 'claude-code'
-import type { Mode, WorldState } from '../types'
+import type { GameView, Mode, Settings, WorldState } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
+import { StageLoop } from './stage/loop'
+import { StageTimeline } from './stage/timeline'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
   DIALOG_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
   WORLD_DEFAULT,
 } from './state'
 import { type StoreCalls, StoreKeyValue } from './storage'
@@ -53,6 +58,13 @@ type Io = {
   /** Reads the `world` atom. */
   readWorld: () => Promise<WorldState | null>
   fetch: FetchLike
+  blit: (args: UiBlitArgs) => Promise<UiBlitResult>
+  /** $.ui.invalidate('ui.render') */
+  invalidate: () => void
+  view: () => Promise<GameView | null>
+  settings: () => Promise<Settings>
+  /** Plays a file of the plugin's; resolves or rejects with nothing played off macOS. */
+  play: (asset: string, gain: number) => Promise<void>
 }
 
 /** The store key of the machine's server setting: a URL, or absent for the in-process ledger. */
@@ -116,6 +128,32 @@ class GameSession implements GameHandle {
   private firstRun = false
   private paneNoticeGen = 0
   private readonly poller: WorldPoller
+  private readonly loops = new Map<RenderSurface, StageLoop>()
+  /** The last applied event's time: the stage's `now` for effects a delivery brought. */
+  private lastAt = 0
+
+  readonly stage: GameHandle['stage'] = {
+    timeline: new StageTimeline(),
+    loopFor: (surface) => {
+      let loop = this.loops.get(surface)
+      if (!loop) {
+        const io = this.io
+        loop = new StageLoop(
+          {
+            now: io.now,
+            after: io.after,
+            blit: io.blit,
+            invalidate: io.invalidate,
+            view: io.view,
+            settings: io.settings,
+          },
+          this.stage.timeline,
+        )
+        this.loops.set(surface, loop)
+      }
+      return loop
+    },
+  }
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store)
@@ -159,7 +197,7 @@ class GameSession implements GameHandle {
         // The session owns the mode: the engine's pause becomes the derived value.
         return io.publish(patch.mode === undefined ? patch : { ...patch, mode: this.mode() })
       },
-      onEffects: (effects) => this.onEffects(effects),
+      onEffects: (effects, at) => this.onEffects(effects, at),
       toast: io.toast,
       after: (ms, fn) => {
         io.after(ms, fn)
@@ -364,7 +402,9 @@ class GameSession implements GameHandle {
     await this.claim()
     this.engine.stop()
     const setting = this.setting
-    for (const key of await this.kv.keys()) if (key !== LEASE_KEY) await this.kv.delete(key)
+    for (const key of await this.kv.keys()) {
+      if (key !== LEASE_KEY && key !== SETTINGS_KEY) await this.kv.delete(key)
+    }
     if (setting !== null) await this.kv.set(SERVER_KEY, setting)
     await this.restart(setting)
   }
@@ -500,7 +540,12 @@ class GameSession implements GameHandle {
     await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
-  private onEffects(effects: Effect[]): void {
+  private onEffects(effects: Effect[], at?: number): void {
+    // Before the toasts, and synchronously: the next render observes the view these effects
+    // came with, so the hits must already be on the timeline (engine.apply publishes first).
+    if (at !== undefined) this.lastAt = at
+    this.stage.timeline.onEffects(effects, at ?? this.lastAt)
+    for (const loop of this.loops.values()) loop.wake()
     for (const effect of effects) {
       if (effect.k === 'rejected') {
         const reason = effect.reason
@@ -528,12 +573,14 @@ const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 let game: GameSession | null = null
 
 export const register: Register = (on) => {
-  registerBand(on)
+  registerBand(on, () => game)
   registerDialog(on, () => game)
   registerCommand(on, () => game)
 
@@ -542,6 +589,12 @@ export const register: Register = (on) => {
     await $.command.register(COMMAND)
     // A set lease owner means this session ran a game before a hot reload, on any surface.
     const hadGame = (await read($, leaseOwnerAtom)) !== null
+    const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
+    await update($, settingsAtom, () => settings)
+    // A forced renderer skips the probe; `auto` leaves the atom to the band's probe.
+    if (e.surface === 'terminal' && settings.renderer !== 'auto') {
+      await update($, rendererAtom, () => settings.renderer)
+    }
     if ((e.isInteractive && e.surface === 'terminal') || hadGame) {
       const session = new GameSession({
         now: () => $.clock.now(),
@@ -592,6 +645,11 @@ export const register: Register = (on) => {
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),
         ),
+        blit: (args) => $.ui.blit(args),
+        invalidate: () => $.ui.invalidate('ui.render'),
+        view: () => read($, viewAtom),
+        settings: async () => (await read($, settingsAtom)) ?? SETTINGS_DEFAULT,
+        play: (asset, gain) => $.audio.play({ asset }, { gain }),
       })
       game = session
       await session.start()
@@ -600,6 +658,10 @@ export const register: Register = (on) => {
   })
 
   on('session.attach', async ($, e, next) => {
+    if (e.surface === 'desktop') {
+      const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
+      await update($, settingsAtom, () => settings)
+    }
     if (e.surface === 'desktop' && !game) {
       const session = new GameSession({
         now: () => $.clock.now(),
@@ -650,6 +712,11 @@ export const register: Register = (on) => {
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),
         ),
+        blit: (args) => $.ui.blit(args),
+        invalidate: () => $.ui.invalidate('ui.render'),
+        view: () => read($, viewAtom),
+        settings: async () => (await read($, settingsAtom)) ?? SETTINGS_DEFAULT,
+        play: (asset, gain) => $.audio.play({ asset }, { gain }),
       })
       game = session
       await session.start()

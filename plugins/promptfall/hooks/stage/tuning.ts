@@ -40,6 +40,12 @@ export const IMAGE_MAX_BYTES = 1_048_576
 /** Task 6 sets it from the spike findings. */
 export const SVG_SMIL = true
 export const SVG_FALLBACK_FRAME_MS = 167
+/**
+ * The deny a blit answers for an Image drawing its alt, verbatim; only it settles the probe on
+ * raster. Task 6 sets it from the spike findings (docs/plans/2026-10-04-phase-4-spikes.md).
+ * PENDING: a placeholder until the findings are in; it matches no real deny.
+ */
+export const PROBE_ALT_DENY = 'PENDING: spike finding'
 export const SVG_MAX_CHARS = 131_072
 export const RASTER_MAX_PAIRS = 1024
 

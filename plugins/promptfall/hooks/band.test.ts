@@ -1,6 +1,9 @@
-import type { On, RenderElement } from 'claude-code'
+import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
-import type { GameView, Prefs, WorldState } from '../types'
+import type { GameView, Prefs, Settings, WorldState } from '../types'
+import { boss, turnBoss, wave } from './stage/fixtures'
+import { DISSOLVE_MS, DROP_MS, SVG_SMIL } from './stage/tuning'
+import { SETTINGS_DEFAULT } from './state'
 import { bossSegment, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
@@ -35,12 +38,38 @@ function harness(on: On) {
     return h(Box, { key: 'engine-band' }) as RenderElement
   })
   const clock = mock.clock(on, { now: 1_000_000 })
-  return { data, states, clock }
+  const blits: (UiBlitArgs & { at: number })[] = []
+  const invalidations: number[] = []
+  const plays: { asset: string; gain: number | undefined }[] = []
+  on('ui.blit', (_$, e) => {
+    blits.push({ ...e, at: clock.now() })
+    return { value: {} }
+  })
+  on('ui.invalidate', (_$, e, next) => {
+    invalidations.push(clock.now())
+    return next(e)
+  })
+  on('audio.play', (_$, e) => {
+    plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
+    return { value: undefined }
+  })
+  // A view the band and the stage loop read in place of the game's own, when set.
+  const shown: { view: GameView | null } = { view: null }
+  on('state.get', (_$, e, next) =>
+    e.key === 'view' && shown.view ? { value: { value: shown.view, version: 1 } } : next(e),
+  )
+  return { data, states, clock, blits, invalidations, plays, shown }
+}
+
+/** Stores machine settings before session.start reads them. */
+function settings(data: Map<string, unknown>, patch: Partial<Settings>) {
+  data.set('promptfall:settings', { ...SETTINGS_DEFAULT, ...patch })
 }
 
 function band(bodyColumns = 120, maxRows = 8, hasSurvey = false) {
   return {
     component: 'AbovePrompt' as const,
+    requestId: 'band-test',
     props: {
       hasSurvey,
       isWorking: false,
@@ -52,11 +81,27 @@ function band(bodyColumns = 120, maxRows = 8, hasSurvey = false) {
   }
 }
 
+/** The band's rows: the compact layout's left column, else the band's own children. */
 async function rows(ui: {
   find: (q: { key: string }) => Promise<{ children: unknown[] } | undefined>
 }) {
-  const root = await ui.find({ key: 'band' })
+  const root = (await ui.find({ key: 'compact-rows' })) ?? (await ui.find({ key: 'band' }))
   return (root?.children ?? []).filter((c) => typeof c === 'object')
+}
+
+/** The band's height in terminal rows: the stage's rows count, the full layout's text rows too. */
+async function height(ui: {
+  find: (q: {
+    key: string
+  }) => Promise<{ props: Record<string, unknown>; children: unknown[] } | undefined>
+}) {
+  if (await ui.find({ key: 'compact-rows' })) return 4
+  const stage = await ui.find({ key: 'stage' })
+  const empty = await ui.find({ key: 'stage-empty' })
+  const all = await rows(ui)
+  if (stage) return Number(stage.props.rows) + all.length - 1
+  if (empty) return empty.children.filter((c) => typeof c === 'object').length + all.length - 1
+  return all.length
 }
 
 test('the band draws the party and the zone, and passes during a survey', async ($, on) => {
@@ -354,7 +399,7 @@ test('in boss mode the first enemy slot is the boss with its bar; without the bo
   const boss = world.snapshot?.boss
   if (!boss || !view.boss) throw new Error('not in boss mode')
   expect(view.boss.bossId).toBe(boss.bossId)
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(150) })
   await ui.press({ key: 'tab-party' })
   expect(
     await ui.find({ type: 'Text', text: new RegExp(`⚔ ${boss.glyph} ${boss.name}\\s*$`) }),
@@ -365,7 +410,7 @@ test('in boss mode the first enemy slot is the boss with its bar; without the bo
   await ui.unmount()
   net.boss = null
   await clock.advance(5_000)
-  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(100) })
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(150) })
   expect(await again.find({ key: 'boss-slot' })).toBeUndefined()
   // The name keeps the first row; what you dealt takes the bar's place on the second.
   expect(
@@ -373,4 +418,169 @@ test('in boss mode the first enemy slot is the boss with its bar; without the bo
   ).toBeDefined()
   expect(await again.find({ type: 'Text', text: /^ {3}you \d+/ })).toBeDefined()
   await again.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// The stage
+
+const RASTER = { renderer: 'raster' } as const
+
+test('the full layout: a 120 × 8 Raster, the party line and the status row, 10 rows', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.view = wave()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  const stage = await ui.find({ key: 'stage' })
+  expect(stage?.type).toBe('Raster')
+  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 8])
+  expect(await height(ui)).toBe(10)
+  const party = await ui.find({ key: 'row-party' })
+  expect(party?.text).toContain('⚔')
+  await ui.unmount()
+})
+
+for (const [name, view, rowsOf] of [
+  ['a zone boss grows the stage to 17 rows', boss, 17],
+  ['a turn boss grows the stage to 12 rows', turnBoss, 12],
+] as const) {
+  test(name, async ($, on) => {
+    const { data, shown } = harness(on)
+    settings(data, RASTER)
+    shown.view = view()
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    const stage = await ui.find({ key: 'stage' })
+    expect([stage?.props.columns, stage?.props.rows]).toEqual([120, rowsOf])
+    expect(await height(ui)).toBe(rowsOf + 2)
+    await ui.unmount()
+  })
+}
+
+test('too short for the boss: compact, then full again once the boss is gone', async ($, on) => {
+  const { data, shown, clock } = harness(on)
+  settings(data, RASTER)
+  shown.view = boss()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
+  expect(await height(ui)).toBe(4)
+  const stage = await ui.find({ key: 'stage' })
+  expect([stage?.props.columns, stage?.props.rows]).toEqual([52, 4])
+  shown.view = wave()
+  await clock.advance(DISSOLVE_MS + DROP_MS + 1)
+  await ui.unmount()
+  const after = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
+  expect(await height(after)).toBe(10)
+  await after.unmount()
+})
+
+test('110 columns is compact with the enemy slots; 99 is one row', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.view = wave()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(110, 20) })
+  expect(await height(ui)).toBe(4)
+  expect(await ui.find({ text: /⚔ \? Goblin/ })).toBeDefined()
+  await ui.unmount()
+  const narrow = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(99, 20) })
+  expect(await rows(narrow)).toHaveLength(1)
+  expect(await narrow.find({ key: 'stage' })).toBeUndefined()
+  await narrow.unmount()
+})
+
+test('the image renderer draws an Image with an alt; unknown draws the probe instead', async ($, on) => {
+  const { data } = harness(on)
+  settings(data, { renderer: 'image' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  const stage = await ui.find({ key: 'stage' })
+  expect(stage?.type).toBe('Image')
+  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 8])
+  expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
+  await ui.unmount()
+})
+
+test('while the renderer is unknown the stage rows are empty and the status row probes', async ($, on) => {
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  const status = await ui.find({ key: 'row-status' })
+  expect(
+    status?.children.some((c) => (c as { props?: { key?: string } }).props?.key === 'probe'),
+  ).toBe(true)
+  const probe = await ui.find({ key: 'probe' })
+  expect(probe?.type).toBe('Image')
+  expect([probe?.props.columns, probe?.props.rows]).toEqual([1, 1])
+  expect(await height(ui)).toBe(10)
+  await ui.unmount()
+})
+
+test('the desktop draws an Svg with its alt', async ($, on) => {
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+  // The desktop's Svg keeps no key: find it by type.
+  const stage = await ui.find({ type: 'Svg' })
+  expect(stage?.type).toBe('Svg')
+  expect(stage?.props.isInteractive).toBe(SVG_SMIL)
+  expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
+  await ui.unmount()
+})
+
+test('Loot and World keep four rows, draw no stage and blit nothing', async ($, on) => {
+  const { data, blits, clock } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  for (const tab of ['tab-loot', 'tab-world']) {
+    await ui.press({ key: tab })
+    expect(await rows(ui)).toHaveLength(4)
+    expect(await ui.find({ key: 'stage' })).toBeUndefined()
+    const before = blits.length
+    await clock.advance(5_000)
+    expect(blits.length).toBe(before)
+  }
+  await ui.unmount()
+})
+
+test('a round of hits blits the stage at the event rate', async ($, on) => {
+  const { data, blits, clock, states } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  for (let i = 0; i < 20 && (states.get('view') as GameView).enemies.length === 0; i++) {
+    await clock.advance(5_000)
+  }
+  // The next tick fights a round.
+  await clock.advance(5_000)
+  const before = blits.length
+  await clock.advance(1_000)
+  const round = blits.slice(before)
+  expect(round.length).toBeGreaterThanOrEqual(10)
+  for (const b of round) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+  await ui.unmount()
+})
+
+test('with motion still and nothing happening, nothing blits', async ($, on) => {
+  const { data, blits, clock, shown } = harness(on)
+  settings(data, { ...RASTER, motion: 'still' })
+  shown.view = wave()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  await clock.advance(5_000)
+  expect(blits).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a survey hides the stage and nothing blits', async ($, on) => {
+  const { data, blits, clock } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20, true) })
+  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  await clock.advance(5_000)
+  expect(blits).toHaveLength(0)
+  await ui.unmount()
 })

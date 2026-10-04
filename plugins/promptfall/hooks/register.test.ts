@@ -1,7 +1,8 @@
-import type { On } from 'claude-code'
+import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
@@ -1008,4 +1009,118 @@ test('a reload during a live boss keeps the held snapshot, so the boss is not an
   })
   await poller.start()
   expect(toasts).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// The stage's renderer probe and the loop's wake
+
+const PARTY_BAND = {
+  component: 'AbovePrompt' as const,
+  requestId: 'band-probe',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 20,
+    bodyColumns: 120,
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+}
+
+/** A terminal session whose blits answer `answer`; records each blit. */
+function probing(on: On, answer: { deny?: string }, seed: Record<string, unknown> = {}) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  engineBottom(on)
+  const blits: (UiBlitArgs & { at: number })[] = []
+  on('ui.blit', (_$, e) => {
+    blits.push({ ...e, at: time.now() })
+    return { value: answer }
+  })
+  on('ui.invalidate', (_$, e, next) => next(e))
+  return { time, data, last, blits }
+}
+
+test('the probe settles on image when the blit is taken', async ($, on) => {
+  const { time, last, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  const mounted = await ui.find({ key: 'probe' })
+  expect(mounted).toBeDefined()
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('image')
+  const probe = blits.find((b) => b.key === 'probe')
+  expect(probe).toBeDefined()
+  expect(probe && 'source' in probe ? probe.source : null).not.toEqual(mounted?.props.source)
+  await ui.unmount()
+})
+
+test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
+  const { time, last } = probing(on, { deny: PROBE_ALT_DENY })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('raster')
+  await ui.unmount()
+})
+
+test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
+  const { time, last, blits } = probing(on, { deny: 'nothing mounted' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer') ?? 'unknown').toBe('unknown')
+  await ui.unmount()
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(2)
+  await again.unmount()
+})
+
+test('a forced renderer sends no probe', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('renderer')).toBe('raster')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a collapsed band arms no probe', async ($, on) => {
+  const { time, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const narrow = { ...PARTY_BAND, props: { ...PARTY_BAND.props, bodyColumns: 80 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
+  await time.advance(PROBE_DELAY_MS * 2)
+  expect(blits).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('effects with a hit wake the stage loop', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'still', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  for (let i = 0; i < 20 && (last.get('view') as GameView).enemies.length === 0; i++) {
+    await time.advance(5_000)
+  }
+  const tick = time.now() + 5_000
+  await time.advance(5_000 + EVENT_FRAME_MS)
+  expect(
+    blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS),
+  ).toBe(true)
+  await ui.unmount()
 })

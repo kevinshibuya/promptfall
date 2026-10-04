@@ -141,6 +141,33 @@ would answer a survey.
 Esc closes the dialog. The band collapses to one row by itself under 100 columns or when fewer
 than 4 rows are free, and hides while Claude asks you a question.
 
+### Stage
+
+The band's Party tab draws the battle as pixel art: enemies on the left, the party on the right,
+lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a pop when
+it drops loot.
+
+- **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
+  Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
+  numbers as text. The desktop app draws it as an `Svg`.
+- **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
+  a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
+  pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
+  Until the answer lands the stage rows stay empty, so the band does not change height.
+- **Heights.** At rest the Party tab is 10 rows (8 for the stage, a party line, the status row).
+  A turn boss grows it to 14 and a zone or world boss to 19; it shrinks back once the boss's
+  dissolve and drop have played.
+- **Compact and collapsed.** The full stage needs 116 columns and room for its rows. With 100 to
+  115 columns, or too few rows, the band keeps the three hero rows and the status row and draws a
+  52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
+  four rows and draw no stage.
+- **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and
+  `/promptfall renderer auto` returns to the probe. It applies at the next session start.
+- **Frames.** The render hook draws the first frame; a timer per surface blits the rest, about 12
+  a second while something moves and 2 a second at rest (the idle bob). A hidden, collapsed or
+  other-tab band blits nothing. The desktop's `Svg` animates itself with SMIL and redraws once a
+  round.
+
 ### What phase 1 has
 
 Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendoring, reforging,
@@ -152,7 +179,7 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No sprites or sound. No mute or ban: the word list is
+No sound. No mute or ban: the word list is
 the only filter. The GitHub link is approved by the fakes, not by GitHub, and the in-process ledger
 has no bots, so its market is yours alone and its chat is closed.
 

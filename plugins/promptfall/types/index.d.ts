@@ -215,6 +215,19 @@ export type WorldState = {
   committedDealt: { bossId: string; dealt: number } | null
 }
 
+/** The terminal's stage renderer: decided by the probe, or forced by `settings.renderer`. */
+export type Renderer = 'unknown' | 'image' | 'raster'
+/** Per machine, in `$.store` under `promptfall:settings`. */
+export type Settings = {
+  sound: boolean
+  motion: 'full' | 'still'
+  renderer: 'auto' | 'image' | 'raster'
+}
+
+// Inside the augmentation below, `Settings` names the engine's own export: alias ours outside it.
+export type PromptfallSettings = Settings
+export type PromptfallRenderer = Renderer
+
 declare module 'claude-code' {
   interface PluginState {
     promptfall: {
@@ -232,6 +245,10 @@ declare module 'claude-code' {
       world: WorldState
       chat: ChatState
       boards: BoardsState
+      /** The store's settings, mirrored for the drawings. */
+      settings: PromptfallSettings
+      /** Per session, owned by ui/band.tsx. */
+      renderer: PromptfallRenderer
     }
   }
 }

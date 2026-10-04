@@ -390,9 +390,9 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No sound, no Account tab change, no command change (Task 7). No dialog change (Task 8). The geometry comes from Task 4; the band computes none of its own. `blocked: spike findings needed` at the first checkbox if `docs/plans/2026-10-04-phase-4-spikes.md` has an empty findings table.
 
-- [ ] Tuning from the spike findings; `Renderer`, `Settings`, `PluginState`, `SETTINGS_DEFAULT`; `loop.ts` with `loop.test.ts` red then green
-- [ ] `PartyLine`; the Party tab with the stage, compact and collapsed layouts, the probe; `band.test.ts` red then green on both surfaces
-- [ ] io additions, `GameHandle.stage`, `GameSession` wiring, `reset()`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): the stage in the band on raster, image and svg`
+- [ ] Tuning from the spike findings; `Renderer`, `Settings`, `PluginState`, `SETTINGS_DEFAULT`; `loop.ts` with `loop.test.ts` red then green — blocked: spike findings needed for the tuning values (`IMAGE_SCALE`, `SVG_SMIL`, `PROBE_ALT_DENY` is a placeholder); the rest of this checkbox is done
+- [x] `PartyLine`; the Party tab with the stage, compact and collapsed layouts, the probe; `band.test.ts` red then green on both surfaces
+- [x] io additions, `GameHandle.stage`, `GameSession` wiring, `reset()`; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): the stage in the band on raster, image and svg`
 
 ### Task 7: Cues, the sound and motion settings, the commands
 

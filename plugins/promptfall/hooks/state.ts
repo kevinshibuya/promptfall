@@ -5,6 +5,7 @@ import type {
   MarketState,
   OrdersState,
   Prefs,
+  Settings,
   WorldState,
 } from '../types'
 
@@ -40,3 +41,21 @@ export const WORLD_DEFAULT: WorldState = {
 }
 export const CHAT_DEFAULT: ChatState = { draft: '', busy: false, error: null }
 export const BOARDS_DEFAULT: BoardsState = { boards: null, busy: false, error: null }
+export const SETTINGS_DEFAULT: Settings = { sound: false, motion: 'full', renderer: 'auto' }
+/** The store key of the settings, under `promptfall:`; `reset()` keeps it as it keeps the lease. */
+export const SETTINGS_KEY = 'settings'
+
+/** The stored settings over the defaults; a missing or malformed field takes its default. */
+export function parseSettings(raw: unknown): Settings {
+  const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<
+    Record<keyof Settings, unknown>
+  >
+  return {
+    sound: typeof r.sound === 'boolean' ? r.sound : SETTINGS_DEFAULT.sound,
+    motion: r.motion === 'still' || r.motion === 'full' ? r.motion : SETTINGS_DEFAULT.motion,
+    renderer:
+      r.renderer === 'image' || r.renderer === 'raster' || r.renderer === 'auto'
+        ? r.renderer
+        : SETTINGS_DEFAULT.renderer,
+  }
+}
