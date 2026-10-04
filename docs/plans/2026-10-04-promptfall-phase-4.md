@@ -333,8 +333,8 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No encoder, no `$`, no band change. `tuning.ts` values are the ones listed; a value that proves wrong is a deviation to report, not to change silently.
 
-- [ ] `tuning.ts`, `font.ts`, `hash.ts`, `fixtures.ts`; `layout.ts` with `layout.test.ts`; `timeline.ts` with `timeline.test.ts` red then green
-- [ ] `model.ts` with `model.test.ts`; `compose.ts` with `compose.test.ts`; run the acceptance check; commit `feat(stage): layout, timeline, model and compositor`
+- [x] `tuning.ts`, `font.ts`, `hash.ts`, `fixtures.ts`; `layout.ts` with `layout.test.ts`; `timeline.ts` with `timeline.test.ts` red then green
+- [x] `model.ts` with `model.test.ts`; `compose.ts` with `compose.test.ts`; run the acceptance check; commit `feat(stage): layout, timeline, model and compositor`
 
 ### Task 5: The three encoders and the golden frames
 
