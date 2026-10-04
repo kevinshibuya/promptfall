@@ -139,6 +139,8 @@ export type Effect =
   | { k: 'rejected'; event: Event; reason: string }
   | { k: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
   | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }
+  /** Output only: one per attack, by and target actor ids (Hero.id or Enemy.id); feeds no hash. */
+  | { k: 'hit'; by: string; target: string; amount: number }
 
 export type GameState = {
   v: typeof SIM_VERSION

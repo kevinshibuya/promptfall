@@ -198,12 +198,15 @@ export function toGameView(
       hp: hero.hp,
       maxHp: heroStats(state, hero).hp,
       alive: hero.hp > 0,
+      rarity: hero.rarity,
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {
     // The world boss has no content entry: its name and glyph travel with boss_engaged.
     if (e.kind === 'world_boss' && state.boss) {
       return {
+        id: e.id,
+        def: 'world_boss',
         name: state.boss.name,
         glyph: state.boss.glyph,
         hp: e.hp,
@@ -213,6 +216,8 @@ export function toGameView(
     }
     const def = content.enemies[e.def]
     return {
+      id: e.id,
+      def: e.def,
       name: def?.name ?? e.def,
       glyph: def?.glyph ?? '?',
       hp: e.hp,

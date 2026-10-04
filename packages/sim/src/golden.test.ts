@@ -25,4 +25,11 @@ describe('golden replay', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
   })
+
+  // The hit effect (phase 4) is output only: the hash above is unchanged and no SIM_VERSION bump.
+  it('the replay reports hits without moving the hash', () => {
+    const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
+    expect(GOLDEN_HASH).toBe('21ecdbaf9e864e9d')
+    expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
+  })
 })

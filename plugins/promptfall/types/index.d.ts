@@ -18,8 +18,18 @@ export type HeroView = {
   hp: number
   maxHp: number
   alive: boolean
+  rarity: string
 }
-export type EnemyView = { name: string; glyph: string; hp: number; maxHp: number; kind: string }
+export type EnemyView = {
+  id: string
+  /** The content id; 'world_boss' for the world boss, which has none. */
+  def: string
+  name: string
+  glyph: string
+  hp: number
+  maxHp: number
+  kind: string
+}
 export type LootView = { text: string; rarity: string }
 export type ItemView = {
   id: string

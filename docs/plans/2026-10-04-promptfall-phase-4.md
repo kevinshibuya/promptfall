@@ -281,8 +281,8 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No stage code. No change to `resolveRound`'s order or to damage. Do not touch `progression.ts`.
 
-- [ ] `types.ts`, `combat.ts`, `combat.test.ts` red then green; `golden.test.ts`'s hash assertion and the `hit` presence
-- [ ] `pnpm vendor`; the view types and `view.ts`; fixtures in the plugin tests; run the acceptance check; commit `feat(sim): output-only hit effect; the view carries actor ids and hero rarity`
+- [x] `types.ts`, `combat.ts`, `combat.test.ts` red then green; `golden.test.ts`'s hash assertion and the `hit` presence
+- [x] `pnpm vendor`; the view types and `view.ts`; fixtures in the plugin tests; run the acceptance check; commit `feat(sim): output-only hit effect; the view carries actor ids and hero rarity`
 
 ### Task 3: The sprite pipeline
 
