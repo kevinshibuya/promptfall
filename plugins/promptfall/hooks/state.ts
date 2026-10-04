@@ -59,3 +59,35 @@ export function parseSettings(raw: unknown): Settings {
         : SETTINGS_DEFAULT.renderer,
   }
 }
+
+/**
+ * A settings subcommand (`sound on|off`, `motion full|still`, `renderer auto|image|raster`):
+ * the change and its answer, a usage line for a bad value, or null for another subcommand.
+ */
+export function settingCommand(
+  arg: string,
+): { patch: Partial<Settings>; text: string } | { usage: string } | null {
+  const [name, value, ...extra] = arg.split(/\s+/)
+  const ok = extra.length === 0
+  if (name === 'sound') {
+    if (!ok || (value !== 'on' && value !== 'off'))
+      return { usage: 'usage: /promptfall sound on|off' }
+    return { patch: { sound: value === 'on' }, text: value === 'on' ? 'Sound on' : 'Sound off' }
+  }
+  if (name === 'motion') {
+    if (!ok || (value !== 'full' && value !== 'still')) {
+      return { usage: 'usage: /promptfall motion full|still' }
+    }
+    return { patch: { motion: value }, text: `Motion: ${value}` }
+  }
+  if (name === 'renderer') {
+    if (!ok || (value !== 'auto' && value !== 'image' && value !== 'raster')) {
+      return { usage: 'usage: /promptfall renderer auto|image|raster' }
+    }
+    return {
+      patch: { renderer: value },
+      text: `Renderer: ${value} (applies at the next session start)`,
+    }
+  }
+  return null
+}

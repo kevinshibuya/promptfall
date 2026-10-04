@@ -168,6 +168,20 @@ it drops loot.
   other-tab band blits nothing. The desktop's `Svg` animates itself with SMIL and redraws once a
   round.
 
+### Sound and motion
+
+- **Sound** is off by default. `/promptfall sound on` (or `s` on the Account tab) turns on four
+  cues: a Rare or Epic drop, a Legendary drop, a level up, and a world boss appearing. Each plays
+  beside its toast, at a fixed volume, only in the session that is playing (the primary); a
+  secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
+  sound on macOS only. The cues in `cues/` are placeholders from `pnpm cues:placeholders`.
+- **Motion**: `/promptfall motion still` (or `n`) stops the idle bob; hits, dissolves and drops
+  still play. `/promptfall motion full` brings the bob back.
+- **Renderer**: `/promptfall renderer auto|image|raster` (or `x` to cycle), see Stage.
+
+All three are per machine, kept in the plugin store under `promptfall:settings`; a reset keeps
+them.
+
 ### What phase 1 has
 
 Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendoring, reforging,
@@ -179,7 +193,7 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No sound. No mute or ban: the word list is
+No mute or ban: the word list is
 the only filter. The GitHub link is approved by the fakes, not by GitHub, and the in-process ledger
 has no bots, so its market is yours alone and its chat is closed.
 

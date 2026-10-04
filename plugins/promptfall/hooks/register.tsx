@@ -2,11 +2,13 @@ import type { Register, RenderSurface, UiBlitArgs, UiBlitResult } from 'claude-c
 import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
 import { COMMAND, registerCommand } from './command'
+import { CUE_ASSET, type Cue, cueFor } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
 import { StageLoop } from './stage/loop'
 import { StageTimeline } from './stage/timeline'
+import { CUE_GAIN } from './stage/tuning'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
@@ -169,7 +171,19 @@ class GameSession implements GameHandle {
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
       toast: io.toast,
+      cue: (cue) => void this.playCue(cue),
     })
+  }
+
+  /**
+   * Plays a cue on the primary with sound on. `/promptfall off` hides the band, not the cues.
+   * Off macOS the engine plays nothing; a rejection is swallowed either way.
+   */
+  private async playCue(cue: Cue): Promise<void> {
+    if (this.role !== 'primary') return
+    const settings = await this.io.settings()
+    if (!settings.sound || this.role !== 'primary') return
+    this.io.play(CUE_ASSET[cue], CUE_GAIN).catch(() => undefined)
   }
 
   /** The stored device token of the current server; reads and chat use it outside the engine. */
@@ -559,6 +573,8 @@ class GameSession implements GameHandle {
       const text = effectToast(effect)
       if (text) this.io.toast(text)
     }
+    // After the toasts: each cue the batch earned, once.
+    for (const cue of new Set(effects.map(cueFor))) if (cue) void this.playCue(cue)
   }
 }
 

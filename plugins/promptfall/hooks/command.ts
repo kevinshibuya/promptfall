@@ -1,7 +1,15 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { BoardsState, DialogTab, MarketState, Mode, OrdersState } from '../types'
+import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
 import type { GameHandle } from './engine'
-import { BOARDS_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import {
+  BOARDS_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
+  settingCommand,
+} from './state'
 import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
@@ -10,9 +18,9 @@ export const PANE_ID = 'promptfall'
 
 export const COMMAND = {
   name: 'promptfall',
-  description: 'Promptfall: open the game, or off / on / farm / server',
+  description: 'Promptfall: open the game, or off / on / farm / server / sound / motion / renderer',
   argumentHint:
-    '[inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local]',
+    '[inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local|sound on|off|motion full|still|renderer auto|image|raster]',
   immediate: true,
 } as const
 
@@ -33,6 +41,7 @@ const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 
 const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
 
@@ -57,6 +66,17 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
       if (running) await running.setOff(off)
       else await update($, modeAtom, () => (off ? 'off' : 'primary') as Mode)
       return { text: off ? 'Promptfall band is off for this session' : 'Promptfall band is on' }
+    }
+
+    // Per machine: the store holds them, the atom mirrors them for the drawings.
+    const setting = settingCommand(arg)
+    if (setting && 'usage' in setting) return { text: setting.usage }
+    if (setting) {
+      const key = `promptfall:${SETTINGS_KEY}`
+      const next: Settings = { ...parseSettings(await $.store.get(key)), ...setting.patch }
+      await $.store.set(key, next)
+      await update($, settingsAtom, () => next)
+      return { text: setting.text }
     }
 
     if (arg === 'server' || arg.startsWith('server ')) {

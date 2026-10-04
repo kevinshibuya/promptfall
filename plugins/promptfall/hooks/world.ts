@@ -1,4 +1,5 @@
 import type { WorldState } from '../types'
+import type { Cue } from './cues'
 import { WORLD_DEFAULT } from './state'
 import {
   CHAT_KEEP,
@@ -32,18 +33,21 @@ export type PollerDeps = {
   committedDealt?: () => WorldState['committedDealt']
   /** Shows a toast: the boss transitions. */
   toast?: (text: string) => void
+  /** Plays a cue beside a toast: the boss appearing. */
+  cue?: (cue: Cue) => void
 }
 
 /** The toast a snapshot transition earns: a boss appearing, or the same boss going down. */
 export function bossTransition(
   before: WorldSnapshot['boss'] | undefined,
   after: WorldSnapshot['boss'],
-): string | null {
+): { kind: 'appeared' | 'down'; text: string } | null {
   if (!after) return null
-  if (after.hp > 0 && before?.bossId !== after.bossId)
-    return `World boss ${after.name} has appeared`
+  if (after.hp > 0 && before?.bossId !== after.bossId) {
+    return { kind: 'appeared', text: `World boss ${after.name} has appeared` }
+  }
   if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) {
-    return `${after.name} is down`
+    return { kind: 'down', text: `${after.name} is down` }
   }
   return null
 }
@@ -162,7 +166,7 @@ export class WorldPoller {
     const now = await this.deps.now()
     if (epoch !== this.epoch) return
     const last = answer.chat.at(-1)
-    const toast = bossTransition(this.state.snapshot?.boss, answer.boss)
+    const transition = bossTransition(this.state.snapshot?.boss, answer.boss)
     this.state = {
       snapshot: answer,
       fetchedAt: now,
@@ -179,7 +183,10 @@ export class WorldPoller {
       void this.deps.publish(this.state)
     })
     await this.deps.publish(this.state)
-    if (toast) this.deps.toast?.(toast)
+    if (transition) {
+      this.deps.toast?.(transition.text)
+      if (transition.kind === 'appeared') this.deps.cue?.('boss')
+    }
     this.rearm(this.cadence(now))
   }
 }

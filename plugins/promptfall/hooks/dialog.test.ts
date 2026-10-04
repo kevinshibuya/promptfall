@@ -57,7 +57,7 @@ function harness(on: On, state: GameState) {
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   mock.clock(on, { now: 1_000_000 })
-  return { states }
+  return { states, data }
 }
 
 const PANE = {
@@ -706,3 +706,25 @@ test('a padded paste goes out cleaned, and a server refusal flashes in its words
   expect(await ui.find({ text: 'That word is not allowed here' })).toBeDefined()
   await ui.unmount()
 })
+
+for (const surface of SURFACES) {
+  test(`the Account tab shows the settings and a press changes them on ${surface}`, async ($, on) => {
+    const { states, data } = harness(on, seeded())
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await ui.press({ key: 'tab-account' })
+    expect(await ui.find({ text: 'Sound: off' })).toBeDefined()
+    expect(await ui.find({ text: 'Motion: full' })).toBeDefined()
+    expect(await ui.find({ text: /^Renderer: auto \(/ })).toBeDefined()
+    await ui.press({ key: 'setting-sound' })
+    await ui.press({ key: 'setting-motion' })
+    await ui.press({ key: 'setting-renderer' })
+    const next = { sound: true, motion: 'still', renderer: 'image' }
+    expect(data.get('promptfall:settings')).toEqual(next)
+    expect(states.get('settings')).toEqual(next)
+    expect(await ui.find({ text: 'Sound: on' })).toBeDefined()
+    expect(await ui.find({ text: 'Motion: still' })).toBeDefined()
+    expect(await ui.find({ text: 'Renderer: image (from next start)' })).toBeDefined()
+    await ui.unmount()
+  })
+}

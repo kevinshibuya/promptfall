@@ -2,11 +2,11 @@ import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
-import { EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
+import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState, step } from './vendor/sim.js'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
@@ -1123,4 +1123,141 @@ test('effects with a hit wake the stage loop', async ($, on) => {
     blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS),
   ).toBe(true)
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Sound cues
+
+/** The in-process ledger's record for an account whose state the test chose. */
+function record(state: GameState): Record<string, unknown> {
+  return {
+    'promptfall:deviceToken': 'token-1',
+    'promptfall:pf:token:token-1': 'acct-1',
+    'promptfall:pf:acct:acct-1:record': {
+      account: {
+        accountId: 'acct-1',
+        seed: state.seed,
+        createdAt: 0,
+        displayName: null,
+        linked: null,
+      },
+      state,
+      seq: 0,
+      refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
+    },
+  }
+}
+
+/** A state whose next tick kills a 1 hp Goblin Scout and drops an item of `rarity`, with no level up. */
+function dropping(rarity: string): GameState {
+  for (let seed = 1; seed < 20_000; seed++) {
+    const s0 = createInitialState(seed)
+    const s: GameState = {
+      ...s0,
+      encounter: {
+        enemies: [{ id: 'e-test', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 }],
+        queue: [],
+        waveSize: 3,
+        spawnedInWave: 3,
+      },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drop = effects.find((e) => e.k === 'drop')
+    if (
+      drop?.k === 'drop' &&
+      drop.item.rarity === rarity &&
+      !effects.some((e) => e.k === 'level_up')
+    ) {
+      return s
+    }
+  }
+  throw new Error(`no ${rarity} drop`)
+}
+
+const SOUND_ON = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'auto' } }
+
+function sounding(on: On, seed: Record<string, unknown>) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  engineBottom(on)
+  const plays: { asset: string; gain: number | undefined }[] = []
+  on('audio.play', (_$, e) => {
+    plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
+    return { value: undefined }
+  })
+  return { time, data, last, plays }
+}
+
+for (const [rarity, asset] of [
+  ['epic', 'cues/drop.wav'],
+  ['rare', 'cues/drop.wav'],
+  ['legendary', 'cues/legendary.wav'],
+] as const) {
+  test(`a ${rarity} drop on a primary with sound on plays ${asset}`, async ($, on) => {
+    const { time, plays } = sounding(on, { ...record(dropping(rarity)), ...SOUND_ON })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(plays).toEqual([{ asset, gain: CUE_GAIN }])
+  })
+}
+
+test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('common')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('sound off plays nothing on an epic drop', async ($, on) => {
+  const { time, plays } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('a secondary plays nothing', async ($, on) => {
+  const { time, plays, last } = sounding(on, {
+    ...record(dropping('epic')),
+    ...SOUND_ON,
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('/promptfall off hides the band, not the cues', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('epic')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
+  await time.advance(5_000)
+  expect(plays.map((p) => p.asset)).toEqual(['cues/drop.wav'])
+})
+
+test('the world boss appearing plays the boss cue; going down plays none', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = null
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  await time.advance(5_000)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toHaveLength(1)
+  expect(plays.filter((p) => p.asset !== 'cues/boss.wav')).toEqual([])
 })

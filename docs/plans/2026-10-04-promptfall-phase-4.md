@@ -417,9 +417,9 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No new toast. No cue for zone or turn bosses, wipes or chat. No volume control. Nothing in `stage/`.
 
-- [ ] `placeholder-cues.ts` and the four files; `cues.ts`; `bossTransition`'s kind
-- [ ] The commands and the Account rows with their tests red then green
-- [ ] `onEffects` and the poller's cue; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): sound cues, the sound, motion and renderer settings`
+- [x] `placeholder-cues.ts` and the four files; `cues.ts`; `bossTransition`'s kind
+- [x] The commands and the Account rows with their tests red then green
+- [x] `onEffects` and the poller's cue; `register.test.ts`; README; run the acceptance check; commit `feat(plugin): sound cues, the sound, motion and renderer settings`
 
 ### Task 8: Sprites in the dialog lists
 

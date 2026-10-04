@@ -10,6 +10,7 @@ import type {
   OrdersState,
   Prefs,
   SellState,
+  Settings,
   WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
@@ -20,6 +21,8 @@ import {
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   PREFS_DEFAULT,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
@@ -47,6 +50,14 @@ const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
+
+const RENDERER_NEXT: Record<Settings['renderer'], Settings['renderer']> = {
+  auto: 'image',
+  image: 'raster',
+  raster: 'auto',
+}
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
@@ -564,6 +575,45 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           <Button key="band-off" label="band off" onPress={() => game()?.setOff(true)} />
         </Box>,
       )
+      // Per machine, like the commands: the store holds them, the atom mirrors them.
+      const settings: Settings = (await read($, settingsAtom)) ?? SETTINGS_DEFAULT
+      const renderer = await read($, rendererAtom)
+      const setSettings = async (patch: Partial<Settings>) => {
+        const next = { ...settings, ...patch }
+        await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
+        await update($, settingsAtom, () => next)
+      }
+      const rendererText =
+        settings.renderer === 'auto'
+          ? `auto (${renderer})`
+          : `${settings.renderer} (from next start)`
+      for (const [k, text, hotkey, patch] of [
+        ['sound', `Sound: ${settings.sound ? 'on' : 'off'}`, 's', { sound: !settings.sound }],
+        [
+          'motion',
+          `Motion: ${settings.motion}`,
+          'n',
+          { motion: settings.motion === 'full' ? 'still' : 'full' },
+        ],
+        [
+          'renderer',
+          `Renderer: ${rendererText}`,
+          'x',
+          { renderer: RENDERER_NEXT[settings.renderer] },
+        ],
+      ] as const) {
+        body.push(
+          <Box key={`account-${k}`} flexDirection="row" gap={2}>
+            <Text wrap="truncate">{text}</Text>
+            <Button
+              key={`setting-${k}`}
+              label="change"
+              hotkey={hotkey}
+              onPress={() => setSettings(patch as Partial<Settings>)}
+            />
+          </Box>,
+        )
+      }
       if (view.account.linked) {
         body.push(
           <Text key="account-linked" color="green" wrap="truncate">
