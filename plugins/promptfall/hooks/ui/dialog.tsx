@@ -35,7 +35,7 @@ import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
 import { openSell, sellBody, sellTrade } from './sell'
-import { ListSprite } from './sprites'
+import { fitRow, ListSprite, listSpriteColumns } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
 
@@ -248,6 +248,9 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     }
 
     const heroNameById = new Map(view.roster.map((h) => [h.id, h.name]))
+    const paneWidth = Math.max(20, e.props.bodyColumns)
+    /** The columns left for a row's text beside its sprite. */
+    const rowWidth = (cols: number) => paneWidth - (cols > 0 ? cols + 1 : 0)
     const body = []
 
     const running = game()
@@ -314,15 +317,23 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             confirm: async () =>
               confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
           },
-          (l) =>
-            ListSprite(
+          paneWidth,
+          (l) => {
+            const art =
+              l.kind === 'item' ? spriteFor('item', l.base ?? '') : spriteFor('hero', l.cls ?? '')
+            const element = ListSprite(
               table,
               listRenderer,
               e.surface,
-              l.kind === 'item' ? spriteFor('item', l.base ?? '') : spriteFor('hero', l.cls ?? ''),
+              art,
               l.name,
               `sprite-${l.id}`,
-            ),
+            )
+            return {
+              element,
+              columns: element ? listSpriteColumns(listRenderer, e.surface, art) : 0,
+            }
+          },
         ),
       )
     } else if (tab === 'orders' && running) {
@@ -379,13 +390,19 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       for (const item of view.inventory) {
         const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
         // A sprite replaces the glyph where pixels draw; the glyph stays as its fallback.
+        const itemArt = spriteFor('item', item.base)
         const itemSprite = ListSprite(
           table,
           listRenderer,
           e.surface,
-          spriteFor('item', item.base),
+          itemArt,
           item.name,
           `sprite-${item.id}`,
+        )
+        const itemFit = fitRow(
+          `${itemSprite ? '' : `${item.glyph} `}${item.name} (${item.rarity}, ${item.slot})`,
+          item.affixes.join(', '),
+          rowWidth(itemSprite ? listSpriteColumns(listRenderer, e.surface, itemArt) : 0),
         )
         // Two rows per item, so a docked pane never truncates a button.
         body.push(
@@ -398,15 +415,28 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
                   dimColor={item.rarity === 'common'}
                   wrap="truncate"
                 >
-                  {`${itemSprite ? '' : `${item.glyph} `}${item.name} (${item.rarity}, ${item.slot})`}
+                  {itemFit.name}
                 </Text>
-                {item.affixes.length > 0 ? (
+                {itemFit.secondary && !itemFit.below ? (
                   <Text dimColor wrap="truncate">
-                    {item.affixes.join(', ')}
+                    {itemFit.secondary}
                   </Text>
                 ) : null}
               </Box>
-              <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+              {itemFit.below ? (
+                <Box key={`item-affixes-${item.id}`} paddingLeft={2}>
+                  <Text dimColor wrap="truncate">
+                    {itemFit.secondary}
+                  </Text>
+                </Box>
+              ) : null}
+              <Box
+                key={`item-actions-${item.id}`}
+                flexDirection="row"
+                flexWrap="wrap"
+                gap={1}
+                paddingLeft={2}
+              >
                 {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
                 {readOnly || item.equippedBy ? null : (
                   <Button
@@ -522,58 +552,84 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       for (const hero of view.roster) {
         const picked = dialog.partyPick.includes(hero.id)
         const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
+        const heroArt = spriteFor('hero', hero.cls)
         const heroSprite = ListSprite(
           table,
           listRenderer,
           e.surface,
-          spriteFor('hero', hero.cls),
+          heroArt,
           hero.name,
           `sprite-${hero.id}`,
         )
+        const heroFit = fitRow(
+          `${heroSprite ? '' : `${hero.glyph} `}${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`,
+          hero.traits.join(', '),
+          rowWidth(heroSprite ? listSpriteColumns(listRenderer, e.surface, heroArt) : 0),
+        )
+        // Two rows per hero, like the items: the name, then its actions, which wrap in a narrow pane.
         body.push(
           <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
             {heroSprite}
-            <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
-              {`${heroSprite ? '' : `${hero.glyph} `}${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
-            </Text>
-            {hero.traits.length > 0 ? (
-              <Text dimColor wrap="truncate">
-                {hero.traits.join(', ')}
-              </Text>
-            ) : null}
-            {marker ? <Text color="cyan">{marker}</Text> : null}
-            {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
-              <Button
-                key={`sell-${hero.id}`}
-                label="sell"
-                onPress={() => openSell(running, 'hero', hero.id, updDialog)}
-              />
-            )}
-            {readOnly ? null : (
-              <Button
-                key={`party-${hero.id}`}
-                label={picked ? 'picked' : 'party'}
-                onPress={async () => {
-                  const next = picked
-                    ? dialog.partyPick.filter((id) => id !== hero.id)
-                    : [...dialog.partyPick, hero.id]
-                  const [a, b, c] = next
-                  if (next.length === 3 && a && b && c) {
-                    await setDialog({ partyPick: [] })
-                    await act({ t: 'set_party', heroIds: [a, b, c] })
-                  } else {
-                    await setDialog({ partyPick: next })
-                  }
-                }}
-              />
-            )}
-            {readOnly || hero.inParty || hero.inPendingParty ? null : (
-              <Button
-                key={`dismiss-${hero.id}`}
-                label="dismiss"
-                onPress={() => act({ t: 'dismiss', heroId: hero.id })}
-              />
-            )}
+            <Box key={`hero-body-${hero.id}`} flexDirection="column">
+              <Box key={`hero-name-${hero.id}`} flexDirection="row" gap={1}>
+                <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
+                  {heroFit.name}
+                </Text>
+                {heroFit.secondary && !heroFit.below ? (
+                  <Text dimColor wrap="truncate">
+                    {heroFit.secondary}
+                  </Text>
+                ) : null}
+              </Box>
+              {heroFit.below ? (
+                <Box key={`hero-traits-${hero.id}`} paddingLeft={2}>
+                  <Text dimColor wrap="truncate">
+                    {heroFit.secondary}
+                  </Text>
+                </Box>
+              ) : null}
+              <Box
+                key={`hero-actions-${hero.id}`}
+                flexDirection="row"
+                flexWrap="wrap"
+                gap={1}
+                paddingLeft={2}
+              >
+                {marker ? <Text color="cyan">{marker}</Text> : null}
+                {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
+                  <Button
+                    key={`sell-${hero.id}`}
+                    label="sell"
+                    onPress={() => openSell(running, 'hero', hero.id, updDialog)}
+                  />
+                )}
+                {readOnly ? null : (
+                  <Button
+                    key={`party-${hero.id}`}
+                    label={picked ? 'picked' : 'party'}
+                    onPress={async () => {
+                      const next = picked
+                        ? dialog.partyPick.filter((id) => id !== hero.id)
+                        : [...dialog.partyPick, hero.id]
+                      const [a, b, c] = next
+                      if (next.length === 3 && a && b && c) {
+                        await setDialog({ partyPick: [] })
+                        await act({ t: 'set_party', heroIds: [a, b, c] })
+                      } else {
+                        await setDialog({ partyPick: next })
+                      }
+                    }}
+                  />
+                )}
+                {readOnly || hero.inParty || hero.inPendingParty ? null : (
+                  <Button
+                    key={`dismiss-${hero.id}`}
+                    label="dismiss"
+                    onPress={() => act({ t: 'dismiss', heroId: hero.id })}
+                  />
+                )}
+              </Box>
+            </Box>
           </Box>,
         )
       }

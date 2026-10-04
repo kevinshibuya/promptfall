@@ -46,6 +46,8 @@ export const SVG_FALLBACK_FRAME_MS = 167
  * band always fills it; this is a ceiling, not a measurement (ADR 0004).
  */
 export const DESKTOP_COLUMN_PX_CEILING = 16
+/** The columns a 16 px list sprite takes in a desktop row: 16 px at about 8 points a column. */
+export const DESKTOP_LIST_SPRITE_COLUMNS = 2
 /**
  * The start of the deny a blit answers where the terminal draws no pictures; only it settles the
  * probe on raster. The engine appends the cause in parentheses, which varies by terminal

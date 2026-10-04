@@ -197,9 +197,9 @@ Three existing tests loop over both surfaces and change on the desktop; split th
 
 **Boundaries:** No change to what a row says, only to how it fits. No Box `width` in cells on the desktop beyond the probe result (`P-cells` only says `bodyColumns` is truthful; the fit is done in text, not in Box widths). Not `P-cells` from Task 1: stop with `blocked: the desktop pane's bodyColumns does not measure its width (<readout>, <points>)`.
 
-- [ ] `listSpriteColumns` with a unit assertion for the three answers; the narrow-pane tests red
-- [ ] The width, the three rows, `marketBody`'s parameter; green
-- [ ] Run the check; commit `fix(dialog): rows fit the pane's columns`
+- [x] `listSpriteColumns` with a unit assertion for the three answers; the narrow-pane tests red
+- [x] The width, the three rows, `marketBody`'s parameter; green
+- [x] Run the check; commit `fix(dialog): rows fit the pane's columns`
 
 ### Task 5: Docs: spec §10, the manual pass's Desktop section, README
 

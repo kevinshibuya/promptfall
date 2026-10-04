@@ -4,7 +4,7 @@ import { content } from '../vendor/sim.js'
 import { listingView } from '../view'
 import { CLASS_LABEL, formatGold } from './format'
 import { RARITY_COLOR } from './parts'
-import type { ListSprite } from './sprites'
+import { fitRow, type ListSprite } from './sprites'
 import {
   type After,
   type Els,
@@ -77,6 +77,9 @@ export type MarketActions = {
   confirm: () => Promise<void>
 }
 
+/** A listing row's sprite and the columns it takes, 0 where none draws. */
+export type ListingSprite = { element: ReturnType<typeof ListSprite>; columns: number }
+
 /** The Market tab: filters, ten listings, paging, and the buy confirmation. */
 export function marketBody(
   els: Els,
@@ -86,8 +89,10 @@ export function marketBody(
   market: MarketState,
   readOnly: boolean,
   actions: MarketActions,
-  /** The sprite at the head of a listing row: the item's, or the hero class's. */
-  listSprite: (listing: ListingView) => ReturnType<typeof ListSprite> = () => null,
+  /** The pane's columns, which every listing row fits. */
+  width: number,
+  /** The sprite at the head of a listing row (the item's, or the hero class's) and its columns. */
+  listSprite: (listing: ListingView) => ListingSprite = () => ({ element: null, columns: 0 }),
 ) {
   const { Box, Text, Button } = els
   const q = market.query
@@ -192,17 +197,40 @@ export function marketBody(
   }
   for (const l of page.listings) {
     const mine = l.sellerId === view.accountId
+    const sprite = listSprite(l)
+    const fit = fitRow(
+      `${l.name} (${l.rarity})`,
+      l.detail,
+      width - (sprite.element && sprite.columns > 0 ? sprite.columns + 1 : 0),
+    )
     body.push(
       <Box key={`listing-${l.id}`} flexDirection="row" gap={1}>
-        {listSprite(l)}
+        {sprite.element}
         <Box key={`listing-body-${l.id}`} flexDirection="column">
           <Box key={`listing-name-${l.id}`} flexDirection="row" gap={1}>
-            <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">{`${l.name} (${l.rarity})`}</Text>
-            <Text dimColor wrap="truncate">
-              {l.detail}
+            <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">
+              {fit.name}
             </Text>
+            {fit.secondary && !fit.below ? (
+              <Text dimColor wrap="truncate">
+                {fit.secondary}
+              </Text>
+            ) : null}
           </Box>
-          <Box key={`listing-meta-${l.id}`} flexDirection="row" gap={1} paddingLeft={2}>
+          {fit.below ? (
+            <Box key={`listing-detail-${l.id}`} paddingLeft={2}>
+              <Text dimColor wrap="truncate">
+                {fit.secondary}
+              </Text>
+            </Box>
+          ) : null}
+          <Box
+            key={`listing-meta-${l.id}`}
+            flexDirection="row"
+            flexWrap="wrap"
+            gap={1}
+            paddingLeft={2}
+          >
             <Text wrap="truncate">{`${l.sellerName} · ${formatGold(l.price)}`}</Text>
             {mine ? (
               <Text dimColor>yours</Text>

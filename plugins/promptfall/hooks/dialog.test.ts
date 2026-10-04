@@ -5,7 +5,9 @@ import { decode } from './sprites/base64'
 import { spriteFor } from './sprites/index'
 import { artFrame } from './stage/compose'
 import { encodeRaster } from './stage/raster'
+import { DESKTOP_LIST_SPRITE_COLUMNS } from './stage/tuning'
 import { CHAT_READ_ONLY, chatBody } from './ui/chat'
+import { listSpriteColumns } from './ui/sprites'
 import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
@@ -202,6 +204,8 @@ async function marketHarness(
     listings?: number
     /** The bot also lists a fourth hero, out of its party. */
     heroListing?: boolean
+    /** The listed items carry two affixes, so a listing's detail is long. */
+    affixed?: boolean
   } = {},
 ) {
   let now = 1_000_000
@@ -226,7 +230,17 @@ async function marketHarness(
     state: {
       ...botState,
       gold: 50_000,
-      inventory: Array.from({ length: options.listings ?? 3 }, (_, i) => rareItem(`iB${i}`)),
+      inventory: Array.from({ length: options.listings ?? 3 }, (_, i) => ({
+        ...rareItem(`iB${i}`),
+        ...(options.affixed
+          ? {
+              affixes: [
+                { id: 'brutal', value: 5 },
+                { id: 'keen', value: 1 },
+              ],
+            }
+          : {}),
+      })),
       roster:
         options.heroListing && spare
           ? [...botState.roster, { ...spare, id: 'hB', rarity: 'rare' as const }]
@@ -867,5 +881,112 @@ test('market listings lead with the item or the hero class sprite', async ($, on
     'Steel Longsword',
     'Steel Longsword',
   ])
+  await desk.unmount()
+})
+
+const NARROW = { ...PANE, props: { ...PANE.props, bodyColumns: 40, placement: 'dock' as const } }
+
+type Node = { type?: string; props: Record<string, unknown>; children: unknown[]; text?: string }
+
+/** A node's text: its own, or its string children's, recursively. */
+function textOf(node: Node): string {
+  if (typeof node.text === 'string') return node.text
+  return (node.children ?? [])
+    .map((c) => (typeof c === 'string' ? c : typeof c === 'object' && c ? textOf(c as Node) : ''))
+    .join('')
+}
+
+/** Every horizontal, non-wrapping Box under `node` with the cells its Texts and gaps take. */
+function rowCells(node: Node): number[] {
+  const kids = (node.children ?? []).filter((c): c is Node => typeof c === 'object' && c !== null)
+  const own =
+    node.type === 'Box' && node.props.flexDirection === 'row' && node.props.flexWrap !== 'wrap'
+      ? (() => {
+          const texts = kids.filter((k) => k.type === 'Text')
+          const gap = Number(node.props.gap ?? 0)
+          const len = texts.reduce((n, t) => n + [...textOf(t)].length, 0)
+          return texts.length > 0 ? [len + gap * Math.max(0, texts.length - 1)] : []
+        })()
+      : []
+  return [...own, ...kids.flatMap(rowCells)]
+}
+
+function narrowState(): GameState {
+  const s = seeded()
+  return {
+    ...s,
+    inventory: [
+      {
+        id: 'ilong',
+        base: 'iron_sword',
+        rarity: 'rare',
+        affixes: [
+          { id: 'brutal', value: 5 },
+          { id: 'keen', value: 1 },
+        ],
+        equippedBy: null,
+        tradeableAt: null,
+      },
+    ],
+  }
+}
+
+test('the list sprite takes 2, 8 or the desktop columns in a row, 0 where none draws', () => {
+  const sword = spriteFor('item', 'iron_sword')
+  expect(listSpriteColumns('image', 'terminal', sword)).toBe(2)
+  expect(listSpriteColumns('raster', 'terminal', sword)).toBe(8)
+  expect(listSpriteColumns('unknown', 'terminal', sword)).toBe(0)
+  expect(listSpriteColumns('raster', 'desktop', sword)).toBe(DESKTOP_LIST_SPRITE_COLUMNS)
+})
+
+for (const [surface, renderer, sprite] of [
+  ['desktop', 'raster', DESKTOP_LIST_SPRITE_COLUMNS],
+  ['terminal', 'raster', 8],
+] as const) {
+  test(`inventory and hero rows fit a 40-column pane on ${surface}`, async ($, on) => {
+    const { data, states } = harness(on, narrowState())
+    data.set('promptfall:settings', RENDERER(renderer))
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...NARROW })
+    const width = 40 - (sprite + 1)
+    const row = (await ui.find({ key: 'item-ilong' })) as Node | undefined
+    expect(row).toBeDefined()
+    for (const cells of rowCells(row as Node)) expect(cells).toBeLessThanOrEqual(width)
+    // The affixes did not fit beside the name: they sit under it, indented.
+    const below = (await ui.findAll({ type: 'Box' })).filter(
+      (b) => b.props.paddingLeft === 2 && /Brutal/i.test(b.text ?? ''),
+    )
+    expect(below.length).toBeGreaterThan(0)
+    expect((await ui.find({ key: 'item-actions-ilong' }))?.props.flexWrap).toBe('wrap')
+    await ui.press({ key: 'tab-heroes' })
+    const hero = (states.get('view') as GameView).roster[0]
+    if (!hero) throw new Error('no hero')
+    const heroCols = listSpriteColumns(renderer, surface, spriteFor('hero', hero.cls))
+    const heroRow = (await ui.find({ key: `hero-${hero.id}` })) as Node | undefined
+    expect(heroRow).toBeDefined()
+    for (const cells of rowCells(heroRow as Node)) {
+      expect(cells).toBeLessThanOrEqual(40 - (heroCols > 0 ? heroCols + 1 : 0))
+    }
+    expect((await ui.find({ key: `hero-actions-${hero.id}` }))?.props.flexWrap).toBe('wrap')
+    await ui.unmount()
+  })
+}
+
+test('market listing rows fit a 30-column pane', async ($, on) => {
+  const { player } = await marketHarness(on, { affixed: true })
+  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
+  await ui.unmount()
+  const thin = { ...NARROW, props: { ...NARROW.props, bodyColumns: 30 } }
+  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...thin })
+  await desk.press({ key: 'tab-market' })
+  const rows = (await desk.findAll({ type: 'Box' })).filter((b) =>
+    String(b.props.key ?? '').startsWith('listing-'),
+  )
+  expect(rows.length).toBeGreaterThan(0)
+  for (const r of rows) {
+    for (const cells of rowCells(r as Node)) {
+      expect(cells).toBeLessThanOrEqual(30 - (DESKTOP_LIST_SPRITE_COLUMNS + 1))
+    }
+  }
   await desk.unmount()
 })

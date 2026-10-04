@@ -5,6 +5,8 @@ import { artFrame } from '../stage/compose'
 import { encodeImage } from '../stage/image'
 import { encodeRaster } from '../stage/raster'
 import { artSvg } from '../stage/svg'
+import { DESKTOP_LIST_SPRITE_COLUMNS } from '../stage/tuning'
+import { clip } from './format'
 
 type Els = Partial<Pick<Elements['terminal'], 'Raster' | 'Image'>> &
   Partial<Pick<Elements['desktop'], 'Svg'>>
@@ -22,6 +24,35 @@ function cached<T extends string | { rgba: string; width: number; height: number
     cache.set(key, v)
   }
   return v
+}
+
+/** The columns `ListSprite` takes at the head of a row, 0 where it draws nothing. */
+export function listSpriteColumns(
+  renderer: Renderer,
+  surface: RenderSurface,
+  sprite: Sprite,
+): number {
+  if (surface !== 'terminal') return DESKTOP_LIST_SPRITE_COLUMNS
+  if (renderer === 'image') return 2
+  if (renderer === 'raster' && sprite.small) return 8
+  return 0
+}
+
+/**
+ * A row's name in `width` columns, with its secondary text (affixes, traits, a listing's detail)
+ * beside it when both fit, else on a row of its own under it.
+ */
+export function fitRow(
+  name: string,
+  secondary: string,
+  width: number,
+): { name: string; secondary: string; below: boolean } {
+  const head = clip(name, width)
+  if (!secondary) return { name: head, secondary: '', below: false }
+  if ([...head].length + 1 + [...secondary].length <= width) {
+    return { name: head, secondary, below: false }
+  }
+  return { name: head, secondary: clip(secondary, Math.max(1, width - 2)), below: true }
 }
 
 /**
