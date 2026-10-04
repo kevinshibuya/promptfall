@@ -41,6 +41,12 @@ export const IMAGE_MAX_BYTES = 1_048_576
 export const SVG_SMIL = true
 export const SVG_FALLBACK_FRAME_MS = 167
 /**
+ * The stage Svg's markup width per band column off the terminal. The desktop draws about 8 points
+ * a column (live check, 2026-10-04) and scales an Svg down to its slot, so a markup wider than the
+ * band always fills it; this is a ceiling, not a measurement (ADR 0004).
+ */
+export const DESKTOP_COLUMN_PX_CEILING = 16
+/**
  * The start of the deny a blit answers where the terminal draws no pictures; only it settles the
  * probe on raster. The engine appends the cause in parentheses, which varies by terminal
  * (`(env: terminal=Apple_Terminal, not asked yet, no answer)`), so the probe matches the prefix.

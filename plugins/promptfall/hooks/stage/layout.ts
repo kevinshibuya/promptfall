@@ -1,3 +1,4 @@
+import type { RenderSurface } from 'claude-code'
 import {
   COMPACT_ROWS,
   COMPACT_STAGE_COLUMNS,
@@ -14,8 +15,19 @@ export type Layout =
   | { kind: 'compact'; box: Box; bandRows: 4 }
   | { kind: 'collapsed'; box: null; bandRows: 1 }
 
-/** `rows` is timeline.rowsAt(view, now): the stage's height for what is on it. */
-export function layoutFor(rows: number, props: { bodyColumns: number; maxRows: number }): Layout {
+/**
+ * `rows` is timeline.rowsAt(view, now): the stage's height for what is on it. Terminals fit the
+ * stage in cells; the Svg surfaces scale it, so they always get the full stage (ADR 0004).
+ */
+export function layoutFor(
+  rows: number,
+  props: { bodyColumns: number; maxRows: number },
+  surface: RenderSurface,
+): Layout {
+  if (surface !== 'terminal') {
+    const columns = Math.min(Math.max(props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
+    return { kind: 'full', box: { columns, rows }, bandRows: rows + STAGE_TEXT_ROWS }
+  }
   if (props.bodyColumns >= FULL_MIN_COLUMNS && props.maxRows >= rows + STAGE_TEXT_ROWS) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STAGE_TEXT_ROWS }

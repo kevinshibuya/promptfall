@@ -1,7 +1,7 @@
 // The frame loop: one timer per surface, re-armed each tick, blitting the mounted stage. The
 // render hook mounts the site and draws the first frame; every frame after it is a blit here.
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
-import type { Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
+import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { GameView, Settings } from '../../types'
 import { composeFrame } from './compose'
 import { encodeImage } from './image'
@@ -19,6 +19,7 @@ export type StageSite = {
   renderer: 'raster' | 'image' | 'svg'
   /** The band's props the layout came from, so a tick can tell when it no longer holds. */
   props: { bodyColumns: number; maxRows: number }
+  surface: RenderSurface
 }
 
 export type LoopIo = {
@@ -58,7 +59,8 @@ function same(a: StageSite, b: StageSite): boolean {
     a.renderer === b.renderer &&
     sameLayout(a.layout, b.layout) &&
     a.props.bodyColumns === b.props.bodyColumns &&
-    a.props.maxRows === b.props.maxRows
+    a.props.maxRows === b.props.maxRows &&
+    a.surface === b.surface
   )
 }
 
@@ -177,7 +179,7 @@ export class StageLoop {
     if (gen !== this.gen || site === null || view === null) return null
 
     this.timeline.observe(view, now)
-    const layout = layoutFor(this.timeline.rowsAt(view, now), site.props)
+    const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface)
     if (!sameLayout(site.layout, layout)) {
       // Grow or shrink is a redraw: the next render mounts the new site.
       this.stopped = true

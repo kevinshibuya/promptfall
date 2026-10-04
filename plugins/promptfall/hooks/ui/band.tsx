@@ -8,7 +8,13 @@ import { stageFrame, stageKey } from '../stage/loop'
 import { stageAt } from '../stage/model'
 import { renderSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
-import { COMPACT_STAGE_COLUMNS, PROBE_ALT_DENY, PROBE_DELAY_MS, SVG_SMIL } from '../stage/tuning'
+import {
+  COMPACT_STAGE_COLUMNS,
+  DESKTOP_COLUMN_PX_CEILING,
+  PROBE_ALT_DENY,
+  PROBE_DELAY_MS,
+  SVG_SMIL,
+} from '../stage/tuning'
 import { PREFS_DEFAULT, SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { gates } from '../view'
 import { type ShownBoss, shownBoss } from './boss'
@@ -23,9 +29,6 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
-
-const MIN_COLUMNS = 100
-const REST_ROWS = 4
 
 /** The one-line form: `Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`. */
 export function collapsedLine(view: GameView, mode: Mode, notice: string | null): string {
@@ -101,8 +104,6 @@ type Els = Pick<Elements['terminal'], 'Box' | 'Text'>
 const PROBE_A = { rgba: encode(Uint8Array.of(0, 0, 0, 0)), width: 1, height: 1 }
 /** One pixel of alpha 1: a source different from PROBE_A, so the blit is a real swap. */
 const PROBE_B = { rgba: encode(Uint8Array.of(0, 0, 0, 1)), width: 1, height: 1 }
-/** The SVG's CSS pixels per stage column. */
-const SVG_PX_PER_COLUMN = 8
 const STATUS_TABS_WIDTH = 36
 
 /** A probe armed and not yet answered; module state, so a reload may arm one more. */
@@ -201,17 +202,13 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // The Party tab sizes itself to the stage; Loot and World keep four rows.
     const party = prefs.bandTab === 'party'
     const timeline = handle?.stage.timeline ?? looseTimeline
-    let layout: Layout = layoutFor(4, e.props)
+    let layout: Layout = layoutFor(4, e.props, e.surface)
     if (party) {
       timeline.observe(view, now)
-      layout = layoutFor(timeline.rowsAt(view, now), e.props)
+      layout = layoutFor(timeline.rowsAt(view, now), e.props, e.surface)
     }
-    const collapsed =
-      prefs.collapsed ||
-      mode !== 'primary' ||
-      layout.kind === 'collapsed' ||
-      e.props.bodyColumns < MIN_COLUMNS ||
-      e.props.maxRows < REST_ROWS
+    // On a terminal, layoutFor collapses below 100 columns or 4 rows; the Svg surfaces never do.
+    const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
 
     if (collapsed) {
       loop?.mount(null)
@@ -247,24 +244,24 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           const source = renderSvg(model, timeline.active(now), {
             smil: SVG_SMIL,
             now,
-            width: box.columns * SVG_PX_PER_COLUMN,
+            // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
+            width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
             motion: settings.motion,
           })
           const { Svg } = els
-          stage = (
-            <Svg
-              key="stage"
-              source={source}
-              alt={model.alt}
-              width={box.columns * SVG_PX_PER_COLUMN}
-              isInteractive={SVG_SMIL}
-            />
-          )
+          stage = <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_SMIL} />
         }
         loop?.mount(
           SVG_SMIL
             ? null
-            : { requestId: e.requestId, key: 'stage', layout, renderer: 'svg', props: e.props },
+            : {
+                requestId: e.requestId,
+                key: 'stage',
+                layout,
+                renderer: 'svg',
+                props: e.props,
+                surface: e.surface,
+              },
         )
       } else if ('Raster' in els) {
         const renderer = await read($, rendererAtom)
@@ -317,7 +314,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             )
           }
           const key = renderer === 'image' ? stageKey(box) : 'stage'
-          loop?.mount({ requestId: e.requestId, key, layout, renderer, props: e.props })
+          loop?.mount({
+            requestId: e.requestId,
+            key,
+            layout,
+            renderer,
+            props: e.props,
+            surface: e.surface,
+          })
         }
       }
     } else {

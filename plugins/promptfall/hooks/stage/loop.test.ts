@@ -6,7 +6,7 @@ import { boss, wave } from './fixtures'
 import { layoutFor } from './layout'
 import { type LoopIo, StageLoop, type StageSite } from './loop'
 import { StageTimeline } from './timeline'
-import { EVENT_FRAME_MS, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
+import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
 type Harness = {
   loop: StageLoop
@@ -27,15 +27,21 @@ type Harness = {
 
 const PROPS = { bodyColumns: 120, maxRows: 20 }
 
-function site(renderer: StageSite['renderer'] = 'raster', view = wave()): StageSite {
+function site(
+  renderer: StageSite['renderer'] = 'raster',
+  view = wave(),
+  props: StageSite['props'] = PROPS,
+  surface: StageSite['surface'] = 'terminal',
+): StageSite {
   const t = new StageTimeline()
   t.observe(view, 0)
   return {
     requestId: 'band-1',
     key: 'stage',
-    layout: layoutFor(t.rowsAt(view, 0), PROPS),
+    layout: layoutFor(t.rowsAt(view, 0), props, surface),
     renderer,
-    props: PROPS,
+    props,
+    surface,
   }
 }
 
@@ -215,6 +221,26 @@ test('an svg site invalidates at the fallback rate while busy and never at rest'
   await clock.advance(SVG_FALLBACK_FRAME_MS * 3)
   expect(h.invalidations.length).toBeGreaterThanOrEqual(3)
   expect(h.blits).toHaveLength(0)
+})
+
+test('a desktop svg site at 95 × 12 keeps running through a zone boss', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.view = boss()
+  h.timeline.observe(boss(), await clock.now())
+  await clock.advance(SPAWN_MS * 4)
+  const props = { bodyColumns: 95, maxRows: 12 }
+  const rows = h.timeline.rowsAt(boss(), await clock.now())
+  h.loop.mount({
+    ...site('svg', boss(), props, 'desktop'),
+    layout: layoutFor(rows, props, 'desktop'),
+  })
+  // On a terminal 95 × 12 is the one-row band: a tick that ignored the surface would stop the site.
+  h.timeline.onEffects([hit], await clock.now())
+  h.loop.wake()
+  await clock.advance(SVG_FALLBACK_FRAME_MS * 5)
+  // A stopped site invalidates once, for the re-mount, and never again; a live one redraws the hit.
+  expect(h.invalidations.length).toBeGreaterThan(1)
 })
 
 test('at rest each blit draws the next bob phase, never the same one twice', async () => {

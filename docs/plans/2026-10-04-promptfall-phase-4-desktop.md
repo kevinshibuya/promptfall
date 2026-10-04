@@ -127,9 +127,9 @@ Three existing tests loop over both surfaces and change on the desktop; split th
 
 **Boundaries:** No change to the terminal thresholds or to `stage/model.ts`. No dialog change. No `SVG_SMIL` change (Task 6). If the measured points per column or row is missing from Task 1's table for the branch chosen, `blocked: Task 1 table lacks <cell>`.
 
-- [ ] `layout.test.ts` desktop cases red; `layoutFor` with the surface; green
-- [ ] `band.test.ts` desktop tests at 95 × 12 and 60 × 12 red; the collapse condition, the calls, the Svg sizing per branch, the tuning constants; `loop.ts` `surface` and its test; green
-- [ ] README bullets; run the check; commit `fix(stage): the desktop always draws the full stage, scaled to the band (ADR 0004)`
+- [x] `layout.test.ts` desktop cases red; `layoutFor` with the surface; green
+- [x] `band.test.ts` desktop tests at 95 × 12 and 60 × 12 red; the collapse condition, the calls, the Svg sizing per branch, the tuning constants; `loop.ts` `surface` and its test; green
+- [x] README bullets; run the check; commit `fix(stage): the desktop always draws the full stage, scaled to the band (ADR 0004)`
 
 ### Task 2b: The party line wraps on the Svg surfaces
 

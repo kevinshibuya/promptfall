@@ -149,7 +149,9 @@ it drops loot.
 
 - **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
   Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
-  numbers as text. The desktop app draws it as an `Svg`.
+  numbers as text. The desktop app draws it as an `Svg`, always the full stage: the art 116 to
+  160 pixels wide, scaled to the band's width (ADR 0004). The desktop keeps an `Svg` under about
+  150 points tall, so a boss stage there draws narrower than the band.
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
@@ -157,7 +159,7 @@ it drops loot.
 - **Heights.** At rest the Party tab is 10 rows (8 for the stage, a party line, the status row).
   A turn boss grows it to 14 and a zone or world boss to 19; it shrinks back once the boss's
   dissolve and drop have played.
-- **Compact and collapsed.** The full stage needs 116 columns and room for its rows. With 100 to
+- **Compact and collapsed.** On terminals, the full stage needs 116 columns and room for its rows. With 100 to
   115 columns, or too few rows, the band keeps the three hero rows and the status row and draws a
   52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
   four rows and draw no stage.

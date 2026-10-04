@@ -2,7 +2,7 @@ import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
-import { DISSOLVE_MS, DROP_MS, SVG_SMIL } from './stage/tuning'
+import { DESKTOP_COLUMN_PX_CEILING, DISSOLVE_MS, DROP_MS, SVG_SMIL } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { bossSegment, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
@@ -117,7 +117,8 @@ test('the band draws the party and the zone, and passes during a survey', async 
       expect(await ui.find({ text: new RegExp(hero.name.split(' ')[0] ?? '') })).toBeDefined()
     }
     expect(await ui.find({ text: /Greenmeadow Road/ })).toBeDefined()
-    expect(await rows(ui)).toHaveLength(4)
+    // A terminal 120 × 8 is the compact stage; the desktop always draws the full one (ADR 0004).
+    expect(await rows(ui)).toHaveLength(surface === 'terminal' ? 4 : 3)
     await ui.unmount()
 
     const survey = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 8, true) })
@@ -130,13 +131,20 @@ test('the band draws the party and the zone, and passes during a survey', async 
 test('narrow terminals get one row', async ($, on) => {
   harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(80) })
-    expect(await rows(ui)).toHaveLength(1)
-    // A notice (here the first-run welcome) shows on the one line too.
-    expect(await ui.find({ text: /Welcome to Promptfall/ })).toBeDefined()
-    await ui.unmount()
-  }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(80) })
+  expect(await rows(ui)).toHaveLength(1)
+  // A notice (here the first-run welcome) shows on the one line too.
+  expect(await ui.find({ text: /Welcome to Promptfall/ })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a narrow desktop still draws the full stage', async ($, on) => {
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(80) })
+  expect(await ui.find({ type: 'Svg' })).toBeDefined()
+  expect(await rows(ui)).toHaveLength(3)
+  await ui.unmount()
 })
 
 test('tabs and collapse write prefs', async ($, on) => {
@@ -152,7 +160,7 @@ test('tabs and collapse write prefs', async ($, on) => {
     expect(await rows(ui)).toHaveLength(1)
     await ui.press({ key: 'collapse' })
     expect((states.get('prefs') as Prefs).collapsed).toBe(false)
-    expect(await rows(ui)).toHaveLength(4)
+    expect(await rows(ui)).toHaveLength(surface === 'terminal' ? 4 : 3)
     await ui.unmount()
   }
 })
@@ -550,6 +558,39 @@ test('the desktop draws an Svg with its alt', async ($, on) => {
   expect(stage?.type).toBe('Svg')
   expect(stage?.props.isInteractive).toBe(SVG_SMIL)
   expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
+  await ui.unmount()
+})
+
+for (const [columns, art] of [
+  [95, 116],
+  [60, 116],
+  [130, 130],
+] as const) {
+  test(`the desktop at ${columns} × 12 draws the full stage ${art} pixels wide`, async ($, on) => {
+    harness(on)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(columns, 12) })
+    const stage = await ui.find({ type: 'Svg' })
+    const source = String(stage?.props.source)
+    expect(source).toContain(`viewBox="0 0 ${art} 16"`)
+    expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
+    // No width prop: the markup is wider than the band and the desktop scales it down to fit.
+    expect(stage?.props.width).toBeUndefined()
+    expect(source).toContain(`width="${columns * DESKTOP_COLUMN_PX_CEILING}"`)
+    await ui.unmount()
+  })
+}
+
+test('the desktop grows the stage for a zone boss whatever maxRows says', async ($, on) => {
+  const { shown } = harness(on)
+  shown.view = boss()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  const stage = await ui.find({ type: 'Svg' })
+  expect(String(stage?.props.source)).toContain('viewBox="0 0 116 34"')
+  expect(await ui.find({ key: 'compact-rows' })).toBeUndefined()
+  const party = await ui.find({ key: 'row-party' })
+  expect(party?.text).toContain('⚔')
   await ui.unmount()
 })
 
