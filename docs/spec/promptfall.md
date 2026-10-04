@@ -1,7 +1,7 @@
 # Promptfall, product and architecture spec
 
-Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03 and for
-phase 3 on 2026-10-03. Every
+Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
+phase 3 on 2026-10-03 and for phase 4 on 2026-10-04. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -21,9 +21,12 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
 
 ## 2. Non-negotiables
 
-- The game never gets in the way of the work. The band is 4 rows at rest,
-  collapses to 1 row, hides while Claude asks a question, collapses under 100
-  columns, and switches off per session with one command.
+- The game never gets in the way of the work. The band is 10 rows at rest on
+  the Party tab (an 8-row stage and two text rows) and grows to at most 19 while
+  a boss is on the stage (ADR 0003); it drops to a 4-row compact stage when the
+  terminal is too short or 100 to 115 columns wide, collapses to 1 row under 100
+  columns, hides while Claude asks a question, and switches off per session with
+  one command.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
   drop. Every drop, trade and hero exists because the server rolled it or
@@ -35,8 +38,9 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
 - Progress needs a live interactive Claude Code session. No offline progress, no
   catch-up. Headless sessions (`claude -p`, subagents, cloud, VS Code chat
   panel) never tick.
-- The mod's footprint is interface, state, store, clock, HTTP and commands. No
-  file system, no process spawning, no model calls, no prompt rewriting.
+- The mod's footprint is interface (including images and sound from the mod's
+  own files), state, store, clock, HTTP and commands. No file system, no process
+  spawning, no model calls, no prompt rewriting.
 - Every social feature sits behind a server flag that can switch it off for
   every client at once.
 
@@ -52,8 +56,16 @@ Checked against Claude Code v2.1.287's mods API.
   interactive on `terminal`, or when a client attaches with surface `desktop`.
 - Band: `ui.render` on `AbovePrompt`, props `hasSurvey`, `isWorking`, `maxRows`,
   `bodyColumns`. Elements: Box, Text, Button (with single-key `hotkey`), Input,
-  Select, Link, Code, Markdown, Image (terminal only, pixel sprites on kitty and
-  Ghostty).
+  Select, Link, Code, Markdown, Image (terminal only, pixels on kitty and
+  Ghostty, its `alt` elsewhere, no capability flag: `$.ui.blit` refuses an Image
+  drawing its alt), Raster (terminal only, a grid of cells each one BMP glyph
+  with a foreground and a background, up to 512 × 256, 1024 colour pairs at
+  once; half-blocks give 2 pixels a row). Desktop, VS Code and mobile have Svg
+  instead (at most 131,072 characters; `isInteractive` runs SMIL in a sandboxed
+  frame) and no Image or Raster. `$.ui.blit` repaints a Raster or swaps a keyed
+  Image without a redraw, up to 120 a second taken.
+- Sound: `$.audio.play({ asset })` plays a file of the plugin's own through
+  `afplay` on macOS; Linux and Windows terminals play nothing. Clips do not queue.
 - Dialog: `$.ui.open({ id, title, focus, closeOnEscape, holdToasts, rows })`
   drawn by a `ui.render` hook on `Pane`.
 - Timers: `$.clock.every(ms, fn)`. Each hook dispatch has a 10 second budget;
@@ -371,10 +383,26 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World. `c`
   collapses. Hotkeys fire only while the band holds the keyboard (ctrl+x tab or
   a click).
-- Band rows at rest: three hero rows (name, class glyph, level, HP bar) and one
-  status row (zone, wave, gold, last drop). One line when collapsed, when
-  `bodyColumns` is under 100, or when `maxRows` is under 4. Hidden while
-  `hasSurvey`.
+- Party tab (phase 4): the stage, 8 rows at rest, the encounter's enemies on the
+  left and the party on the right, side-on, standing on a one-row ground strip
+  coloured per zone; under it the party line (each hero's name, level, HP bar,
+  then the front enemy as `⚔ Goblin Brute 42/60`) and the status row (zone,
+  wave, gold, last drop). The stage grows to 12 rows for a turn boss and 17 for a
+  zone or world boss, at the boss's spawn, and shrinks back after its death
+  dissolve and drop pop. Kitty and Ghostty draw it as an Image, every other
+  terminal as a half-block Raster, desktop, VS Code and mobile as an Svg, one
+  geometry for all. Compact 4-row stage (side by side with three hero rows and
+  the status row, sprites downsampled) when `maxRows` is under what the full
+  stage needs or `bodyColumns` is 100 to 115. One line when `bodyColumns` is
+  under 100 or `maxRows` is under 4. Hidden while `hasSurvey`. Loot and World
+  tabs stay 4 rows of text. Every Image and Svg has an alt summarising the scene.
+- Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
+  or cast pose), hit flash, death dissolve, spawn fade-in, floating damage
+  numbers, and a drop popping out of the defeated enemy. Driven by the sim's
+  `hit` effect. About 12 frames a second during an event, the idle bob at 2,
+  nothing while the band is hidden, collapsed or on another tab. The desktop
+  redraws once a round with the round's motion as SMIL. Account setting "Motion:
+  full / still", default full; still drops the idle bob.
 - World tab rows (phase 3): the count online and the names in your zone, you
   excluded; the world boss line while one is live (name, global HP bar, time
   left, your damage), else highest zone, kills and wipes; the latest chat
@@ -411,20 +439,35 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited,
   listing sold, purchase complete, order filled, item returned, world boss
   appeared, world boss down, boss reward. Chat messages never toast.
-- Sound (phase 4): off by default, toggle in Account; cues for drop, level up,
-  boss spawn.
+- Sound (phase 4): off by default, a per-machine toggle in Account and
+  `/promptfall sound on|off`, fixed gain. Four cues, each with a toast: drop
+  (Rare, Epic), legendary drop, level up, world boss appeared. Only the primary
+  session plays them; `/promptfall off` hides the band, not the cues.
+- Item sprites (phase 4): 16 px icons in the dialog's Inventory, Heroes and
+  Market lists on Image and Svg, a 2-row icon in half-block terminals.
 
 ## 11. Art (phase 4)
 
-Style reference is early Final Fantasy. Actual Final Fantasy sprites are
-copyrighted and excluded. Enemies and tiles from licensed packs, the
-finalbossblues Time Fantasy family being the first candidate for one coherent
-palette, with 0x72 DungeonTileset II plus Kenney Tiny Dungeon as the zero-cost
-fallback; item icons from Shikashi's set recoloured to the hero palette; the
-four heroes generated with Retro Diffusion or PixelLab on the pack's palette and
-cleaned in Aseprite or Pixelorama. Licences get verified before purchase.
-Sprites draw through the Image element where the terminal supports it and fall
-back to glyphs everywhere else.
+Style reference is early Final Fantasy; its own sprites and signature designs
+are excluded (no black mage with a shadowed face and glowing eyes under a wide
+brim, no white mage with red triangle trim, no archer in a green pointed cap).
+
+- Heroes, monsters and items in the NES style: 16 × 16, the NES master palette,
+  at most 4 colours a sprite including the black outline. One sprite per hero
+  class plus an attack or cast pose; one palette slot takes the hero's rarity
+  colour (Common grey, Uncommon green, Rare blue, Epic magenta, Legendary gold).
+- Zone, turn and world bosses in the SNES style, each its own art: up to 48 ×
+  34, turn bosses about two-thirds of that, at most 16 colours each from one
+  shared 64-colour master palette.
+- Made with gpt-image-2 through codex-image, one sheet per zone, every sheet
+  generated against a style sheet Kevin approved first; the build slices and
+  palette-locks them and fails a sprite that breaks a palette rule. The four
+  heroes and four world bosses get a hand cleanup in Aseprite or Pixelorama.
+  Nothing third-party ships. Cues are four clips from Juhani Junkala's CC0 "512
+  Sound Effects (8-bit style)".
+- Source PNGs live in an `art/` folder; a build step turns them into a committed,
+  generated module of indexed sprites (CI fails when stale). The mod reads no
+  files for sprites; cues are plugin files the engine plays.
 
 ## 12. Phases
 
@@ -438,7 +481,12 @@ back to glyphs everywhere else.
    batch, fill and chat, the World, Chat and Leaderboards tabs), no sim change;
    the world boss second (`SIM_VERSION` 3 with boss mode, the boss record,
    contribution and rewards, bots fighting, the boss display and toasts).
-4. Sprites and sound.
+4. Sprites and sound. Two PRs: the engine first (the pixel-detection, Ghostty
+   scaling and desktop SMIL spikes, the sprite pipeline, the three renderers,
+   the stage with grow, compact and collapse, the motion set, the sim's
+   output-only `hit` effect, cues, the motion toggle, item icons) on concept
+   sprites; the art second (the style sheet gate, then every sprite zone by
+   zone, and the cue clips).
 5. Real server: accounts, authority, flags, admin CLI, Docker Compose, contract
    suite green against it.
 
