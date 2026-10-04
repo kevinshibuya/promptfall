@@ -150,6 +150,8 @@ export class StageTimeline {
   }
 
   onEffects(effects: readonly Effect[], now: number): void {
+    // observe prunes too, but nothing observes while the band is hidden or on another tab.
+    this.motions = this.motions.filter((m) => m.until > now)
     let hits = 0
     let last: { target: string; flashEnd: number } | null = null
     for (const effect of effects) {

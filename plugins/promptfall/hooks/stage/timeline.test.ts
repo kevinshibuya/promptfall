@@ -179,3 +179,14 @@ test('an enemy that comes back after leaving is live again: no dissolve, not dep
   expect(t.active(2_100).some((m) => m.actor === 'e3' && m.kind === 'dissolve')).toBe(false)
   expect(t.known().find((k) => k.id === 'e3')?.slot).toBe(2)
 })
+
+test('motions that ended are pruned as effects land, even while nothing observes', () => {
+  // On the Loot or World tab, or with the band off, nothing calls observe.
+  const t = new StageTimeline()
+  t.observe(wave(), 1_000)
+  for (let i = 0; i < 500; i++) {
+    t.onEffects([{ k: 'hit', by: 'h1', target: 'e1', amount: 1 }] as Effect[], 2_000 + i * 2_000)
+  }
+  const motions = (t as unknown as { motions: unknown[] }).motions
+  expect(motions.length).toBeLessThan(20)
+})
