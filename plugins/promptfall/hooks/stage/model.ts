@@ -53,7 +53,7 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const progress = (m: Motion, now: number) => clamp((now - m.from) / (m.until - m.from), 0, 1)
 
 /** The lunge's offset: out over the first half, back over the second. */
-function lungeOffset(m: Motion | undefined, now: number): number {
+export function lungeOffset(m: Motion | undefined, now: number): number {
   if (m?.kind !== 'lunge') return 0
   const p = progress(m, now)
   return m.dir * Math.round(LUNGE_PX * (p < 0.5 ? p * 2 : (1 - p) * 2))

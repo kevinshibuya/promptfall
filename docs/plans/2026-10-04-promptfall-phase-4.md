@@ -360,9 +360,9 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** No band change, no loop, no `$`. Do not add a dependency for XML or hashing.
 
-- [ ] `raster.ts` with `raster.test.ts` red then green; `NOTICE.md`
-- [ ] `image.ts`, `svg.ts` with their tests
-- [ ] `stage-goldens.ts`, the goldens, the biome exclusion, `golden.test.ts` with the budgets; run the acceptance check; commit `feat(stage): raster, image and svg encoders; golden frames and budgets`
+- [x] `raster.ts` with `raster.test.ts` red then green; `NOTICE.md`
+- [x] `image.ts`, `svg.ts` with their tests
+- [x] `stage-goldens.ts`, the goldens, the biome exclusion, `golden.test.ts` with the budgets; run the acceptance check; commit `feat(stage): raster, image and svg encoders; golden frames and budgets`
 
 ### Task 6: The band draws the stage
 

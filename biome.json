@@ -11,6 +11,7 @@
       "**",
       "!plugins/promptfall/hooks/vendor",
       "!plugins/promptfall/hooks/sprites/generated.ts",
+      "!plugins/promptfall/hooks/stage/goldens",
       "!plugins/promptfall/.claude-plugin/types",
       "!plugins/promptfall/tsconfig.json",
       "!**/dist",

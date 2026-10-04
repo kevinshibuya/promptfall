@@ -30,6 +30,11 @@ export type Known = { id: string; spriteId: string; kind: string; slot: number; 
 
 const SLOTS = 3
 
+/** The idle bob's phase: floor(now / IDLE_FRAME_MS) % 2. */
+export function bobbingAt(now: number): 0 | 1 {
+  return Math.floor(now / IDLE_FRAME_MS) % 2 === 0 ? 0 : 1
+}
+
 function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
   return enemy.kind === 'world_boss'
     ? spriteFor('world_boss', worldBossKey(enemy.name)).id
@@ -212,6 +217,6 @@ export class StageTimeline {
   }
 
   bobbing(now: number): 0 | 1 {
-    return Math.floor(now / IDLE_FRAME_MS) % 2 === 0 ? 0 : 1
+    return bobbingAt(now)
   }
 }
