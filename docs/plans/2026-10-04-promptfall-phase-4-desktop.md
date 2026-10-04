@@ -168,8 +168,8 @@ Three existing tests loop over both surfaces and change on the desktop; split th
 
 **Boundaries:** No change to `ListSprite`, to `market.tsx`, or to the Loot tab, toasts or chat (PR 1 out of scope: sprites there). No width handling (Task 4).
 
-- [ ] The four glyph tests red; the item and hero rows; green
-- [ ] Run the check; commit `fix(dialog): rows drop the glyph where a sprite draws`
+- [x] The four glyph tests red; the item and hero rows; green
+- [x] Run the check; commit `fix(dialog): rows drop the glyph where a sprite draws`
 
 ### Task 4: Dialog rows fit the pane's columns
 

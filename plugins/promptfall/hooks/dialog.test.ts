@@ -807,6 +807,45 @@ test('a heroes row keeps its glyph on half-blocks and leads with an Svg on the d
   await desk.unmount()
 })
 
+test('a row drops its glyph where a sprite draws and keeps it where none does', async ($, on) => {
+  const { data, states } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('image'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const hero = (states.get('view') as GameView).roster[0]
+  if (!hero) throw new Error('no hero')
+  const glyphed = new RegExp(`^\\${hero.glyph} ${hero.name.split(' ')[0]}`)
+  const bare = new RegExp(`^${hero.name.split(' ')[0]}`)
+  for (const surface of ['terminal', 'desktop'] as const) {
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    expect(await ui.find({ text: /^Iron Sword \(/ })).toBeDefined()
+    expect(await ui.find({ text: /^\/ Iron Sword/ })).toBeUndefined()
+    await ui.press({ key: 'tab-heroes' })
+    expect(await ui.find({ text: bare })).toBeDefined()
+    expect(await ui.find({ text: glyphed })).toBeUndefined()
+    await ui.press({ key: 'tab-inventory' })
+    await ui.unmount()
+  }
+})
+
+test('half-blocks: the item row drops its glyph, the hero row keeps it', async ($, on) => {
+  const { data } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('raster'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  expect(await ui.find({ text: /^Iron Sword \(/ })).toBeDefined()
+  expect(await ui.find({ text: /^\/ Iron Sword/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('before the probe answers a terminal row keeps its glyph', async ($, on) => {
+  const { data } = harness(on, seeded())
+  data.set('promptfall:settings', RENDERER('auto'))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  expect(await ui.find({ text: /^\/ Iron Sword \(/ })).toBeDefined()
+  await ui.unmount()
+})
+
 test('market listings lead with the item or the hero class sprite', async ($, on) => {
   const { player } = await marketHarness(on, { heroListing: true })
   const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })

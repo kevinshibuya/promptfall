@@ -378,17 +378,19 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         )
       for (const item of view.inventory) {
         const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
+        // A sprite replaces the glyph where pixels draw; the glyph stays as its fallback.
+        const itemSprite = ListSprite(
+          table,
+          listRenderer,
+          e.surface,
+          spriteFor('item', item.base),
+          item.name,
+          `sprite-${item.id}`,
+        )
         // Two rows per item, so a docked pane never truncates a button.
         body.push(
           <Box key={`item-${item.id}`} flexDirection="row" gap={1}>
-            {ListSprite(
-              table,
-              listRenderer,
-              e.surface,
-              spriteFor('item', item.base),
-              item.name,
-              `sprite-${item.id}`,
-            )}
+            {itemSprite}
             <Box key={`item-body-${item.id}`} flexDirection="column">
               <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
                 <Text
@@ -396,7 +398,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
                   dimColor={item.rarity === 'common'}
                   wrap="truncate"
                 >
-                  {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
+                  {`${itemSprite ? '' : `${item.glyph} `}${item.name} (${item.rarity}, ${item.slot})`}
                 </Text>
                 {item.affixes.length > 0 ? (
                   <Text dimColor wrap="truncate">
@@ -520,18 +522,19 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       for (const hero of view.roster) {
         const picked = dialog.partyPick.includes(hero.id)
         const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
+        const heroSprite = ListSprite(
+          table,
+          listRenderer,
+          e.surface,
+          spriteFor('hero', hero.cls),
+          hero.name,
+          `sprite-${hero.id}`,
+        )
         body.push(
           <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
-            {ListSprite(
-              table,
-              listRenderer,
-              e.surface,
-              spriteFor('hero', hero.cls),
-              hero.name,
-              `sprite-${hero.id}`,
-            )}
+            {heroSprite}
             <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
-              {`${hero.glyph} ${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
+              {`${heroSprite ? '' : `${hero.glyph} `}${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
             </Text>
             {hero.traits.length > 0 ? (
               <Text dimColor wrap="truncate">
