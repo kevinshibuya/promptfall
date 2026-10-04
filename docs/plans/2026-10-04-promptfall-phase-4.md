@@ -255,8 +255,8 @@ The io closures built in `session.start` and on desktop attach gain `blit: (args
 
 **Boundaries:** Nothing under `plugins/promptfall`. No art. The spike is not added to any workspace script or CI.
 
-- [ ] The module, the two JSON files, the gitignore line; `claude plugin validate spikes/phase-4`
-- [ ] The findings doc with the table and the decision rules; commit `docs(phase-4): spike plugin and findings sheet`
+- [x] The module, the two JSON files, the gitignore line; `claude plugin validate spikes/phase-4`
+- [x] The findings doc with the table and the decision rules; commit `docs(phase-4): spike plugin and findings sheet`
 - [ ] Ask Kevin to run the five surfaces; record the findings in the doc; commit `docs(phase-4): spike findings`
 
 ### Task 2: Sim: the `hit` effect; the view carries ids and rarity
