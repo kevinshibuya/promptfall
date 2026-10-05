@@ -637,8 +637,8 @@ Then the full check line.
 
 **Boundaries:** No band or loop change. The stage goldens stay byte-identical.
 
-- [ ] Window contents per kind
-- [ ] Tracks, hotspots, alt
+- [x] Window contents per kind
+- [x] Tracks, hotspots, alt
 - [ ] Scenarios, goldens, PNGs; Kevin's look; run the check, commit
 
 ### Task 9: The band draws the strip

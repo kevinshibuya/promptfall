@@ -1,7 +1,6 @@
 import { atom, type Elements, type On, read, update } from 'claude-code'
 import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
-import { IN_PROCESS } from '../server'
 import { encode } from '../sprites/base64'
 import { type Layout, layoutFor } from '../stage/layout'
 import { stageFrame, stageKey } from '../stage/loop'
@@ -26,11 +25,9 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
-import { gates } from '../view'
-import { type ShownBoss, shownBoss } from './boss'
+import { shownBoss } from './boss'
 import { CLASS_INITIAL, clip, formatCount, formatGold, padEnd, padStart, waveLabel } from './format'
 import { ClassGlyph, HpBar, PartyLine, RarityText } from './parts'
-import { formatRemaining, remainingRealMs } from './time'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -52,61 +49,9 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
 
 export { type ShownBoss, shownBoss } from './boss'
 
-const BOSS_BAR_CELLS = 8
+import { bossSegment, worldRows } from './world-rows'
 
-function pctOf(shown: ShownBoss): number {
-  return shown.boss.maxHp > 0 ? Math.floor((shown.shownHp * 100) / shown.boss.maxHp) : 0
-}
-
-function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
-  if (!world.clock) return ''
-  return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
-}
-
-/** The status row's boss segment while the boss is live: `boss 62% · 11m`. */
-export function bossSegment(view: GameView, world: WorldState, now: number): string | null {
-  const shown = shownBoss(view, world)
-  if (!shown || shown.boss.hp <= 0) return null
-  return `boss ${pctOf(shown)}% · ${remainingOf(shown, world, now)}`
-}
-
-/** The World tab's three rows: who is around, the account's records or the boss, the chat ticker. */
-export function worldRows(
-  view: GameView,
-  world: WorldState,
-  now = 0,
-): { text: string; dim: boolean }[] {
-  const open = gates(world, view.account)
-  const snapshot = world.snapshot
-  let presence: { text: string; dim: boolean }
-  if (!open.presenceOpen) presence = { text: 'presence is off', dim: true }
-  else if (!snapshot) presence = { text: 'connecting to the world…', dim: true }
-  else {
-    const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
-    presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
-  }
-  const shown = shownBoss(view, world)
-  let records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
-  if (shown && shown.boss.hp > 0) {
-    const max = shown.boss.maxHp
-    const filled =
-      max > 0 ? Math.min(BOSS_BAR_CELLS, Math.ceil((shown.shownHp * BOSS_BAR_CELLS) / max)) : 0
-    const bar = '█'.repeat(filled) + '░'.repeat(BOSS_BAR_CELLS - filled)
-    records = `World boss ${shown.boss.name} ${bar} ${pctOf(shown)}% · ${remainingOf(shown, world, now)} left · you ${formatCount(shown.dealt)}`
-  } else if (shown) {
-    records = `${shown.boss.name} is down · you ${formatCount(shown.dealt)}`
-  }
-  const last = world.messages.at(-1)
-  const chat = !open.chatOpen
-    ? {
-        text: view.account.server === IN_PROCESS ? 'chat needs a server' : 'chat is closed',
-        dim: true,
-      }
-    : last
-      ? { text: `${last.name}: ${last.text}`, dim: false }
-      : { text: 'chat is quiet', dim: true }
-  return [presence, { text: records, dim: false }, chat]
-}
+export { bossSegment, worldRows }
 
 type Els = Pick<Elements['terminal'], 'Box' | 'Text'>
 

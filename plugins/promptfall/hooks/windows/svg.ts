@@ -249,9 +249,8 @@ export function sceneSvg(
           if (fr.typing) {
             const id = `c${clips.length}`
             const line = fr.lines[fr.typing.line]
-            const n = line
-              ? line.spans.reduce((k, s) => k + ('text' in s ? chars(s.text).length : 0), 0)
-              : 0
+            // Every cell of the line, its leading gap included, so the last character shows.
+            const n = line ? line.spans.reduce((k, s) => k + spanCells(s), 0) : 0
             const x = (win.x + 1) * CELL_W
             const y = (fr.typing.line + 1) * CELL_H
             const steps = Array.from({ length: n + 1 }, (_, k) => k * CELL_W).join(';')
