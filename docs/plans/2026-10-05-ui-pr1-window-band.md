@@ -519,9 +519,9 @@ jump, not a ramp; a five-second `lines` track at a
 
 **Boundaries:** No band, loop or stage change.
 
-- [ ] Raster cells
-- [ ] Svg, static
-- [ ] Svg tracks, budget; tests, run the check, commit
+- [x] Raster cells
+- [x] Svg, static
+- [x] Svg tracks, budget; tests, run the check, commit
 
 ### Task 6: The timeline's actions and the gauge tracker
 

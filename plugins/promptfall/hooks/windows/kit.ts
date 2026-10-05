@@ -73,10 +73,11 @@ export type Track =
     }
 
 /** A span laid at cell `x` of its line (0 = the first inner cell), clipped to the line's width. */
-export type Placed =
-  | { x: number; kind: 'text'; text: string; rgb: number }
-  | { x: number; kind: 'bar'; cells: number; fill: number; rgb: number }
-  | { x: number; kind: 'cursor' }
+export type Placed = { x: number; span: number } & (
+  | { kind: 'text'; text: string; rgb: number }
+  | { kind: 'bar'; cells: number; fill: number; rgb: number }
+  | { kind: 'cursor' }
+)
 
 /** One string per character (code point), so a character is one cell. */
 export function chars(text: string): string[] {
@@ -100,18 +101,20 @@ export function placeLine(spans: readonly Span[], width: number, reveal?: number
   const out: Placed[] = []
   let x = 0
   let left = reveal ?? Number.POSITIVE_INFINITY
-  for (const span of spans) {
+  for (const [i, span] of spans.entries()) {
     if (x >= width) break
     const room = width - x
     if ('text' in span) {
       const cs = chars(span.text).slice(0, Math.min(room, Math.max(0, left)))
       left -= Math.min(chars(span.text).length, room)
-      if (cs.length > 0) out.push({ x, kind: 'text', text: cs.join(''), rgb: span.rgb ?? TEXT_RGB })
+      if (cs.length > 0)
+        out.push({ x, span: i, kind: 'text', text: cs.join(''), rgb: span.rgb ?? TEXT_RGB })
     } else if ('bar' in span) {
       const cells = Math.min(room, span.cells)
-      if (cells > 0) out.push({ x, kind: 'bar', cells, fill: clampFill(span.bar), rgb: span.rgb })
+      if (cells > 0)
+        out.push({ x, span: i, kind: 'bar', cells, fill: clampFill(span.bar), rgb: span.rgb })
     } else if ('cursor' in span) {
-      if (span.cursor) out.push({ x, kind: 'cursor' })
+      if (span.cursor) out.push({ x, span: i, kind: 'cursor' })
     }
     x += spanCells(span)
   }
