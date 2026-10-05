@@ -9,6 +9,7 @@ import { COMPACT_STAGE_COLUMNS, RARITY_RGB } from '../stage/tuning'
 import { GAUGE_FULL } from '../vendor/sim.js'
 import {
   chars,
+  drawable,
   type Line,
   type Scene,
   type Span,
@@ -218,8 +219,14 @@ function tabRows(input: StripInput, n: number, at = input.now): Line[] {
   if (tab === 'loot') {
     const loot = view.loot.slice(-2)
     if (loot.length === 0) return [{ spans: [text(padTo('No loot yet', n), DIM_RGB)] }]
+    // A loot line opens with its glyph; the font lacks the hero ones (♞ ✶ ✚ ➶): drop those.
+    const shown = (t: string) => {
+      const [first, second] = chars(t)
+      const bare = first && drawable(first) === '?' && first !== '?' && second === ' '
+      return bare ? chars(t).slice(2).join('') : t
+    }
     return loot.map((l) => ({
-      spans: [text(padTo(clip(l.text, n), n), RARITY_RGB[l.rarity] ?? TEXT_RGB)],
+      spans: [text(padTo(clip(shown(l.text), n), n), RARITY_RGB[l.rarity] ?? TEXT_RGB)],
     }))
   }
   if (tab === 'world') {
@@ -480,11 +487,38 @@ export function stripTracks(input: StripInput, horizonMs: number): Track[] {
         })
     }
     if (b.win.key === 'message' && input.tab === 'party') {
-      const frames = input.log.upcoming(now, horizonMs).map((l) => {
+      // A notice holds the typing row, and motion still shows lines whole: no typing then.
+      const types = input.motion !== 'still' && !input.notice
+      const width = b.win.columns - 4
+      const lastRow = (text: string, revealed: number) => {
+        // Cells of the line's last row already shown: its leading gap, then what typed into it.
+        const rows = wrap(text, width)
+        const before = rows.slice(0, -1).reduce((k, r) => k + chars(r).length + 1, 0)
+        return 1 + Math.max(0, revealed - before)
+      }
+      const frames: Extract<Track, { kind: 'lines' }>['frames'][number][] = []
+      const current = input.log.typing(now, input.motion)
+      if (current && types) {
+        // The line typing when the band rendered goes on typing from where it is.
+        const lines = messageLines({ ...input, motion: 'still' }, b.win.columns, now)
+        frames.push({
+          at: 0,
+          lines,
+          typing: {
+            line: lines.length - 1,
+            charMs: current.charMs,
+            from: lastRow(current.text, current.revealed),
+          },
+        })
+      }
+      for (const l of input.log.upcoming(now, horizonMs)) {
         const lines = messageLines({ ...input, motion: 'still' }, b.win.columns, l.at)
-        const typingRow = lines.length - 1
-        return { at: l.at - now, lines, typing: { line: typingRow, charMs: l.charMs } }
-      })
+        frames.push({
+          at: l.at - now,
+          lines,
+          ...(types ? { typing: { line: lines.length - 1, charMs: l.charMs } } : {}),
+        })
+      }
       if (frames.length > 0) tracks.push({ kind: 'lines', window: 'message', frames })
     }
   }

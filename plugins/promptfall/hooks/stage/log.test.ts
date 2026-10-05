@@ -202,3 +202,42 @@ test('a burst more than a tick behind drops hit lines, never a drop or a level-u
   // Lines scheduled behind two unfinished ones type fast.
   expect(lines.some((l) => l.charMs === CHAR_FAST_MS)).toBe(true)
 })
+
+test('a wipe after a hit that did not kill prints no defeated line', () => {
+  const v = wave()
+  const h1 = v.heroes[0]?.id ?? ''
+  const e1 = v.enemies[0]
+  // The encounter is cleared by the wipe: every enemy leaves the view alive.
+  const after = { ...v, enemies: [] }
+  const { texts } = run(
+    [
+      act(h1, 0),
+      hit(h1, e1?.id ?? '', 1),
+      act(e1?.id ?? '', 500),
+      hit(e1?.id ?? '', h1, 99),
+      { k: 'hero_fell', heroId: h1 },
+      { k: 'wipe', retreatedTo: 1 },
+    ],
+    { before: v, after },
+  )
+  expect(texts.some((t) => t.includes('defeated'))).toBe(false)
+  expect(texts).toContain('The party retreats to zone 1.')
+})
+
+test('an enemy no view ever held is a Foe, and its kill still prints', () => {
+  const v = wave()
+  const h1 = v.heroes[0]?.id ?? ''
+  const { texts } = run([act(h1, 0), hit(h1, 'e57', 30)])
+  expect(texts).toEqual([`${v.heroes[0]?.shortName} hits Foe for 30.`, 'Foe is defeated!'])
+})
+
+test('a purchase or a return prints nothing; a sale prints', () => {
+  const entry = (what: 'sold' | 'bought' | 'returned') =>
+    ({
+      k: 'traded',
+      entry: { k: 'trade', what, kind: 'item', base: 'silk_robe', rarity: 'rare', gold: 120 },
+    }) as unknown as Effect
+  const { texts } = run([entry('bought'), entry('returned'), entry('sold')])
+  expect(texts).toHaveLength(1)
+  expect(texts[0]).toMatch(/^Sold .+ for 120G\.$/)
+})

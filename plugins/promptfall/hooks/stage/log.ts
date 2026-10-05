@@ -19,7 +19,10 @@ export type LogLine = {
   charMs: number
 }
 
-type Known = { name: string; kind: string }
+type Known = { name: string; kind: string; hp?: number }
+
+/** Enemies the log remembers past their view, so a kill can name them; older ones are dropped. */
+const KNOWN_KEEP = 200
 
 const length = (text: string) => Array.from(text).length
 const typed = (line: LogLine) => line.at + length(line.text) * line.charMs
@@ -46,11 +49,18 @@ export class MessageLog {
     cadenceMs: number,
     timeline: StageTimeline,
   ): void {
-    for (const k of timeline.known()) this.known.set(k.id, { name: k.name, kind: k.kind })
-    for (const h of view.heroes) this.known.set(h.id, { name: h.shortName, kind: 'hero' })
-    for (const e of view.enemies) this.known.set(e.id, { name: e.name, kind: e.kind })
-    const name = (id: string) => this.known.get(id)?.name ?? id
+    // HP as the log last saw it, before this batch's view: a kill is a hit that empties it.
+    const hpBefore = new Map([...this.known].map(([id, k]) => [id, k.hp]))
+    for (const k of timeline.known())
+      this.remember(k.id, { name: k.name, kind: k.kind, hp: this.known.get(k.id)?.hp })
+    for (const h of view.heroes) this.remember(h.id, { name: h.shortName, kind: 'hero' })
+    for (const e of view.enemies) this.remember(e.id, { name: e.name, kind: e.kind, hp: e.hp })
+    // An enemy spawned and killed inside one tick is in no view: it is a Foe.
+    const name = (id: string) => this.known.get(id)?.name ?? 'Foe'
     const live = new Set(view.enemies.map((e) => e.id))
+    // A wipe clears the encounter: enemies leave the view alive, so only an emptied HP is a kill.
+    const wiped = effects.some((e) => e.k === 'wipe')
+    const hpLeft = new Map(hpBefore)
 
     const all = groups(effects)
     // The group holding each target's last hit: a kill prints after that action.
@@ -75,12 +85,18 @@ export class MessageLog {
         if (e.k === 'heal')
           out.push({ text: `${name(e.by)} heals ${name(e.target)} for ${e.amount}.`, key: false })
       for (const h of hits) {
+        const hp = hpLeft.get(h.target)
+        if (hp !== undefined) hpLeft.set(h.target, hp - h.amount)
+      }
+      for (const h of hits) {
         const who = this.known.get(h.target)
-        if (lastHit.get(h.target) !== i || live.has(h.target) || !who || who.kind === 'hero')
-          continue
-        if (who.kind === 'world_boss') continue
-        if (out.some((l) => l.text === `${who.name} is defeated!`)) continue
-        out.push({ text: `${who.name} is defeated!`, key: true })
+        if (lastHit.get(h.target) !== i || live.has(h.target) || who?.kind === 'hero') continue
+        if (who?.kind === 'world_boss') continue
+        const hp = hpLeft.get(h.target)
+        if (wiped && (hp === undefined || hp > 0)) continue
+        const text = `${who?.name ?? 'Foe'} is defeated!`
+        if (out.some((l) => l.text === text)) continue
+        out.push({ text, key: true })
       }
       for (const e of g.effects) {
         const line = this.consequence(e, view, name)
@@ -120,9 +136,8 @@ export class MessageLog {
       case 'traded': {
         const t = e.entry
         const what = tradeName(t.kind, t.base)
-        if (t.what === 'sold') return { text: `Sold ${what} for ${t.gold}G.`, key: true }
-        if (t.what === 'bought') return { text: `Bought ${what} for ${t.gold}G.`, key: true }
-        return { text: `${what} came back.`, key: true }
+        // Grill 1.16's table has the sale only; purchases and returns print nothing.
+        return t.what === 'sold' ? { text: `Sold ${what} for ${t.gold}G.`, key: true } : null
       }
       case 'rewarded': {
         const goods = e.goods
@@ -170,6 +185,23 @@ export class MessageLog {
             ? length(l.text)
             : Math.min(length(l.text), Math.floor((now - l.at) / l.charMs)),
       }))
+  }
+
+  private remember(id: string, k: Known): void {
+    this.known.delete(id)
+    this.known.set(id, k)
+    if (this.known.size > KNOWN_KEEP) {
+      const oldest = this.known.keys().next().value
+      if (oldest !== undefined) this.known.delete(oldest)
+    }
+  }
+
+  /** The newest line shown by `now` while it is still typing, and how much of it shows. */
+  typing(now: number, motion: Settings['motion']): (LogLine & { revealed: number }) | null {
+    if (motion === 'still') return null
+    const line = this.lines.filter((l) => l.at <= now).at(-1)
+    if (!line || typed(line) <= now) return null
+    return { ...line, revealed: Math.floor((now - line.at) / line.charMs) }
   }
 
   /** A line is waiting, or still typing. */

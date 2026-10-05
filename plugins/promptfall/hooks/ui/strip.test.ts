@@ -2,9 +2,9 @@ import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
 import { glyph } from '../windows/glyphs'
-import type { Line, Scene, Win } from '../windows/kit'
+import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
-import { type StripInput, stripScene, wrap } from './strip'
+import { type StripInput, stripScene, stripTracks, wrap } from './strip'
 
 const win = (scene: Scene, key: string) => scene.windows.find((w) => w.key === key) as Win
 const lineText = (l: Line | undefined) =>
@@ -122,4 +122,26 @@ test('every character a strip scene holds has a glyph, on every tab and with a n
           expect(glyph(ch) !== null, `${name} ${tab} ${JSON.stringify(ch)}`).toBe(true)
     }
   }
+})
+
+test('desktop tracks: the line typing at render goes on from where it is; a notice or motion still types nothing', () => {
+  const input = strip('strip-rest')
+  const lines = (i: StripInput) =>
+    stripTracks(i, 3000).find((t): t is Extract<Track, { kind: 'lines' }> => t.kind === 'lines')
+  const first = lines(input)?.frames[0]
+  expect(first?.at).toBe(0)
+  expect(first?.typing?.from ?? 0).toBeGreaterThan(1)
+  for (const i of [
+    { ...input, notice: 'Promptfall resynced' },
+    { ...input, motion: 'still' as const },
+  ])
+    expect(lines(i)?.frames.every((f) => f.typing === undefined) ?? true).toBe(true)
+})
+
+test('a hero-joined loot line drops the glyph the font lacks', () => {
+  const input = strip('strip-loot')
+  const view = { ...input.view, loot: [{ text: '♞ Aldric joined (rare)', rarity: 'rare' }] }
+  const { scene } = stripScene({ ...input, view })
+  const message = win(scene, 'message')
+  expect(lineText(message.lines[1]).trim()).toBe('Aldric joined (rare)')
 })

@@ -109,7 +109,7 @@ test('reveal 3 on "Hello" draws exactly three glyphs', () => {
 })
 
 test('a character the font lacks draws as ?; the cursor draws ▶', () => {
-  const f = windowFrame(win({ lines: [{ spans: [{ cursor: true }, { text: 'é' }] }] }))
+  const f = windowFrame(win({ lines: [{ spans: [{ cursor: true }, { text: '♞' }] }] }))
   expect(cellRows(f, 1, 1, TEXT_RGB)).toEqual([...(glyph('▶') as Uint8Array)])
   expect(cellRows(f, 2, 1, TEXT_RGB)).toEqual([...(glyph('?') as Uint8Array)])
 })

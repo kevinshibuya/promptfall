@@ -123,3 +123,43 @@ test('smil false emits no animation at all', () => {
   expect(svg).not.toContain('<animate')
   expect(svg).not.toContain('<set')
 })
+
+test('a cursor off at render time still lights on its track', () => {
+  const line: Line = { spans: [{ cursor: false }, { text: 'A' }] }
+  const track: Track = {
+    kind: 'cursor',
+    window: 'w',
+    line: 0,
+    span: 0,
+    on: [{ from: 500, until: 900 }],
+  }
+  const svg = sceneSvg(
+    { columns: 10, rows: 3, windows: [win({ lines: [line] })], alt: '' },
+    [track],
+    opts,
+  )
+  expect(svg).toContain(
+    'visibility="hidden"><set attributeName="visibility" to="visible" begin="500ms" end="900ms"/>',
+  )
+  // Without a track an off cursor draws nothing.
+  const still = sceneSvg(
+    { columns: 10, rows: 3, windows: [win({ lines: [line] })], alt: '' },
+    [],
+    opts,
+  )
+  expect(still).not.toContain('<set')
+})
+
+test('a typing frame can start part-way: its clip opens at the cells already shown', () => {
+  const frames = [
+    { at: 0, lines: [{ spans: [{ text: 'Hit it!' }] }], typing: { line: 0, charMs: 10, from: 3 } },
+  ]
+  const svg = sceneSvg(
+    { columns: 10, rows: 3, windows: [win()], alt: '' },
+    [{ kind: 'lines', window: 'w', frames }],
+    opts,
+  )
+  expect(svg).toContain(
+    'width="24" height="16"><animate attributeName="width" values="24;32;40;48;56"',
+  )
+})

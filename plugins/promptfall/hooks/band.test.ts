@@ -2,7 +2,7 @@ import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
-import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
+import { boss, turnBoss, wave } from './stage/fixtures'
 import {
   DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
@@ -12,7 +12,7 @@ import {
   SVG_INTERACTIVE,
 } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
-import { bossSegment, worldRows } from './ui/band'
+import { shownBoss, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
@@ -451,7 +451,7 @@ function bossWorld(
   }
 }
 
-test('the boss line and the status segment read the snapshot, less what this party dealt since', async ($, on) => {
+test('the world boss reads the snapshot, less what this party dealt since', async ($, on) => {
   const { states } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const plain = states.get('view') as GameView
@@ -462,18 +462,16 @@ test('the boss line and the status segment read the snapshot, less what this par
   const now = 1_000_000
   // The view's tally equals the committed one: the server's HP as it is.
   const even = bossWorld(BOSS, { bossId: 'wb1', dealt: 0 })
-  expect(bossSegment(view(0), even, now)).toBe('boss 62% · 11m')
   expect(worldRows(view(0), even, now)[1]?.text).toBe(
     'World boss The Promptwyrm █████░░░ 62% · 11m left · you 0',
   )
   // 300 dealt locally past the committed 200: 5,900 shown.
   const ahead = bossWorld(BOSS, { bossId: 'wb1', dealt: 200 })
-  expect(bossSegment(view(500), ahead, now)).toBe('boss 59% · 11m')
+  expect(shownBoss(view(500), ahead)?.shownHp).toBe(5_900)
   // A secondary has no committed reading: nothing is subtracted.
-  expect(bossSegment(view(500), bossWorld(BOSS, null), now)).toBe('boss 62% · 11m')
-  // Down: no segment, and the World row says so.
+  expect(shownBoss(view(500), bossWorld(BOSS, null))?.shownHp).toBe(6_200)
+  // Down: the World row says so.
   const down = bossWorld({ ...BOSS, hp: 0 }, null)
-  expect(bossSegment(view(500), down, now)).toBeNull()
   expect(worldRows(view(500), down, now)[1]?.text).toBe('The Promptwyrm is down · you 500')
 })
 

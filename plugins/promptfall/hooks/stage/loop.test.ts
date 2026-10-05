@@ -318,21 +318,33 @@ function extras() {
   return { world: WORLD_DEFAULT, notice: null, gauges: new GaugeTrack(), log: new MessageLog() }
 }
 
-test('the image strip takes its first frame as drawn, then blits only the window that changed', async () => {
+test('the image strip blits each window on the first frame, then only the window that changed', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.state.strip = extras()
   h.loop.mount(site('image'))
+  await clock.advance(EVENT_FRAME_MS + 1)
+  const first = h.blits.filter((b) => b.key.startsWith('win-')).map((b) => b.key)
+  expect(first.sort()).toEqual([
+    'win-enemy-25x5',
+    'win-message-40x5',
+    'win-party-42x5',
+    'win-purse-13x5',
+  ])
+  const before = h.blits.length
   await clock.advance(IDLE_FRAME_MS * 2)
-  // The render drew the strip: nothing changed since, so no window blits.
-  expect(h.blits.filter((b) => b.key.startsWith('win-'))).toHaveLength(0)
+  expect(h.blits.slice(before).filter((b) => b.key.startsWith('win-'))).toHaveLength(0)
   const v = wave()
   v.gold = 1240
   h.state.view = v
+  const mid = h.blits.length
   await clock.advance(IDLE_FRAME_MS * 2)
-  expect(h.blits.filter((b) => b.key.startsWith('win-')).map((b) => b.key)).toEqual([
-    'win-purse-13x5',
-  ])
+  expect(
+    h.blits
+      .slice(mid)
+      .filter((b) => b.key.startsWith('win-'))
+      .map((b) => b.key),
+  ).toEqual(['win-purse-13x5'])
 })
 
 test('the raster strip blits one strip Raster when it changes', async () => {

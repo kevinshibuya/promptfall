@@ -18,13 +18,6 @@ function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
   return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
 }
 
-/** The status row's boss segment while the boss is live: `boss 62% · 11m`. */
-export function bossSegment(view: GameView, world: WorldState, now: number): string | null {
-  const shown = shownBoss(view, world)
-  if (!shown || shown.boss.hp <= 0) return null
-  return `boss ${pctOf(shown)}% · ${remainingOf(shown, world, now)}`
-}
-
 /** The World tab's three rows: who is around, the account's records or the boss, the chat ticker. */
 export function worldRows(
   view: GameView,

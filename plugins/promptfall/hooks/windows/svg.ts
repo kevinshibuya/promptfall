@@ -100,6 +100,18 @@ function drawLine(
 ): string {
   const out: string[] = []
   const text: string[] = []
+  // A cursor off at render time may still have a track: it shows hidden, and the track lights it.
+  if (opts.line !== undefined && opts.anim) {
+    let cell = 0
+    for (const [i, span] of spans.entries()) {
+      const t = 'cursor' in span && !span.cursor ? opts.anim.cursor(opts.line, i) : undefined
+      if (t && cell < width)
+        out.push(
+          g.use('▶', x0 + cell * CELL_W, y0, BORDER_RGB, 'visibility="hidden"', cursorAnim(t)),
+        )
+      cell += spanCells(span)
+    }
+  }
   for (const p of placeLine(spans, width, opts.reveal)) {
     const x = x0 + p.x * CELL_W
     if (p.kind === 'text') {
@@ -253,9 +265,13 @@ export function sceneSvg(
             const n = line ? line.spans.reduce((k, s) => k + spanCells(s), 0) : 0
             const x = (win.x + 1) * CELL_W
             const y = (fr.typing.line + 1) * CELL_H
-            const steps = Array.from({ length: n + 1 }, (_, k) => k * CELL_W).join(';')
+            // A line already typing at render time continues from the cells it shows.
+            const from = Math.min(n, fr.typing.from ?? 0)
+            const steps = Array.from({ length: n - from + 1 }, (_, k) => (from + k) * CELL_W).join(
+              ';',
+            )
             clips.push(
-              `<clipPath id="${id}"><rect x="${x}" y="${y}" width="0" height="${CELL_H}"><animate attributeName="width" values="${steps}" calcMode="discrete" begin="${ms(fr.at)}" dur="${ms(Math.max(1, n) * fr.typing.charMs)}" fill="freeze"/></rect></clipPath>`,
+              `<clipPath id="${id}"><rect x="${x}" y="${y}" width="${from * CELL_W}" height="${CELL_H}"><animate attributeName="width" values="${steps}" calcMode="discrete" begin="${ms(fr.at)}" dur="${ms(Math.max(1, n - from) * fr.typing.charMs)}" fill="freeze"/></rect></clipPath>`,
             )
             typing = { line: fr.typing.line, clip: id }
           }

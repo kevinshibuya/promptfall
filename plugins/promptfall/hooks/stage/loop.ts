@@ -118,8 +118,6 @@ export class StageLoop {
   private fresh = false
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
-  /** The render hook drew the strip too: the first frame takes it as drawn and blits nothing. */
-  private freshStrip = false
 
   constructor(
     private readonly io: LoopIo,
@@ -143,8 +141,9 @@ export class StageLoop {
       this.stopped = false
       this.fresh = true
       this.wasBusy = false
+      // The first frame blits the strip too: the engine sends nothing for a source it already
+      // drew, and a change between the render and this frame still lands.
       this.sent.clear()
-      this.freshStrip = true
       this.arm(EVENT_FRAME_MS)
       return
     }
@@ -227,7 +226,10 @@ export class StageLoop {
     }
     const extras = await this.io.strip()
     if (gen !== this.gen) return null
-    const busy = this.timeline.isBusy(now) || (extras?.log.isBusy(now, settings.motion) ?? false)
+    // On Loot and World neither the stage nor the log shows: only the gauges set the pace.
+    const busy =
+      site.strip.kind !== 'bare' &&
+      (this.timeline.isBusy(now) || (extras?.log.isBusy(now, settings.motion) ?? false))
     const filling = extras?.gauges.isFilling(view, now) ?? false
     if (site.renderer === 'svg') {
       // The desktop's fallback without SMIL: redraws while a motion is live, nothing at rest.
@@ -283,13 +285,10 @@ export class StageLoop {
         gauges: extras.gauges,
         log: extras.log,
       })
-      const drawn = this.freshStrip
-      this.freshStrip = false
       const sends: UiBlitArgs[] = []
       if (site.renderer === 'raster') {
         const cells = sceneCells(scene)
-        if (drawn) this.sent.set('strip', cells)
-        else if (this.sent.get('strip') !== cells) {
+        if (this.sent.get('strip') !== cells) {
           this.sent.set('strip', cells)
           sends.push({
             requestId: site.requestId,
@@ -305,7 +304,6 @@ export class StageLoop {
           const json = JSON.stringify(win)
           if (this.sent.get(key) === json) continue
           this.sent.set(key, json)
-          if (drawn) continue
           const source = encodeImage(windowFrame(win), WINDOW_SCALE)
           sends.push({
             requestId: site.requestId,

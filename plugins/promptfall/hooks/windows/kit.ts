@@ -59,7 +59,8 @@ export type Track =
       frames: readonly {
         at: number
         lines: readonly Line[]
-        typing?: { line: number; charMs: number }
+        /** The line typing through this frame; `from` cells already show at its start. */
+        typing?: { line: number; charMs: number; from?: number }
       }[]
     }
   | {
@@ -130,9 +131,19 @@ export function barPixels(cells: number, fill: number): number {
   return Math.round((cells * CELL_W * clampFill(fill)) / 10000)
 }
 
-/** The glyph for a character, `?` when the font lacks it, blank for a space. */
+/**
+ * The character the font draws for `ch`: itself, else its base letter (é as e; the font has no
+ * accented letters), else `?`.
+ */
+export function drawable(ch: string): string {
+  if (ch === ' ' || glyph(ch)) return ch
+  const base = ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  return base.length === 1 && glyph(base) ? base : '?'
+}
+
+/** The glyph for a character, through `drawable`; blank for a space. */
 export function glyphFor(ch: string): Uint8Array {
-  return glyph(ch) ?? (glyph('?') as Uint8Array)
+  return glyph(drawable(ch)) as Uint8Array
 }
 
 /** What a window pixel is: outside the window, field, or white line. */

@@ -3,19 +3,13 @@
 // bg, each a little-endian u32; CLEAR is the terminal's own colour.
 import { encode } from '../sprites/base64'
 import { CLEAR } from '../stage/raster'
-import { glyph } from './glyphs'
-import { chars, placeLine, type Scene, type Span, spanCells, type Win } from './kit'
+import { chars, drawable, placeLine, type Scene, type Span, spanCells, type Win } from './kit'
 import { BAR_BACK_RGB, BORDER_RGB, FIELD_RGB } from './tuning'
 
 const BOX = { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' }
 const BAR = '▬'
 
 type Cell = { ch: string; fg: number; bg: number }
-
-/** The character a cell shows: the font's set, `?` for anything it lacks. */
-function shown(ch: string): string {
-  return ch === ' ' || glyph(ch) ? ch : '?'
-}
 
 function lay(
   grid: Cell[][],
@@ -32,7 +26,7 @@ function lay(
     if (p.kind === 'text') {
       for (const [i, ch] of chars(p.text).entries()) {
         const cell = row[x + i]
-        if (cell) Object.assign(cell, { ch: shown(ch), fg: p.rgb })
+        if (cell) Object.assign(cell, { ch: drawable(ch), fg: p.rgb })
       }
     } else if (p.kind === 'cursor') {
       const cell = row[x]

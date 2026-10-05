@@ -55,9 +55,9 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
 
 export { type ShownBoss, shownBoss } from './boss'
 
-import { bossSegment, worldRows } from './world-rows'
+import { worldRows } from './world-rows'
 
-export { bossSegment, worldRows }
+export { worldRows }
 
 /** One transparent pixel: what the probe's Image draws first. */
 const PROBE_A = { rgba: encode(Uint8Array.of(0, 0, 0, 0)), width: 1, height: 1 }
@@ -362,8 +362,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       loop?.mount(null)
     }
 
+    // On the desktop a row would leave the strip's frame at its default 300 points, as the stage's.
     const stripRow = (
-      <Box key="row-strip" flexDirection="row">
+      <Box key="row-strip" flexDirection={terminal ? 'row' : 'column'}>
         {strip}
         {probe}
         {terminal ? hidden : null}

@@ -50,7 +50,7 @@ test('a bar at 5000 over 4 cells gives two filled ▬ and two empty', () => {
 
 test('text, the cursor, reveal and the ? fallback', () => {
   const g = cells(
-    scene(win({ lines: [{ spans: [{ cursor: true }, { text: 'Hé!' }], reveal: 2 }] })),
+    scene(win({ lines: [{ spans: [{ cursor: true }, { text: 'H♞!' }], reveal: 2 }] })),
   )
   expect(text(g[1]).slice(1, 5)).toBe('▶H? ')
 })
@@ -64,4 +64,9 @@ test('two windows side by side keep their own frames', () => {
   })
   expect(text(g[0])).toBe('╭──╮╭──╮')
   expect(text(g[2])).toBe('╰──╯╰──╯')
+})
+
+test('an accented letter draws as its base letter, a symbol the font lacks as ?', () => {
+  const g = cells(scene(win({ lines: [{ spans: [{ text: 'Zoé♞' }] }] })))
+  expect(text(g[1]).slice(1, 5)).toBe('Zoe?')
 })
