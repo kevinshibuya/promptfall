@@ -154,10 +154,10 @@ test('an id that comes back as another enemy is a new actor: the world boss is n
   // ticks, the boss can take the id the predicted slime had.
   const t = new StageTimeline()
   const slime = wave()
-  slime.enemies = [{ ...slime.enemies[2]!, id: 'e25' }]
+  slime.enemies = slime.enemies.slice(2, 3).map((e) => ({ ...e, id: 'e25' }))
   t.observe(slime, 1_000)
   const engaged = worldBoss()
-  engaged.enemies = [{ ...engaged.enemies[0]!, id: 'e25' }]
+  engaged.enemies = engaged.enemies.slice(0, 1).map((e) => ({ ...e, id: 'e25' }))
   t.observe(engaged, 2_000)
   const known = t.known().find((k) => k.id === 'e25')
   expect(known?.spriteId).toBe('world_boss:the_promptwyrm')

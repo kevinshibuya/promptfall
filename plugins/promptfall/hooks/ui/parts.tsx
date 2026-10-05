@@ -77,10 +77,10 @@ export function PartyLine(
   })
   // Wrapped, the enemy segment is as wide as it needs, up to a row of its own.
   const room = wrap ? width : Math.max(0, width - (HERO_SEGMENT * 3 + SEPARATOR.length * 3))
-  const fit = (text: string) => (wrap ? clip(text, room) : padStart(clip(text, room), room))
+  const fitted = (text: string) => (wrap ? clip(text, room) : padStart(clip(text, room), room))
   let enemy = (
     <Text key="enemy" wrap="truncate">
-      {room > 0 ? fit(frontEnemy(view)) : ''}
+      {room > 0 ? fitted(frontEnemy(view)) : ''}
     </Text>
   )
   if (view.boss) {
@@ -105,14 +105,14 @@ export function PartyLine(
     } else if (shown?.engaged) {
       enemy = (
         <Text key="enemy" wrap="truncate">
-          {fit(`⚔${hp}`)}
+          {fitted(`⚔${hp}`)}
         </Text>
       )
     } else {
       const text = `${name}you ${formatCount(view.boss.dealt)}`
       enemy = (
         <Text key="enemy" wrap="truncate">
-          {fit(text)}
+          {fitted(text)}
         </Text>
       )
     }
