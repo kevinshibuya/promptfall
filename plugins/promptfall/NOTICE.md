@@ -36,3 +36,18 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Misaki font
+
+The window band's text is drawn from glyph bitmaps derived from Misaki Gothic 2nd
+(美咲ゴシック第2), by Num Kadoma (`hooks/windows/glyphs.ts`, built by `scripts/font.ts` from
+`art/fonts/misaki_gothic_2nd.ttf`). The plugin ships the bitmaps, not the font file.
+
+```
+Copyright(C) 2002-2021 Num Kadoma
+
+These fonts are free softwares.
+Unlimited permission is granted to use, copy, and distribute it, with or without modification,
+either commercially and noncommercially.
+THESE FONTS ARE PROVIDED "AS IS" WITHOUT WARRANTY.
+```

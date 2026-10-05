@@ -4,8 +4,7 @@
 export const STAGE_REST_ROWS = 8
 export const STAGE_TURN_BOSS_ROWS = 12
 export const STAGE_BOSS_ROWS = 17
-export const STAGE_TEXT_ROWS = 2
-export const COMPACT_ROWS = 4
+export const COMPACT_STAGE_ROWS = 4
 export const COMPACT_STAGE_COLUMNS = 52
 export const FULL_MIN_COLUMNS = 116
 export const MIN_COLUMNS = 100
@@ -56,11 +55,6 @@ export const DESKTOP_LIST_SPRITE_COLUMNS = 2
 /** The desktop's points per band column and per text row (live check and pass, 2026-10-04). */
 export const DESKTOP_COLUMN_PX = 8
 export const DESKTOP_ROW_PX = 19
-/**
- * The desktop band's text rows under the stage: the party line, which wraps to two rows when the
- * enemy segment does not fit, and the status row. The desktop scrolls a band past `maxRows` rows.
- */
-export const DESKTOP_TEXT_ROWS = 3
 /**
  * The start of the deny a blit answers where the terminal draws no pictures; only it settles the
  * probe on raster. The engine appends the cause in parentheses, which varies by terminal

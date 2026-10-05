@@ -5,7 +5,7 @@ import { GLYPH_HEIGHT, textWidth } from './font'
 import { lungeOffset, type StageActor, type StageModel } from './model'
 import { bobbingAt, type Motion } from './timeline'
 import {
-  COMPACT_ROWS,
+  COMPACT_STAGE_ROWS,
   DROP_RISE_PX,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
@@ -58,7 +58,7 @@ export function renderSvg(
 ): string {
   const W = model.box.columns
   const H = model.box.rows * 2
-  const compact = model.box.rows <= COMPACT_ROWS
+  const compact = model.box.rows <= COMPACT_STAGE_ROWS
   const live = motions.filter((m) => m.until > opts.now)
   const ids = new Map<SpriteArt, string>()
   const defs: string[] = []

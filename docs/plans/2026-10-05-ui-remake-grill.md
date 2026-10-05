@@ -148,6 +148,66 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
   at a time (1.13's skipping rule may go), the gauge's fill rate and how "full" shows in time,
   and the order the stage plays events in.
 
+### 1.16 Planning gaps (round 4, while planning UI PR 1, recommended, accepted)
+
+Raised by the UI PR 1 planner on 2026-10-05 (Opus 5.5, Fable still out); Kevin took every
+recommendation.
+
+- Zone, wave, gold and tactics: "Zone 3 · Wave 2" is the enemy window's title. A small window at
+  the strip's right end holds gold ("1,240G") and tactics ("Push on" or "Farm here", `f`
+  toggles). The zone name leaves the band (it stays in the alt, the World tab and the "Zone 3
+  cleared!" line).
+- The status tail: a notice is a message window line, shown at once, never typed. Boss % and time
+  left sit on the boss's line in the enemy window (1.7). The last drop is a log line and the Loot
+  tab. Nothing else carries the tail.
+- Loot and World tabs: no stage. The band is the strip alone; the message window shows the last
+  two drops or the World lines (online in your zone, then the chat ticker or your records). The
+  other windows stay.
+- Compact (100-115 columns, or short) grows from 4 to 6 rows: the 52-column stage centred
+  vertically, beside one party window whose top border carries "Z3 · W2 · 1,240G", then three
+  hero rows (`Aldric L4 H 42 ▬▬ ▰▰▱`, ▶ on the acting hero), a front enemy row, and the command
+  line `▶Party Loot World ▾` in its bottom border. No message window and no log in compact. Under
+  4 rows of height the band collapses to one line.
+- A Black Mage action is one line: "Morwen hits 3 foes for 8, 9 and 7." Kills follow on their own
+  lines.
+- The log's words: "Aldric hits Wood Goblin for 12." / "Wood Goblin hits Aldric for 5.";
+  "Lyra heals Aldric for 14."; "Wood Goblin is defeated!"; "Found a Silk Robe!"; "Found a Rusty
+  Sword, sold for 3G."; "Morwen reached level 5!"; "Aldric falls!"; "Grave Lord appears!";
+  "Zone 3 cleared!"; "The party retreats to zone 2."; "Sold Silk Robe for 120G."; "Boss reward:
+  50G." Gold, wave_cleared and the other effects print nothing.
+- Pacing: 1.13's skip rule stays as a safety valve only (hit lines dropped when the queue falls
+  more than a tick behind; never kills, drops, level-ups, deaths or sales); typing speeds up while
+  two or more lines wait. This settles the node 1.15 moved to the combat grill.
+- Tab hotkeys need Buttons on screen. The spike picks the first rung that works: (a) plain
+  Buttons positioned over the command line in the picture; (b) a 3-cell column of Buttons at the
+  strip's right edge; (c) one text row of Buttons under the strip (band +1 row).
+- Planner's calls, cheap to change: a window cell is 8 x 16 picture pixels (DotGothic16's Latin
+  glyphs), the spike checks sharpness; the desktop strip is a second `Svg` under the stage,
+  gauges animate with SMIL and typing is a stepped clip; gauges fill smoothly by replaying
+  `gaugePerStep` from the timeline's action starts, snapping to the view's value when the tick's
+  playback ends.
+
+### 1.17 Plan review rulings (2026-10-05, on Opus, Fable out)
+
+Made in the UI PR 1 plan's fix pass, inline on Opus because `reasoner` needs Fable; Kevin can
+overturn either.
+
+- Compact collapses under 6 rows, not 4. 1.16's "under 4 rows" carried today's threshold over,
+  but a 6-row compact band cannot fit a 4 or 5 row terminal; the band never draws taller than the
+  terminal shows. On Loot and World (5 rows) the band collapses under 5.
+- The world boss's time left sits in the enemy window's title ("World boss · 11m"), not on the
+  boss's line (1.16): the line's 21 cells hold the name, the bar and the percentage, and no more.
+
+### 1.18 The font (Kevin, during UI PR 1's transcription)
+
+- The windows bake **Misaki Gothic 2nd** (美咲ゴシック第2, Num Kadoma; free to use, modify and
+  redistribute), its full-width Latin forms at 8 px, each 8 x 8 glyph placed in the 8 x 16 cell
+  from row 5, as Dragon Quest V places its type. This replaces 1.5's DotGothic16: measured
+  against the references, DQ V's type has 7 px caps, 1 px strokes and a 16 px line (9 px of
+  leading); DotGothic16 has 13 px caps and a 24 px line, so in a 16 px row it leaves no leading
+  and clips descenders. Accepted cost: lowercase reads letter-spaced (narrow glyphs on an 8 px
+  advance).
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+

@@ -1,11 +1,18 @@
-// The frame loop: one timer per surface, re-armed each tick, blitting the mounted stage. The
-// render hook mounts the site and draws the first frame; every frame after it is a blit here.
+// The frame loop: one timer per surface, re-armed each tick, blitting the mounted stage and its
+// window strip. The render hook mounts the site and draws the first frame; every frame after it
+// is a blit here.
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
-import type { GameView, Settings } from '../../types'
+import type { BandTab, GameView, Settings, WorldState } from '../../types'
+import { stripScene } from '../ui/strip'
+import { windowFrame, windowKey } from '../windows/image'
+import { sceneCells } from '../windows/raster'
+import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame } from './compose'
+import type { GaugeTrack } from './gauges'
 import { encodeImage } from './image'
 import { type Layout, layoutFor, sameLayout } from './layout'
+import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
@@ -13,9 +20,11 @@ import { EVENT_FRAME_MS, IDLE_FRAME_MS, IMAGE_SCALE, SVG_FALLBACK_FRAME_MS } fro
 
 export type StageSite = {
   requestId: string
-  /** The element's key: `stage` for the Raster, `stageKey(box)` for the Image. */
+  /** The element's key: `stage` for the Raster, `stageKey(box)` for the Image; '' with no stage. */
   key: string
   layout: Layout
+  /** The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row. */
+  strip: { kind: 'full' | 'compact' | 'bare'; columns: number; tab: BandTab; extra: 0 | 1 }
   renderer: 'raster' | 'image' | 'svg'
   /** The band's props the layout came from, so a tick can tell when it no longer holds. */
   props: { bodyColumns: number; maxRows: number }
@@ -30,6 +39,13 @@ export type LoopIo = {
   invalidate: () => void
   view: () => Promise<GameView | null>
   settings: () => Promise<Settings>
+  /** What the strip reads besides the view; null draws no strip. */
+  strip: () => Promise<{
+    world: WorldState
+    notice: string | null
+    gauges: GaugeTrack
+    log: MessageLog
+  } | null>
 }
 
 /**
@@ -58,6 +74,10 @@ function same(a: StageSite, b: StageSite): boolean {
     a.key === b.key &&
     a.renderer === b.renderer &&
     sameLayout(a.layout, b.layout) &&
+    a.strip.kind === b.strip.kind &&
+    a.strip.columns === b.strip.columns &&
+    a.strip.tab === b.strip.tab &&
+    a.strip.extra === b.strip.extra &&
     a.props.bodyColumns === b.props.bodyColumns &&
     a.props.maxRows === b.props.maxRows &&
     a.surface === b.surface
@@ -96,6 +116,8 @@ export class StageLoop {
   private lastActors = ''
   /** The render hook drew this site's first frame: the first tick takes its actors as drawn. */
   private fresh = false
+  /** What each strip element last got: a window's model as JSON, or the raster's cells. */
+  private sent = new Map<string, string>()
 
   constructor(
     private readonly io: LoopIo,
@@ -119,6 +141,9 @@ export class StageLoop {
       this.stopped = false
       this.fresh = true
       this.wasBusy = false
+      // The first frame blits the strip too: the engine sends nothing for a source it already
+      // drew, and a change between the render and this frame still lands.
+      this.sent.clear()
       this.arm(EVENT_FRAME_MS)
       return
     }
@@ -189,47 +214,117 @@ export class StageLoop {
     if (gen !== this.gen || site === null || view === null) return null
 
     this.timeline.observe(view, now)
-    const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface)
+    const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
+      tab: site.strip.tab,
+      extra: site.strip.extra,
+    })
     if (!sameLayout(site.layout, layout)) {
       // Grow or shrink is a redraw: the next render mounts the new site.
       this.stopped = true
       this.io.invalidate()
       return null
     }
-    const busy = this.timeline.isBusy(now)
+    const extras = await this.io.strip()
+    if (gen !== this.gen) return null
+    // On Loot and World neither the stage nor the log shows: only the gauges set the pace.
+    const busy =
+      site.strip.kind !== 'bare' &&
+      (this.timeline.isBusy(now) || (extras?.log.isBusy(now, settings.motion) ?? false))
+    const filling = extras?.gauges.isFilling(view, now) ?? false
     if (site.renderer === 'svg') {
       // The desktop's fallback without SMIL: redraws while a motion is live, nothing at rest.
       if (busy) this.io.invalidate()
       return busy ? SVG_FALLBACK_FRAME_MS : IDLE_FRAME_MS
     }
 
-    const actors = [
-      ...this.timeline.known().map((k) => k.id),
-      ...view.heroes.map((h) => `${h.id}:${h.alive}`),
-    ].join(',')
-    if (this.fresh) {
-      this.fresh = false
-      this.lastActors = actors
-    }
-    const settled = settings.motion === 'still' && !busy
-    const skip = settled && !this.wasBusy && actors === this.lastActors
-    this.wasBusy = busy
-    if (skip) return restDelay(now)
-
-    const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
     const box = layout.box
-    if (!box) return null
-    const at = { requestId: site.requestId, key: site.key, columns: box.columns, rows: box.rows }
-    const result = await this.io.blit(
-      'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },
-    )
-    this.blitCount += 1
-    this.lastActors = actors
-    if (gen !== this.gen) return null
-    if (result.deny !== undefined) {
-      this.stopped = true
-      return null
+    if (box) {
+      const actors = [
+        ...this.timeline.known().map((k) => k.id),
+        ...view.heroes.map((h) => `${h.id}:${h.alive}`),
+      ].join(',')
+      if (this.fresh) {
+        this.fresh = false
+        this.lastActors = actors
+      }
+      const settled = settings.motion === 'still' && !this.timeline.isBusy(now)
+      const skip = settled && !this.wasBusy && actors === this.lastActors
+      this.wasBusy = this.timeline.isBusy(now)
+      if (!skip) {
+        const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+        const at = {
+          requestId: site.requestId,
+          key: site.key,
+          columns: box.columns,
+          rows: box.rows,
+        }
+        const result = await this.io.blit(
+          'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },
+        )
+        this.blitCount += 1
+        this.lastActors = actors
+        if (gen !== this.gen) return null
+        if (result.deny !== undefined) {
+          this.stopped = true
+          return null
+        }
+      }
     }
-    return busy ? EVENT_FRAME_MS : restDelay(now)
+
+    if (extras) {
+      const { scene } = stripScene({
+        view,
+        world: extras.world,
+        tab: site.strip.tab,
+        kind: site.strip.kind,
+        columns: site.strip.columns,
+        now,
+        notice: extras.notice,
+        motion: settings.motion,
+        timeline: this.timeline,
+        gauges: extras.gauges,
+        log: extras.log,
+      })
+      const sends: UiBlitArgs[] = []
+      if (site.renderer === 'raster') {
+        const cells = sceneCells(scene)
+        if (this.sent.get('strip') !== cells) {
+          this.sent.set('strip', cells)
+          sends.push({
+            requestId: site.requestId,
+            key: 'strip',
+            columns: scene.columns,
+            rows: scene.rows,
+            cells,
+          })
+        }
+      } else {
+        for (const win of scene.windows) {
+          const key = windowKey(win)
+          const json = JSON.stringify(win)
+          if (this.sent.get(key) === json) continue
+          this.sent.set(key, json)
+          const source = encodeImage(windowFrame(win), WINDOW_SCALE)
+          sends.push({
+            requestId: site.requestId,
+            key,
+            columns: win.columns,
+            rows: win.rows,
+            source,
+          })
+        }
+      }
+      for (const args of sends) {
+        const result = await this.io.blit(args)
+        this.blitCount += 1
+        if (gen !== this.gen) return null
+        if (result.deny !== undefined) {
+          this.stopped = true
+          return null
+        }
+      }
+    }
+    if (busy) return EVENT_FRAME_MS
+    return filling ? Math.min(GAUGE_FRAME_MS, restDelay(now)) : restDelay(now)
   }
 }

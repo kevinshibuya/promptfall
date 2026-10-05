@@ -1,11 +1,18 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
-import type { GameView } from '../../types'
+import type { GameView, WorldState } from '../../types'
+import { type StripInput, stripScene, stripTracks } from '../ui/strip'
 import type { Effect } from '../vendor/sim.js'
-import { composeFrame } from './compose'
-import { boss, empty, wave } from './fixtures'
+import { windowFrame } from '../windows/image'
+import { sceneCells } from '../windows/raster'
+import { sceneSvg } from '../windows/svg'
+import { CELL_H, CELL_W, WINDOW_SCALE } from '../windows/tuning'
+import { composeFrame, type Frame } from './compose'
+import { boss, empty, fallen, wave, worldBoss } from './fixtures'
+import { GaugeTrack } from './gauges'
 import { fnv1a64 } from './hash'
 import { encodeImage } from './image'
 import type { Box } from './layout'
+import { MessageLog } from './log'
 import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
 import { renderSvg } from './svg'
@@ -134,4 +141,164 @@ export function goldenOf(s: Staged): Golden {
 
 export function svgOf(s: Staged): string {
   return renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+}
+
+// The window strip's scenarios (UI PR 1, Task 8): the same fixtures, the band's strip under them.
+export const STRIP_SCENARIOS = [
+  'strip-rest',
+  'strip-boss',
+  'strip-world-boss',
+  'strip-low-hp',
+  'strip-compact',
+  'strip-loot',
+  'strip-world',
+  'strip-notice',
+] as const
+export type StripScenario = (typeof STRIP_SCENARIOS)[number]
+export type StripGolden = {
+  imageHash: string
+  cellsHash: string
+  svgHash: string
+  svgChars: number
+}
+
+const WORLD: WorldState = {
+  snapshot: {
+    serverNow: NOW,
+    speed: 1,
+    online: 13,
+    zones: [{ zone: 1, count: 13 }],
+    here: ['Bea', 'Kit'],
+    boss: null,
+    chat: [],
+    flags: { 'chat.enabled': true, 'presence.enabled': true },
+  },
+  fetchedAt: NOW,
+  stale: false,
+  messages: [{ id: 1, name: 'Kit', text: 'anyone farming zone 1?', at: NOW - 5000 }],
+  chatMark: 1,
+  clock: { serverNow: NOW, clientNow: NOW, speed: 1 },
+  committedDealt: null,
+}
+
+/** A view, a timeline that has seen it, and a log holding two settled lines and one typing. */
+function stripInput(
+  view: GameView,
+  patch: Partial<StripInput> = {},
+  effects: Effect[] = [
+    { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'h1', target: view.enemies[0]?.id ?? 'e1', amount: 12 },
+    { k: 'act', actor: view.enemies[0]?.id ?? 'e1', action: 'attack', at: 600 },
+    { k: 'hit', by: view.enemies[0]?.id ?? 'e1', target: 'h1', amount: 5 },
+    { k: 'act', actor: 'h2', action: 'attack', at: 1200 },
+    { k: 'hit', by: 'h2', target: view.enemies[0]?.id ?? 'e1', amount: 9 },
+  ],
+): StripInput {
+  const timeline = new StageTimeline()
+  const gauges = new GaugeTrack()
+  const log = new MessageLog()
+  const t0 = NOW - 1300
+  timeline.observe(view, t0 - 1)
+  const starts = timeline.onEffects(effects, t0, 2000)
+  timeline.observe(view, NOW)
+  log.onEffects(effects, starts, view, t0, 2000, timeline)
+  return {
+    view,
+    world: WORLD,
+    tab: 'party',
+    kind: 'full',
+    columns: 120,
+    now: NOW,
+    notice: null,
+    motion: 'full',
+    timeline,
+    gauges,
+    log,
+    ...patch,
+  }
+}
+
+export function strip(name: StripScenario): StripInput {
+  switch (name) {
+    case 'strip-rest':
+      return stripInput(wave())
+    case 'strip-boss':
+      return stripInput(boss())
+    case 'strip-world-boss': {
+      const v = worldBoss()
+      const world: WorldState = {
+        ...WORLD,
+        snapshot: {
+          ...(WORLD.snapshot as NonNullable<WorldState['snapshot']>),
+          boss: {
+            bossId: 'wb1',
+            name: 'The Promptwyrm',
+            glyph: 'W',
+            maxHp: 90000,
+            hp: 55800,
+            spawnedAt: NOW - 3_600_000,
+            endsAt: NOW + 660_000,
+            yours: 0,
+          },
+        },
+      }
+      return stripInput(v, { world })
+    }
+    case 'strip-low-hp': {
+      const v = fallen()
+      v.heroes = v.heroes.map((h) => (h.id === 'h1' ? { ...h, hp: 9 } : h))
+      return stripInput(v)
+    }
+    case 'strip-compact':
+      return stripInput(wave(), { kind: 'compact', columns: 110 })
+    case 'strip-loot': {
+      const v = wave()
+      v.loot = [
+        { text: '/ Iron Sword (epic)', rarity: 'epic' },
+        { text: '[ Silk Robe (rare)', rarity: 'rare' },
+      ]
+      return stripInput(v, { kind: 'bare', tab: 'loot' })
+    }
+    case 'strip-world':
+      return stripInput(wave(), { kind: 'bare', tab: 'world' })
+    case 'strip-notice':
+      return stripInput(wave(), {
+        kind: 'bare',
+        tab: 'loot',
+        notice: 'Promptfall: server unreachable, retrying',
+      })
+  }
+}
+
+/** Every window's picture, composed onto one canvas at its cells (transparent between). */
+export function stripPicture(input: StripInput): Frame {
+  const { scene } = stripScene(input)
+  const width = scene.columns * CELL_W
+  const height = scene.rows * CELL_H
+  const rgba = new Uint8ClampedArray(width * height * 4)
+  for (const win of scene.windows) {
+    const f = windowFrame(win)
+    for (let y = 0; y < f.height; y++) {
+      const from = y * f.width * 4
+      rgba.set(f.rgba.subarray(from, from + f.width * 4), (y * width + win.x * CELL_W) * 4)
+    }
+  }
+  return { width, height, rgba }
+}
+
+export function stripSvgOf(input: StripInput): string {
+  const { scene } = stripScene(input)
+  return sceneSvg(scene, stripTracks(input, 3000), { smil: true, width: scene.columns * CELL_W })
+}
+
+export function stripGoldenOf(input: StripInput): StripGolden {
+  const { scene } = stripScene(input)
+  const image = encodeImage(stripPicture(input), WINDOW_SCALE)
+  const svg = stripSvgOf(input)
+  return {
+    imageHash: fnv1a64(image.rgba),
+    cellsHash: fnv1a64(sceneCells(scene)),
+    svgHash: fnv1a64(svg),
+    svgChars: svg.length,
+  }
 }

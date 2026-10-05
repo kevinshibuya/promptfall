@@ -34,3 +34,9 @@ terminal shares that geometry, `Image` filling the same box crisp.
 - The Loot and World tabs keep 4 rows, so switching tabs changes the band's height.
 - Half-block cost sets the stage's width too: a 16 px sprite is 16 columns, three heroes
   and three monsters about 110, which is why the full stage needs about 116 columns.
+
+## Amended (2026-10-05, UI PR 1)
+
+The two text rows became the 5-row window strip (ADR 0005): the band is 13 rows at rest and up
+to 22 in a zone or world boss fight. The compact band is 6 rows (the 4-row stage beside one
+party window) and collapses under 6 rows; Loot and World are the strip alone, 5 rows.

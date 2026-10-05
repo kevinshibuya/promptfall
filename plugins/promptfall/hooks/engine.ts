@@ -1,4 +1,7 @@
 import type { PluginState, RenderSurface } from 'claude-code'
+import type { GameView } from '../types'
+import type { GaugeTrack } from './stage/gauges'
+import type { MessageLog } from './stage/log'
 import type { StageLoop } from './stage/loop'
 import type { StageTimeline } from './stage/timeline'
 import type {
@@ -47,8 +50,12 @@ export type EngineDeps = {
   newBatchId: () => string
   /** Writes atoms; a closure over the session's `$`. */
   publish: EnginePublish
-  /** `at`: the applied event's time; absent for effects a delivery brought. */
-  onEffects: (effects: Effect[], at?: number) => void
+  /**
+   * Every applied event, effects or none, and every restep that publishes or brings effects.
+   * `at`: the applied event's time, absent for a delivery; `view`: the view just published for it,
+   * so a listener needs no read of the async atom (null when the state has no view).
+   */
+  onEffects: (effects: Effect[], at: number | undefined, view: GameView | null) => void
   /** Shows a toast. Optional: tests leave it out. */
   toast?: (text: string) => void
   /** Runs `fn` once after `ms`: notices that clear themselves and outage retries. */
@@ -60,7 +67,12 @@ export type EngineDeps = {
 /** What the command and the dialog hold of a running game. */
 export type GameHandle = {
   /** The stage's timeline (one per session) and its frame loop per surface, made on first use. */
-  stage: { timeline: StageTimeline; loopFor: (surface: RenderSurface) => StageLoop }
+  stage: {
+    timeline: StageTimeline
+    gauges: GaugeTrack
+    log: MessageLog
+    loopFor: (surface: RenderSurface) => StageLoop
+  }
   apply: (event: PlayerEvent, at: number) => void
   canApply: () => boolean
   setOff: (off: boolean) => Promise<void>
@@ -229,8 +241,10 @@ export class GameEngine {
     const r = step(local, event)
     this.local = r.state
     this.buffer.push({ ...event, at: Math.floor(at) } as TimedEvent)
-    void this.publish({ view: this.view() })
-    if (r.effects.length > 0) this.deps.onEffects(r.effects, at)
+    const view = this.view()
+    void this.publish({ view })
+    // Every tick, effects or not: gauges fill on ticks where nobody acts.
+    this.deps.onEffects(r.effects, at, view)
   }
 
   /** Whether `apply` takes events now: not paused, and not past the outage's buffer window. */
@@ -398,8 +412,10 @@ export class GameEngine {
     }
     restep(this.buffer)
     this.local = s
-    if (publish) void this.publish({ view: this.view() })
-    if (effects.length > 0) this.deps.onEffects(effects)
+    if (!publish && effects.length === 0) return
+    const view = this.view()
+    if (publish) void this.publish({ view })
+    this.deps.onEffects(effects, undefined, view)
   }
 
   // ---------------------------------------------------------------------------

@@ -207,6 +207,7 @@ export function toGameView(
     heroes.push({
       id: hero.id,
       name: heroName(hero.template, hero.epithet),
+      shortName: content.heroTemplates[hero.template]?.name ?? hero.template,
       cls: hero.cls,
       glyph: content.heroTemplates[hero.template]?.glyph ?? '@',
       level: hero.level,
