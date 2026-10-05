@@ -180,15 +180,33 @@ describe('the battle loop', () => {
 
   it("an action's hits and heals are its actor's, up to the next act", () => {
     let s = createInitialState(11)
+    let sweeps = 0
     for (let i = 0; i < 400; i++) {
+      // A tool call every third tick puts several enemies on the field.
+      if (i % 3 === 0) s = step(s, { t: 'tool_call' }).state
+      const party = new Set(s.party)
       const r = step(s, { t: 'tick' })
       s = r.state
-      let actor: string | null = null
+      let act: Act | null = null
+      let targets: string[] = []
       for (const e of r.effects) {
-        if (e.k === 'act') actor = e.actor
-        if (e.k === 'hit' || e.k === 'heal') expect(e.by).toBe(actor)
+        if (e.k === 'act') {
+          act = e
+          targets = []
+        }
+        if (e.k === 'hit' || e.k === 'heal') expect(e.by).toBe(act?.actor)
+        // Heroes hit enemies and heal heroes; enemies hit heroes.
+        if (e.k === 'hit') expect(party.has(e.target)).toBe(!party.has(e.by))
+        if (e.k === 'heal') expect([party.has(e.by), party.has(e.target)]).toEqual([true, true])
+        if (e.k === 'hit' && act?.action === 'attack_all') {
+          // The black mage's sweep hits each enemy once.
+          expect(targets).not.toContain(e.target)
+          targets.push(e.target)
+          if (targets.length === 2) sweeps += 1
+        }
       }
     }
+    expect(sweeps).toBeGreaterThan(0)
   })
 
   it('a faster hero acts more often, but less than twice as often', () => {
@@ -336,6 +354,23 @@ describe('the battle loop', () => {
     expect(r.state.boss?.dealt).toBe((s.boss?.dealt ?? 0) + dealt)
     expect(r.state.encounter?.enemies[0]?.hp).toBe(boss.hp)
     expect(scaledBossStats(s).atk).toBeGreaterThan(0)
+  })
+
+  it('an engaged world boss gets a gauge of 0 to 50%; disengaging drops it', () => {
+    const s = engaged({ hp: 630, atk: 14, def: 4, spd: 5 })
+    const id = s.encounter?.enemies[0]?.id ?? ''
+    const g = s.battle.gauges.find((e) => e.id === id)?.g ?? -1
+    expect(g).toBeGreaterThanOrEqual(0)
+    expect(g).toBeLessThanOrEqual(SPAWN_GAUGE_MAX)
+    const off = step(
+      { ...s, battle: { ...s.battle, queue: [id] } },
+      {
+        t: 'boss_disengaged',
+        bossId: 'wb1',
+      },
+    ).state
+    expect(off.battle.gauges.some((e) => e.id === id)).toBe(false)
+    expect(off.battle.queue).toEqual([])
   })
 
   it('a kill that ends the fight at step 0 leaves nobody busy by the end of the tick', () => {

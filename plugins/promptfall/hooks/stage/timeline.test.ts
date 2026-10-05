@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
-import type { Effect } from '../vendor/sim.js'
+import { ACTION_STEPS, type Effect, STEP_MS } from '../vendor/sim.js'
 import { boss, wave, worldBoss } from './fixtures'
-import { type Motion, StageTimeline } from './timeline'
+import { ACTION_MS, type Motion, StageTimeline } from './timeline'
 import {
   DISSOLVE_MS,
   DROP_MS,
@@ -166,6 +166,34 @@ test('a batch at the turn cadence waits for the idle batch still playing', () =>
   for (let i = 1; i < lunges.length; i++) {
     expect(lunges[i]?.from ?? 0).toBeGreaterThan(lunges[i - 1]?.from ?? 0)
   }
+})
+
+test('playback never drifts: an action is over before the next can start at turn cadence', () => {
+  // The non-overlap clamp only drains a backlog while an action is shorter than the gap between two.
+  expect(ACTION_MS).toBeLessThanOrEqual(ACTION_STEPS * STEP_MS)
+})
+
+test('a newcomer waits while every departed enemy still has a hit to show', () => {
+  const t = observed()
+  // A sweep at the end of the tick lands after the next tick has brought a new enemy.
+  t.onEffects(
+    [act('h2', 1900, 'attack_all'), hit('h2', 'e1'), hit('h2', 'e2'), hit('h2', 'e3')],
+    NOW,
+    2000,
+  )
+  const next = wave()
+  next.enemies = [
+    { ...next.enemies[0], id: 'e4', def: 'road_slime', name: 'Road Slime', hp: 9, maxHp: 9 },
+  ] as typeof next.enemies
+  t.observe(next, NOW + 2000)
+  expect(t.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
+  expect(of(t.active(NOW + 2000), 'flash').map((m) => m.actor)).toEqual(['e1', 'e2', 'e3'])
+  // Once the numbers have risen, the newcomer takes the first slot to free, with a spawn.
+  const later = NOW + 1900 + LUNGE_MS / 2 + NUMBER_MS
+  t.observe(next, later)
+  const e4 = t.known().find((k) => k.id === 'e4')
+  expect(e4).toBeDefined()
+  expect(of(t.active(later), 'spawn').map((m) => m.actor)).toEqual(['e4'])
 })
 
 test('a departed enemy dissolves after its last flash and keeps its slot until then', () => {

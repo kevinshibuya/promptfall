@@ -719,6 +719,10 @@ test('in boss mode the party line fits its width: the boss name gives way, not t
     expect([...line].length).toBeLessThanOrEqual(width)
     expect(line.match(/15\/69/g)).toHaveLength(3)
     expect(line).toContain('42,604/52,000')
+    // The hero gauges take 12 columns, so under about 130 the boss keeps ⚔ and its HP but not its
+    // name (accepted until the UI remake's window band replaces this line).
+    if (width < 130) expect(line).toContain('⚔ 42,604/52,000')
+    else expect(line).toContain(`⚔ ${BOSS.name.slice(0, 4)}`)
     await ui.unmount()
   }
 })

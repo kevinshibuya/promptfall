@@ -31,7 +31,7 @@ export type Known = { id: string; spriteId: string; kind: string; slot: number; 
 const SLOTS = 3
 
 /** An action's lunge and its impact flash: the next action starts once both are over. */
-const ACTION_MS = Math.max(LUNGE_MS, LUNGE_MS / 2 + FLASH_MS)
+export const ACTION_MS = Math.max(LUNGE_MS, LUNGE_MS / 2 + FLASH_MS)
 
 type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
@@ -122,7 +122,8 @@ export class StageTimeline {
         }
         continue
       }
-      const slot = this.freeSlot()
+      const slot = this.freeSlot(now)
+      if (slot === null) continue
       this.entries.set(enemy.id, {
         id: enemy.id,
         spriteId,
@@ -137,13 +138,25 @@ export class StageTimeline {
     this.observed = true
   }
 
-  /** The lowest slot no entry holds; when all three are held, the slot of the departed entry that ends first. */
-  private freeSlot(): number {
+  /**
+   * The lowest slot no entry holds; when all three are held, the slot of the departed entry that
+   * ends first among those whose hit has played out (flash, numbers and drop over). Null when every
+   * departed holder still has a hit to show: an action can land after the next tick has already
+   * brought a newcomer, and evicting would drop that hit, so the newcomer waits a frame or more.
+   */
+  private freeSlot(now: number): number | null {
     const held = new Set([...this.entries.values()].map((k) => k.slot))
     for (let slot = 0; slot < SLOTS; slot++) if (!held.has(slot)) return slot
     let evict: Known | null = null
     let evictEnd = Number.POSITIVE_INFINITY
     for (const id of this.departed) {
+      const showing = this.motions.some(
+        (m) =>
+          m.actor === id &&
+          m.until > now &&
+          (m.kind === 'flash' || m.kind === 'number' || m.kind === 'drop'),
+      )
+      if (showing) continue
       const end = this.motions
         .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
         .reduce((e, m) => Math.max(e, m.until), 0)
@@ -153,7 +166,7 @@ export class StageTimeline {
         evictEnd = end
       }
     }
-    if (evict === null) return held.size
+    if (evict === null) return this.departed.size > 0 ? null : held.size
     this.entries.delete(evict.id)
     this.departed.delete(evict.id)
     this.motions = this.motions.filter((m) => m.actor !== evict.id)
