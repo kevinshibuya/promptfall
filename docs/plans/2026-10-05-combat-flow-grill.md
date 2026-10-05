@@ -20,7 +20,41 @@ how "full" shows in time, and the order the stage plays events in.
 
 ## 1. Settled design tree
 
-(Filled as rounds settle.)
+### 1.1 Battle time (Q1, Q3, recommended, accepted)
+
+- Each tick advances a fixed 2 seconds of battle time. During a turn (a tick every 2 s) the
+  battle plays at real speed; idle (a tick every 5 s) the client stretches those 2 seconds
+  over 5: gauges fill slower, attack animations keep their speed. Progress per tick and the
+  server's rate caps are unchanged; the tick event keeps carrying no time.
+- The fill rate is tuned so an average-speed unit acts about once per tick: kills per minute
+  and the zone pace target stay where they are (the balance harness checks it).
+
+### 1.2 Gauges and the queue (Q2, Q4, Q6, Q7, recommended, accepted)
+
+- Active, as Final Fantasy VI: gauges keep filling while a unit acts. A unit whose gauge is
+  full joins the action queue; units act one at a time, in the order their gauges filled;
+  each action takes a fixed slice of battle time.
+- Fill rate is proportional to speed plus a constant (tuned in the balance harness), so speed
+  8 against 4 is about 1.3 times the actions, not 2.
+- Enemies, the world boss included, have gauges and join the same queue; their gauges are
+  never shown. The world boss damage the server counts is unchanged.
+- Heroes keep their gauges across waves. A spawned enemy starts at a random 0-50%. A fallen
+  hero's gauge stops and empties. After a wipe or a rest every gauge empties.
+
+### 1.3 Actions (Q5, recommended, accepted)
+
+- Every class has Attack, behaving as today: the knight hits the front enemy, the black mage
+  every enemy at 60%, the archer the weakest enemy with a 20% double-damage chance. The white
+  mage also has Heal.
+- A picker draws among a class's actions by weight (Kevin's "confidence factor"). Attack's
+  weight is fixed. Heal's weight is zero until an ally is below 50% HP, then rises the lower
+  that ally falls. Future skills and techniques join the same picker.
+- A heal becomes an event the combat log and the stage show (today it emits nothing).
+
+### 1.4 Version and names (Q8, Q9, recommended, accepted)
+
+- `SIM_VERSION` 3 to 4; every saved game resets through the Account tab, as in phases 2 and 3.
+- Glossary: Action gauge, Action, Action queue, Battle time (`CONTEXT.md`).
 
 ## 2. Facts gathered (2026-10-05)
 
