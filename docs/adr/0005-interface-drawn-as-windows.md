@@ -30,3 +30,13 @@ Only fields the player types into (chat, order forms) stay real `Input`s, under 
   redraws with the stage's frame loop.
 - Clicks inside a picture are not free: a `Client` gets the pointer but cannot draw an
   `Image`. v1 is keyboard only.
+
+## Amended (2026-10-05, UI PR 1)
+
+- The font is Misaki Gothic 2nd, not DotGothic16 (grill 1.18): measured against Dragon Quest V,
+  DotGothic16's 13 px capitals fill a 16 px row and clip descenders, where DQ V sets 7 px
+  capitals with 9 px of leading. NOTICE.md carries its licence.
+- Terminals that draw pictures get one Image per window, not one picture for the strip: each
+  window blits only when its own content changes.
+- Hotkeys need Buttons on screen. Terminals keep them in a zero-width Box, out of view; the Svg
+  surfaces show them as a row under the strip (`docs/plans/2026-10-05-ui-remake-spikes.md`).

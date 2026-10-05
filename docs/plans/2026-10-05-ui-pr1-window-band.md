@@ -756,6 +756,6 @@ cmux and Terminal.app with its result; the PR is open.
 **Boundaries:** No code change here except a fix found by the pass, committed separately with
 its own test.
 
-- [ ] Spec, ADRs, glossary
+- [x] Spec, ADRs, glossary
 - [ ] Driven pass
 - [ ] Ticks, PR
