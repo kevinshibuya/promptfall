@@ -48,6 +48,62 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
   as much as needed to have space for our new style". Spec §2's "10 rows at rest" gets amended
   to whatever the strip needs.
 
+### 1.7 The band strip (Q9, Q12, Q13, Q14, Q20, recommended, accepted)
+
+- Grouped, as Dragon Quest V's battle screen: an **enemy window** under the enemies, one line
+  per enemy with its name and HP bar (at most 3); a **party window** under the heroes, one
+  column per hero; a **message window** for the log. Placement of the message window is a
+  later round (the 3-enemy case leaves little room between the two).
+- The band tabs become a command line on the message window (`▶Party Loot World ▾`, same
+  hotkeys `p`, `l`, `w`, `c`). Party shows the log, Loot the latest drops, World the world
+  boss.
+- Compact (100-115 columns, or short): one party window beside the 52-column stage, the front
+  enemy as an extra line in it. Collapsed (1 row): stays one text line.
+- Bosses: the enemy window shows the boss on one line with a long bar and its numbers (the
+  world boss with today's predicted bar), minions on the lines below. Stage heights unchanged.
+
+### 1.8 The combat log (Q10 Kevin: every event; Q11 recommended, accepted)
+
+- The log prints every event, hits included, Dragon Quest style. Kevin chose this over the
+  recommended notable-events-only. Pacing under a burst of hits is a later round.
+- Messages type out letter by letter when the Motion setting is full, instantly when reduced.
+  No blip sound.
+
+### 1.9 The pane (Q15, Q16, recommended, accepted)
+
+- 24 rows, at most 120 columns, centred on wider terminals.
+- Market filters become command windows inside the picture. Only typed values (chat message,
+  order price and quantity) stay `Input`s under the picture.
+
+### 1.10 Spikes (Q17, recommended, accepted)
+
+- The plan's first task, run like phase 4's (the implementing session drives cmux and
+  Terminal.app; Kevin checks standalone Ghostty and the desktop): text over an `Image`, image
+  sharpness at pane size, clicks, and whether the pane's focus ring (Tab, arrows, Enter over
+  hidden Buttons) can drive the ▶ cursor or a `Client` is needed. If neither, no cursor:
+  digits pick rows, letters pick actions.
+
+### 1.11 ADR 0005 (Q18, recommended, accepted)
+
+- `docs/adr/0005-interface-drawn-as-windows.md`: one window model, three encoders, the font
+  baked in.
+
+### 1.12 References (Q19, Q21, recommended, accepted)
+
+- Eight Dragon Quest V Super Famicom screenshots (5 battle, 3 dialogue) from
+  https://www.hardcoregaming101.net/dragon-quest-v-hand-of-the-heavenly-bride/ are the
+  references for the band and the message window. They are not committed (copyright); the
+  page is the source.
+- No menu, item list, shop or status screenshots were found (MobyGames blocks scripts; the
+  strategy sites cover the remakes). The pane is built from the anatomy in hand: header row
+  and divider, ▶ lists, right-aligned number columns, Yes/No windows, the message window and
+  its ▼. Kevin may add menu shots before the PR 2 plan.
+- What the references show that the mockups got wrong: the field is dark charcoal, not black;
+  the border is a single white rounded line; the party and command windows have a header row
+  (names, or the acting hero) under a white divider; the party window has one column per
+  member with H, M and Lv rows; HP is numbers only (the bar is the Pokémon graft); the enemy
+  window lists groups with counts; a small tactics window sits top right.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
@@ -66,3 +122,6 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
   Box paints over an Image, or how an Image is scaled.
 - The phase 4 spikes were driven by the implementing session through cmux (Ghostty engine)
   and Terminal.app (`docs/plans/2026-10-04-phase-4-spikes.md`).
+- A wave holds at most 3 enemies at once (`packages/sim/src/progression.ts:153`); with 3
+  enemies and 3 heroes at 120 columns the stage is full edge to edge.
+- The `hit` effect carries `by`, `target` and `amount` only (`hooks/vendor/sim.d.ts:257-261`).
