@@ -56,6 +56,39 @@ how "full" shows in time, and the order the stage plays events in.
 - `SIM_VERSION` 3 to 4; every saved game resets through the Account tab, as in phases 2 and 3.
 - Glossary: Action gauge, Action, Action queue, Battle time (`CONTEXT.md`).
 
+### 1.5 Tempo (Q10, recommended, accepted; amends 1.1)
+
+- An average-speed unit acts about once every 2 ticks, and every action deals (or heals)
+  double. Kills per minute and the zone pace stay as today; there are about 3 actions per 2
+  seconds of battle time, about 0.67 s each, so every combat log line can be read. This
+  replaces 1.1's "about once per tick".
+
+### 1.6 The stage per action (Q11, recommended, accepted)
+
+- The acting unit lunges; all of its hits land together at the impact (the black mage's spell
+  hits every enemy at once); a heal shows a green rising number on the healed hero; the next
+  action starts only when this one is over. Idle, the gaps between actions stretch; each
+  action's animation keeps its speed.
+
+### 1.7 Rest (Q12, recommended, accepted; amends 1.2)
+
+- A rest (every prompt Kevin sends) heals and leaves the gauges alone. Only a wipe empties
+  them.
+
+### 1.8 Healing (Q13, recommended, accepted, with Kevin's note)
+
+- Heal targets the ally with the lowest HP percentage, for 0.8 x the white mage's attack,
+  doubled by 1.5. The one-heal-per-round rule goes: actions are one at a time, so a second
+  healer sees the first heal. A heal never targets a fallen hero; no revival.
+- Kevin: the 50% heal was an example "so you have a rough idea on how to think of this for
+  all characters and interactions they might have". The weighted choice is a principle for
+  every unit, not a white mage rule. Round 3 takes it up.
+
+### 1.9 Before the UI remake (Q14, recommended, accepted)
+
+- The combat PR changes the stage (one action at a time, heals visible) and adds a small text
+  gauge per hero to today's party line, so the queue can be checked by eye before UI PR 1.
+
 ## 2. Facts gathered (2026-10-05)
 
 - A `tick` player event has no fields. It runs one round: every living hero and enemy acts
