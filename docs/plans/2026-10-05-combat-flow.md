@@ -279,8 +279,8 @@ Red before: `picker.ts` does not exist.
 **Boundaries:** Do not change `combat.ts` behaviour yet beyond an export. Stop and report
 `blocked: <ambiguity>` if a rule in the contract cannot be expressed with the state the sim has.
 
-- [ ] Tactics content and validation
-- [ ] Picker and its tests, run, commit
+- [x] Tactics content and validation
+- [x] Picker and its tests, run, commit
 
 ### Task 3: The battle loop
 

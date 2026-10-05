@@ -5,6 +5,7 @@ import { expansions } from './expansions'
 import { heroTemplates } from './heroes'
 import { itemBases } from './items'
 import { rarity } from './rarity'
+import { tactics } from './tactics'
 import { tavern } from './tavern'
 import { traits } from './traits'
 import type { Content } from './types'
@@ -12,12 +13,17 @@ import { zones } from './zones'
 
 export type {
   AffixDef,
+  Archetype,
   Content,
   EnemyDef,
   HeroTemplate,
   ItemBase,
   RarityRule,
+  Tactic,
+  Tactics,
+  TargetRule,
   TraitDef,
+  WeightRule,
   ZoneDef,
 } from './types'
 
@@ -32,5 +38,6 @@ export const content: Content = {
   rarity,
   tavern,
   expansions,
+  tactics,
   xpToNext: (level: number) => 110 * level * level,
 }
