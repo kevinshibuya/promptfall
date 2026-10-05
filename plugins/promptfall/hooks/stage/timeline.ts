@@ -1,6 +1,6 @@
 import type { GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
-import { type Effect, TICK_MS } from '../vendor/sim.js'
+import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
   DISSOLVE_MS,
   DROP_MS,
@@ -35,9 +35,12 @@ export const ACTION_MS = Math.max(LUNGE_MS, LUNGE_MS / 2 + FLASH_MS)
 
 type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
-type Group = { act: Act | null; effects: Effect[] }
+export type Group = { act: Act | null; effects: Effect[] }
 
-function groups(effects: readonly Effect[]): Group[] {
+/** An action on the timeline: its actor, when it starts, and when its ▶ goes (`acting`). */
+export type Action = { actor: string; start: number; until: number }
+
+export function groups(effects: readonly Effect[]): Group[] {
   const out: Group[] = []
   let current: Group = { act: null, effects: [] }
   for (const effect of effects) {
@@ -73,9 +76,12 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
+  /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
+  private actions_: (Action & { keep: number })[] = []
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
+    this.actions_ = this.actions_.filter((a) => a.keep > now)
     this.heroes = new Set(view.heroes.map((h) => h.id))
     const live = new Set(view.enemies.map((e) => e.id))
 
@@ -190,12 +196,25 @@ export class StageTimeline {
    * lunges once; every hit and heal of the action lands at one impact. Each animation keeps its
    * own speed whatever the cadence.
    */
-  onEffects(effects: readonly Effect[], now: number, cadenceMs: number = TICK_MS): void {
+  onEffects(effects: readonly Effect[], now: number, cadenceMs: number = TICK_MS): number[] {
     // observe prunes too, but nothing observes while the band is hidden or on another tab.
     this.motions = this.motions.filter((m) => m.until > now)
+    this.actions_ = this.actions_.filter((a) => a.keep > now)
+    const starts: number[] = []
     for (const group of groups(effects)) {
       const offset = group.act ? Math.floor((group.act.at * cadenceMs) / TICK_MS) : 0
       const start = Math.max(now + offset, this.actionEnd)
+      starts.push(start)
+      if (group.act) {
+        // The ▶ holds for the action's battle time stretched to the cadence, at least its lunge.
+        const span = Math.max(ACTION_MS, Math.floor((ACTION_STEPS * STEP_MS * cadenceMs) / TICK_MS))
+        this.actions_.push({
+          actor: group.act.actor,
+          start,
+          until: start + span,
+          keep: start + 2 * cadenceMs,
+        })
+      }
       const impact = start + LUNGE_MS / 2
       let shown = false
       const act = group.act
@@ -257,6 +276,31 @@ export class StageTimeline {
       }
       if (shown) this.actionEnd = start + ACTION_MS
     }
+    this.actions_.sort((a, b) => a.start - b.start)
+    return starts
+  }
+
+  /**
+   * The hero or enemy whose action is playing: from its start until the next action starts or its
+   * `until`, whichever is first.
+   */
+  acting(now: number): string | null {
+    let current: Action | null = null
+    for (const a of this.actions_) {
+      if (a.start > now) break
+      current = a
+    }
+    return current && now < current.until ? current.actor : null
+  }
+
+  /** Wall-clock starts of this actor's actions still held. */
+  actionStarts(actor: string): readonly number[] {
+    return this.actions_.filter((a) => a.actor === actor).map((a) => a.start)
+  }
+
+  /** Every action still held, in start order. */
+  actions(): readonly Action[] {
+    return this.actions_.map(({ actor, start, until }) => ({ actor, start, until }))
   }
 
   /** The live enemy in the lowest slot. */

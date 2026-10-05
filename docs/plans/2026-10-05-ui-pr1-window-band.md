@@ -551,9 +551,9 @@ a reset. Red before: `acting` does not exist. Then the full check line.
 **Boundaries:** No change to what the stage draws (its goldens stay byte-identical: run
 `pnpm stage:goldens` and confirm `git status` shows no change under `stage/goldens/`).
 
-- [ ] Timeline: groups, starts, action records, acting
-- [ ] Gauge tracker
-- [ ] Tests, goldens unchanged, run the check, commit
+- [x] Timeline: groups, starts, action records, acting
+- [x] Gauge tracker
+- [x] Tests, goldens unchanged, run the check, commit
 
 ### Task 7: The message log and its wiring
 
