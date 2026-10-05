@@ -216,9 +216,15 @@ test('a narrow desktop draws the full stage and the strip, laid out in 116 colum
     `viewBox="0 0 ${116 * CELL_W} ${STRIP_ROWS * CELL_H}"`,
   )
   expect(String(strip?.props.source)).toContain(`width="${95 * DESKTOP_COLUMN_PX_CEILING}"`)
-  // Rung (c): the hotkeys are a row of their own under the strip.
-  expect(await ui.find({ key: 'row-hotkeys' })).toBeDefined()
+  // Rung (a′) on the desktop (spike sheet): the hotkeys sit in a hidden absolute Box, no row.
+  expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
+  const keys = await ui.find({ key: 'hotkeys' })
+  expect([keys?.props.width, keys?.props.position]).toEqual([0, 'absolute'])
   await ui.unmount()
+  // VS Code is untested: it keeps rung (c), a row of its own under the strip.
+  const vscode = await $.ui.mount({ plugin: 'promptfall', surface: 'vscode', ...band(95, 20) })
+  expect(await vscode.find({ key: 'row-hotkeys' })).toBeDefined()
+  await vscode.unmount()
 })
 
 test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so', async ($, on) => {
@@ -742,7 +748,7 @@ test('Loot and World are the strip alone: 5 rows, no stage; the loop blits the s
   await ui.unmount()
 })
 
-test('on the desktop the World tab draws the strip Svg alone, the hotkey row under it', async ($, on) => {
+test('on the desktop the World tab draws the strip Svg alone, its hotkeys hidden', async ($, on) => {
   harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
@@ -751,7 +757,8 @@ test('on the desktop the World tab draws the strip Svg alone, the hotkey row und
   const { strip } = await svgs(ui)
   expect(strip?.type).toBe('Svg')
   expect(String(strip?.props.alt)).toContain('World tab')
-  expect(await ui.find({ key: 'row-hotkeys' })).toBeDefined()
+  expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
+  expect(await ui.find({ key: 'hotkeys' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -830,9 +837,9 @@ test('on the desktop a boss stage is scaled down to the rows the strip leaves, t
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
   const { stage } = await svgs(ui)
-  // 12 rows of 19 points, less the strip at the band's width and the hotkey row.
+  // 12 rows of 19 points, less the strip at the band's width (no hotkey row on the desktop).
   const stripPx = (95 * DESKTOP_COLUMN_PX * STRIP_ROWS * CELL_H) / (116 * CELL_W)
-  const cap = (12 - Math.ceil(stripPx / DESKTOP_ROW_PX) - 1) * DESKTOP_ROW_PX
+  const cap = (12 - Math.ceil(stripPx / DESKTOP_ROW_PX)) * DESKTOP_ROW_PX
   expect(stage?.props.height).toBe(Math.round(cap))
   expect(stage?.props.width).toBe(Math.floor((cap * 116) / 34))
   await ui.unmount()

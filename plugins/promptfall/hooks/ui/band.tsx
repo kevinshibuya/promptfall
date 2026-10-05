@@ -125,9 +125,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const tab = prefs.bandTab
     const party = tab === 'party'
     const timeline = handle?.stage.timeline ?? looseTimeline
-    // Hotkeys need Buttons on screen (spike sheet): hidden in a zero-width Box on terminals
-    // (rung a′), a row of their own on the Svg surfaces (rung c).
-    const extra: 0 | 1 = terminal ? 0 : 1
+    // Hotkeys need Buttons on screen (spike sheet): hidden in a zero-width Box on terminals and
+    // the desktop (rung a′), a row of their own on VS Code and mobile, untested there (rung c).
+    const hiddenKeys = terminal || e.surface === 'desktop'
+    const extra: 0 | 1 = hiddenKeys ? 0 : 1
     if (party) timeline.observe(view, now)
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
@@ -196,8 +197,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         onPress={press[k.hotkey]}
       />
     ))
+    // On the desktop the strip sits in a column: an absolute Box takes no row there.
     const hidden = (
-      <Box key="hotkeys" width={0} overflow="hidden">
+      <Box
+        key="hotkeys"
+        width={0}
+        overflow="hidden"
+        {...(terminal ? {} : { position: 'absolute' as const, top: 0, left: 0 })}
+      >
         {buttons}
       </Box>
     )
@@ -367,10 +374,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       <Box key="row-strip" flexDirection={terminal ? 'row' : 'column'}>
         {strip}
         {probe}
-        {terminal ? hidden : null}
+        {hiddenKeys ? hidden : null}
       </Box>
     )
-    const hotkeyRow = terminal ? null : (
+    const hotkeyRow = hiddenKeys ? null : (
       <Box key="row-hotkeys" flexDirection="row">
         {buttons.flatMap((b, i) => (i === 0 ? [b] : [<Text key={`hot-gap-${i}`}> </Text>, b]))}
       </Box>

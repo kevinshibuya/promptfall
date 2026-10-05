@@ -27,7 +27,7 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
   compact band when the terminal is too short or 100 to 115 columns wide,
   collapses to 1 row under 100 columns or 6 rows, hides while Claude asks a
   question, and switches off per session with one command. Loot and World are
-  the strip alone, 5 rows. The Svg surfaces add a row of hotkeys.
+  the strip alone, 5 rows. VS Code and mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
   drop. Every drop, trade and hero exists because the server rolled it or
@@ -409,8 +409,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
   the message window's command line (`▶Party Loot World ▾`). `c` collapses, `f`
   toggles farm. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
-  or a click). On terminals their Buttons sit out of view in a zero-width Box;
-  the Svg surfaces show them as a row under the strip.
+  or a click). On terminals and the desktop their Buttons sit out of view in a
+  zero-width Box; VS Code and mobile show them as a row under the strip.
 - Party tab (phase 4): the stage, 8 rows at rest, the encounter's enemies on the
   left and the party on the right, side-on, standing on a one-row ground strip
   coloured per zone; under it the window strip (ADR 0005), Dragon Quest V's

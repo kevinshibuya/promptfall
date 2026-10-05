@@ -38,5 +38,6 @@ Only fields the player types into (chat, order forms) stay real `Input`s, under 
   capitals with 9 px of leading. NOTICE.md carries its licence.
 - Terminals that draw pictures get one Image per window, not one picture for the strip: each
   window blits only when its own content changes.
-- Hotkeys need Buttons on screen. Terminals keep them in a zero-width Box, out of view; the Svg
-  surfaces show them as a row under the strip (`docs/plans/2026-10-05-ui-remake-spikes.md`).
+- Hotkeys need Buttons on screen. Terminals and the desktop keep them in a zero-width Box, out
+  of view; VS Code and mobile, untested, show them as a row under the strip
+  (`docs/plans/2026-10-05-ui-remake-spikes.md`).

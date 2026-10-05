@@ -42,7 +42,7 @@ a JXA CGEvent click. Screenshots stayed in the session's scratchpad.
 | cmux (Ghostty engine) | yes, as a cut-out: the Box's cells replace the picture's placeholder cells, drawn as terminal text on the terminal background | `x` fired | scale 1 crisp: glyph strokes, the 1 px checker and the 1 px lines hold hard edges | strip s1 307,200 B / 2.3 ms; strip s2 1,228,800 B / 6.0 ms; pane s1 1,474,560 B / 6.5 ms; pane s2 5,898,240 B: 50 of 50 denied, `source.rgba decodes to more than 2097152 bytes` | nothing raised | `ui.press` with the Button's key | `ui.focus` names each Button (`alpha`, `beta`, `space`, origin `person`); the one-space Button joins the ring; `q` fired | fired, nothing visible | fired, but the Button is drawn, wrapped down the right edge |
 | Terminal.app | the Image draws its alt on one row; the Box over it is not visible there; over the `Raster` it paints as text in the window | `x` and `r` fired | n/a (no pictures) | n/a | n/a | n/a | not run (same engine code path as cmux) | fired, nothing visible | fired, drawn as on cmux |
 | Ghostty (standalone) | | | | | | | | | |
-| Desktop app | | | n/a | n/a | | | | | |
+| Desktop app (Claude.app, 2026-10-05, driven by the implementing session) | yes: the Box's text draws over the Svg | `x` fired | n/a | n/a | not run | not run | not run | fired, nothing visible | fired |
 
 The desktop and standalone Ghostty rows are Kevin's.
 
@@ -55,9 +55,9 @@ The desktop and standalone Ghostty rows are Kevin's.
   places `p`, `l`, `w`, `c`, `f` that way: no row and no columns lost, nothing laid over the
   picture. Rung (a) works too, but as a cut-out of terminal text in the picture, so it ranks
   below (a′).
-- **Hotkey rung on the Svg surfaces: (c), provisional.** The desktop row is Kevin's; the plan has
-  the desktop take rung (c) (one row of Buttons under the strip, band + 1 row) until it says a
-  higher rung works there.
+- **Hotkey rung on the desktop: (a′)** (its row above): the band's hotkeys sit in a zero-width,
+  absolutely positioned Box, since the desktop strip lives in a column. VS Code and mobile are
+  untested and keep rung (c), a row of Buttons under the strip.
 - **PR 2 notes, not applied here.**
   - A pane-sized picture (120 × 24 cells) at scale 1 is 1,474,560 bytes, above the plugin's
     `IMAGE_MAX_BYTES` (1 MiB) and below the engine's 2 MiB; its blit averaged 6.5 ms. PR 2
