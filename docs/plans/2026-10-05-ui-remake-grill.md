@@ -198,6 +198,16 @@ overturn either.
 - The world boss's time left sits in the enemy window's title ("World boss · 11m"), not on the
   boss's line (1.16): the line's 21 cells hold the name, the bar and the percentage, and no more.
 
+### 1.18 The font (Kevin, during UI PR 1's transcription)
+
+- The windows bake **Misaki Gothic 2nd** (美咲ゴシック第2, Num Kadoma; free to use, modify and
+  redistribute), its full-width Latin forms at 8 px, each 8 x 8 glyph placed in the 8 x 16 cell
+  from row 5, as Dragon Quest V places its type. This replaces 1.5's DotGothic16: measured
+  against the references, DQ V's type has 7 px caps, 1 px strokes and a 16 px line (9 px of
+  leading); DotGothic16 has 13 px caps and a 24 px line, so in a 16 px row it leaves no leading
+  and clips descenders. Accepted cost: lowercase reads letter-spaced (narrow glyphs on an 8 px
+  advance).
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+

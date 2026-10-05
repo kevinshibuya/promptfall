@@ -25,16 +25,16 @@ https://claude.ai/artifact/MnNPLXiqrkMG3BxW8CjCMh
 Not chosen: A (Pause Screen), C (Battle HUD and Bag), D (Wood and Slots), E (Ring Menu), and the
 mixes F, G and H. F (B with A's pips and D's gear panel) was the recommended mix.
 
-## Open before a plan
+## Open before a plan (settled)
 
-1. Transcribe Dragon Quest V's windows from real screenshots (design-from-references). The
-   mockups were drawn from memory.
-2. Spike: text. Bake a pixel font into the bitmap, or lay real terminal `Text` over the `Image`
-   (does a positioned Box paint over an Image?).
-3. Spike: whether the terminal scales a pane-sized `Image` without blurring the pixels.
-4. Spike: clicks. `Client` modules get the pointer but cannot draw `Image`.
-5. Order against phase 4 PR 2: its style-sheet gate first, so the frame palette comes from the
-   sprite palette.
+1. Transcription: `transcription.md` (Task 2 of the UI PR 1 plan); the font became Misaki Gothic
+   2nd (grill 1.18).
+2. Text: baked into the pictures (ADR 0005). The spike found a positioned Box over an Image cuts
+   a hole of terminal text: `docs/plans/2026-10-05-ui-remake-spikes.md`.
+3. Sharpness: 8 × 16 picture pixels per cell read crisp at scale 1 (the spike sheet).
+4. Clicks: a Button positioned over a picture takes clicks; v1 stays keyboard only (the spike
+   sheet).
+5. Order against phase 4 PR 2: settled by grill 1.1 and 1.15 (the remake goes first).
 
 ## Files
 

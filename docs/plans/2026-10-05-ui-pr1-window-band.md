@@ -6,10 +6,11 @@ gauges and a typed combat log.
 **Architecture:** A cell-based window model (`hooks/windows/kit.ts`) describes windows, their
 text and bars. Three encoders draw it: one RGBA picture per window for terminals that draw
 images, raster text cells for terminals that draw none, and one `Svg` with SMIL for the desktop,
-VS Code and mobile. The pixel font (DotGothic16) is baked into a generated TS module. A strip
+VS Code and mobile. The pixel font (Misaki Gothic 2nd, grill 1.18) is baked into a generated TS
+module. A strip
 builder turns the view, the stage timeline, a gauge tracker and a message log into a scene; the
 stage loop blits the strip with the stage.
-**Spec:** `docs/plans/2026-10-05-ui-remake-grill.md` (section 1 is binding, 1.16 and 1.17 included),
+**Spec:** `docs/plans/2026-10-05-ui-remake-grill.md` (section 1 is binding, 1.16 to 1.18 included),
 `docs/design/ui-remake/README.md`, `docs/adr/0005-interface-drawn-as-windows.md`, and
 `docs/spec/promptfall.md` (amended in Task 10).
 **Execution model:** opus
@@ -54,16 +55,17 @@ fix pass, on Opus (no `reasoner` without Fable); the two rulings it needed are g
 
 | Name | Start value | Set by |
 |---|---|---|
-| `CELL_W`, `CELL_H` | 8, 16 | fixed (DotGothic16's half-width Latin glyphs) |
-| `WINDOW_SCALE` | 1 | Task 1 (sharpness spike): 1, or 2 if 1 reads soft in Ghostty |
-| `FIELD_RGB` | 0x282828 | Task 2 (the references' charcoal) |
-| `BORDER_RGB`, `TEXT_RGB` | 0xf8f8f8 | Task 2 |
-| `DIM_RGB` | 0x888888 | Task 2 |
+| `CELL_W`, `CELL_H` | 8, 16 | fixed (Dragon Quest V's text grid: 8 px advance, 16 px line) |
+| `WINDOW_SCALE` | 1 | Task 1: 1 (crisp in the Ghostty engine) |
+| `FIELD_RGB` | 0x303028 | Task 2 (sampled) |
+| `BORDER_RGB`, `TEXT_RGB` | 0xf0f0e8 | Task 2 (sampled) |
+| `DIM_RGB` | 0x888880 | Task 2 |
 | `WARN_RGB` (under 25% HP) | 0xf8a030 | Task 2 (grill 1.13: check against DQ V) |
 | `DOWN_RGB` (0 HP) | 0xe83830 | Task 2 |
-| `HP_BAR_RGB`, `BAR_BACK_RGB` | 0x58d858, 0x404040 | Task 2 (the Pokémon graft) |
+| `HP_BAR_RGB`, `BAR_BACK_RGB` | 0x58d858, 0x484840 | Task 2 (the Pokémon graft) |
 | `GAUGE_RGB`, `GAUGE_FULL_RGB` | 0x58a8f8, 0xf8d038 (gold) | Task 2 |
-| `BORDER_PX`, `PAD_PX` | 2, 2 | Task 2 (border line thickness and inset inside its cell) |
+| `BORDER_PX`, `MARGIN_PX`, `PAD_PX` | 2, 1, 4 | Task 2: the white line, the field outside it, the field between it and the content cell; the rest of a border cell is transparent (`docs/design/ui-remake/transcription.md`, "The frame in whole cells") |
+| `GLYPH_Y` | 5 | Task 2: the 8 × 8 glyph's first row in the 16 px cell |
 | `STRIP_ROWS` | 5 | fixed: border, 3 inner rows, border |
 | `COMPACT_WINDOW_ROWS` | 6 | fixed (grill 1.16): the compact band's rows; the compact stage box stays 4 rows (`COMPACT_STAGE_ROWS`, Task 9) |
 | `STRIP_MAX_COLUMNS` | 160 | fixed: a strip or compact band is laid out in at most `STAGE_MAX_COLUMNS` columns, as the stage is |
@@ -413,21 +415,21 @@ table covering every "Task 2" row of the constants table, and the five bitmaps. 
 **Boundaries:** No code. Window widths and strip rows stay as the constants table says; a reference
 that argues for different ones is a note for Kevin, not a change.
 
-- [ ] Fetch the references, pick the spine
-- [ ] Slot tables, font comparison
-- [ ] Kit values and bitmaps; Kevin's approval; run the check, commit
+- [x] Fetch the references, pick the spine (dq5-8)
+- [x] Slot tables, font comparison (Kevin chose Misaki Gothic 2nd, grill 1.18)
+- [x] Kit values and bitmaps; Kevin's approval; run the check, commit
 
 ### Task 3: Bake the font
 
 **Files:**
-- `art/fonts/DotGothic16-Regular.ttf`, `art/fonts/OFL.txt` (create): from the `ofl/dotgothic16`
-  directory of github.com/google/fonts.
+- `art/fonts/misaki_gothic_2nd.ttf`, `art/fonts/misaki.txt` (create): from Num Kadoma's
+  `misaki_ttf_2021-05-05.zip` (littlelimit.net/misaki.htm); `misaki.txt` holds the licence.
 - `scripts/font.ts` (create): reads the TTF, writes `plugins/promptfall/hooks/windows/glyphs.ts`.
 - `scripts/font.test.ts` (create).
 - `plugins/promptfall/hooks/windows/glyphs.ts` (create, generated).
 - `package.json` (modify): `font` and `font:check` scripts (shaped like `sprites` and
   `sprites:check`); `opentype.js` as a dev dependency.
-- `plugins/promptfall/NOTICE.md` (modify): a DotGothic16 section, the OFL text, and that the
+- `plugins/promptfall/NOTICE.md` (modify): a Misaki font section, its licence text, and that the
   plugin ships glyph bitmaps derived from it, not the font file.
 - `.github/workflows/ci.yml` (modify): a `pnpm font:check` step after `pnpm sprites:check`.
 
@@ -435,17 +437,17 @@ that argues for different ones is a note for Kevin, not a change.
 `glyph(ch: string): Uint8Array | null` (16 row bytes, bit 7 the leftmost pixel; null for a
 character not in the set).
 
-**Work:** Rasterise at 16 px per em by sampling each pixel's centre against the outline (the font
-is drawn on a pixel grid, so this is exact). Fail the script, naming the character, if any
-outline point of a baked glyph falls off the integer grid or its advance is not 8 px. The set:
-printable ASCII (0x20-0x7E), `·` (U+00B7), `…` (U+2026), and the Latin-1 letters DotGothic16
-carries. ▶, ▼ and ▾ come from
-Task 2's hand-drawn bitmaps, written into the generated module from a small table in
-`scripts/font.ts`. Check the OFL's Reserved Font Name clause and word the NOTICE to match.
-Internal encoding of the module is your choice (hex or base64 rows).
+**Work:** Each baked character is drawn from Misaki Gothic 2nd's full-width form (ASCII
+0x21-0x7E as U+FF01-FF5E; space blank; `·` from U+30FB; `…` from U+2026) at 8 px per em, by
+sampling each pixel's centre against the outline (the font is drawn on a pixel grid, so this is
+exact), and placed in the 16-row cell at rows 5-12 (`GLYPH_Y = 5`, Task 2). Fail the script,
+naming the character, if any outline point of a baked glyph falls off the 1 px grid or its
+advance is not 8 px. The set: printable ASCII, `·`, `…`, and the Latin-1 letters the font
+carries. ▶, ▼ and ▾ come from Task 2's bitmaps, written into the generated module from a small
+table in `scripts/font.ts`. Internal encoding of the module is your choice (hex or base64 rows).
 
-**Acceptance check:** `pnpm vitest run scripts/font.test.ts` passes with tests that: `A` and `g`
-match hand-checked rows; every printable ASCII character bakes; a non-grid outline point fails
+**Acceptance check:** `pnpm vitest run scripts/font.test.ts` passes with tests that: `H` and `6`
+match the rows Task 2 transcribed against DQ V; every printable ASCII character bakes; a non-grid outline point fails
 the script; `pnpm font:check` fails after a hand edit to `glyphs.ts`. Red before: no script. Then
 the full check line.
 
