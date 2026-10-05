@@ -3,11 +3,11 @@ import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { composeFrame } from './compose'
-import { GOLDENS } from './goldens/index'
+import { GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes } from './image'
 import type { StageActor, StageModel } from './model'
 import { encodeRaster, rasterPairs } from './raster'
-import { goldenOf, SCENARIOS, stage } from './scenarios'
+import { goldenOf, SCENARIOS, STRIP_SCENARIOS, stage, strip, stripGoldenOf } from './scenarios'
 import { renderSvg } from './svg'
 import type { Motion } from './timeline'
 import {
@@ -143,3 +143,9 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
     NOW,
   )
 })
+
+for (const name of STRIP_SCENARIOS) {
+  test(`strip golden: ${name}`, () => {
+    expect(stripGoldenOf(strip(name))).toEqual(STRIP_GOLDENS[name])
+  })
+}

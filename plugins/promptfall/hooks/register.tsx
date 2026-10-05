@@ -6,6 +6,8 @@ import { CUE_ASSET, type Cue, cueFor } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
+import { GaugeTrack } from './stage/gauges'
+import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
 import { StageTimeline } from './stage/timeline'
 import { CUE_GAIN } from './stage/tuning'
@@ -59,6 +61,8 @@ type Io = {
   clearDialog: () => Promise<void>
   /** Reads the `world` atom. */
   readWorld: () => Promise<WorldState | null>
+  /** Reads the `notice` atom: the band's strip shows it. */
+  readNotice: () => Promise<string | null>
   fetch: FetchLike
   blit: (args: UiBlitArgs) => Promise<UiBlitResult>
   /** $.ui.invalidate('ui.render') */
@@ -136,6 +140,8 @@ class GameSession implements GameHandle {
 
   readonly stage: GameHandle['stage'] = {
     timeline: new StageTimeline(),
+    gauges: new GaugeTrack(),
+    log: new MessageLog(),
     loopFor: (surface) => {
       let loop = this.loops.get(surface)
       if (!loop) {
@@ -148,6 +154,12 @@ class GameSession implements GameHandle {
             invalidate: io.invalidate,
             view: io.view,
             settings: io.settings,
+            strip: async () => ({
+              world: (await io.readWorld()) ?? WORLD_DEFAULT,
+              notice: await io.readNotice(),
+              gauges: this.stage.gauges,
+              log: this.stage.log,
+            }),
           },
           this.stage.timeline,
         )
@@ -211,7 +223,7 @@ class GameSession implements GameHandle {
         // The session owns the mode: the engine's pause becomes the derived value.
         return io.publish(patch.mode === undefined ? patch : { ...patch, mode: this.mode() })
       },
-      onEffects: (effects, at) => this.onEffects(effects, at),
+      onEffects: (effects, at, view) => this.onEffects(effects, at, view),
       toast: io.toast,
       after: (ms, fn) => {
         io.after(ms, fn)
@@ -554,12 +566,18 @@ class GameSession implements GameHandle {
     await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
-  private onEffects(effects: Effect[], at?: number): void {
+  private onEffects(effects: Effect[], at: number | undefined, view: GameView | null): void {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
     if (at !== undefined) this.lastAt = at
     // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
-    this.stage.timeline.onEffects(effects, at ?? this.lastAt, this.cadence || TURN_CADENCE_MS)
+    const now = at ?? this.lastAt
+    const cadence = this.cadence || TURN_CADENCE_MS
+    const starts = this.stage.timeline.onEffects(effects, now, cadence)
+    if (view) {
+      this.stage.gauges.onTick(view, now, cadence, this.stage.timeline)
+      this.stage.log.onEffects(effects, starts, view, now, cadence, this.stage.timeline)
+    }
     for (const loop of this.loops.values()) loop.wake()
     for (const effect of effects) {
       if (effect.k === 'rejected') {
@@ -658,6 +676,7 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
+        readNotice: () => read($, noticeAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),
@@ -726,6 +745,7 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
+        readNotice: () => read($, noticeAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),

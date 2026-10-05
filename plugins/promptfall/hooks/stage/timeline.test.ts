@@ -330,3 +330,36 @@ test('motions that ended are pruned as effects land, even while nothing observes
   const motions = (t as unknown as { motions: unknown[] }).motions
   expect(motions.length).toBeLessThan(20)
 })
+
+test('onEffects answers each group’s start, the lunge’s own start', () => {
+  const t = observed()
+  const starts = t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e1', 500), hit('e1', 'h1')], NOW)
+  const lunges = of(t.active(NOW), 'lunge')
+  expect(starts).toEqual(lunges.map((m) => m.from))
+  expect(starts).toEqual([NOW, NOW + 500])
+})
+
+test('acting names the actor during its action and the next actor once that one starts', () => {
+  const t = observed()
+  t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e1', 300), hit('e1', 'h1')], NOW)
+  expect(t.acting(NOW - 1)).toBe(null)
+  expect(t.acting(NOW + 100)).toBe('h1')
+  expect(t.acting(NOW + 300)).toBe('e1')
+  expect(t.acting(NOW + 300 + ACTION_STEPS * STEP_MS)).toBe(null)
+  expect(t.actionStarts('e1')).toEqual([NOW + 300])
+  expect(t.actions().map((a) => a.actor)).toEqual(['h1', 'e1'])
+})
+
+test('at the idle cadence the ▶ holds for the action’s battle time stretched 2.5 times', () => {
+  const t = observed()
+  t.onEffects([act('h1', 0), hit('h1', 'e1')], NOW, 5000)
+  const [a] = t.actions()
+  expect(a ? a.until - a.start : 0).toBe(ACTION_STEPS * STEP_MS * 2.5)
+})
+
+test('an act whose actor is not on the stage still gets a start and an action', () => {
+  const t = observed()
+  const starts = t.onEffects([act('ghost', 200)], NOW)
+  expect(starts).toEqual([NOW + 200])
+  expect(t.acting(NOW + 250)).toBe('ghost')
+})

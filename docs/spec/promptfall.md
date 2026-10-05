@@ -21,12 +21,13 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
 
 ## 2. Non-negotiables
 
-- The game never gets in the way of the work. The band is 10 rows at rest on
-  the Party tab (an 8-row stage and two text rows) and grows to at most 19 while
-  a boss is on the stage (ADR 0003); it drops to a 4-row compact stage when the
-  terminal is too short or 100 to 115 columns wide, collapses to 1 row under 100
-  columns, hides while Claude asks a question, and switches off per session with
-  one command.
+- The game never gets in the way of the work. The band is 13 rows at rest on
+  the Party tab (an 8-row stage and the 5-row window strip) and grows to at most
+  22 while a zone or world boss is on the stage (ADR 0003); it drops to a 6-row
+  compact band when the terminal is too short or 100 to 115 columns wide,
+  collapses to 1 row under 100 columns or 6 rows, hides while Claude asks a
+  question, and switches off per session with one command. Loot and World are
+  the strip alone, 5 rows. VS Code and mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
   drop. Every drop, trade and hero exists because the server rolled it or
@@ -405,30 +406,39 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
 ## 10. Client structure
 
-- Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World. `c`
-  collapses. Hotkeys fire only while the band holds the keyboard (ctrl+x tab or
-  a click).
+- Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
+  the message window's command line (`▶Party Loot World ▾`). `c` collapses, `f`
+  toggles farm. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
+  or a click). On terminals and the desktop their Buttons sit out of view in a
+  zero-width Box; VS Code and mobile show them as a row under the strip.
 - Party tab (phase 4): the stage, 8 rows at rest, the encounter's enemies on the
   left and the party on the right, side-on, standing on a one-row ground strip
-  coloured per zone; under it the party line (each hero's name, level, HP bar,
-  HP and a three-cell action gauge, yellow while the hero waits in the queue,
-  then the front enemy as `⚔ Goblin Brute 42/60`) and the status row (zone,
-  wave, gold, last drop). The stage grows to 12 rows for a turn boss and 17 for a
+  coloured per zone; under it the window strip (ADR 0005), Dragon Quest V's
+  windows in its pixel font: the enemy window (titled with the zone and wave,
+  one row per enemy with an HP bar, a boss with its percentage), the message
+  window (the command line, then the combat log), the party window (each hero's
+  name and level with ▶ while it acts, HP with a bar, and an action gauge that
+  fills between ticks and turns gold when full) and the purse window (gold and
+  the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
+  and red at 0. The stage grows to 12 rows for a turn boss and 17 for a
   zone or world boss, at the boss's spawn, and shrinks back after its death
   dissolve and drop pop. Kitty and Ghostty draw it as an Image, every other
   terminal as a half-block Raster, desktop, VS Code and mobile as an Svg: one
   art geometry for all, in cells on terminals and scaled on the Svg surfaces
-  (ADR 0004). On terminals: compact 4-row stage (side by side with three hero
-  rows and the status row, sprites downsampled) when `maxRows` is under what
-  the full stage needs or `bodyColumns` is 100 to 115; one line when
-  `bodyColumns` is under 100 or `maxRows` is under 4. On the Svg surfaces:
+  (ADR 0004). The strip is one Image per window on kitty and Ghostty, one Raster
+  of box-drawing text elsewhere, a second Svg on the desktop. On terminals:
+  compact (the 4-row stage, sprites downsampled, beside one 6-row party window:
+  three hero rows, the front enemy, the command line in its border) when
+  `maxRows` is under what the full band needs or `bodyColumns` is 100 to 115;
+  one line when `bodyColumns` is under 100 or `maxRows` is under 6. On the Svg surfaces:
   always the full stage, the art `clamp(bodyColumns, 116, 160)` pixels wide
   scaled to the band's width, growing to the boss heights whatever `maxRows`
   says, scaled down where a boss stage would pass the rows the surface shows
-  whole (the desktop scrolls the rest), and the
-  party line wraps by segment; the band collapses only by hand or as a
-  secondary. Hidden while `hasSurvey`. Loot and World
-  tabs stay 4 rows of text. Every Image and Svg has an alt summarising the scene.
+  whole once the strip and the hotkey row are counted (the desktop scrolls the
+  rest); the band collapses only by hand or as a secondary. Hidden while
+  `hasSurvey`. Loot and World tabs are the strip alone: the message window
+  shows the last two drops, or the World rows. Every Image and Svg has an alt
+  that carries its text.
 - Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
   or cast pose), hit flash, death dissolve, spawn fade-in, floating damage
   numbers, and a drop popping out of the defeated enemy. Driven by the sim's
@@ -437,17 +447,22 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   lunges once and all of its hits land at one impact (the Black Mage's spell
   hits every enemy at once); a heal shows a green rising number and no flash.
   Action starts stretch to the cadence and never overlap, across ticks too.
-  About 12 frames a second during an event, the idle bob at 2,
-  nothing while the band is hidden, collapsed or on another tab. The desktop
+  About 12 frames a second during an event, 4 while only gauges fill, the idle
+  bob at 2, nothing while the band is hidden or collapsed; on Loot and World
+  the loop draws the strip alone. The combat log types out each action's line
+  as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
+  12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
+  more than a tick behind are dropped, never kills, drops, level-ups, deaths or
+  sales. The desktop
   redraws once a tick with the tick's motion as SMIL. Account setting "Motion:
   full / still", default full; still drops the idle bob.
-- World tab rows (phase 3): the count online and the names in your zone, you
-  excluded; the world boss line while one is live (name, global HP bar, time
-  left, your damage), else highest zone, kills and wipes; the latest chat
-  message as a ticker, or the closed state in place.
-- World boss display (phase 3): in boss mode the Party tab's enemy slot shows the
-  boss with the global HP bar, and the status row's last segment reads the boss
-  percentage and time left on every tab. Between polls the bar shows the last
+- World tab rows (phase 3), in the message window: the count online and the
+  names in your zone, you excluded; then the latest chat message as a ticker,
+  or highest zone, kills and wipes when chat is closed or quiet. The world boss
+  shows in the enemy window instead.
+- World boss display (phase 3): in boss mode the enemy window shows the boss
+  with the global HP bar and its percentage, its title the time left, on every
+  tab. Between polls the bar shows the last
   polled HP less the damage this party dealt since. No other surface.
 - World poll failures (phase 3): a thrown poll is ignored and the World tab dims
   as stale after 45 seconds without a fresh snapshot; only a thrown submit or

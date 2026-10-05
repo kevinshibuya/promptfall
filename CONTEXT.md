@@ -163,10 +163,28 @@ Replaces the glyph where pixels draw; the glyph stays as its fallback.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
 
 **Window**:
-A framed box of the game's interface, in the Dragon Quest style: a black field, a rounded
-white border, text in the game's pixel font. The band's HUD under the stage and every tab of
-the pane are made of windows.
+A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
+line with cut corners, text in the game's pixel font. The band's strip and every tab of the
+pane are made of windows.
 _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
+
+**Strip**:
+The row of windows under the stage: the enemy window, the message window, the party window and
+the purse. Beside the compact stage it is one party window; on Loot and World it is the band.
+_Avoid_: HUD, status bar, party line (the text row it replaced)
+
+**Message window**:
+The strip's middle window: the command line on top, then the combat log, the latest drops or
+the World rows, by tab.
+_Avoid_: log panel, chat box
+
+**Command line**:
+The message window's first row, `▶Party Loot World ▾`: the band tabs, ▶ on the current one.
+_Avoid_: tab bar, menu
+
+**Purse**:
+The strip's last window: the gold and the tactics (Push on, or Farm here; `f` toggles).
+_Avoid_: wallet, status window
 
 **Combat log**:
 The running account of the encounter, one short line per event (hits, kills, drops, level-ups,
