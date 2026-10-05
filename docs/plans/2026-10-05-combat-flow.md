@@ -235,8 +235,8 @@ does not exist.
 
 **Boundaries:** No combat logic here. Golden tests will fail until Task 5; that is expected.
 
-- [ ] Add the types and constants
-- [ ] Write the two tests, run them, commit
+- [x] Add the types and constants
+- [x] Write the two tests, run them, commit
 
 ### Task 2: Tactics and the picker
 
