@@ -362,8 +362,8 @@ commit message.
 
 **Boundaries:** Only the four tunable constants and the two harness files.
 
-- [ ] Report fields
-- [ ] Tune, run, commit with the numbers
+- [x] Report fields
+- [x] Tune, run, commit with the numbers (no retune: start values hold every target)
 
 ### Task 5: Golden, vendor, and the rest of the repo green
 

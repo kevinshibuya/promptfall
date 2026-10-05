@@ -16,6 +16,9 @@ describe('balance targets', () => {
     expect(r.highestZone).toBeLessThanOrEqual(3)
     expect(r.roundsPerKillZone1).toBeGreaterThanOrEqual(2)
     expect(r.roundsPerKillZone1).toBeLessThanOrEqual(6)
+    // Grill 1.5: a hero acts about once every 2 combat ticks.
+    expect(r.heroActsPerCombatTick).toBeGreaterThanOrEqual(0.4)
+    expect(r.heroActsPerCombatTick).toBeLessThanOrEqual(0.6)
     expect(r.ticks).toBeGreaterThan(0)
     expect(r.toolCalls).toBeGreaterThan(0)
   })
