@@ -141,6 +141,12 @@ The pixel art of one hero class, enemy, world boss or item, with its animation f
 Replaces the glyph where pixels draw; the glyph stays as its fallback.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
 
+**Window**:
+A framed box of the game's interface, in the Dragon Quest style: a black field, a rounded
+white border, text in the game's pixel font. The band's HUD under the stage and every tab of
+the pane are made of windows.
+_Avoid_: panel, card, frame, box, dialog (the pane as a whole)
+
 **Cue**:
 A short sound the primary session plays alongside a toast. Every cue has a toast; most
 toasts have no cue.
