@@ -20,3 +20,4 @@ jobs:
       - run: pnpm test
       - run: pnpm vendor:check
       - run: pnpm sprites:check
+      - run: pnpm font:check

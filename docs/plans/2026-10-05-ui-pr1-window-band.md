@@ -453,9 +453,9 @@ the full check line.
 
 **Boundaries:** Nothing under `hooks/` but the generated file. No runtime file reads.
 
-- [ ] Fetch the font and licence
-- [ ] Script, grid check, hand glyphs
-- [ ] Tests, NOTICE, run the check, commit
+- [x] Fetch the font and licence
+- [x] Script, grid check, hand glyphs
+- [x] Tests, NOTICE, run the check, commit
 
 ### Task 4: The window model and the image encoder
 
