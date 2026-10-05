@@ -330,9 +330,9 @@ Red before: `advanceBattle` does not exist.
 **Boundaries:** No tuning in this task: use the start values. Do not touch the harness, the
 golden test or the plugin.
 
-- [ ] Loop and gauges sync
-- [ ] Spawn, wipe, fall and boss hooks
-- [ ] Rewrite the combat tests, run, commit
+- [x] Loop and gauges sync
+- [x] Spawn, wipe, fall and boss hooks
+- [x] Rewrite the combat tests, run, commit
 
 ### Task 4: Pace
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { GAUGE_FULL } from './battle'
 import { content } from './content'
 import { heroStats } from './progression'
 import { createInitialState } from './state'
@@ -8,6 +9,14 @@ import type { Effect, Enemy, EnemyKind, Event, GameState } from './types'
 const toolCall = { t: 'tool_call' } as const
 const turnEnd = { t: 'turn_end' } as const
 const tick = { t: 'tick' } as const
+
+/** Every party hero's gauge one point short of full: the party acts in the next tick's first steps. */
+function ready(s: GameState): GameState {
+  return {
+    ...s,
+    battle: { gauges: s.party.map((id) => ({ id, g: GAUGE_FULL - 1 })), queue: [], busy: 0 },
+  }
+}
 
 function killAll(s: GameState): GameState {
   if (!s.encounter) return s
@@ -87,8 +96,8 @@ describe('zone boss and pending party', () => {
     if (!enc) throw new Error('enc')
     const boss = enc.enemies[0]
     if (!boss) throw new Error('boss')
-    // Leave the boss at 1 hp so the next round kills it.
-    s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+    // Leave the boss at 1 hp and the party ready so the next tick kills it.
+    s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
     const r = run(s, [tick])
     expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 1, advancedTo: 2 })
     expect(r.effects).toContainEqual({ k: 'party_applied', heroIds: [k.id, b.id, a.id] })
@@ -112,7 +121,7 @@ describe('zone boss and pending party', () => {
       const enc = s.encounter
       const boss = enc?.enemies[0]
       if (!enc || !boss) throw new Error('enc')
-      s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+      s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
       const r = run(s, [tick])
       expect(r.state.zone).toBe(2)
       const fallen = pending ? a : w
@@ -129,7 +138,7 @@ describe('zone boss and pending party', () => {
     const enc = s.encounter
     const boss = enc?.enemies[0]
     if (!enc || !boss) throw new Error('enc')
-    s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+    s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
     const r = run(s, [tick])
     expect(r.state.zone).toBe(1)
     expect(r.state.wave).toBe(1)

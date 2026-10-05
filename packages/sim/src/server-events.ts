@@ -1,6 +1,7 @@
+import { SPAWN_GAUGE_MAX } from './battle'
 import { clone, draft, reject } from './draft'
 import { pushLog } from './heroes'
-import { findHero, newId } from './progression'
+import { draw, findHero, newId } from './progression'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -134,13 +135,15 @@ export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepRe
   if (state.boss !== null) return unapplicable(state, event, 'already_engaged')
   return draft(state, (s) => {
     const { hp } = event.stats
+    const id = newId(s, 'e')
     // The old encounter and queue go; a pending turn boss and the turn's tool calls stay.
     s.encounter = {
-      enemies: [{ id: newId(s, 'e'), def: 'world_boss', kind: 'world_boss', hp, maxHp: hp }],
+      enemies: [{ id, def: 'world_boss', kind: 'world_boss', hp, maxHp: hp }],
       queue: [],
       waveSize: 0,
       spawnedInWave: 0,
     }
+    s.battle.gauges.push({ id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
     s.boss = {
       bossId: event.bossId,
       name: event.name,
@@ -154,6 +157,9 @@ export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepRe
 export function bossDisengaged(state: GameState, event: Of<'boss_disengaged'>): StepResult {
   if (state.boss?.bossId !== event.bossId) return unapplicable(state, event, 'not_engaged')
   return draft(state, (s) => {
+    const id = s.encounter?.enemies.find((e) => e.kind === 'world_boss')?.id
+    s.battle.gauges = s.battle.gauges.filter((e) => e.id !== id)
+    s.battle.queue = s.battle.queue.filter((q) => q !== id)
     s.encounter = null
     s.boss = null
   })
