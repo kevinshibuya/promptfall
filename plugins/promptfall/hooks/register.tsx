@@ -61,6 +61,8 @@ type Io = {
   clearDialog: () => Promise<void>
   /** Reads the `world` atom. */
   readWorld: () => Promise<WorldState | null>
+  /** Reads the `notice` atom: the band's strip shows it. */
+  readNotice: () => Promise<string | null>
   fetch: FetchLike
   blit: (args: UiBlitArgs) => Promise<UiBlitResult>
   /** $.ui.invalidate('ui.render') */
@@ -152,6 +154,12 @@ class GameSession implements GameHandle {
             invalidate: io.invalidate,
             view: io.view,
             settings: io.settings,
+            strip: async () => ({
+              world: (await io.readWorld()) ?? WORLD_DEFAULT,
+              notice: await io.readNotice(),
+              gauges: this.stage.gauges,
+              log: this.stage.log,
+            }),
           },
           this.stage.timeline,
         )
@@ -668,6 +676,7 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
+        readNotice: () => read($, noticeAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),
@@ -736,6 +745,7 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
+        readNotice: () => read($, noticeAtom),
         fetch: timedFetch(
           (url, init) => $.http.fetch(url, init),
           (ms, fn) => $.clock.after(ms, fn),

@@ -1,20 +1,23 @@
-import { atom, type Elements, type On, read, update } from 'claude-code'
+import { atom, type On, read, update } from 'claude-code'
 import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { encode } from '../sprites/base64'
-import { type Layout, layoutFor } from '../stage/layout'
+import { GaugeTrack } from '../stage/gauges'
+import { encodeImage } from '../stage/image'
+import { layoutFor } from '../stage/layout'
+import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
 import { stageAt } from '../stage/model'
 import { renderSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
-  COMPACT_STAGE_COLUMNS,
   DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
   DESKTOP_ROW_PX,
-  DESKTOP_TEXT_ROWS,
+  FULL_MIN_COLUMNS,
   PROBE_ALT_DENY,
   PROBE_DELAY_MS,
+  STAGE_MAX_COLUMNS,
   SVG_INTERACTIVE,
   SVG_SMIL,
 } from '../stage/tuning'
@@ -25,9 +28,12 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
-import { shownBoss } from './boss'
-import { CLASS_INITIAL, clip, formatCount, formatGold, padEnd, padStart, waveLabel } from './format'
-import { ClassGlyph, HpBar, PartyLine, RarityText } from './parts'
+import { windowFrame, windowKey } from '../windows/image'
+import { sceneCells } from '../windows/raster'
+import { sceneSvg } from '../windows/svg'
+import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
+import { CLASS_INITIAL, clip, formatGold } from './format'
+import { type StripInput, stripScene, stripTracks } from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -53,69 +59,27 @@ import { bossSegment, worldRows } from './world-rows'
 
 export { bossSegment, worldRows }
 
-type Els = Pick<Elements['terminal'], 'Box' | 'Text'>
-
 /** One transparent pixel: what the probe's Image draws first. */
 const PROBE_A = { rgba: encode(Uint8Array.of(0, 0, 0, 0)), width: 1, height: 1 }
 /** One pixel of alpha 1: a source different from PROBE_A, so the blit is a real swap. */
 const PROBE_B = { rgba: encode(Uint8Array.of(0, 0, 0, 1)), width: 1, height: 1 }
-const STATUS_TABS_WIDTH = 36
+/** The desktop strip's SMIL horizon: the idle cadence, 5 s, plus a second. */
+const SVG_STRIP_HORIZON_MS = 6000
 
 /** A probe armed and not yet answered; module state, so a reload may arm one more. */
 let probePending = false
 /** For a band drawn without a running game (a hot reload before session.start): drawing only. */
 const looseTimeline = new StageTimeline()
+const looseGauges = new GaugeTrack()
+const looseLog = new MessageLog()
 
-/** The compact layout's three hero rows, each with its enemy slot, in `width` columns. */
-function heroRows(els: Els, view: GameView, world: WorldState, width: number) {
-  const { Box, Text } = els
-  const bar = 6
-  const enemyWidth = Math.max(12, Math.floor(width / 3))
-  // The class (7), the level (5), the bar and the hp (9) take the rest.
-  const nameWidth = Math.max(4, width - enemyWidth - (21 + bar))
-  const shown = view.boss ? shownBoss(view, world) : null
-  const rows = []
-  for (let i = 0; i < 3; i++) {
-    const hero = view.heroes[i]
-    const enemy = view.enemies[i]
-    const enemyText = enemy
-      ? `${i === 0 ? '⚔' : ' '} ${enemy.glyph} ${enemy.name} ${enemy.hp}/${enemy.maxHp}`
-      : ''
-    const slotText = (text: string) => (
-      <Text wrap="truncate">{padEnd(` ${clip(text, enemyWidth - 2)}`, enemyWidth)}</Text>
-    )
-    let enemySlot = slotText(enemyText)
-    if (view.boss) {
-      // Boss mode: the slot's first row is the boss's name, the second its bar (or what
-      // you dealt, when the snapshot has no such boss), the third empty.
-      if (i === 0) enemySlot = slotText(`⚔ ${view.boss.glyph} ${view.boss.name}`)
-      else if (i === 1 && shown?.engaged) {
-        const hpText = `${formatCount(shown.shownHp)}/${formatCount(shown.boss.maxHp)}`
-        enemySlot = (
-          <Box key="boss-slot" flexDirection="row">
-            <Text>{'   '}</Text>
-            {HpBar(els, shown.shownHp, shown.boss.maxHp, bar)}
-            <Text wrap="truncate">{padEnd(` ${hpText}`, Math.max(0, enemyWidth - 3 - bar))}</Text>
-          </Box>
-        )
-      } else if (i === 1) enemySlot = slotText(`  you ${formatCount(view.boss.dealt)}`)
-      else enemySlot = slotText('')
-    }
-    rows.push(
-      <Box key={`row-${i}`} flexDirection="row">
-        {hero ? ClassGlyph(els, hero.cls) : <Text>{padEnd('', 7)}</Text>}
-        <Text dimColor={hero ? !hero.alive : true} wrap="truncate">
-          {padEnd(hero?.name ?? '', nameWidth)}
-        </Text>
-        <Text wrap="truncate">{hero ? ` L${padEnd(String(hero.level), 3)}` : ''}</Text>
-        {hero ? HpBar(els, hero.hp, hero.maxHp, bar) : <Text> </Text>}
-        <Text wrap="truncate">{hero ? padStart(`${hero.hp}/${hero.maxHp}`, 9) : ''}</Text>
-        {enemySlot}
-      </Box>,
-    )
-  }
-  return rows
-}
+const HOTKEYS = [
+  { hotkey: 'p', label: 'party' },
+  { hotkey: 'l', label: 'loot' },
+  { hotkey: 'w', label: 'world' },
+  { hotkey: 'c', label: '▾' },
+  { hotkey: 'f', label: 'farm' },
+] as const
 
 export function registerBand(on: On, game: () => GameHandle | null): void {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -153,19 +117,23 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const els = $.ui.resolve(e)
     const { Box, Text, Button } = els
     const width = Math.max(20, e.props.bodyColumns)
+    const terminal = e.surface === 'terminal'
 
     const setPrefs = (patch: Partial<Prefs>) =>
       update($, prefsAtom, (p) => ({ ...(p ?? PREFS_DEFAULT), ...patch }))
 
-    // The Party tab sizes itself to the stage; Loot and World keep four rows.
-    const party = prefs.bandTab === 'party'
+    const tab = prefs.bandTab
+    const party = tab === 'party'
     const timeline = handle?.stage.timeline ?? looseTimeline
-    let layout: Layout = layoutFor(4, e.props, e.surface)
-    if (party) {
-      timeline.observe(view, now)
-      layout = layoutFor(timeline.rowsAt(view, now), e.props, e.surface)
-    }
-    // On a terminal, layoutFor collapses below 100 columns or 4 rows; the Svg surfaces never do.
+    // Hotkeys need Buttons on screen (spike sheet): hidden in a zero-width Box on terminals
+    // (rung a′), a row of their own on the Svg surfaces (rung c).
+    const extra: 0 | 1 = terminal ? 0 : 1
+    if (party) timeline.observe(view, now)
+    const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
+      tab,
+      extra,
+    })
+    // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
 
     if (collapsed) {
@@ -187,233 +155,252 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       )
     }
 
+    // The window strip: under the stage, beside the compact stage, or alone on Loot and World.
+    const kind = layout.kind === 'full' ? 'full' : layout.kind === 'compact' ? 'compact' : 'bare'
+    const stripColumns = terminal
+      ? Math.min(width, STRIP_MAX_COLUMNS)
+      : Math.min(Math.max(e.props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
+    const input: StripInput = {
+      view,
+      world,
+      tab,
+      kind,
+      columns: stripColumns,
+      now,
+      notice,
+      motion: settings.motion,
+      timeline,
+      gauges: handle?.stage.gauges ?? looseGauges,
+      log: handle?.stage.log ?? looseLog,
+    }
+    const { scene } = stripScene(input)
+
+    const press: Record<(typeof HOTKEYS)[number]['hotkey'], () => void> = {
+      p: () => void setPrefs({ bandTab: 'party' }),
+      l: () => void setPrefs({ bandTab: 'loot' }),
+      w: () => void setPrefs({ bandTab: 'world' }),
+      c: () => void setPrefs({ collapsed: true }),
+      f: () => {
+        // The path `/promptfall farm` takes (hooks/command.ts).
+        if (handle?.canApply()) handle.apply({ t: 'set_farm', on: !view.farm }, now)
+      },
+    }
+    // Not `h`: that name is the JSX factory.
+    const buttons = HOTKEYS.map((k) => (
+      <Button
+        key={`hot-${k.hotkey}`}
+        label={k.label}
+        hotkey={k.hotkey}
+        plain
+        dimColor={k.hotkey !== 'c' && k.hotkey !== 'f' && k.label !== tab}
+        onPress={press[k.hotkey]}
+      />
+    ))
+    const hidden = (
+      <Box key="hotkeys" width={0} overflow="hidden">
+        {buttons}
+      </Box>
+    )
+
+    let stage = null
+    let strip = null
+    let probe = null
+    let renderer: 'raster' | 'image' | 'svg' | 'unknown' = 'svg'
+    if (terminal && 'Raster' in els) {
+      renderer = await read($, rendererAtom)
+      const { Raster, Image } = els
+      if (renderer === 'unknown') {
+        // Empty rows while the probe decides, so the band's height does not jump when it lands.
+        strip = (
+          <Box key="strip-empty" flexDirection="column">
+            {Array.from({ length: scene.rows }, (_, i) => (
+              <Text key={`strip-empty-${i}`}> </Text>
+            ))}
+          </Box>
+        )
+        // A renderer forced at session start set the atom; one forced later applies from the next
+        // start, so this session still probes.
+        probe = <Image key="probe" source={PROBE_A} columns={1} rows={1} alt=" " />
+        if (!probePending) {
+          probePending = true
+          const requestId = e.requestId
+          $.clock.after(PROBE_DELAY_MS, () => {
+            void (async () => {
+              const r = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B })
+              probePending = false
+              // Only the no-pictures deny settles on raster; any other leaves it unknown.
+              if (r.deny === undefined) await update($, rendererAtom, () => 'image')
+              else if (r.deny.startsWith(PROBE_ALT_DENY))
+                await update($, rendererAtom, () => 'raster')
+            })()
+          })
+        }
+      } else if (renderer === 'raster') {
+        strip = (
+          <Raster key="strip" columns={scene.columns} rows={scene.rows} cells={sceneCells(scene)} />
+        )
+      } else {
+        strip = (
+          <Box key="strip-windows" flexDirection="row">
+            {scene.windows.map((w) => (
+              <Image
+                key={windowKey(w)}
+                source={encodeImage(windowFrame(w), WINDOW_SCALE)}
+                columns={w.columns}
+                rows={w.rows}
+                alt={w.alt}
+              />
+            ))}
+          </Box>
+        )
+      }
+    } else if (!terminal && 'Svg' in els) {
+      const { Svg } = els
+      const tracks = SVG_SMIL ? stripTracks(input, SVG_STRIP_HORIZON_MS) : []
+      strip = (
+        <Svg
+          key="strip"
+          source={sceneSvg(scene, tracks, {
+            smil: SVG_SMIL,
+            width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+          })}
+          alt={scene.alt}
+          isInteractive={SVG_INTERACTIVE}
+        />
+      )
+    }
+
     // The stage: an element sized to the layout's box, its first frame drawn here so a redraw
     // is never blank; the loop blits every frame after it.
-    let stage = null
-    let probe = null
-    if (party && layout.box) {
-      const box = layout.box
-      if (e.surface !== 'terminal') {
-        if ('Svg' in els) {
+    const box = layout.box
+    if (box && !terminal && 'Svg' in els) {
+      const model = stageAt(view, timeline, now, box, { compact: false, motion: settings.motion })
+      const source = renderSvg(model, timeline.active(now), {
+        smil: SVG_SMIL,
+        now,
+        // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
+        width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+        motion: settings.motion,
+      })
+      const { Svg } = els
+      // At the band's width a boss stage is taller than the band the desktop shows whole, and
+      // the desktop scrolls the rest away: scale it down to the rows left under it (ADR 0004).
+      const stripPx =
+        (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
+      const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
+      const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
+      const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
+      const fit =
+        // Under two rows left there is nothing to fit to: the desktop scrolls the band instead.
+        natural > cap && cap >= DESKTOP_ROW_PX * 2
+          ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
+          : {}
+      stage = (
+        <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_INTERACTIVE} {...fit} />
+      )
+    } else if (box && terminal && 'Raster' in els) {
+      const { Raster, Image } = els
+      if (renderer === 'unknown') {
+        stage = (
+          <Box key="stage-empty" flexDirection="column">
+            {Array.from({ length: box.rows }, (_, i) => (
+              <Text key={`stage-empty-${i}`}> </Text>
+            ))}
+          </Box>
+        )
+      } else {
+        const frame = stageFrame(
+          view,
+          timeline,
+          now,
+          layout,
+          renderer === 'raster' ? 'raster' : 'image',
+          settings.motion,
+        )
+        if ('cells' in frame) {
+          stage = <Raster key="stage" columns={box.columns} rows={box.rows} cells={frame.cells} />
+        } else {
           const model = stageAt(view, timeline, now, box, {
             compact: layout.kind === 'compact',
             motion: settings.motion,
           })
-          const source = renderSvg(model, timeline.active(now), {
-            smil: SVG_SMIL,
-            now,
-            // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
-            width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
-            motion: settings.motion,
-          })
-          const { Svg } = els
-          // At the band's width a boss stage is taller than the band the desktop shows whole, and
-          // the desktop scrolls the rest away: scale it down to the rows left (ADR 0004).
-          const cap = (e.props.maxRows - DESKTOP_TEXT_ROWS) * DESKTOP_ROW_PX
-          const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
-          const fit =
-            // Under two rows left there is nothing to fit to: the desktop scrolls the band instead.
-            natural > cap && cap >= DESKTOP_ROW_PX * 2
-              ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
-              : {}
           stage = (
-            <Svg
-              key="stage"
-              source={source}
+            <Image
+              key={stageKey(box)}
+              source={frame.source}
+              columns={box.columns}
+              rows={box.rows}
               alt={model.alt}
-              isInteractive={SVG_INTERACTIVE}
-              {...fit}
             />
           )
         }
-        loop?.mount(
-          SVG_SMIL
-            ? null
-            : {
-                requestId: e.requestId,
-                key: 'stage',
-                layout,
-                renderer: 'svg',
-                props: e.props,
-                surface: e.surface,
-              },
-        )
-      } else if ('Raster' in els) {
-        const renderer = await read($, rendererAtom)
-        if (renderer === 'unknown') {
-          // Empty rows while the probe decides, so the band's height does not jump when it lands.
-          stage = (
-            <Box key="stage-empty" flexDirection="column">
-              {Array.from({ length: box.rows }, (_, i) => (
-                <Text key={`stage-empty-${i}`}> </Text>
-              ))}
-            </Box>
-          )
-          loop?.mount(null)
-          // A renderer forced at session start set the atom; one forced later applies from the next
-          // start, so this session still probes.
-          {
-            const { Image } = els
-            probe = <Image key="probe" source={PROBE_A} columns={1} rows={1} alt=" " />
-            if (!probePending) {
-              probePending = true
-              const requestId = e.requestId
-              $.clock.after(PROBE_DELAY_MS, () => {
-                void (async () => {
-                  const r = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B })
-                  probePending = false
-                  // Only the no-pictures deny settles on raster; any other leaves it unknown.
-                  if (r.deny === undefined) await update($, rendererAtom, () => 'image')
-                  else if (r.deny.startsWith(PROBE_ALT_DENY))
-                    await update($, rendererAtom, () => 'raster')
-                })()
-              })
-            }
-          }
-        } else {
-          const frame = stageFrame(view, timeline, now, layout, renderer, settings.motion)
-          const { Raster, Image } = els
-          if ('cells' in frame) {
-            stage = <Raster key="stage" columns={box.columns} rows={box.rows} cells={frame.cells} />
-          } else {
-            const model = stageAt(view, timeline, now, box, {
-              compact: layout.kind === 'compact',
-              motion: settings.motion,
-            })
-            stage = (
-              <Image
-                key={stageKey(box)}
-                source={frame.source}
-                columns={box.columns}
-                rows={box.rows}
-                alt={model.alt}
-              />
-            )
-          }
-          const key = renderer === 'image' ? stageKey(box) : 'stage'
-          loop?.mount({
-            requestId: e.requestId,
-            key,
-            layout,
-            renderer,
-            props: e.props,
-            surface: e.surface,
-          })
-        }
       }
+    }
+
+    // The loop: terminals blit the stage and the strip; the desktop runs on SMIL.
+    if (terminal && (renderer === 'raster' || renderer === 'image')) {
+      loop?.mount({
+        requestId: e.requestId,
+        key: box ? (renderer === 'image' ? stageKey(box) : 'stage') : '',
+        layout,
+        renderer,
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
+    } else if (!terminal && !SVG_SMIL) {
+      loop?.mount({
+        requestId: e.requestId,
+        key: 'stage',
+        layout,
+        renderer: 'svg',
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
     } else {
       loop?.mount(null)
     }
 
-    const statusRow = (rowWidth: number) => {
-      const tail =
-        notice ??
-        bossSegment(view, world, now) ??
-        (view.lastDrop ? `last: ${view.lastDrop.text}` : 'no drops yet')
-      const status = `Zone ${view.zone} ${view.zoneName} · ${waveLabel(view.wave)} · ${formatGold(view.gold)} · ${tail}`
-      return (
-        <Box key="row-status" flexDirection="row">
-          <Text wrap="truncate">
-            {`${padEnd(status, rowWidth - STATUS_TABS_WIDTH - 1 - (probe ? 1 : 0))} `}
-          </Text>
-          <Button
-            key="tab-party"
-            label="party"
-            hotkey="p"
-            plain
-            dimColor={prefs.bandTab !== 'party'}
-            onPress={() => setPrefs({ bandTab: 'party' })}
-          />
-          <Text> </Text>
-          <Button
-            key="tab-loot"
-            label="loot"
-            hotkey="l"
-            plain
-            dimColor={prefs.bandTab !== 'loot'}
-            onPress={() => setPrefs({ bandTab: 'loot' })}
-          />
-          <Text> </Text>
-          <Button
-            key="tab-world"
-            label="world"
-            hotkey="w"
-            plain
-            dimColor={prefs.bandTab !== 'world'}
-            onPress={() => setPrefs({ bandTab: 'world' })}
-          />
-          <Text> </Text>
-          <Button
-            key="collapse"
-            label="▾"
-            hotkey="c"
-            plain
-            dimColor
-            onPress={() => setPrefs({ collapsed: true })}
-          />
-          {probe}
-        </Box>
-      )
-    }
+    const stripRow = (
+      <Box key="row-strip" flexDirection="row">
+        {strip}
+        {probe}
+        {terminal ? hidden : null}
+      </Box>
+    )
+    const hotkeyRow = terminal ? null : (
+      <Box key="row-hotkeys" flexDirection="row">
+        {buttons.flatMap((b, i) => (i === 0 ? [b] : [<Text key={`hot-gap-${i}`}> </Text>, b]))}
+      </Box>
+    )
 
-    if (party && layout.kind === 'full') {
-      return (
-        <Box key="band" flexDirection="column">
-          {/* On the desktop a row would leave the stage's frame at its default 300 points. */}
-          <Box key="row-stage" flexDirection={e.surface === 'terminal' ? 'row' : 'column'}>
-            {stage}
-          </Box>
-          {PartyLine(els, view, world, width, e.surface !== 'terminal')}
-          {statusRow(width)}
-        </Box>
-      )
-    }
-
-    if (party && layout.kind === 'compact') {
-      const left = Math.max(20, width - COMPACT_STAGE_COLUMNS)
+    if (layout.kind === 'compact') {
       return (
         <Box key="band" flexDirection="column">
           <Box key="row-compact" flexDirection="row">
-            <Box key="compact-rows" flexDirection="column">
-              {heroRows(els, view, world, left)}
-              {statusRow(left)}
+            <Box key="compact-stage" flexDirection="column">
+              <Text key="compact-above"> </Text>
+              {stage}
+              <Text key="compact-below"> </Text>
             </Box>
-            {stage}
+            {strip}
+            {probe}
+            {hidden}
           </Box>
         </Box>
       )
     }
-
-    const rows = []
-    if (prefs.bandTab === 'loot') {
-      const lines = view.loot.slice(-3)
-      for (let i = 0; i < 3; i++) {
-        const line = lines[i]
-        rows.push(
-          <Box key={`row-${i}`} flexDirection="row">
-            {line ? (
-              RarityText(els, clip(line.text, width), line.rarity)
-            ) : (
-              <Text dimColor>{i === 0 ? 'No loot yet' : ' '}</Text>
-            )}
-          </Box>,
-        )
-      }
-    } else {
-      worldRows(view, world, now).forEach((row, i) => {
-        rows.push(
-          <Box key={`row-${i}`} flexDirection="row">
-            <Text key={`world-${i}`} dimColor={row.dim} wrap="truncate">
-              {clip(row.text, width)}
-            </Text>
-          </Box>,
-        )
-      })
-    }
-    rows.push(statusRow(width))
     return (
       <Box key="band" flexDirection="column">
-        {rows}
+        {stage ? (
+          // On the desktop a row would leave the stage's frame at its default 300 points.
+          <Box key="row-stage" flexDirection={terminal ? 'row' : 'column'}>
+            {stage}
+          </Box>
+        ) : null}
+        {stripRow}
+        {hotkeyRow}
       </Box>
     )
   })

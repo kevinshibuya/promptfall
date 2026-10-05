@@ -639,7 +639,7 @@ Then the full check line.
 
 - [x] Window contents per kind
 - [x] Tracks, hotspots, alt
-- [ ] Scenarios, goldens, PNGs; Kevin's look; run the check, commit
+- [x] Scenarios, goldens, PNGs; Kevin's look; run the check, commit
 
 ### Task 9: The band draws the strip
 
@@ -723,10 +723,10 @@ Red before: the band has a status row. Then the full check line.
 
 **Boundaries:** No pane (dialog) change; that is PR 2. No change to what the stage itself draws.
 
-- [ ] Layout rows and constants
-- [ ] Loop: strip blits, delay rule, Loot and World
-- [ ] Band branches per surface, hotkeys, `f`
-- [ ] Remove the status row and `PartyLine`; tests, run the check, commit
+- [x] Layout rows and constants
+- [x] Loop: strip blits, delay rule, Loot and World
+- [x] Band branches per surface, hotkeys, `f`
+- [x] Remove the status row and `PartyLine`; tests, run the check, commit
 
 ### Task 10: Docs, the driven pass, the pull request
 

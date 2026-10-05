@@ -1,9 +1,12 @@
 import type { UiBlitArgs, UiBlitResult } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import type { GameView, Settings } from '../../types'
-import { SETTINGS_DEFAULT } from '../state'
+import { SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
+import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { boss, wave } from './fixtures'
+import { GaugeTrack } from './gauges'
 import { layoutFor } from './layout'
+import { MessageLog } from './log'
 import { type LoopIo, StageLoop, type StageSite } from './loop'
 import { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
@@ -22,10 +25,13 @@ type Harness = {
     onView: (() => void) | null
     /** The next blits reject, as a failed call through `$` would. */
     rejects: number
+    /** What the strip reads; null (the default) draws no strip, the stage alone. */
+    strip: Awaited<ReturnType<LoopIo['strip']>>
   }
 }
 
-const PROPS = { bodyColumns: 120, maxRows: 20 }
+// Room for a zone boss: 17 stage rows and the 5-row strip.
+const PROPS = { bodyColumns: 120, maxRows: 30 }
 
 function site(
   renderer: StageSite['renderer'] = 'raster',
@@ -35,13 +41,15 @@ function site(
 ): StageSite {
   const t = new StageTimeline()
   t.observe(view, 0)
+  const extra = surface === 'terminal' ? 0 : 1
   return {
     requestId: 'band-1',
     key: 'stage',
-    layout: layoutFor(t.rowsAt(view, 0), props, surface),
+    layout: layoutFor(t.rowsAt(view, 0), props, surface, { tab: 'party', extra }),
     renderer,
     props,
     surface,
+    strip: { kind: 'full', columns: props.bodyColumns, tab: 'party', extra },
   }
 }
 
@@ -96,6 +104,7 @@ function harness(clock: Clock, blitMs = 0): Harness {
     answer: {},
     onView: null,
     rejects: 0,
+    strip: null,
   }
   let now = 0
   const io: LoopIo = {
@@ -121,6 +130,7 @@ function harness(clock: Clock, blitMs = 0): Harness {
       return v
     },
     settings: async () => state.settings,
+    strip: async () => state.strip,
   }
   const timeline = new StageTimeline()
   timeline.observe(wave(), 1_000_000)
@@ -237,7 +247,7 @@ test('a desktop svg site at 95 × 12 keeps running through a zone boss', async (
   const rows = h.timeline.rowsAt(boss(), await clock.now())
   h.loop.mount({
     ...site('svg', boss(), props, 'desktop'),
-    layout: layoutFor(rows, props, 'desktop'),
+    layout: layoutFor(rows, props, 'desktop', { tab: 'party', extra: 1 }),
   })
   // On a terminal 95 × 12 is the one-row band: a tick that ignored the surface would stop the site.
   h.timeline.onEffects(hit, await clock.now())
@@ -288,6 +298,7 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
       return new Promise<GameView>((resolve) => clock.after(150, () => resolve(wave())))
     },
     settings: async () => SETTINGS_DEFAULT,
+    strip: async () => null,
   }
   const timeline = new StageTimeline()
   timeline.observe(wave(), 1_000_000)
@@ -300,4 +311,86 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
   await clock.advance(2_000)
   expect(blits.length).toBeGreaterThan(before)
   expect(blits.length).toBeGreaterThan(0)
+})
+
+/** The strip's reads, with a fresh tracker and log. */
+function extras() {
+  return { world: WORLD_DEFAULT, notice: null, gauges: new GaugeTrack(), log: new MessageLog() }
+}
+
+test('the image strip takes its first frame as drawn, then blits only the window that changed', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(site('image'))
+  await clock.advance(IDLE_FRAME_MS * 2)
+  // The render drew the strip: nothing changed since, so no window blits.
+  expect(h.blits.filter((b) => b.key.startsWith('win-'))).toHaveLength(0)
+  const v = wave()
+  v.gold = 1240
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits.filter((b) => b.key.startsWith('win-')).map((b) => b.key)).toEqual([
+    'win-purse-13x5',
+  ])
+})
+
+test('the raster strip blits one strip Raster when it changes', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(site('raster'))
+  await clock.advance(EVENT_FRAME_MS + 1)
+  const v = wave()
+  v.farm = true
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  const strip = h.blits.find((b) => b.key === 'strip')
+  expect(strip && 'cells' in strip).toBe(true)
+  expect([strip?.columns, strip?.rows]).toEqual([120, 5])
+})
+
+test('with only a gauge filling the loop re-arms at the gauge rate, capped by the bob', async () => {
+  const clock = fakeClock(1_000_000)
+  const h = harness(clock)
+  const e = extras()
+  h.state.strip = e
+  const t0 = await clock.now()
+  // A batch landed: the gauges fill for 5 s at the idle cadence, nobody acts.
+  e.gauges.onTick(wave(), t0, 5000, h.timeline)
+  const v = wave()
+  v.heroes = v.heroes.map((x) => ({ ...x, gauge: 9000, queued: false }))
+  h.state.view = v
+  e.gauges.onTick(v, t0 + 1, 5000, h.timeline)
+  h.loop.mount(site('raster', v))
+  await clock.advance(2_000)
+  const gaps = h.times.slice(2).map((t, i) => t - (h.times[i + 1] ?? t))
+  expect(gaps.length).toBeGreaterThan(4)
+  expect(Math.max(...gaps)).toBeLessThanOrEqual(GAUGE_FRAME_MS)
+})
+
+test('a bare site (World) blits the strip and no stage; a boss arriving is not a layout change', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  const props = PROPS
+  h.loop.mount({
+    requestId: 'band-1',
+    key: '',
+    layout: layoutFor(0, props, 'terminal', { tab: 'world', extra: 0 }),
+    renderer: 'image',
+    props,
+    surface: 'terminal',
+    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
+  })
+  await clock.advance(EVENT_FRAME_MS + 1)
+  const v = wave()
+  v.highestZone = 4
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits.some((b) => b.key === 'win-message-40x5')).toBe(true)
+  expect(h.blits.some((b) => b.key === 'stage' || b.key.startsWith('stage-'))).toBe(false)
+  h.state.view = boss()
+  await clock.advance(IDLE_FRAME_MS * 3)
+  expect(h.invalidations).toHaveLength(0)
 })
