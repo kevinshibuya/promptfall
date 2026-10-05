@@ -148,6 +148,45 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
   at a time (1.13's skipping rule may go), the gauge's fill rate and how "full" shows in time,
   and the order the stage plays events in.
 
+### 1.16 Planning gaps (round 4, while planning UI PR 1, recommended, accepted)
+
+Raised by the UI PR 1 planner on 2026-10-05 (Opus 5.5, Fable still out); Kevin took every
+recommendation.
+
+- Zone, wave, gold and tactics: "Zone 3 · Wave 2" is the enemy window's title. A small window at
+  the strip's right end holds gold ("1,240G") and tactics ("Push on" or "Farm here", `f`
+  toggles). The zone name leaves the band (it stays in the alt, the World tab and the "Zone 3
+  cleared!" line).
+- The status tail: a notice is a message window line, shown at once, never typed. Boss % and time
+  left sit on the boss's line in the enemy window (1.7). The last drop is a log line and the Loot
+  tab. Nothing else carries the tail.
+- Loot and World tabs: no stage. The band is the strip alone; the message window shows the last
+  two drops or the World lines (online in your zone, then the chat ticker or your records). The
+  other windows stay.
+- Compact (100-115 columns, or short) grows from 4 to 6 rows: the 52-column stage centred
+  vertically, beside one party window whose top border carries "Z3 · W2 · 1,240G", then three
+  hero rows (`Aldric L4 H 42 ▬▬ ▰▰▱`, ▶ on the acting hero), a front enemy row, and the command
+  line `▶Party Loot World ▾` in its bottom border. No message window and no log in compact. Under
+  4 rows of height the band collapses to one line.
+- A Black Mage action is one line: "Morwen hits 3 foes for 8, 9 and 7." Kills follow on their own
+  lines.
+- The log's words: "Aldric hits Wood Goblin for 12." / "Wood Goblin hits Aldric for 5.";
+  "Lyra heals Aldric for 14."; "Wood Goblin is defeated!"; "Found a Silk Robe!"; "Found a Rusty
+  Sword, sold for 3G."; "Morwen reached level 5!"; "Aldric falls!"; "Grave Lord appears!";
+  "Zone 3 cleared!"; "The party retreats to zone 2."; "Sold Silk Robe for 120G."; "Boss reward:
+  50G." Gold, wave_cleared and the other effects print nothing.
+- Pacing: 1.13's skip rule stays as a safety valve only (hit lines dropped when the queue falls
+  more than a tick behind; never kills, drops, level-ups, deaths or sales); typing speeds up while
+  two or more lines wait. This settles the node 1.15 moved to the combat grill.
+- Tab hotkeys need Buttons on screen. The spike picks the first rung that works: (a) plain
+  Buttons positioned over the command line in the picture; (b) a 3-cell column of Buttons at the
+  strip's right edge; (c) one text row of Buttons under the strip (band +1 row).
+- Planner's calls, cheap to change: a window cell is 8 x 16 picture pixels (DotGothic16's Latin
+  glyphs), the spike checks sharpness; the desktop strip is a second `Svg` under the stage,
+  gauges animate with SMIL and typing is a stepped clip; gauges fill smoothly by replaying
+  `gaugePerStep` from the timeline's action starts, snapping to the view's value when the tick's
+  playback ends.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
