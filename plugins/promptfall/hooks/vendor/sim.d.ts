@@ -251,6 +251,13 @@ type Effect = {
     entry: Extract<LootEntry, {
         k: 'trade';
     }>;
+}
+/** Output only: one per attack, by and target actor ids (Hero.id or Enemy.id); feeds no hash. */
+ | {
+    k: 'hit';
+    by: string;
+    target: string;
+    amount: number;
 };
 type GameState = {
     v: typeof SIM_VERSION;

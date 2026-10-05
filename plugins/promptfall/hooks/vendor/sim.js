@@ -1063,7 +1063,8 @@ function lowestHpEnemy(enemies2) {
   for (const e of enemies2) if (!best || e.hp < best.hp) best = e;
   return best;
 }
-function hitEnemy(s, enemy, amount, effects) {
+function hitEnemy(s, by, enemy, amount, effects) {
+  effects.push({ k: "hit", by, target: enemy.id, amount });
   if (enemy.kind === "world_boss") {
     if (s.boss) s.boss.dealt += amount;
     return;
@@ -1078,14 +1079,15 @@ function heroAct(s, hero, effects, round) {
   switch (hero.cls) {
     case "knight": {
       const target = encounter.enemies[0];
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
+      if (target)
+        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
       return;
     }
     case "black_mage": {
       const atk = Math.floor(stats.atk * 6e3 / 1e4);
       for (const target of [...encounter.enemies]) {
         if (!s.encounter?.enemies.includes(target)) continue;
-        hitEnemy(s, target, damage(s, atk, enemyStats(s, target).def), effects);
+        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects);
       }
       return;
     }
@@ -1106,7 +1108,8 @@ function heroAct(s, hero, effects, round) {
         return;
       }
       const target = lowestHpEnemy(encounter.enemies);
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
+      if (target)
+        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
       return;
     }
     case "archer": {
@@ -1114,7 +1117,7 @@ function heroAct(s, hero, effects, round) {
       if (!target) return;
       let amount = damage(s, stats.atk, enemyStats(s, target).def);
       if (drawBp(s) < 2e3) amount *= 2;
-      hitEnemy(s, target, amount, effects);
+      hitEnemy(s, hero.id, target, amount, effects);
       return;
     }
   }
@@ -1130,6 +1133,7 @@ function enemyAct(s, enemy, effects) {
   const stats = enemyStats(s, enemy);
   const amount = damage(s, stats.atk, heroStats(s, target).def);
   target.hp = Math.max(0, target.hp - amount);
+  effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
   if (target.hp === 0) effects.push({ k: "hero_fell", heroId: target.id });
 }
 function resolveRound(s, effects) {

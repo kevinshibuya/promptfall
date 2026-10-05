@@ -10,9 +10,11 @@ import type {
   OrdersState,
   Prefs,
   SellState,
+  Settings,
   WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
+import { spriteFor } from '../sprites/index'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
@@ -20,17 +22,21 @@ import {
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   PREFS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
 import { chatBody, postChat } from './chat'
-import { CLASS_LABEL, formatGold } from './format'
+import { CLASS_LABEL, formatGold, type TextFit } from './format'
 import { boardsBody, loadBoards } from './leaderboards'
 import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
 import { RARITY_COLOR } from './parts'
 import { openSell, sellBody, sellTrade } from './sell'
+import { fitRow, ListSprite, listSpriteColumns } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
 
@@ -47,6 +53,14 @@ const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
+
+const RENDERER_NEXT: Record<Settings['renderer'], Settings['renderer']> = {
+  auto: 'image',
+  image: 'raster',
+  raster: 'auto',
+}
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
 
@@ -104,6 +118,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const view: GameView | null = await read($, viewAtom)
     const mode: Mode = (await read($, modeAtom)) ?? 'primary'
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
+    const listRenderer = await read($, rendererAtom)
     const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
     const notice = await read($, noticeAtom)
     const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
@@ -234,6 +249,12 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     }
 
     const heroNameById = new Map(view.roster.map((h) => [h.id, h.name]))
+    const paneWidth = Math.max(20, e.props.bodyColumns)
+    /** The columns left for a row's text beside its sprite. */
+    const rowWidth = (cols: number) => paneWidth - (cols > 0 ? cols + 1 : 0)
+    // Terminals cut a row at its cells; the desktop's proportional text wraps instead.
+    const fit: TextFit = e.surface === 'terminal' ? 'truncate' : 'wrap'
+    const fitWidth = (cols: number) => (fit === 'wrap' ? Number.POSITIVE_INFINITY : rowWidth(cols))
     const body = []
 
     const running = game()
@@ -241,13 +262,20 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       // Each draw of the Chat tab keeps the world poll fast while it is shown.
       running.chatSeen(clientNow)
       body.push(
-        ...chatBody(els, view, world, chat, {
-          setDraft: (text) => updChat((c) => ({ ...c, draft: text })),
-          post: async (text) => {
-            if (((await read($, chatAtom)) ?? chat).busy) return
-            await postChat(running, text, updChat, after)
+        ...chatBody(
+          els,
+          view,
+          world,
+          chat,
+          {
+            setDraft: (text) => updChat((c) => ({ ...c, draft: text })),
+            post: async (text) => {
+              if (((await read($, chatAtom)) ?? chat).busy) return
+              await postChat(running, text, updChat, after)
+            },
           },
-        }),
+          fit,
+        ),
       )
     } else if (tab === 'leaderboards' && running) {
       body.push(...boardsBody(els, view, world, boards))
@@ -287,51 +315,87 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'market' && running) {
       body.push(
-        ...marketBody(els, pick, view, world, market, readOnly, {
-          setQuery: (q) => loadMarket(running, q, updMarket, after),
-          ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
-          confirm: async () =>
-            confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
-        }),
+        ...marketBody(
+          els,
+          pick,
+          view,
+          world,
+          market,
+          readOnly,
+          {
+            setQuery: (q) => loadMarket(running, q, updMarket, after),
+            ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
+            confirm: async () =>
+              confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
+          },
+          paneWidth,
+          (l) => {
+            const art =
+              l.kind === 'item' ? spriteFor('item', l.base ?? '') : spriteFor('hero', l.cls ?? '')
+            const element = ListSprite(
+              table,
+              listRenderer,
+              e.surface,
+              art,
+              l.name,
+              `sprite-${l.id}`,
+            )
+            return {
+              element,
+              columns: element ? listSpriteColumns(listRenderer, e.surface, art) : 0,
+            }
+          },
+          fit,
+        ),
       )
     } else if (tab === 'orders' && running) {
       body.push(
-        ...ordersBody(els, pick, view, world, orders, readOnly, remainingMs, {
-          cancelListing: async (id) => {
-            await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
+        ...ordersBody(
+          els,
+          pick,
+          view,
+          world,
+          orders,
+          readOnly,
+          remainingMs,
+          {
+            cancelListing: async (id) => {
+              await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
+            },
+            cancelOrder: async (id) => {
+              await ordersTrade(running, (c, a) => c.cancelOrder(a, id), updOrders, after)
+            },
+            openForm: () =>
+              updOrders((o) => ({
+                ...o,
+                form: { base: 'steel_longsword', minRarity: 'rare', affixId: null, maxPrice: '' },
+              })),
+            closeForm: () => updOrders((o) => ({ ...o, form: null })),
+            setForm: (patch) =>
+              updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
+            submit: async () => {
+              const current = (await read($, ordersAtom)) ?? orders
+              const form = current.form
+              // Enter and `place` both submit: one order at a time.
+              if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
+              await updOrders((o) => ({ ...o, busy: true }))
+              const input = {
+                base: form.base,
+                minRarity: form.minRarity,
+                affixId: form.affixId,
+                maxPrice: Number(form.maxPrice),
+              }
+              const done = await ordersTrade(
+                running,
+                (c, a) => c.placeOrder(a, input),
+                updOrders,
+                after,
+              )
+              if (done) await updOrders((o) => ({ ...o, form: null }))
+            },
           },
-          cancelOrder: async (id) => {
-            await ordersTrade(running, (c, a) => c.cancelOrder(a, id), updOrders, after)
-          },
-          openForm: () =>
-            updOrders((o) => ({
-              ...o,
-              form: { base: 'steel_longsword', minRarity: 'rare', affixId: null, maxPrice: '' },
-            })),
-          closeForm: () => updOrders((o) => ({ ...o, form: null })),
-          setForm: (patch) =>
-            updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
-          submit: async () => {
-            const current = (await read($, ordersAtom)) ?? orders
-            const form = current.form
-            // Enter and `place` both submit: one order at a time.
-            if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
-            await updOrders((o) => ({ ...o, busy: true }))
-            const input = {
-              base: form.base,
-              minRarity: form.minRarity,
-              affixId: form.affixId,
-              maxPrice: Number(form.maxPrice),
-            }
-            const done = await ordersTrade(
-              running,
-              (c, a) => c.placeOrder(a, input),
-              updOrders,
-              after,
-            )
-            if (done) await updOrders((o) => ({ ...o, form: null }))
-          },
-        }),
+          fit,
+        ),
       )
     } else if (tab === 'inventory') {
       body.push(
@@ -347,78 +411,115 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         )
       for (const item of view.inventory) {
         const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
+        // A sprite replaces the glyph where pixels draw; the glyph stays as its fallback.
+        const itemArt = spriteFor('item', item.base)
+        const itemSprite = ListSprite(
+          table,
+          listRenderer,
+          e.surface,
+          itemArt,
+          item.name,
+          `sprite-${item.id}`,
+        )
+        const itemFit = fitRow(
+          `${itemSprite ? '' : `${item.glyph} `}${item.name} (${item.rarity}, ${item.slot})`,
+          item.affixes.join(', '),
+          fitWidth(itemSprite ? listSpriteColumns(listRenderer, e.surface, itemArt) : 0),
+        )
         // Two rows per item, so a docked pane never truncates a button.
         body.push(
-          <Box key={`item-${item.id}`} flexDirection="column">
-            <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
-              <Text
-                color={RARITY_COLOR[item.rarity]}
-                dimColor={item.rarity === 'common'}
-                wrap="truncate"
+          <Box key={`item-${item.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
+            {itemSprite}
+            <Box key={`item-body-${item.id}`} flexDirection="column">
+              <Box
+                key={`item-name-${item.id}`}
+                flexDirection="row"
+                flexWrap={fit === 'wrap' ? 'wrap' : undefined}
+                gap={1}
               >
-                {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
-              </Text>
-              {item.affixes.length > 0 ? (
-                <Text dimColor wrap="truncate">
-                  {item.affixes.join(', ')}
+                <Text
+                  color={RARITY_COLOR[item.rarity]}
+                  dimColor={item.rarity === 'common'}
+                  wrap={fit}
+                >
+                  {itemFit.name}
                 </Text>
+                {itemFit.secondary && !itemFit.below ? (
+                  <Text dimColor wrap={fit}>
+                    {itemFit.secondary}
+                  </Text>
+                ) : null}
+              </Box>
+              {itemFit.below ? (
+                <Box key={`item-affixes-${item.id}`} paddingLeft={2}>
+                  <Text dimColor wrap={fit}>
+                    {itemFit.secondary}
+                  </Text>
+                </Box>
               ) : null}
-            </Box>
-            <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
-              {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`equip-${item.id}`}
-                  label="equip"
-                  onPress={() =>
-                    setDialog({
-                      itemPick: dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
-                    })
-                  }
-                />
-              )}
-              {readOnly || !item.equippedBy ? null : (
-                <Button
-                  key={`unequip-${item.id}`}
-                  label="unequip"
-                  onPress={() => {
-                    const heroId = item.equippedBy
-                    const slot = item.slot
-                    if (
-                      heroId &&
-                      (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
-                    ) {
-                      return act({ t: 'unequip', heroId, slot })
+              <Box
+                key={`item-actions-${item.id}`}
+                flexDirection="row"
+                flexWrap="wrap"
+                gap={1}
+                paddingLeft={2}
+              >
+                {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
+                {readOnly || item.equippedBy ? null : (
+                  <Button
+                    key={`equip-${item.id}`}
+                    label="equip"
+                    onPress={() =>
+                      setDialog({
+                        itemPick:
+                          dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
+                      })
                     }
-                  }}
-                />
-              )}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`vendor-${item.id}`}
-                  label={`vendor ${item.vendorValue}g`}
-                  onPress={() => act({ t: 'vendor', itemId: item.id })}
-                />
-              )}
-              {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
-                <Button
-                  key={`sell-${item.id}`}
-                  label="sell"
-                  onPress={() => openSell(running, 'item', item.id, updDialog)}
-                />
-              )}
-              {readOnly || item.affixes.length === 0 ? null : (
-                <Button
-                  key={`reforge-${item.id}`}
-                  label={`reforge ${item.reforgeCost}g`}
-                  onPress={() =>
-                    setDialog({
-                      itemPick:
-                        dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
-                    })
-                  }
-                />
-              )}
+                  />
+                )}
+                {readOnly || !item.equippedBy ? null : (
+                  <Button
+                    key={`unequip-${item.id}`}
+                    label="unequip"
+                    onPress={() => {
+                      const heroId = item.equippedBy
+                      const slot = item.slot
+                      if (
+                        heroId &&
+                        (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
+                      ) {
+                        return act({ t: 'unequip', heroId, slot })
+                      }
+                    }}
+                  />
+                )}
+                {readOnly || item.equippedBy ? null : (
+                  <Button
+                    key={`vendor-${item.id}`}
+                    label={`vendor ${item.vendorValue}g`}
+                    onPress={() => act({ t: 'vendor', itemId: item.id })}
+                  />
+                )}
+                {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
+                  <Button
+                    key={`sell-${item.id}`}
+                    label="sell"
+                    onPress={() => openSell(running, 'item', item.id, updDialog)}
+                  />
+                )}
+                {readOnly || item.affixes.length === 0 ? null : (
+                  <Button
+                    key={`reforge-${item.id}`}
+                    label={`reforge ${item.reforgeCost}g`}
+                    onPress={() =>
+                      setDialog({
+                        itemPick:
+                          dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
+                      })
+                    }
+                  />
+                )}
+              </Box>
             </Box>
           </Box>,
         )
@@ -478,49 +579,89 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       for (const hero of view.roster) {
         const picked = dialog.partyPick.includes(hero.id)
         const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
+        const heroArt = spriteFor('hero', hero.cls)
+        const heroSprite = ListSprite(
+          table,
+          listRenderer,
+          e.surface,
+          heroArt,
+          hero.name,
+          `sprite-${hero.id}`,
+        )
+        const heroFit = fitRow(
+          `${heroSprite ? '' : `${hero.glyph} `}${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`,
+          hero.traits.join(', '),
+          fitWidth(heroSprite ? listSpriteColumns(listRenderer, e.surface, heroArt) : 0),
+        )
+        // Two rows per hero, like the items: the name, then its actions, which wrap in a narrow pane.
         body.push(
-          <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
-            <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
-              {`${hero.glyph} ${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
-            </Text>
-            {hero.traits.length > 0 ? (
-              <Text dimColor wrap="truncate">
-                {hero.traits.join(', ')}
-              </Text>
-            ) : null}
-            {marker ? <Text color="cyan">{marker}</Text> : null}
-            {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
-              <Button
-                key={`sell-${hero.id}`}
-                label="sell"
-                onPress={() => openSell(running, 'hero', hero.id, updDialog)}
-              />
-            )}
-            {readOnly ? null : (
-              <Button
-                key={`party-${hero.id}`}
-                label={picked ? 'picked' : 'party'}
-                onPress={async () => {
-                  const next = picked
-                    ? dialog.partyPick.filter((id) => id !== hero.id)
-                    : [...dialog.partyPick, hero.id]
-                  const [a, b, c] = next
-                  if (next.length === 3 && a && b && c) {
-                    await setDialog({ partyPick: [] })
-                    await act({ t: 'set_party', heroIds: [a, b, c] })
-                  } else {
-                    await setDialog({ partyPick: next })
-                  }
-                }}
-              />
-            )}
-            {readOnly || hero.inParty || hero.inPendingParty ? null : (
-              <Button
-                key={`dismiss-${hero.id}`}
-                label="dismiss"
-                onPress={() => act({ t: 'dismiss', heroId: hero.id })}
-              />
-            )}
+          <Box key={`hero-${hero.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
+            {heroSprite}
+            <Box key={`hero-body-${hero.id}`} flexDirection="column">
+              <Box
+                key={`hero-name-${hero.id}`}
+                flexDirection="row"
+                flexWrap={fit === 'wrap' ? 'wrap' : undefined}
+                gap={1}
+              >
+                <Text color={RARITY_COLOR[hero.rarity]} wrap={fit}>
+                  {heroFit.name}
+                </Text>
+                {heroFit.secondary && !heroFit.below ? (
+                  <Text dimColor wrap={fit}>
+                    {heroFit.secondary}
+                  </Text>
+                ) : null}
+              </Box>
+              {heroFit.below ? (
+                <Box key={`hero-traits-${hero.id}`} paddingLeft={2}>
+                  <Text dimColor wrap={fit}>
+                    {heroFit.secondary}
+                  </Text>
+                </Box>
+              ) : null}
+              <Box
+                key={`hero-actions-${hero.id}`}
+                flexDirection="row"
+                flexWrap="wrap"
+                gap={1}
+                paddingLeft={2}
+              >
+                {marker ? <Text color="cyan">{marker}</Text> : null}
+                {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
+                  <Button
+                    key={`sell-${hero.id}`}
+                    label="sell"
+                    onPress={() => openSell(running, 'hero', hero.id, updDialog)}
+                  />
+                )}
+                {readOnly ? null : (
+                  <Button
+                    key={`party-${hero.id}`}
+                    label={picked ? 'picked' : 'party'}
+                    onPress={async () => {
+                      const next = picked
+                        ? dialog.partyPick.filter((id) => id !== hero.id)
+                        : [...dialog.partyPick, hero.id]
+                      const [a, b, c] = next
+                      if (next.length === 3 && a && b && c) {
+                        await setDialog({ partyPick: [] })
+                        await act({ t: 'set_party', heroIds: [a, b, c] })
+                      } else {
+                        await setDialog({ partyPick: next })
+                      }
+                    }}
+                  />
+                )}
+                {readOnly || hero.inParty || hero.inPendingParty ? null : (
+                  <Button
+                    key={`dismiss-${hero.id}`}
+                    label="dismiss"
+                    onPress={() => act({ t: 'dismiss', heroId: hero.id })}
+                  />
+                )}
+              </Box>
+            </Box>
           </Box>,
         )
       }
@@ -564,6 +705,48 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           <Button key="band-off" label="band off" onPress={() => game()?.setOff(true)} />
         </Box>,
       )
+      // Per machine, like the commands: the store holds them, the atom mirrors them.
+      // The atom keeps this render subscribed; the store is the truth (another session may write it).
+      await read($, settingsAtom)
+      const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
+      const renderer = await read($, rendererAtom)
+      const setSettings = async (patch: Partial<Settings>) => {
+        // Merge into the store, not this render's copy: another session may have changed it.
+        const next = { ...parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)), ...patch }
+        await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
+        await update($, settingsAtom, () => next)
+      }
+      const rendererText =
+        settings.renderer === 'auto'
+          ? `auto (${renderer})`
+          : `${settings.renderer} (from next start)`
+      for (const [k, text, hotkey, patch] of [
+        ['sound', `Sound: ${settings.sound ? 'on' : 'off'}`, 's', { sound: !settings.sound }],
+        [
+          'motion',
+          `Motion: ${settings.motion}`,
+          'n',
+          { motion: settings.motion === 'full' ? 'still' : 'full' },
+        ],
+        [
+          'renderer',
+          `Renderer: ${rendererText}`,
+          'x',
+          { renderer: RENDERER_NEXT[settings.renderer] },
+        ],
+      ] as const) {
+        body.push(
+          <Box key={`account-${k}`} flexDirection="row" gap={2}>
+            <Text wrap="truncate">{text}</Text>
+            <Button
+              key={`setting-${k}`}
+              label="change"
+              hotkey={hotkey}
+              onPress={() => setSettings(patch as Partial<Settings>)}
+            />
+          </Box>,
+        )
+      }
       if (view.account.linked) {
         body.push(
           <Text key="account-linked" color="green" wrap="truncate">

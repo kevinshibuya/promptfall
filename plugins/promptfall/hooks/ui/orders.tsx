@@ -3,7 +3,7 @@ import type { GameHandle } from '../engine'
 import { validPrice } from '../vendor/ledger.js'
 import { content, type Item, vendorValue } from '../vendor/sim.js'
 import { listingView, orderView } from '../view'
-import { formatGold } from './format'
+import { formatGold, type TextFit } from './format'
 import { RARITY_COLOR } from './parts'
 import { formatRemaining } from './time'
 import {
@@ -91,13 +91,14 @@ export function ordersBody(
   readOnly: boolean,
   remainingMs: (deadline: number) => number,
   actions: OrdersActions,
+  fit: TextFit = 'truncate',
 ) {
   const { Box, Text, Button, Input } = els
   const body = []
   const expires = (at: number) => `expires in ${formatRemaining(remainingMs(at))}`
   if (orders.error) {
     body.push(
-      <Text key="orders-error" color="red" wrap="truncate">
+      <Text key="orders-error" color="red" wrap={fit}>
         {orders.error}
       </Text>,
     )
@@ -128,9 +129,14 @@ export function ordersBody(
   }
   for (const l of mine.listings) {
     body.push(
-      <Box key={`my-listing-${l.id}`} flexDirection="row" gap={1}>
-        <Text color={RARITY_COLOR[l.rarity]} wrap="truncate">{`${l.name} (${l.rarity})`}</Text>
-        <Text wrap="truncate">{`${formatGold(l.price)} · ${expires(l.expiresAt)}`}</Text>
+      <Box
+        key={`my-listing-${l.id}`}
+        flexDirection="row"
+        flexWrap={fit === 'wrap' ? 'wrap' : undefined}
+        gap={1}
+      >
+        <Text color={RARITY_COLOR[l.rarity]} wrap={fit}>{`${l.name} (${l.rarity})`}</Text>
+        <Text wrap={fit}>{`${formatGold(l.price)} · ${expires(l.expiresAt)}`}</Text>
         {readOnly ? null : (
           <Button
             key={`cancel-listing-${l.id}`}
@@ -156,11 +162,16 @@ export function ordersBody(
   for (const o of mine.orders) {
     const what = `${o.name} ${o.minRarity}+${o.affix ? ` with ${o.affix}` : ''}`
     body.push(
-      <Box key={`my-order-${o.id}`} flexDirection="row" gap={1}>
-        <Text color={RARITY_COLOR[o.minRarity]} wrap="truncate">
+      <Box
+        key={`my-order-${o.id}`}
+        flexDirection="row"
+        flexWrap={fit === 'wrap' ? 'wrap' : undefined}
+        gap={1}
+      >
+        <Text color={RARITY_COLOR[o.minRarity]} wrap={fit}>
           {what}
         </Text>
-        <Text wrap="truncate">{`up to ${formatGold(o.maxPrice)} · ${expires(o.expiresAt)}`}</Text>
+        <Text wrap={fit}>{`up to ${formatGold(o.maxPrice)} · ${expires(o.expiresAt)}`}</Text>
         {readOnly ? null : (
           <Button
             key={`cancel-order-${o.id}`}
@@ -201,7 +212,7 @@ export function ordersBody(
     ? (content.affixes[form.affixId]?.name ?? form.affixId)
     : 'any affix'
   body.push(
-    <Text key="order-summary" bold wrap="truncate">
+    <Text key="order-summary" bold wrap={fit}>
       {`New order: ${content.itemBases[form.base]?.name ?? form.base} ${form.minRarity}+ · ${affixName}${validPrice(price) ? ` · up to ${formatGold(price)}` : ''}`}
     </Text>,
   )

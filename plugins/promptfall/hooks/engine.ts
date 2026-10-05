@@ -1,4 +1,6 @@
-import type { PluginState } from 'claude-code'
+import type { PluginState, RenderSurface } from 'claude-code'
+import type { StageLoop } from './stage/loop'
+import type { StageTimeline } from './stage/timeline'
 import type {
   Account,
   Auth,
@@ -45,7 +47,8 @@ export type EngineDeps = {
   newBatchId: () => string
   /** Writes atoms; a closure over the session's `$`. */
   publish: EnginePublish
-  onEffects: (effects: Effect[]) => void
+  /** `at`: the applied event's time; absent for effects a delivery brought. */
+  onEffects: (effects: Effect[], at?: number) => void
   /** Shows a toast. Optional: tests leave it out. */
   toast?: (text: string) => void
   /** Runs `fn` once after `ms`: notices that clear themselves and outage retries. */
@@ -56,6 +59,8 @@ export type EngineDeps = {
 
 /** What the command and the dialog hold of a running game. */
 export type GameHandle = {
+  /** The stage's timeline (one per session) and its frame loop per surface, made on first use. */
+  stage: { timeline: StageTimeline; loopFor: (surface: RenderSurface) => StageLoop }
   apply: (event: PlayerEvent, at: number) => void
   canApply: () => boolean
   setOff: (off: boolean) => Promise<void>
@@ -225,7 +230,7 @@ export class GameEngine {
     this.local = r.state
     this.buffer.push({ ...event, at: Math.floor(at) } as TimedEvent)
     void this.publish({ view: this.view() })
-    if (r.effects.length > 0) this.deps.onEffects(r.effects)
+    if (r.effects.length > 0) this.deps.onEffects(r.effects, at)
   }
 
   /** Whether `apply` takes events now: not paused, and not past the outage's buffer window. */

@@ -141,6 +141,50 @@ would answer a survey.
 Esc closes the dialog. The band collapses to one row by itself under 100 columns or when fewer
 than 4 rows are free, and hides while Claude asks you a question.
 
+### Stage
+
+The band's Party tab draws the battle as pixel art: enemies on the left, the party on the right,
+lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a pop when
+it drops loot.
+
+- **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
+  Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
+  numbers as text. The desktop app draws it as an `Svg`, always the full stage: the art 116 to
+  160 pixels wide, scaled to the band's width (ADR 0004). The desktop scrolls a band taller than
+  its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
+  band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
+- **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
+  a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
+  pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
+  Until the answer lands the stage rows stay empty, so the band does not change height.
+- **Heights.** At rest the Party tab is 10 rows (8 for the stage, a party line, the status row).
+  A turn boss grows it to 14 and a zone or world boss to 19; it shrinks back once the boss's
+  dissolve and drop have played.
+- **Compact and collapsed.** On terminals, the full stage needs 116 columns and room for its rows. With 100 to
+  115 columns, or too few rows, the band keeps the three hero rows and the status row and draws a
+  52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
+  four rows and draw no stage.
+- **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and
+  `/promptfall renderer auto` returns to the probe. It applies at the next session start.
+- **Frames.** The render hook draws the first frame; a timer per surface blits the rest, about 12
+  a second while something moves and 2 a second at rest (the idle bob). A hidden, collapsed or
+  other-tab band blits nothing. The desktop's `Svg` animates itself with SMIL and redraws once a
+  round.
+
+### Sound and motion
+
+- **Sound** is off by default. `/promptfall sound on` (or `s` on the Account tab) turns on four
+  cues: a Rare or Epic drop, a Legendary drop, a level up, and a world boss appearing. Each plays
+  beside its toast, at a fixed volume, only in the session that is playing (the primary); a
+  secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
+  sound on macOS only. The cues in `cues/` are placeholders from `pnpm cues:placeholders`.
+- **Motion**: `/promptfall motion still` (or `n`) stops the idle bob; hits, dissolves and drops
+  still play. `/promptfall motion full` brings the bob back.
+- **Renderer**: `/promptfall renderer auto|image|raster` (or `x` to cycle), see Stage.
+
+All three are per machine, kept in the plugin store under `promptfall:settings`; a reset keeps
+them.
+
 ### What phase 1 has
 
 Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendoring, reforging,
@@ -152,7 +196,7 @@ session makes it the one that plays at once.
 
 ### What it lacks
 
-No sprites or sound. No mute or ban: the word list is
+No mute or ban: the word list is
 the only filter. The GitHub link is approved by the fakes, not by GitHub, and the in-process ledger
 has no bots, so its market is yours alone and its chat is closed.
 
@@ -178,3 +222,34 @@ pnpm exec tsc -p plugins/promptfall
 `tsc -p plugins/promptfall` needs the engine's declarations, which an interactive
 `claude --plugin-dir plugins/promptfall` lays under `.claude-plugin/types/` on first load. They
 are generated per Claude Code version and stay uncommitted.
+
+### Sprites
+
+The art lives in `art/` at the repository root and becomes one generated module,
+`hooks/sprites/generated.ts`. Never edit that file: run `pnpm sprites` and commit the result. CI
+fails when it is stale (`pnpm sprites:check`).
+
+- `art/manifest.json` has one entry per sprite id: `hero:<class>`, `hero_attack:<class>`,
+  `enemy:<content id>`, `world_boss:<name key>`, `item:<item base>`, and `fallback`. An entry
+  names its PNG with `file` (true size, under `art/`) or `alias` (a stem under `art/concept/`,
+  which marks it a placeholder), a `style` (`nes` or `snes`), a `rarityColor` for heroes (the
+  exact source colour that takes the hero's rarity colour), and an optional `fit: { height }`.
+  The build fails on a missing or extra content id.
+- `art/palettes/nes.json` is the 64-entry NES master palette (the FCEUX table, duplicates kept so
+  the indices match). `art/palettes/snes.json` is the shared 64-colour SNES master, written by
+  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` stem.
+- Every opaque pixel snaps to its style's master palette. An `nes` sprite may then hold at most 4
+  colours and fit 16 × 16 (smaller art is padded, bottom-centred). An `snes` sprite may hold at
+  most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.
+- The build also writes a `compact` variant (8 px tall) of every sprite and an 8 × 4 `small`
+  variant of every item, for the compact stage and the half-block lists.
+- `pnpm slice <sheet.png> <out-dir> --grid 4x3 [--row r] --colours n (--size 16 | --fit 48x34)
+  [--names a,b,c]` cuts a magenta-keyed sheet into one PNG per cell. The phase 4 concept sheets in
+  `docs/plans/phase-4-concepts/` were cut this way into `art/concept/`.
+- In PR 1 every sprite is an alias: enemies use the concept monster of their archetype, zone and
+  world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
+  slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
+  counts them.
+- The Inventory, Heroes and Market lists lead each row with its sprite: an `Svg` on the desktop,
+  a 2-cell `Image` where pictures draw, and the 8 × 4 item sprite as half-blocks elsewhere (heroes
+  keep their glyph there).

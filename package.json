@@ -10,15 +10,26 @@
     "lint": "biome check .",
     "format": "biome format --write .",
     "typecheck": "tsc -b packages/sim packages/protocol packages/ledger servers/fake",
-    "test": "pnpm -r --filter './packages/*' --filter './servers/*' test",
+    "test": "pnpm -r --filter './packages/*' --filter './servers/*' test && pnpm test:scripts",
     "vendor": "node scripts/vendor.mjs",
     "vendor:check": "node scripts/vendor.mjs && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/vendor plugins/promptfall/hooks/version.ts)\"",
-    "fake": "pnpm --filter @promptfall/fake-server start"
+    "fake": "pnpm --filter @promptfall/fake-server start",
+    "sprites": "tsx scripts/sprites.ts",
+    "sprites:check": "pnpm sprites && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/sprites/generated.ts)\"",
+    "slice": "tsx scripts/slice-sheet.ts",
+    "test:scripts": "vitest run scripts",
+    "stage:goldens": "tsx scripts/stage-goldens.ts",
+    "cues:placeholders": "tsx scripts/placeholder-cues.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@promptfall/ledger": "workspace:*",
+    "@promptfall/sim": "workspace:*",
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
+    "pngjs": "^7.0.0",
     "tsup": "8.5.1",
+    "tsx": "^4.23.15",
     "typescript": "5.9.3",
     "vitest": "^5.0.3"
   }

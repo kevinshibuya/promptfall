@@ -18,11 +18,23 @@ export type HeroView = {
   hp: number
   maxHp: number
   alive: boolean
+  rarity: string
 }
-export type EnemyView = { name: string; glyph: string; hp: number; maxHp: number; kind: string }
+export type EnemyView = {
+  id: string
+  /** The content id; 'world_boss' for the world boss, which has none. */
+  def: string
+  name: string
+  glyph: string
+  hp: number
+  maxHp: number
+  kind: string
+}
 export type LootView = { text: string; rarity: string }
 export type ItemView = {
   id: string
+  /** The item base's content id: the sprite key. */
+  base: string
   name: string
   glyph: string
   slot: string
@@ -107,6 +119,10 @@ export type ListingView = {
   sellerName: string
   price: number
   expiresAt: number
+  /** An item listing's base, else null: the sprite key. */
+  base: string | null
+  /** A hero listing's class, else null: the sprite key. */
+  cls: string | null
 }
 export type OrderView = {
   id: string
@@ -205,6 +221,19 @@ export type WorldState = {
   committedDealt: { bossId: string; dealt: number } | null
 }
 
+/** The terminal's stage renderer: decided by the probe, or forced by `settings.renderer`. */
+export type Renderer = 'unknown' | 'image' | 'raster'
+/** Per machine, in `$.store` under `promptfall:settings`. */
+export type Settings = {
+  sound: boolean
+  motion: 'full' | 'still'
+  renderer: 'auto' | 'image' | 'raster'
+}
+
+// Inside the augmentation below, `Settings` names the engine's own export: alias ours outside it.
+export type PromptfallSettings = Settings
+export type PromptfallRenderer = Renderer
+
 declare module 'claude-code' {
   interface PluginState {
     promptfall: {
@@ -222,6 +251,10 @@ declare module 'claude-code' {
       world: WorldState
       chat: ChatState
       boards: BoardsState
+      /** The store's settings, mirrored for the drawings. */
+      settings: PromptfallSettings
+      /** Per session, owned by ui/band.tsx. */
+      renderer: PromptfallRenderer
     }
   }
 }

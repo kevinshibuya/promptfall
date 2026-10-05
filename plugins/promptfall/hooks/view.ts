@@ -63,6 +63,8 @@ export function listingView(listing: Listing): ListingView {
   if (g.kind === 'item') {
     return {
       ...common,
+      base: g.item.base,
+      cls: null,
       name: tradeName('item', g.item.base),
       rarity: g.item.rarity,
       detail: affixLine(g.item) || 'no affixes',
@@ -71,6 +73,8 @@ export function listingView(listing: Listing): ListingView {
   const traits = g.hero.traits.map((t) => content.traits[t.id]?.name ?? t.id).join(', ')
   return {
     ...common,
+    base: null,
+    cls: g.hero.cls,
     name: heroName(g.hero.template, g.hero.epithet),
     rarity: g.hero.rarity,
     detail: [g.hero.cls, traits].filter(Boolean).join(' · '),
@@ -117,6 +121,7 @@ function itemView(item: Item): ItemView {
   const base = content.itemBases[item.base]
   return {
     id: item.id,
+    base: item.base,
     name: base?.name ?? item.base,
     glyph: base?.glyph ?? '?',
     slot: base?.slot ?? 'weapon',
@@ -198,12 +203,15 @@ export function toGameView(
       hp: hero.hp,
       maxHp: heroStats(state, hero).hp,
       alive: hero.hp > 0,
+      rarity: hero.rarity,
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {
     // The world boss has no content entry: its name and glyph travel with boss_engaged.
     if (e.kind === 'world_boss' && state.boss) {
       return {
+        id: e.id,
+        def: 'world_boss',
         name: state.boss.name,
         glyph: state.boss.glyph,
         hp: e.hp,
@@ -213,6 +221,8 @@ export function toGameView(
     }
     const def = content.enemies[e.def]
     return {
+      id: e.id,
+      def: e.def,
       name: def?.name ?? e.def,
       glyph: def?.glyph ?? '?',
       hp: e.hp,
