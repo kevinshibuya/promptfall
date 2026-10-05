@@ -187,6 +187,17 @@ recommendation.
   `gaugePerStep` from the timeline's action starts, snapping to the view's value when the tick's
   playback ends.
 
+### 1.17 Plan review rulings (2026-10-05, on Opus, Fable out)
+
+Made in the UI PR 1 plan's fix pass, inline on Opus because `reasoner` needs Fable; Kevin can
+overturn either.
+
+- Compact collapses under 6 rows, not 4. 1.16's "under 4 rows" carried today's threshold over,
+  but a 6-row compact band cannot fit a 4 or 5 row terminal; the band never draws taller than the
+  terminal shows. On Loot and World (5 rows) the band collapses under 5.
+- The world boss's time left sits in the enemy window's title ("World boss · 11m"), not on the
+  boss's line (1.16): the line's 21 cells hold the name, the bar and the percentage, and no more.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+

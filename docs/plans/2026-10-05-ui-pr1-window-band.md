@@ -9,14 +9,16 @@ images, raster text cells for terminals that draw none, and one `Svg` with SMIL 
 VS Code and mobile. The pixel font (DotGothic16) is baked into a generated TS module. A strip
 builder turns the view, the stage timeline, a gauge tracker and a message log into a scene; the
 stage loop blits the strip with the stage.
-**Spec:** `docs/plans/2026-10-05-ui-remake-grill.md` (section 1 is binding, 1.16 included),
+**Spec:** `docs/plans/2026-10-05-ui-remake-grill.md` (section 1 is binding, 1.16 and 1.17 included),
 `docs/design/ui-remake/README.md`, `docs/adr/0005-interface-drawn-as-windows.md`, and
 `docs/spec/promptfall.md` (amended in Task 10).
 **Execution model:** opus
 
 Review wave note: Fable is out of credits locally and in the cloud, so this plan was written on
-Opus 5.5 and its review wave runs `reviewer` on Opus and `codex-review` only. The Fable
-`reviewer` leg cannot run.
+Opus 5.5. Its review wave ran `reviewer` on Opus only: the Fable `reviewer` leg cannot run, and
+the `codex-review` leg hit the account-wide codex usage limit mid-run (no findings; GPT lanes
+blocked until 2026-10-09 19:43). The Opus leg's 17 findings were folded into this version in one
+fix pass, on Opus (no `reasoner` without Fable); the two rulings it needed are grill 1.17.
 
 ## Global constraints
 
@@ -63,15 +65,16 @@ Opus 5.5 and its review wave runs `reviewer` on Opus and `codex-review` only. Th
 | `GAUGE_RGB`, `GAUGE_FULL_RGB` | 0x58a8f8, 0xf8d038 (gold) | Task 2 |
 | `BORDER_PX`, `PAD_PX` | 2, 2 | Task 2 (border line thickness and inset inside its cell) |
 | `STRIP_ROWS` | 5 | fixed: border, 3 inner rows, border |
-| `COMPACT_WINDOW_ROWS` | 6 | fixed (grill 1.16); Task 9 sets `stage/tuning.ts`'s `COMPACT_ROWS` from it |
-| `ENEMY_COLUMNS` | 25 | fixed: border, pad, name 12, gap, bar 8, pad, border |
+| `COMPACT_WINDOW_ROWS` | 6 | fixed (grill 1.16): the compact band's rows; the compact stage box stays 4 rows (`COMPACT_STAGE_ROWS`, Task 9) |
+| `STRIP_MAX_COLUMNS` | 160 | fixed: a strip or compact band is laid out in at most `STAGE_MAX_COLUMNS` columns, as the stage is |
+| `ENEMY_COLUMNS` | 25 | fixed: border, pad, name 12, gap, bar 8, pad, border (21 content cells) |
 | `PARTY_COLUMNS` | 42 | fixed: border, pad, 3 hero columns of 12 with a gap between, pad, border |
 | `PURSE_COLUMNS` | 13 | fixed: border, pad, 9 ("Farm here"), pad, border |
 | `MESSAGE_MIN_COLUMNS` | 28 | fixed: the message window takes every column the others leave |
 | `CHAR_MS`, `CHAR_FAST_MS` | 18, 6 | typing speed; fast while 2 or more lines wait |
 | `LINE_MIN_MS` | 300 | the least time a line holds the bottom row before the next one |
 | `LOG_KEEP` | 40 | lines the log keeps |
-| `GAUGE_FRAME_MS` | 250 | loop delay while only gauges move |
+| `GAUGE_FRAME_MS` | 250 | loop delay while only gauges move (capped by `restDelay(now)` so the bob keeps its phase) |
 | `STRIP_SVG_MAX_CHARS` | 65,536 | the strip Svg's budget; SMIL frames past it are cut from the tail |
 
 ### The window model (`plugins/promptfall/hooks/windows/kit.ts`)
@@ -121,7 +124,8 @@ export type Track =
       line: number
       /** Index of the bar span in that line. */
       span: number
-      /** Linear between keys; `at` in ms after the scene's now, ascending, the first at 0. */
+      /** Linear between keys; `at` in ms after the scene's now, non-decreasing, the first at 0.
+       *  Two keys at one `at` are a jump (a gauge reset). */
       keys: readonly { at: number; fill: number }[]
       /** The bar's colour switches to this while fill is 10000. */
       fullRgb: number
@@ -144,7 +148,8 @@ export type Track =
 ```
 
 Spans that do not fit a line are clipped at the window's inner edge; text never wraps inside an
-encoder (wrapping is the builder's job). A character the font lacks draws as `?`.
+encoder (wrapping is the builder's job). A character the font lacks draws as `?`; Task 8 tests
+that the builder emits none.
 
 ### Encoders (`plugins/promptfall/hooks/windows/`)
 
@@ -175,6 +180,8 @@ onEffects(effects: readonly Effect[], now: number, cadenceMs?: number): number[]
 acting(now: number): string | null
 /** Wall-clock starts of this actor's actions still held (kept until 2 × cadence after start). */
 actionStarts(actor: string): readonly number[]
+/** Every action still held, in start order; `until` is the end of the interval `acting` uses. */
+actions(): readonly { actor: string; start: number; until: number }[]
 ```
 
 A group whose actor is not on the stage still gets a start (today it only skips the lunge);
@@ -189,35 +196,37 @@ in full:
 type Record = {
   from: number      // gauge drawn when the batch landed (continuity: no jump at batch start)
   fromAt: number    // wall ms the batch landed
-  perMs: number     // gaugePerStep × TICK_MS / (STEP_MS × cadenceMs); 0 when the view has no enemy
+  perMs: number     // gaugePerStep × TICK_MS / (STEP_MS × cadenceMs)
   resets: number[]  // this hero's action starts scheduled by this batch (timeline.actionStarts, ≥ fromAt)
   endAt: number     // max(fromAt + cadenceMs, last reset + 1)
   to: number        // the view's gauge after the batch
 }
 
 export class GaugeTrack {
-  /** Every applied tick, effects or none, after timeline.onEffects for the same batch. */
+  /** Every applied event, effects or none, after timeline.onEffects for the same batch. */
   onTick(view: GameView, now: number, cadenceMs: number, timeline: StageTimeline): void
   /** 0..GAUGE_FULL to draw. No record yet: hero.gauge. */
   at(hero: HeroView, now: number): number
-  /** A living hero's drawn gauge is below full and perMs > 0. */
+  /** A living hero's drawn gauge is still rising toward its cap. */
   isFilling(view: GameView, now: number): boolean
   /** Piecewise-linear keys for SMIL over [now, now + horizonMs]: corners at each reset and at full. */
   keys(hero: HeroView, now: number, horizonMs: number): { at: number; fill: number }[]
 }
 
-// at(hero, now):
+// at(hero, now):           hero is the CURRENT view's HeroView
 //   if !hero.alive: 0
 //   r = record for hero.id; if none: hero.gauge
-//   if now >= r.endAt: r.to
+//   if now >= r.endAt: hero.gauge            (the current view: a resync or delivery wins)
 //   last = greatest reset ≤ now
 //   g = last !== undefined ? r.perMs × (now − last) : r.from + r.perMs × (now − r.fromAt)
-//   clamp(floor(g), 0, GAUGE_FULL)
+//   cap = (a reset > now remains in r.resets) ? GAUGE_FULL : r.to
+//   clamp(floor(g), 0, min(cap, GAUGE_FULL))
 ```
 
-A full gauge draws in `GAUGE_FULL_RGB` (gold), whether or not the view says `queued`. The snap to
-`to` at `endAt` absorbs what the replay cannot see (a wave with no enemy for some steps, a hero
-synced in mid-tick).
+After a hero's last reset in a tick (or with none), its gauge only rises to the tick's end value,
+so capping at `to` is exact: a spawn-only tick (the sim fills nothing) holds, a wave cleared
+mid-tick stops where the sim stopped, a wipe drops to 0. A full gauge draws in `GAUGE_FULL_RGB`
+(gold); in the sim full implies queued, so this matches grill 1.15's "full and queued".
 
 ### The message log (`plugins/promptfall/hooks/stage/log.ts`)
 
@@ -227,7 +236,8 @@ export type LogLine = {
   rgb?: number          // rarity colour for drops, TEXT_RGB otherwise
   key: boolean          // never skipped: kills, drops, level-ups, deaths, sales, everything but hits and heals
   at: number            // wall ms the line starts typing
-  charMs: number        // CHAR_MS, or CHAR_FAST_MS when it was scheduled behind 2+ waiting lines
+  charMs: number        // CHAR_FAST_MS when 2+ earlier lines are unfinished (not done typing) at its
+                        // group's start; CHAR_MS otherwise
 }
 
 export class MessageLog {
@@ -255,11 +265,12 @@ Rules:
   `wipe` "The party retreats to zone 2."; `traded` "Sold Silk Robe for 120G."; `rewarded`
   "Boss reward: 50G." (with goods: "Boss reward: Silk Robe and 50G."). Every other effect prints
   nothing.
-- A kill: an enemy the log saw on the field before this batch (any kind but `world_boss`) and
-  absent from `view.enemies` after it prints "Wood Goblin is defeated!" right after the action
-  holding the last `hit` on it.
-- Names: heroes from `view.heroes`; enemies from `timeline.known()`. Item and trade wording reuse
-  the loot log's names in `hooks/view.ts`.
+- A kill: a `hit` target absent from `view.enemies` after the batch, that is not a world boss,
+  prints "Wood Goblin is defeated!" right after the action holding the last `hit` on it.
+- Names: the log keeps its own id → { name, kind } map, updated from every view it receives
+  (enemies stay in it after they leave). Heroes use `HeroView.shortName` (the name without its
+  epithet, added in Task 7). `boss_spawned` carries a `def`: the name is the view's enemy with
+  that `def`, else the def. Item and trade wording reuse the loot log's names in `hooks/view.ts`.
 - Pacing: a line's `at` is `max(its group's start, previous line's at + LINE_MIN_MS, previous line's
   at + its typing time)`. A non-key line whose `at` would land more than `cadenceMs` after its
   group's start is dropped (grill 1.13's skip rule, kept as a safety valve).
@@ -288,27 +299,31 @@ export function stripScene(input: StripInput): { scene: Scene; hotspots: readonl
 export function stripTracks(input: StripInput, horizonMs: number): Track[]
 ```
 
+`columns` is the band's columns capped at `STRIP_MAX_COLUMNS`; on the Svg surfaces it is the
+stage's `clamp(bodyColumns, 116, 160)` (ADR 0004: the desktop scales the picture to the band).
 Windows, left to right, in `full` and `bare` (`bare` drops the enemy window under 116 columns):
 
 | Window | Columns | Title | Inner rows |
 |---|---|---|---|
-| enemy | `ENEMY_COLUMNS` | "Zone 3 · Wave 2"; a zone or turn boss "Zone 3 · Boss"; the world boss "World boss · 11m" | one per live enemy in slot order (at most 3): name (12, clipped) and an 8-cell HP bar. A boss's line: name (10) and the bar, then " 62%" right-aligned. |
-| message | the rest, at least `MESSAGE_MIN_COLUMNS` | none | 1: the command line `▶Party Loot World` with ▶ on the current tab and `▾` right-aligned; 2-3: Party the log's last two rows, Loot the last two drops (rarity colour, "No loot yet" dim), World `worldRows`' presence row then its chat row (the records row when chat is closed or quiet). A notice replaces row 3 on every tab, in full, never typed. |
-| party | `PARTY_COLUMNS` | none | 3 hero columns of 12 cells. 1: cursor cell (▶ while `timeline.acting(now)` is this hero), "Aldric L4" (name clipped to fit), `rule`. 2: "H", the HP right-aligned, an HP bar in the cells left. 3: the gauge bar across all 12 cells. A hero under 25% HP draws its column's text in `WARN_RGB`, at 0 in `DOWN_RGB` with an empty dim gauge. |
+| enemy | `ENEMY_COLUMNS` | "Zone 3 · Wave 2"; a zone or turn boss "Zone 3 · Boss"; the world boss "World boss · 11m" (grill 1.17) | one per live enemy in slot order (at most 3): name (12, clipped), a gap, an 8-cell HP bar. A boss's line: name (8), a gap, the 8-cell bar, the percentage right-aligned in 4 ("62%", "100%"). |
+| message | the rest, at least `MESSAGE_MIN_COLUMNS` | none | 1: the command line `▶Party Loot World` with ▶ on the current tab and `▾` right-aligned; 2-3: Party the log's last two rows, Loot the last two drops (rarity colour, "No loot yet" dim), World `worldRows`' presence row, then its chat row when chat is open and has a message, else "highest zone 7 · kills 184 · wipes 3" (the records text without the boss variant, so no `█░`). A notice replaces row 3 on every tab, in full, never typed. |
+| party | `PARTY_COLUMNS` | none | 3 hero columns of 12 cells. 1: cursor cell (▶ while `timeline.acting(now)` is this hero), "Aldric L4" (`shortName` clipped to fit), `rule`. 2: "H", the HP right-aligned, an HP bar in the cells left. 3: the gauge bar across all 12 cells. A hero under 25% HP draws its column's text in `WARN_RGB`, at 0 in `DOWN_RGB` with an empty dim gauge. |
 | purse | `PURSE_COLUMNS` | none | 1: gold ("1,240G", `formatGold` without its unit then "G"); 2: "Push on" or "Farm here". |
 
 Log rows: a log line longer than the message window's inner width wraps at a word boundary onto
 two rows; the window shows the newest two rows, so a wrapped line fills both. Typing reveals
 across the wrap.
 
-`compact`: one party window, `columns` = band width − `COMPACT_STAGE_COLUMNS`, `COMPACT_WINDOW_ROWS`
-rows. Title "Z3 · W2 · 1,240G" (" · Farm" appended when farming and it fits). Inner rows 1-3: one
-per hero, cursor cell, name, " L4", " H", HP right-aligned in 4, an HP bar, a gauge bar (the bars
-share what the row leaves, HP first). Row 4: the front enemy's name and HP bar, or the boss line.
-Footer: the command line.
+`compact`: one party window, `columns` = `min(bodyColumns, STRIP_MAX_COLUMNS)` −
+`COMPACT_STAGE_COLUMNS`, `COMPACT_WINDOW_ROWS` rows. Title "Z3 · W2 · 1,240G" (" · Farm"
+appended when farming and it fits). Inner rows 1-3: one per hero, cursor cell, `shortName`, " L4",
+" H", HP right-aligned in 4, an HP bar, a gauge bar (the bars share what the row leaves, HP
+first). Row 4: the front enemy's name and HP bar, or the boss line; a notice replaces it while
+set. Footer: the command line.
 
 Hotspots: one per command line item (`p` Party, `l` Loot, `w` World, `c` ▾) at its cells, and `f`
-over the purse's tactics row. The band uses them only on hotkey rung (a) (Task 1).
+over the purse's tactics row (compact: over the title). The band uses them only on hotkey rung (a)
+(Task 1).
 
 `alt`: per window, its text in reading order ("Party: Aldric level 4, HP 42 of 60, gauge full;
 …"); the scene's alt joins them.
@@ -345,8 +360,9 @@ Drive cmux and Terminal.app yourself (HANDOFF's driving notes: osascript, `key c
 `read-screen`, `screencapture`); the desktop row is Kevin's.
 
 Decisions the sheet sets:
-- `WINDOW_SCALE`: 1 if scale 1 reads crisp in the Ghostty engine; else 2 (every strip window
-  stays under 2048 px wide at 2: the widest, the message window at 160 columns, is 1,248 px).
+- `WINDOW_SCALE`: 1 if scale 1 reads crisp in the Ghostty engine; else 2. The widest window is
+  the message window of a 160-column band, 80 columns: 640 px at scale 1, 1,280 px and 819,200
+  bytes at scale 2, inside both the 2048 px side and `IMAGE_MAX_BYTES`.
 - Hotkey rung per surface, first that works: (a) Buttons over the command line, (b) a 3-cell
   column of plain Buttons at the strip's right edge (the strip's windows lose 3 columns), (c) one
   text row of Buttons under the strip (band + 1 row). Question 5 answering yes adds rung (a′):
@@ -374,7 +390,7 @@ also fails there: stop, report `blocked: no rung holds hotkeys on <surface>`.
   transcription and the spike sheet; item 5 notes it was settled by grill 1.1 and 1.15.
 
 **Interfaces:** Produces the values in the "Set by Task 2" rows of the constants table, and the
-corner, cursor (▶), ▼ and divider bitmaps at `CELL_W × CELL_H` as `#`/`.` rows.
+corner, cursor (▶), ▼, ▾ and divider bitmaps at `CELL_W × CELL_H` as `#`/`.` rows.
 
 **Work:** Load the `design-from-references` skill and follow it. The eight Dragon Quest V Super
 Famicom screenshots (5 battle, 3 dialogue) on
@@ -391,7 +407,7 @@ the source's 256 × 224 pixels converted to the 8 × 16 cell. Elements the refer
 Gate: ask Kevin to approve the transcription (AskUserQuestion, approve a draft) before Task 4.
 
 **Acceptance check:** the sheet has a slot table per reference, the font comparison, a kit values
-table covering every "Task 2" row of the constants table, and the four bitmaps. Kevin approved.
+table covering every "Task 2" row of the constants table, and the five bitmaps. Kevin approved.
 `pnpm lint` passes.
 
 **Boundaries:** No code. Window widths and strip rows stay as the constants table says; a reference
@@ -413,6 +429,7 @@ that argues for different ones is a note for Kevin, not a change.
   `sprites:check`); `opentype.js` as a dev dependency.
 - `plugins/promptfall/NOTICE.md` (modify): a DotGothic16 section, the OFL text, and that the
   plugin ships glyph bitmaps derived from it, not the font file.
+- `.github/workflows/ci.yml` (modify): a `pnpm font:check` step after `pnpm sprites:check`.
 
 **Interfaces:** Produces `GLYPH_W = 8`, `GLYPH_H = 16`,
 `glyph(ch: string): Uint8Array | null` (16 row bytes, bit 7 the leftmost pixel; null for a
@@ -421,7 +438,8 @@ character not in the set).
 **Work:** Rasterise at 16 px per em by sampling each pixel's centre against the outline (the font
 is drawn on a pixel grid, so this is exact). Fail the script, naming the character, if any
 outline point of a baked glyph falls off the integer grid or its advance is not 8 px. The set:
-printable ASCII (0x20-0x7E) and the Latin-1 letters DotGothic16 carries. ▶, ▼ and ▾ come from
+printable ASCII (0x20-0x7E), `·` (U+00B7), `…` (U+2026), and the Latin-1 letters DotGothic16
+carries. ▶, ▼ and ▾ come from
 Task 2's hand-drawn bitmaps, written into the generated module from a small table in
 `scripts/font.ts`. Check the OFL's Reserved Font Name clause and word the NOTICE to match.
 Internal encoding of the module is your choice (hex or base64 rows).
@@ -460,7 +478,8 @@ mid-line. Alpha is 255 everywhere inside the window.
 window's frame is 80 × 48 px; its corner pixels match Task 2's bitmap; a title shows its glyph
 pixels in the top border row; a bar at 5000 over 4 cells fills 16 px; `reveal: 3` on "Hello"
 draws exactly three glyphs; an unknown character draws `?`; `imageBytes` of the widest strip
-window (message window at 160 columns) at `WINDOW_SCALE` is under `IMAGE_MAX_BYTES`. Red before:
+window (the message window of a 160-column band, 80 columns) at `WINDOW_SCALE` is under
+`IMAGE_MAX_BYTES` and its width under 2048 px. Red before:
 no module. Then the full check line.
 
 **Boundaries:** No band, loop or stage change.
@@ -491,7 +510,8 @@ shows its ▶ through `<set>` over each interval. Frames past
 **Acceptance check:** `claude plugin test plugins/promptfall` passes with tests that: a 10 × 3
 window's cells start `╭` and end `╯`, with the title's characters in row 0; a bar at 5000 over 4
 cells gives two filled `▬` and two empty; the Svg of a two-window scene defines each glyph once;
-a bar track gives an `<animate>` whose `values` follow its keys; a five-second `lines` track at a
+a bar track gives an `<animate>` whose `values` follow its keys, and two keys at one `at` give a
+jump, not a ramp; a five-second `lines` track at a
 200-character-per-frame load stays under `STRIP_SVG_MAX_CHARS`; `smil: false` emits no
 `<animate>` or `<set>`. Red before: no modules. Then the full check line.
 
@@ -505,7 +525,7 @@ a bar track gives an `<animate>` whose `values` follow its keys; a five-second `
 
 **Files:**
 - `plugins/promptfall/hooks/stage/timeline.ts` (modify): export `groups` and `Group`; `onEffects`
-  returns the starts; record actions; `acting`, `actionStarts`.
+  returns the starts; record actions; `acting`, `actionStarts`, `actions`.
 - `plugins/promptfall/hooks/stage/timeline.test.ts` (modify).
 - `plugins/promptfall/hooks/stage/gauges.ts`, `gauges.test.ts` (create): `GaugeTrack`.
 
@@ -520,9 +540,11 @@ returns one start per group, equal to the lunge's `from`; `acting` names the act
 action and the next actor once that one starts; at cadence 5000 the ▶ window is
 `ACTION_STEPS × STEP_MS × 2.5` ms; a hero at gauge 2000 with `gaugePerStep` 150 at cadence 2000
 draws 2000 + 150 × 5 = 2750 after 500 ms; a hero whose action starts at +800 ms draws 0 at
-+800 and `perMs × 200` at +1000; after `endAt` it draws the view's gauge; a fallen hero draws 0;
-with no enemy in the view the gauge holds; a second batch landing mid-fill starts from the drawn
-value, not the view's. Red before: `acting` does not exist. Then the full check line.
++800 and `perMs × 200` at +1000; after `endAt` it draws the current view's gauge, and a view
+published without a batch (a resync) is drawn at once once `endAt` passed; a spawn-only tick
+(`to` equal to `from`) holds the gauge flat; a wipe (`to` 0) draws 0; a fallen hero draws 0; a
+second batch landing mid-fill starts from the drawn value, not the view's; `keys` puts two keys at
+a reset. Red before: `acting` does not exist. Then the full check line.
 
 **Boundaries:** No change to what the stage draws (its goldens stay byte-identical: run
 `pnpm stage:goldens` and confirm `git status` shows no change under `stage/goldens/`).
@@ -535,29 +557,40 @@ value, not the view's. Red before: `acting` does not exist. Then the full check 
 
 **Files:**
 - `plugins/promptfall/hooks/stage/log.ts`, `log.test.ts` (create): `MessageLog`.
-- `plugins/promptfall/hooks/register.tsx` (modify): the stage object gains `gauges: GaugeTrack`
-  and `log: MessageLog`; `onEffects` feeds both after the timeline, with the timeline's starts,
-  the view the effects came with, and the cadence.
-- `plugins/promptfall/hooks/engine.ts` (modify, only if needed): the `GameHandle.stage` type gains
-  the two fields.
+- `plugins/promptfall/hooks/engine.ts` (modify): the `onEffects` dep becomes
+  `onEffects(effects: Effect[], at: number | undefined, view: GameView | null)`, called on every
+  `apply` (effects or none) and on every restep that publishes or has effects, with the view it
+  computed for that publish (computed once, used for both); `GameHandle.stage` gains
+  `gauges: GaugeTrack` and `log: MessageLog`.
+- `plugins/promptfall/hooks/engine.test.ts` (modify): the dep fires on an effect-less tick, with
+  the view.
+- `plugins/promptfall/hooks/register.tsx` (modify): makes the two; its `onEffects` feeds the
+  timeline, then (when the view is not null) `gauges.onTick` and `log.onEffects`, with the
+  timeline's starts, the view and the cadence. Toasts and the pane notice keep their behaviour
+  (an empty list toasts nothing).
+- `plugins/promptfall/hooks/view.ts`, `plugins/promptfall/types/index.d.ts` (modify):
+  `HeroView.shortName` (the template's name, no epithet).
+- `plugins/promptfall/hooks/stage/fixtures.ts` (modify): `shortName` on fixture heroes.
 - `plugins/promptfall/hooks/register.test.ts` (modify): the wiring test.
 
 **Interfaces:** Consumes Task 6. Produces `MessageLog` (verbatim above) and
 `handle.stage.gauges`, `handle.stage.log`.
 
-**Work:** Confirm whether `onEffects` runs for a tick with no effects. If it does not,
-`gauges.onTick` is called from the tick's apply site instead; name the site in the commit message.
-The view the effects came with is the one `engine.apply` published just before; find its
-accessor in `register.tsx`.
+**Work:** Today `onEffects` fires only with effects (`engine.ts:233`, `:402`) and the view reaches
+the atom through an async queue, so register cannot read it synchronously; the dep change above
+fixes both. Under the combat flow a tick where nobody acts has no effects, and gauges still fill
+on it.
 
 **Acceptance check:** `claude plugin test plugins/promptfall` passes with tests that: each row of
 the grill 1.16 wording table prints exactly as written; a Black Mage action with three hits prints
 one line ending "for 8, 9 and 7."; a kill prints "is defeated!" after the killing action and not
 for a world boss; two actions 500 ms apart at cadence 2000 start their lines 500 ms apart; a
 burst whose hit lines would fall more than a cadence behind drops hit lines and keeps a drop and a
-level-up; a line typed at `CHAR_MS` shows 3 characters 3 × `CHAR_MS` ms after its `at`; motion
-`still` shows every line whole; and in `register.test.ts`, a tick applied through the engine
-leaves lines in `handle.stage.log` and a record in `handle.stage.gauges`. Red before: no module.
+level-up (the two-actions test uses lines short enough to type in under 500 ms); a line typed at `CHAR_MS` shows 3 characters 3 × `CHAR_MS` ms after its `at`; motion
+`still` shows every line whole; a hit that kills an enemy whose spawn tick had no effects
+still prints "is defeated!"; and in `register.test.ts`, a tick applied through the engine
+leaves lines in `handle.stage.log`, and an effect-less tick leaves a record in
+`handle.stage.gauges`. Red before: no module.
 Then the full check line.
 
 **Boundaries:** No band change. No toast change.
@@ -576,8 +609,7 @@ Then the full check line.
 - `plugins/promptfall/hooks/stage/goldens/` (regenerated): adds `strip-*.svg` and `strip-*.png`.
 - `plugins/promptfall/hooks/stage/golden.test.ts` (modify): the strip goldens.
 - `scripts/stage-goldens.ts` (modify): writes the strip goldens and a PNG of each strip scenario
-  (through `scripts/png.ts`) for eyeballing.
-- `scripts/png.ts` (modify, only to export its PNG encoder if it is not exported).
+  (through `writePng` from `scripts/png.ts`) for eyeballing.
 
 **Interfaces:** Consumes Tasks 4-7, `worldRows`, `shownBoss`, `formatGold` from `hooks/ui/`.
 Produces `stripScene`, `stripTracks`, `Hotspot`.
@@ -596,7 +628,9 @@ columns the four windows' widths sum to 120 and the message window is 40 wide; a
 Boss", "World boss · 11m"; ▶ sits on the acting hero and on the current tab; a hero at 20% HP has
 `WARN_RGB` text and one at 0 `DOWN_RGB`; a notice replaces the third message row on Loot; a 40-
 character log line in a 30-wide message window fills both rows; hotspots cover the command line's
-words; the alt names every hero's HP and gauge; the strip goldens match. Red before: no module.
+words; the alt names every hero's HP and gauge; across every strip scenario, every tab and a
+notice, every character the scene holds has a glyph (no `?`); a 250-column band's windows are laid
+out in 160; the strip goldens match. Red before: no module.
 Then the full check line.
 
 **Boundaries:** No band or loop change. The stage goldens stay byte-identical.
@@ -611,26 +645,54 @@ Then the full check line.
 - `plugins/promptfall/hooks/ui/band.tsx` (modify): the full, compact, Loot and World branches draw
   the strip; the status row and its tab Buttons go; the hotkey rung from Task 1; the `f` hotkey.
 - `plugins/promptfall/hooks/ui/parts.tsx` (modify): remove `PartyLine` and anything only it used.
-- `plugins/promptfall/hooks/stage/layout.ts` (modify): `full` is `rows + STRIP_ROWS` (+1 on rung
-  c); `compact` is `COMPACT_ROWS` = 6; on the Party tab a terminal under `COMPACT_ROWS` rows
-  collapses, on Loot and World one under `STRIP_ROWS`.
+- `plugins/promptfall/hooks/stage/layout.ts` (modify): the contract below.
 - `plugins/promptfall/hooks/stage/tuning.ts` (modify): `STAGE_TEXT_ROWS` and `DESKTOP_TEXT_ROWS`
-  go; `COMPACT_ROWS` = 6.
-- `plugins/promptfall/hooks/stage/loop.ts` (modify): the site carries the strip; each frame blits
-  it; the loop runs on Loot and World for the strip alone; the frame delay rule below.
-- `plugins/promptfall/hooks/band.test.ts`, `stage/layout.test.ts`, `stage/loop.test.ts` (modify).
+  go; `COMPACT_ROWS` (4) is renamed `COMPACT_STAGE_ROWS` and keeps sizing the compact stage box.
+- `plugins/promptfall/hooks/stage/svg.ts` (modify): its compact test reads `COMPACT_STAGE_ROWS`.
+- `plugins/promptfall/hooks/stage/loop.ts` (modify): the site and io below; each frame blits the
+  strip; the frame delay rule below.
+- `plugins/promptfall/hooks/register.tsx` (modify): builds the extended `LoopIo`.
+- `plugins/promptfall/hooks/band.test.ts`, `stage/layout.test.ts`, `stage/loop.test.ts`,
+  `stage/svg.test.ts` (modify).
 
 **Interfaces:** Consumes `stripScene`, `stripTracks`, the encoders, `handle.stage.gauges` and
 `handle.stage.log`.
+
+**Layout contract** (`layout.ts`):
+
+```ts
+export type Layout =
+  | { kind: 'full'; box: Box; bandRows: number }                 // rows + STRIP_ROWS + extra
+  | { kind: 'compact'; box: Box; bandRows: number }              // box 52 × COMPACT_STAGE_ROWS; COMPACT_WINDOW_ROWS + extra
+  | { kind: 'bare'; box: null; bandRows: number }                // Loot, World: STRIP_ROWS + extra
+  | { kind: 'collapsed'; box: null; bandRows: 1 }
+export function layoutFor(rows: number, props: { bodyColumns: number; maxRows: number },
+  surface: RenderSurface, opts: { tab: BandTab; extra: 0 | 1 }): Layout
+```
+
+`extra` is 1 on hotkey rung (c) for that renderer. Terminal: Party is `full` when
+`bodyColumns ≥ 116` and `maxRows ≥ rows + STRIP_ROWS + extra`, else `compact` when
+`bodyColumns ≥ 100` and `maxRows ≥ COMPACT_WINDOW_ROWS + extra` (grill 1.17), else `collapsed`;
+Loot and World are `bare` when `bodyColumns ≥ 100` and `maxRows ≥ STRIP_ROWS + extra`, else
+`collapsed`. Svg surfaces: Party always `full`, Loot and World always `bare`.
+
+**Loop contract** (`loop.ts`): `StageSite` gains
+`strip: { kind: 'full' | 'compact' | 'bare'; columns: number; tab: BandTab; keys: readonly string[] }`
+(`keys` the window Image keys on `image`, `['strip']` on `raster`). `LoopIo` gains
+`strip: () => Promise<{ world: WorldState; notice: string | null; gauges: GaugeTrack; log: MessageLog } | null>`.
+A `bare` site's frame checks only that `layoutFor` still answers `bare` for its props (a boss
+spawning on Loot is not a layout change) and blits no stage. The loop caches each window's last
+encoded source by its `Win` JSON and skips the encode and the blit when it is unchanged.
 
 **Work:**
 - Image terminals: one `Image` per strip window (key `windowKey`, alt the window's `alt`), in a
   row `Box`, left to right; the loop blits each window every frame (an unchanged source sends
   nothing). Raster terminals: one `Raster` keyed `strip`, blitted the same way. Probe pending: the
-  strip's rows empty, as the stage does.
-- Svg surfaces: a second `Svg` under the stage, `stripScene` plus `stripTracks` over a horizon of
-  the cadence plus 1 s, rendered on each band render (once a tick, as the stage), at the band's
-  width; the stage's fit cap subtracts the strip's height in desktop rows
+  strip's rows empty, as the stage does; the 1 × 1 probe `Image` moves from the deleted status row
+  into the first empty strip row, and arms on every tab (Loot and World need the renderer too).
+- Svg surfaces: a second `Svg` under the stage, `stripScene` (at the stage's columns) plus
+  `stripTracks` over a horizon of the cadence plus 1 s, rendered on each band render (once a tick,
+  as the stage), scaled to the band's width; the stage's fit cap subtracts the strip's height in desktop rows
   (`ceil(stripHeightPx / DESKTOP_ROW_PX)`), replacing `DESKTOP_TEXT_ROWS`.
 - Compact: the 52-column stage centred vertically in 6 rows (a blank row above and below), the
   party window beside it on the right.
@@ -640,18 +702,22 @@ Then the full check line.
   (`hooks/command.ts:96-103`). Placed per Task 1's rung for the surface; on rung (a) at the
   hotspots. The desktop takes rung (c) unless Kevin's desktop row in the spike sheet says a higher
   rung works there.
-- Loop delay: `EVENT_FRAME_MS` while the timeline or the log is busy; `GAUGE_FRAME_MS` while a
-  gauge fills; else `restDelay`. Motion `still`'s frame skip also needs the strip unchanged since
+- Loop delay: `EVENT_FRAME_MS` while the timeline or the log is busy;
+  `min(GAUGE_FRAME_MS, restDelay(now))` while a gauge fills; else `restDelay(now)`. Motion `still`'s frame skip also needs the strip unchanged since
   the last blit.
 
-**Acceptance check:** `claude plugin test plugins/promptfall` passes with tests that, for each of
-terminal-image, terminal-raster and desktop: the Party band at rest is 13 rows (14 on rung c), a
-zone boss 22, compact 6, Loot and World 5; the image band mounts four window Images with alts; the
-raster band mounts a `strip` Raster; the desktop band has two Svgs; `p`, `l`, `w`, `c` switch and
-collapse; `f` applies `set_farm` and the purse reads "Farm here"; the loop blits the strip on the
-World tab and stops when collapsed; with only a gauge filling the loop re-arms at
-`GAUGE_FRAME_MS`; a terminal of 5 rows collapses. Red before: the band has a status row. Then the
-full check line.
+**Acceptance check:** `claude plugin test plugins/promptfall` passes with tests that:
+- terminal, image and raster renderers: the Party band at rest is 13 rows (14 on rung c), a zone
+  boss 22, compact 6, Loot and World 5; a Party band with `maxRows` 5 collapses; the image band
+  mounts four window Images with alts; the raster band mounts a `strip` Raster; the probe arms on
+  the World tab; a boss spawning while on Loot keeps the loop running;
+- desktop: two Svgs; at 95 columns the strip Svg is laid out in 116 columns and scaled; the World
+  tab draws the strip Svg alone;
+- every surface: `p`, `l`, `w`, `c` switch and collapse; `f` applies `set_farm` and the purse reads
+  "Farm here";
+- loop: it blits the strip on the World tab and stops when collapsed; with only a gauge filling it
+  re-arms at `min(GAUGE_FRAME_MS, restDelay)`; an unchanged window is not blitted twice.
+Red before: the band has a status row. Then the full check line.
 
 **Boundaries:** No pane (dialog) change; that is PR 2. No change to what the stage itself draws.
 
