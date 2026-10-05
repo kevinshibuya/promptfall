@@ -506,4 +506,4 @@ on its own with the failing step named.
 - [x] Spec amendments
 - [x] Full check line
 - [x] Manual pass, record results (steps 1-3 driven in Terminal.app; 4-6 Kevin's, test-covered; stopped at 93% weekly usage)
-- [ ] PR, stop
+- [x] PR, stop (https://github.com/kevinshibuya/promptfall/pull/7)
