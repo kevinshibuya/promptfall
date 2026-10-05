@@ -35,6 +35,8 @@ export type StageActor = {
   /** A hero at 0 hp: each palette channel halved (opacity 0.5 on Svg). */
   fallen: boolean
   flashing: boolean
+  /** The rarity slot's colour before the flash (the fallen dim applied); null without a slot. */
+  accent?: number | null
 }
 /** The text's top-left in stage pixels, already clamped inside the frame. */
 export type StageNumber = { text: string; x: number; y: number; rgb: number }
@@ -115,6 +117,7 @@ export function stageAt(
       alpha,
       fallen: false,
       flashing,
+      accent: null,
     })
   }
 
@@ -129,6 +132,7 @@ export function stageAt(
       palette[sprite.raritySlot] = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
     }
     if (fallen) palette = palette.map((c, i) => (i === 0 ? c : halve(c)))
+    const accent = sprite.raritySlot === null ? null : (palette[sprite.raritySlot] ?? null)
     if (flashing) palette = palette.map((c, i) => (i === 0 ? c : FLASH_RGB))
     actors.push({
       key: hero.id,
@@ -141,6 +145,7 @@ export function stageAt(
       alpha: 1,
       fallen,
       flashing,
+      accent,
     })
   })
 

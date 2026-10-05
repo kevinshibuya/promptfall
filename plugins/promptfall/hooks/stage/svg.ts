@@ -83,10 +83,15 @@ export function renderSvg(
   for (const actor of model.actors) {
     const mine = live.filter((m) => m.actor === actor.key)
     const spawning = mine.some((m) => m.kind === 'spawn')
-    if (actor.alpha <= 0 && !(opts.smil && spawning)) continue
+    if (actor.alpha <= 0 && !(opts.smil && spawning)) {
+      // Not drawn, but a drop still rising from it needs its anchor.
+      base.set(actor.key, { x: actor.x, y: actor.y, actor })
+      continue
+    }
     const id = define(actor.art, actor.spriteId)
     const slot = SPRITES[actor.spriteId]?.raritySlot ?? null
-    const color = slot === null ? '' : ` color="${hex(actor.palette[slot] ?? 0)}"`
+    // The accent before any flash: the flash is an overlay here, never baked into the base.
+    const color = slot === null ? '' : ` color="${hex(actor.accent ?? actor.palette[slot] ?? 0)}"`
     const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
     const use = `<use href="#${id}"${flip}${color}/>`
     const flashUse = `<use href="#${id}"${flip} filter="url(#flash)"`

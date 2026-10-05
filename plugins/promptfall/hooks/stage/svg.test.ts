@@ -5,7 +5,7 @@ import { wave } from './fixtures'
 import { stageAt } from './model'
 import { renderSvg } from './svg'
 import { StageTimeline } from './timeline'
-import { DROP_MS, LUNGE_MS } from './tuning'
+import { DROP_MS, LUNGE_MS, RARITY_RGB } from './tuning'
 
 const NOW = 1_000_000
 const BOX = { columns: 120, rows: 8 }
@@ -102,4 +102,45 @@ test('without smil no animation element appears', () => {
 test('the idle bob animates with motion full only', () => {
   expect(svg([], NOW, { smil: true, motion: 'full' })).toContain('repeatCount="indefinite"')
   expect(svg([], NOW, { smil: true, motion: 'still' })).not.toContain('<animateTransform')
+})
+
+const DROP: Effect = {
+  k: 'drop',
+  item: {
+    id: 'i',
+    base: 'iron_sword',
+    rarity: 'rare',
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  },
+}
+
+test('a drop still running after its enemy dissolved stays in a redraw', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW)
+  t.onEffects([hit, DROP], NOW)
+  const gone = wave()
+  gone.enemies = gone.enemies.filter((e) => e.id !== 'e1')
+  t.observe(gone, NOW + 10)
+  // Past the dissolve, inside the drop.
+  const at = NOW + 750
+  const model = stageAt(gone, t, at, BOX, { compact: false, motion: 'full' })
+  expect(model.drops).toHaveLength(1)
+  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
+  expect(s).toMatch(/values="1;1;0"/)
+})
+
+test('a hero flashing at a redraw keeps its rarity colour under the flash', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects([{ k: 'hit', by: 'e1', target: 'h2', amount: 3 }], NOW)
+  const flash = t.active(NOW).find((m) => m.actor === 'h2' && m.kind === 'flash')
+  if (!flash) throw new Error('no flash')
+  const at = flash.from + 10
+  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full' })
+  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
+  const rare = `#${(RARITY_RGB.rare ?? 0).toString(16).padStart(6, '0')}`
+  expect(s).toContain(`color="${rare}"`)
 })
