@@ -27,6 +27,11 @@ describe('createInitialState', () => {
     expect(s.stats).toEqual({ kills: 0, bosses: 0, wipes: 0 })
   })
 
+  it('is version 4 with an empty battle', () => {
+    expect(s.v).toBe(4)
+    expect(s.battle).toEqual({ gauges: [], queue: [], busy: 0 })
+  })
+
   it('has one common hero per class', () => {
     expect(s.roster.map((h) => [h.template, h.cls])).toEqual([
       ['knight_1', 'knight'],

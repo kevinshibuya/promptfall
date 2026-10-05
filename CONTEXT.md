@@ -128,6 +128,27 @@ What the server rolls for a contributor when a world boss dies or expires, deliv
 the server event `rewarded`.
 _Avoid_: loot (that is a drop), prize, payout
 
+### Combat
+
+**Battle time**:
+The sim's own clock. Each tick advances it by a fixed slice; it never reads the wall clock.
+_Avoid_: game time, real time, elapsed time
+
+**Action gauge**:
+A unit's bar that fills with battle time, faster with more speed. A unit whose gauge is full
+joins the action queue. Heroes' gauges show in the band; enemies' never do.
+_Avoid_: ATB bar, timer, charge, cooldown
+
+**Action queue**:
+The units whose action gauges are full, in the order they filled. The first one acts; nobody
+else acts until its action is over.
+_Avoid_: turn order, initiative, round
+
+**Action**:
+What a unit does when its turn in the action queue comes: an attack, a heal, later a skill or
+a technique. Picked by a weighted draw among the actions that make sense right now.
+_Avoid_: move, command, turn, ability
+
 ### Presentation
 
 **Stage**:
@@ -140,6 +161,17 @@ _Avoid_: scene, arena, battlefield, viewport
 The pixel art of one hero class, enemy, world boss or item, with its animation frames.
 Replaces the glyph where pixels draw; the glyph stays as its fallback.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
+
+**Window**:
+A framed box of the game's interface, in the Dragon Quest style: a black field, a rounded
+white border, text in the game's pixel font. The band's HUD under the stage and every tab of
+the pane are made of windows.
+_Avoid_: panel, card, frame, box, dialog (the pane as a whole)
+
+**Combat log**:
+The running account of the encounter, one short line per event (hits, kills, drops, level-ups,
+deaths, sales), printed in the band's message window as it happens.
+_Avoid_: battle log, feed, history, last drop
 
 **Cue**:
 A short sound the primary session plays alongside a toast. Every cue has a toast; most

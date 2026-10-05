@@ -40,7 +40,7 @@ const withoutFront = (): GameView => {
   return v
 }
 
-/** A killing hit on the slot-0 enemy at `t1`, a hit back on a hero, the kill observed right after. */
+/** A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill observed right after. */
 function killed(t1: number, effects: Effect[], box: Box): Staged {
   const t = new StageTimeline()
   t.observe(wave(), t1 - 1000)
@@ -93,7 +93,9 @@ export function stage(name: Scenario): Staged {
       return killed(
         t1,
         [
+          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
           { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
+          { k: 'act', actor: 'e2', action: 'attack', at: 500 },
           { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
         ],
         FULL,
@@ -105,8 +107,10 @@ export function stage(name: Scenario): Staged {
       return killed(
         t1,
         [
+          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
           { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
           { k: 'drop', item },
+          { k: 'act', actor: 'e2', action: 'attack', at: 500 },
           { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
         ],
         FULL,

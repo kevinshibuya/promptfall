@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { GOLDEN_HASH, GOLDEN_HASH_V2, GOLDEN_SEED, goldenEvents } from './golden'
+import { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 import { hashState } from './hash'
 import { createInitialState } from './state'
 import { replay } from './step'
@@ -10,26 +10,18 @@ describe('golden replay', () => {
   })
 
   // GOLDEN_HASH pins the rules and the content. Changing the literal requires bumping SIM_VERSION.
-  // Boss mode is the only change of SIM_VERSION 3: without boss events the v2 script must land on
-  // the v2 state exactly, which pins the draw order of ordinary drops, combat and every other path.
-  it('the boss-free script still reaches the v2 golden state, boss field aside', () => {
-    const { boss, ...rest } = replay(
-      createInitialState(GOLDEN_SEED),
-      goldenEvents({ boss: false }),
-    ).state
-    expect(boss).toBeNull()
-    expect(hashState({ ...rest, v: 2 } as never)).toBe(GOLDEN_HASH_V2)
-  })
-
+  // SIM_VERSION 4 (combat flow) changed the draw order of every fight, so the v2 pin is gone.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
   })
 
-  // The hit effect (phase 4) is output only: the hash above is unchanged and no SIM_VERSION bump.
-  it('the replay reports hits without moving the hash', () => {
+  // hit, act and heal are output only: effects are not part of the state the hash reads.
+  it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('21ecdbaf9e864e9d')
+    expect(GOLDEN_HASH).toBe('0343e76688254278')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
+    expect(r.effects.some((e) => e.k === 'act')).toBe(true)
+    expect(r.effects.some((e) => e.k === 'heal')).toBe(true)
   })
 })

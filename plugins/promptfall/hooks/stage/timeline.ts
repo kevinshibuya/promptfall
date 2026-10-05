@@ -1,15 +1,15 @@
 import type { GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
-import type { Effect } from '../vendor/sim.js'
+import { type Effect, TICK_MS } from '../vendor/sim.js'
 import {
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
-  HIT_STAGGER_MS,
   IDLE_FRAME_MS,
   LUNGE_MS,
   NUMBER_MS,
   NUMBER_RGB_ENEMY,
+  NUMBER_RGB_HEAL,
   NUMBER_RGB_HERO,
   SPAWN_MS,
   STAGE_BOSS_ROWS,
@@ -29,6 +29,26 @@ export type Motion =
 export type Known = { id: string; spriteId: string; kind: string; slot: number; name: string }
 
 const SLOTS = 3
+
+/** An action's lunge and its impact flash: the next action starts once both are over. */
+export const ACTION_MS = Math.max(LUNGE_MS, LUNGE_MS / 2 + FLASH_MS)
+
+type Act = Extract<Effect, { k: 'act' }>
+/** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
+type Group = { act: Act | null; effects: Effect[] }
+
+function groups(effects: readonly Effect[]): Group[] {
+  const out: Group[] = []
+  let current: Group = { act: null, effects: [] }
+  for (const effect of effects) {
+    if (effect.k === 'act') {
+      if (current.act || current.effects.length > 0) out.push(current)
+      current = { act: effect, effects: [] }
+    } else current.effects.push(effect)
+  }
+  if (current.act || current.effects.length > 0) out.push(current)
+  return out
+}
 
 /** The idle bob's phase: floor(now / IDLE_FRAME_MS) % 2. */
 export function bobbingAt(now: number): 0 | 1 {
@@ -51,6 +71,8 @@ export class StageTimeline {
   private heroes = new Set<string>()
   private motions: Motion[] = []
   private observed = false
+  /** When the last action on the timeline ends: a later one never starts before it. */
+  private actionEnd = Number.NEGATIVE_INFINITY
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -100,7 +122,8 @@ export class StageTimeline {
         }
         continue
       }
-      const slot = this.freeSlot()
+      const slot = this.freeSlot(now)
+      if (slot === null) continue
       this.entries.set(enemy.id, {
         id: enemy.id,
         spriteId,
@@ -115,13 +138,25 @@ export class StageTimeline {
     this.observed = true
   }
 
-  /** The lowest slot no entry holds; when all three are held, the slot of the departed entry that ends first. */
-  private freeSlot(): number {
+  /**
+   * The lowest slot no entry holds; when all three are held, the slot of the departed entry that
+   * ends first among those whose hit has played out (flash, numbers and drop over). Null when every
+   * departed holder still has a hit to show: an action can land after the next tick has already
+   * brought a newcomer, and evicting would drop that hit, so the newcomer waits a frame or more.
+   */
+  private freeSlot(now: number): number | null {
     const held = new Set([...this.entries.values()].map((k) => k.slot))
     for (let slot = 0; slot < SLOTS; slot++) if (!held.has(slot)) return slot
     let evict: Known | null = null
     let evictEnd = Number.POSITIVE_INFINITY
     for (const id of this.departed) {
+      const showing = this.motions.some(
+        (m) =>
+          m.actor === id &&
+          m.until > now &&
+          (m.kind === 'flash' || m.kind === 'number' || m.kind === 'drop'),
+      )
+      if (showing) continue
       const end = this.motions
         .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
         .reduce((e, m) => Math.max(e, m.until), 0)
@@ -131,7 +166,7 @@ export class StageTimeline {
         evictEnd = end
       }
     }
-    if (evict === null) return held.size
+    if (evict === null) return this.departed.size > 0 ? null : held.size
     this.entries.delete(evict.id)
     this.departed.delete(evict.id)
     this.motions = this.motions.filter((m) => m.actor !== evict.id)
@@ -149,55 +184,78 @@ export class StageTimeline {
     return this.heroes.has(id) || this.entries.has(id)
   }
 
-  onEffects(effects: readonly Effect[], now: number): void {
+  /**
+   * One action at a time: each `act` starts its action at its battle-time offset stretched to the
+   * cadence (grill 1.6), never before the previous action's lunge and flash are over. The actor
+   * lunges once; every hit and heal of the action lands at one impact. Each animation keeps its
+   * own speed whatever the cadence.
+   */
+  onEffects(effects: readonly Effect[], now: number, cadenceMs: number = TICK_MS): void {
     // observe prunes too, but nothing observes while the band is hidden or on another tab.
     this.motions = this.motions.filter((m) => m.until > now)
-    let hits = 0
-    let last: { target: string; flashEnd: number } | null = null
-    for (const effect of effects) {
-      if (effect.k === 'hit') {
-        const start = now + hits * HIT_STAGGER_MS
-        hits += 1
-        const impact = start + LUNGE_MS / 2
-        if (this.isActor(effect.by)) {
-          const dir = this.heroes.has(effect.by) ? -1 : 1
-          this.motions.push({
-            kind: 'lunge',
-            actor: effect.by,
-            from: start,
-            until: start + LUNGE_MS,
-            dir,
-          })
-        }
-        if (this.isActor(effect.target)) {
-          this.motions.push({
-            kind: 'flash',
-            actor: effect.target,
-            from: impact,
-            until: impact + FLASH_MS,
-          })
+    for (const group of groups(effects)) {
+      const offset = group.act ? Math.floor((group.act.at * cadenceMs) / TICK_MS) : 0
+      const start = Math.max(now + offset, this.actionEnd)
+      const impact = start + LUNGE_MS / 2
+      let shown = false
+      const act = group.act
+      if (act && this.isActor(act.actor)) {
+        const dir = this.heroes.has(act.actor) ? -1 : 1
+        this.motions.push({
+          kind: 'lunge',
+          actor: act.actor,
+          from: start,
+          until: start + LUNGE_MS,
+          dir,
+        })
+        shown = true
+      }
+      let last: { target: string; flashEnd: number } | null = null
+      for (const effect of group.effects) {
+        if (effect.k === 'hit') {
+          if (this.isActor(effect.target)) {
+            this.motions.push({
+              kind: 'flash',
+              actor: effect.target,
+              from: impact,
+              until: impact + FLASH_MS,
+            })
+            this.motions.push({
+              kind: 'number',
+              actor: effect.target,
+              text: String(effect.amount),
+              rgb: this.heroes.has(effect.target) ? NUMBER_RGB_HERO : NUMBER_RGB_ENEMY,
+              from: impact,
+              until: impact + NUMBER_MS,
+            })
+            shown = true
+          }
+          last = { target: effect.target, flashEnd: impact + FLASH_MS }
+        } else if (effect.k === 'heal') {
+          if (!this.isActor(effect.target)) continue
           this.motions.push({
             kind: 'number',
             actor: effect.target,
             text: String(effect.amount),
-            rgb: this.heroes.has(effect.target) ? NUMBER_RGB_HERO : NUMBER_RGB_ENEMY,
+            rgb: NUMBER_RGB_HEAL,
             from: impact,
             until: impact + NUMBER_MS,
           })
+          shown = true
+        } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
+          const actor = last?.target ?? this.front()
+          if (actor === null || !this.entries.has(actor)) continue
+          const from = last?.flashEnd ?? now
+          this.motions.push({
+            kind: 'drop',
+            actor,
+            item: spriteFor('item', effect.item.base).id,
+            from,
+            until: from + DROP_MS,
+          })
         }
-        last = { target: effect.target, flashEnd: impact + FLASH_MS }
-      } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
-        const actor = last?.target ?? this.front()
-        if (actor === null || !this.entries.has(actor)) continue
-        const from = last?.flashEnd ?? now
-        this.motions.push({
-          kind: 'drop',
-          actor,
-          item: spriteFor('item', effect.item.base).id,
-          from,
-          until: from + DROP_MS,
-        })
       }
+      if (shown) this.actionEnd = start + ACTION_MS
     }
   }
 
@@ -211,7 +269,7 @@ export class StageTimeline {
     return best?.id ?? null
   }
 
-  /** Motions not yet over: under way, or starting later (a staggered hit). */
+  /** Motions not yet over: under way, or starting later (a later action of the tick). */
   active(now: number): readonly Motion[] {
     return this.motions.filter((m) => m.until > now)
   }

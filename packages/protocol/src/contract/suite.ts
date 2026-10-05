@@ -1,6 +1,7 @@
 import {
   content,
   createInitialState,
+  GAUGE_FULL,
   type GameState,
   type Hero,
   hashState,
@@ -87,10 +88,14 @@ function commonItem(id: string): Item {
   }
 }
 
-/** A minted trader: linked, 10,000 gold, the given inventory, and spare heroes out of the party. */
+/**
+ * A minted trader: linked, 10,000 gold, the given inventory, and spare heroes out of the party.
+ * Every party hero's gauge starts full, so a one-tick commit already deals damage (grill 1.12).
+ */
 function traderState(seed: number, patch: Partial<GameState> = {}, spares: Hero[] = []): GameState {
   const s = createInitialState(seed)
-  return { ...s, gold: 10_000, roster: [...s.roster, ...spares], ...patch }
+  const battle = { gauges: s.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 }
+  return { ...s, gold: 10_000, roster: [...s.roster, ...spares], battle, ...patch }
 }
 
 function spareHero(seed: number, id: string, patch: Partial<Hero> = {}): Hero {

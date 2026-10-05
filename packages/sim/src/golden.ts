@@ -68,8 +68,5 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
   return events.slice(0, 300)
 }
 
-/** The phase 2 golden hash (SIM_VERSION 2): the boss-free script must still reach it, boss field aside. */
-export const GOLDEN_HASH_V2 = '261e337c034123fa'
-
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
-export const GOLDEN_HASH = '21ecdbaf9e864e9d'
+export const GOLDEN_HASH = '0343e76688254278'

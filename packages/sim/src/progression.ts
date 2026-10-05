@@ -1,3 +1,4 @@
+import { SPAWN_GAUGE_MAX } from './battle'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
 import { rollDrops } from './loot'
@@ -135,6 +136,7 @@ function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: Ene
   const hp = def ? def.stats.hp : 1
   const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp }
   encounter.enemies.push(enemy)
+  s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
 }
 
 function pickWaveEnemy(s: GameState): string {
@@ -282,6 +284,7 @@ export function checkWipe(s: GameState, effects: Effect[]): boolean {
   }
   const retreatedTo = Math.max(1, s.zone - 1)
   effects.push({ k: 'wipe', retreatedTo })
+  s.battle = { gauges: [], queue: [], busy: 0 }
   s.encounter = null
   s.pendingTurnBoss = false
   s.stats.wipes += 1

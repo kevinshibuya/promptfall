@@ -19,4 +19,30 @@ describe('validateContent', () => {
     expect(problems[0]).toContain('zone 1')
     expect(problems[0]).toContain('ghost_enemy')
   })
+
+  it('names a hero class with no tactic and a negative weight', () => {
+    const broken = {
+      ...content,
+      tactics: {
+        ...content.tactics,
+        heroes: {
+          ...content.tactics.heroes,
+          archer: [],
+          knight: [
+            {
+              action: 'attack' as const,
+              weight: { kind: 'fixed' as const, weight: -1 },
+              target: { kind: 'none' as const },
+            },
+          ],
+        },
+      },
+    }
+    const problems = validateContent(broken)
+    expect(problems).toHaveLength(2)
+    expect(problems.some((p) => p.includes('archer') && p.includes('at least one tactic'))).toBe(
+      true,
+    )
+    expect(problems.some((p) => p.includes('knight') && p.includes('non-negative'))).toBe(true)
+  })
 })

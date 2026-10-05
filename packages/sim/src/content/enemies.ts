@@ -1,7 +1,5 @@
 import type { EnemyKind, Stats } from '../types'
-import type { EnemyDef } from './types'
-
-type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss'
+import type { Archetype, EnemyDef } from './types'
 
 // Multipliers on the zone baseline, in basis points; spd is a flat offset.
 const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number; spd: number }> = {
@@ -179,6 +177,7 @@ function build(): Record<string, EnemyDef> {
         glyph: GLYPHS[archetype],
         zone,
         kind,
+        archetype,
         stats,
         xp: xp * bossMult,
         gold: [goldMin * bossMult, goldMax * bossMult],

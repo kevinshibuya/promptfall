@@ -18,7 +18,6 @@ export const ACTOR_EDGE = 4
 export const COMPACT_PITCH = 8
 
 // Motion, in ms and px.
-export const HIT_STAGGER_MS = 150
 export const LUNGE_MS = 240
 export const LUNGE_PX = 4
 export const FLASH_MS = 160
@@ -101,3 +100,5 @@ export const FLASH_RGB = 0xffffff
 /** Damage taken by a hero. */
 export const NUMBER_RGB_HERO = 0xff5050
 export const NUMBER_RGB_ENEMY = 0xffffff
+/** HP a heal restored. */
+export const NUMBER_RGB_HEAL = 0x58d858

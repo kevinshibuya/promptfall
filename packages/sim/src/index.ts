@@ -1,3 +1,14 @@
+export {
+  ACTION_STEPS,
+  FILL_BP,
+  FILL_K,
+  fill,
+  GAUGE_FULL,
+  POWER_BP,
+  SPAWN_GAUGE_MAX,
+  STEP_MS,
+  TICK_MS,
+} from './battle'
 export type {
   AffixDef,
   Content,
@@ -16,7 +27,9 @@ export { heroStats } from './progression'
 export { createInitialState } from './state'
 export { replay, step } from './step'
 export type {
+  ActionId,
   Affix,
+  Battle,
   Effect,
   Encounter,
   Enemy,
