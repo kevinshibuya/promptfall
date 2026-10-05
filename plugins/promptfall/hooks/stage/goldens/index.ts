@@ -5,6 +5,6 @@ export const GOLDENS: Record<Scenario, Golden> = {
   rest: {rasterHash: "303fdf0091006563", imageHash: "32d3c00ad3ad8d91", svgHash: "d5a6b30a42b232be", svgChars: 8675, rasterPairs: 61},
   boss: {rasterHash: "a20aee3c7ef884a2", imageHash: "2d3080bf8408c20f", svgHash: "6ff8c3b6e020c7c6", svgChars: 16259, rasterPairs: 58},
   compact: {rasterHash: "2b3d2444a9dff9a0", imageHash: "3dd18245d4e35bc1", svgHash: "f86fc064e6f7470a", svgChars: 3943, rasterPairs: 40},
-  dissolve: {rasterHash: "b55707bb2438fc42", imageHash: "2e25321eeed5522e", svgHash: "bc245fe2df6b1112", svgChars: 9343, rasterPairs: 57},
-  drop: {rasterHash: "a0c505e00f34ed8e", imageHash: "296c9ea481de4f58", svgHash: "da3c4350c9225c02", svgChars: 10491, rasterPairs: 64},
+  dissolve: {rasterHash: "126dec09e1b4dfa4", imageHash: "ebb27032a65c968b", svgHash: "690df3ab89cf3680", svgChars: 9633, rasterPairs: 56},
+  drop: {rasterHash: "5ca1969a298b99e8", imageHash: "87c3bb92b89655ed", svgHash: "a15b851611eaa880", svgChars: 10782, rasterPairs: 63},
 }

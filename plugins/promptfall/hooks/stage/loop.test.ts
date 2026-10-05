@@ -127,13 +127,17 @@ function harness(clock: Clock, blitMs = 0): Harness {
   return { loop: new StageLoop(io, timeline), timeline, blits, times, invalidations, state }
 }
 
-const hit = { k: 'hit' as const, by: 'h1', target: 'e1', amount: 5 }
+/** One action: the knight lunges and hits the front enemy. */
+const hit = [
+  { k: 'act' as const, actor: 'h1', action: 'attack' as const, at: 0 },
+  { k: 'hit' as const, by: 'h1', target: 'e1', amount: 5 },
+]
 
 test('a mounted raster site blits on wake, at the event rate while busy, at the idle rate at rest', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.loop.mount(site())
-  h.timeline.onEffects([hit], 1_000_000)
+  h.timeline.onEffects(hit, 1_000_000)
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
   expect(h.blits.length).toBeGreaterThanOrEqual(1)
@@ -201,7 +205,7 @@ test('with motion still, one settled blit follows the last motion and then none'
   h.loop.mount(site())
   await clock.advance(5_000)
   expect(h.blits).toHaveLength(0)
-  h.timeline.onEffects([hit], await clock.now())
+  h.timeline.onEffects(hit, await clock.now())
   h.loop.wake()
   await clock.advance(2_000)
   const settled = h.blits.length
@@ -216,7 +220,7 @@ test('an svg site invalidates at the fallback rate while busy and never at rest'
   h.loop.mount(site('svg'))
   await clock.advance(5_000)
   expect(h.invalidations).toHaveLength(0)
-  h.timeline.onEffects([hit], await clock.now())
+  h.timeline.onEffects(hit, await clock.now())
   h.loop.wake()
   await clock.advance(SVG_FALLBACK_FRAME_MS * 3)
   expect(h.invalidations.length).toBeGreaterThanOrEqual(3)
@@ -236,7 +240,7 @@ test('a desktop svg site at 95 × 12 keeps running through a zone boss', async (
     layout: layoutFor(rows, props, 'desktop'),
   })
   // On a terminal 95 × 12 is the one-row band: a tick that ignored the surface would stop the site.
-  h.timeline.onEffects([hit], await clock.now())
+  h.timeline.onEffects(hit, await clock.now())
   h.loop.wake()
   await clock.advance(SVG_FALLBACK_FRAME_MS * 5)
   // A stopped site invalidates once, for the re-mount, and never again; a live one redraws the hit.
@@ -292,7 +296,7 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
   slowNext = true
   await clock.advance(400)
   const before = blits.length
-  timeline.onEffects([hit], await clock.now())
+  timeline.onEffects(hit, await clock.now())
   await clock.advance(2_000)
   expect(blits.length).toBeGreaterThan(before)
   expect(blits.length).toBeGreaterThan(0)

@@ -619,7 +619,7 @@ test('Loot and World keep four rows, draw no stage and blit nothing', async ($, 
   await ui.unmount()
 })
 
-test('a round of hits blits the stage at the event rate', async ($, on) => {
+test('an action blits the stage at the event rate', async ($, on) => {
   const { data, blits, clock, states } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -627,13 +627,16 @@ test('a round of hits blits the stage at the event rate', async ($, on) => {
   for (let i = 0; i < 20 && (states.get('view') as GameView).enemies.length === 0; i++) {
     await clock.advance(5_000)
   }
-  // The next tick fights a round.
-  await clock.advance(5_000)
-  const before = blits.length
-  await clock.advance(1_000)
-  const round = blits.slice(before)
-  expect(round.length).toBeGreaterThanOrEqual(10)
-  for (const b of round) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+  // Gauges start empty, so the first action comes a few ticks in: find a busy second.
+  let busiest = 0
+  for (let i = 0; i < 60 && busiest < 10; i++) {
+    const before = blits.length
+    await clock.advance(1_000)
+    const second = blits.slice(before)
+    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+    busiest = Math.max(busiest, second.length)
+  }
+  expect(busiest).toBeGreaterThanOrEqual(10)
   await ui.unmount()
 })
 

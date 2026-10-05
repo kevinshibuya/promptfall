@@ -439,9 +439,9 @@ ends. Red before: the timeline staggers by `HIT_STAGGER_MS`.
 
 **Boundaries:** No band layout or party line changes here (Task 7). No sim changes.
 
-- [ ] Timeline grouping and stretch
-- [ ] Heal numbers, cadence plumbing
-- [ ] Scenarios and goldens, run, commit
+- [x] Timeline grouping and stretch
+- [x] Heal numbers, cadence plumbing
+- [x] Scenarios and goldens, run, commit
 
 ### Task 7: The text gauge in today's party line
 

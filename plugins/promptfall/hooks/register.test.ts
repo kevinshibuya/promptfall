@@ -1121,11 +1121,16 @@ test('effects with a hit wake the stage loop', async ($, on) => {
   for (let i = 0; i < 20 && (last.get('view') as GameView).enemies.length === 0; i++) {
     await time.advance(5_000)
   }
-  const tick = time.now() + 5_000
-  await time.advance(5_000 + EVENT_FRAME_MS)
-  expect(
-    blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS),
-  ).toBe(true)
+  // Gauges start empty: the first ticks with an enemy carry no action. With motion still only
+  // effects wake the loop, so a blit right after a tick means that tick's effects woke it.
+  let next = time.now() + 5_000
+  let woke = false
+  for (let i = 0; i < 12 && !woke; i++, next += 5_000) {
+    await time.advance(next + EVENT_FRAME_MS - time.now())
+    const tick = next
+    woke = blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS)
+  }
+  expect(woke).toBe(true)
   await ui.unmount()
 })
 

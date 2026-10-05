@@ -6,8 +6,9 @@ import {
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
-  HIT_STAGGER_MS,
   LUNGE_MS,
+  NUMBER_MS,
+  NUMBER_RGB_HEAL,
   SPAWN_MS,
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
@@ -15,6 +16,16 @@ import {
 
 const NOW = 1_000_000
 const hit = (by: string, target: string, amount = 5): Effect => ({ k: 'hit', by, target, amount })
+const act = (
+  actor: string,
+  at: number,
+  action: 'attack' | 'attack_all' | 'heal' = 'attack',
+): Effect => ({
+  k: 'act',
+  actor,
+  action,
+  at,
+})
 const item = (base: string) => ({
   id: 'i1',
   base,
@@ -43,17 +54,118 @@ test('the first observe assigns slots and starts nothing', () => {
   expect(t.isBusy(NOW)).toBe(false)
 })
 
-test('hits in one call stagger their lunges, flashes and numbers', () => {
+test('one action at a time: each act lunges once at its offset, its hits flash at the impact', () => {
   const t = observed()
-  t.onEffects([hit('h1', 'e1'), hit('e2', 'h2'), hit('h3', 'e3'), hit('h1', 'e1')], NOW)
-  const lunges = of(t.active(NOW), 'lunge')
-  expect(lunges.map((m) => m.from)).toEqual([0, 1, 2, 3].map((i) => NOW + i * HIT_STAGGER_MS))
-  expect(lunges.map((m) => (m.kind === 'lunge' ? m.dir : 0))).toEqual([-1, 1, -1, -1])
-  const flashes = of(t.active(NOW), 'flash')
-  expect(flashes.map((m) => m.from)).toEqual(
-    [0, 1, 2, 3].map((i) => NOW + i * HIT_STAGGER_MS + LUNGE_MS / 2),
+  t.onEffects(
+    [
+      act('h1', 0),
+      hit('h1', 'e1'),
+      act('e2', 500),
+      hit('e2', 'h2'),
+      act('h3', 1000),
+      hit('h3', 'e3'),
+    ],
+    NOW,
   )
-  expect(of(t.active(NOW), 'number').map((m) => m.actor)).toEqual(['e1', 'h2', 'e3', 'e1'])
+  const lunges = of(t.active(NOW), 'lunge')
+  expect(lunges.map((m) => [m.actor, m.from])).toEqual([
+    ['h1', NOW],
+    ['e2', NOW + 500],
+    ['h3', NOW + 1000],
+  ])
+  expect(lunges.map((m) => (m.kind === 'lunge' ? m.dir : 0))).toEqual([-1, 1, -1])
+  expect(of(t.active(NOW), 'flash').map((m) => m.from)).toEqual(
+    [0, 500, 1000].map((at) => NOW + at + LUNGE_MS / 2),
+  )
+  expect(of(t.active(NOW), 'number').map((m) => m.actor)).toEqual(['e1', 'h2', 'e3'])
+})
+
+test('the cadence stretches the gaps between actions, not the actions', () => {
+  for (const [cadence, gap] of [
+    [2000, 500],
+    [5000, 1250],
+  ] as const) {
+    const t = observed()
+    t.onEffects([act('h1', 0), hit('h1', 'e1'), act('h3', 500), hit('h3', 'e2')], NOW, cadence)
+    const lunges = of(t.active(NOW), 'lunge')
+    expect(lunges.map((m) => m.from)).toEqual([NOW, NOW + gap])
+    for (const m of lunges) expect(m.until - m.from).toBe(LUNGE_MS)
+  }
+})
+
+test("a black mage's three hits number three enemies at one impact", () => {
+  const t = observed()
+  t.onEffects([act('h2', 0, 'attack_all'), hit('h2', 'e1'), hit('h2', 'e2'), hit('h2', 'e3')], NOW)
+  expect(of(t.active(NOW), 'lunge')).toHaveLength(1)
+  const numbers = of(t.active(NOW), 'number')
+  expect(numbers.map((m) => m.actor)).toEqual(['e1', 'e2', 'e3'])
+  expect(new Set(numbers.map((m) => m.from))).toEqual(new Set([NOW + LUNGE_MS / 2]))
+})
+
+test('a heal shows a green number on the healed hero and no flash', () => {
+  const t = observed()
+  t.onEffects([act('h3', 0, 'heal'), { k: 'heal', by: 'h3', target: 'h1', amount: 14 }], NOW)
+  expect(of(t.active(NOW), 'flash')).toEqual([])
+  expect(of(t.active(NOW), 'number')).toEqual([
+    {
+      kind: 'number',
+      actor: 'h1',
+      text: '14',
+      rgb: NUMBER_RGB_HEAL,
+      from: NOW + LUNGE_MS / 2,
+      until: NOW + LUNGE_MS / 2 + NUMBER_MS,
+    },
+  ])
+})
+
+test('hits with no act play as one action at offset 0, without a lunge', () => {
+  const t = observed()
+  t.onEffects([hit('h1', 'e1'), hit('e2', 'h2')], NOW, 5000)
+  expect(of(t.active(NOW), 'lunge')).toEqual([])
+  expect(of(t.active(NOW), 'flash').map((m) => m.from)).toEqual([
+    NOW + LUNGE_MS / 2,
+    NOW + LUNGE_MS / 2,
+  ])
+})
+
+test("a black mage's kill of the first of two targets drops from the first", () => {
+  const t = observed()
+  t.onEffects(
+    [
+      act('h2', 0, 'attack_all'),
+      hit('h2', 'e1'),
+      { k: 'gold', amount: 2 },
+      { k: 'drop', item: item('iron_sword') },
+      hit('h2', 'e2'),
+    ],
+    NOW,
+  )
+  expect(of(t.active(NOW), 'drop')[0]).toMatchObject({
+    actor: 'e1',
+    from: NOW + LUNGE_MS / 2 + FLASH_MS,
+  })
+})
+
+test('a batch at the turn cadence waits for the idle batch still playing', () => {
+  const t = observed()
+  // Idle: four actions over 5 s.
+  t.onEffects(
+    [0, 500, 1000, 1500].flatMap((at) => [act('h1', at), hit('h1', 'e1')]),
+    NOW,
+    5000,
+  )
+  const lastOld = NOW + Math.floor((1500 * 5000) / 2000)
+  // A turn starts 2 s in: the new tick plays at 2 s cadence.
+  t.onEffects([act('h3', 0), hit('h3', 'e2'), act('e3', 500), hit('e3', 'h2')], NOW + 2000, 2000)
+  const lunges = of(t.active(NOW + 2000), 'lunge')
+  const fresh = lunges.filter((m) => m.actor !== 'h1')
+  expect(fresh.map((m) => m.actor)).toEqual(['h3', 'e3'])
+  expect(fresh[0]?.from).toBeGreaterThanOrEqual(lastOld + LUNGE_MS)
+  expect(fresh[0]?.from).toBeGreaterThanOrEqual(lastOld + LUNGE_MS / 2 + FLASH_MS)
+  expect((fresh[1]?.from ?? 0) - (fresh[0]?.from ?? 0)).toBeGreaterThanOrEqual(LUNGE_MS)
+  for (let i = 1; i < lunges.length; i++) {
+    expect(lunges[i]?.from ?? 0).toBeGreaterThan(lunges[i - 1]?.from ?? 0)
+  }
 })
 
 test('a departed enemy dissolves after its last flash and keeps its slot until then', () => {

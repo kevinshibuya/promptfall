@@ -34,6 +34,7 @@ function balanced(s: string): boolean {
 }
 
 const hit: Effect = { k: 'hit', by: 'h1', target: 'e1', amount: 7 }
+const act: Effect = { k: 'act', actor: 'h1', action: 'attack', at: 0 }
 
 test('a well-formed document on the stage box', () => {
   const s = svg()
@@ -61,7 +62,7 @@ test('each art stem is defined once, one path per colour, the rarity colour as c
 })
 
 test('smil animates a lunge already under way from a negative begin', () => {
-  const s = svg([hit], NOW + 100)
+  const s = svg([act, hit], NOW + 100)
   expect(s.match(/<animateTransform[^>]*values="0 0;-4 0;0 0"[^>]*>/g)).toHaveLength(1)
   expect(s).toContain('begin="-0.1s"')
   expect(s).toContain('filter="url(#flash)"')
@@ -96,7 +97,7 @@ test('a drop yields an animated use', () => {
 })
 
 test('without smil no animation element appears', () => {
-  expect(svg([hit], NOW + 100, { smil: false, motion: 'full' })).not.toContain('<animate')
+  expect(svg([act, hit], NOW + 100, { smil: false, motion: 'full' })).not.toContain('<animate')
 })
 
 test('the idle bob animates with motion full only', () => {
