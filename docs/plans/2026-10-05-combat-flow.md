@@ -471,8 +471,8 @@ segment of 116 − 102 = 14 cells (clipped, not wrapped). Red before: `HeroView`
 
 **Boundaries:** No window band, no layout thresholds, no compact layout changes.
 
-- [ ] View fields
-- [ ] Party line gauge and tests, run, commit
+- [x] View fields
+- [x] Party line gauge and tests, run, commit
 
 ### Task 8: Spec, manual pass, pull request
 
