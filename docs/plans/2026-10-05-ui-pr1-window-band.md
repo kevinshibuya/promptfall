@@ -486,9 +486,9 @@ no module. Then the full check line.
 
 **Boundaries:** No band, loop or stage change.
 
-- [ ] Constants and model
-- [ ] Frame drawing
-- [ ] Tests, run the check, commit
+- [x] Constants and model
+- [x] Frame drawing
+- [x] Tests, run the check, commit
 
 ### Task 5: The raster and Svg encoders
 
