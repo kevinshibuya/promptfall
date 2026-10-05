@@ -6,7 +6,7 @@ import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stag
 import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState, step } from './vendor/sim.js'
+import { createInitialState, GAUGE_FULL, type GameState, hashState, step } from './vendor/sim.js'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
@@ -1172,6 +1172,8 @@ function dropping(rarity: string): GameState {
         waveSize: 3,
         spawnedInWave: 3,
       },
+      // Full party gauges: the party acts in the tick's first step and kills the 1 HP enemy.
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
     }
     const effects = step(s, { t: 'tick' }).effects
     const drop = effects.find((e) => e.k === 'drop')

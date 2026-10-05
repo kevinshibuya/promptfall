@@ -1,4 +1,23 @@
-declare const SIM_VERSION: 3;
+/** Battle time one tick advances, whatever the cadence (grill 1.1). Fixed. */
+declare const TICK_MS = 2000;
+/** Resolution of the battle loop: 20 steps per tick. Fixed. */
+declare const STEP_MS = 100;
+/** A full action gauge. Fixed. */
+declare const GAUGE_FULL = 10000;
+/** An action lasts this many steps of battle time. Tunable (plan Task 4). */
+declare const ACTION_STEPS = 5;
+/** Speed constant: fill is proportional to spd + FILL_K (grill 1.2). Tunable. */
+declare const FILL_K = 10;
+/** Per-step fill = floor((spd + FILL_K) × FILL_BP / 1000). Tunable. */
+declare const FILL_BP = 16667;
+/** Every damage and heal amount × POWER_BP / 10000 (grill 1.5). Tunable. */
+declare const POWER_BP = 20000;
+/** A spawned enemy's gauge starts at draw(SPAWN_GAUGE_MAX + 1). */
+declare const SPAWN_GAUGE_MAX = 5000;
+/** Gauge gained per step at this speed, never below 1. */
+declare function fill(spd: number): number;
+
+declare const SIM_VERSION: 4;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -53,6 +72,19 @@ type Encounter = {
     waveSize: number;
     spawnedInWave: number;
 };
+/** Battle time state carried across ticks. Arrays, not records: canonical order is insertion order. */
+type Battle = {
+    /** One entry per unit on the field (living party heroes, encounter enemies). 0..GAUGE_FULL. */
+    gauges: {
+        id: string;
+        g: number;
+    }[];
+    /** Unit ids whose gauge is full, in the order they filled. Head acts next. */
+    queue: string[];
+    /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
+    busy: number;
+};
+type ActionId = 'attack' | 'attack_all' | 'heal';
 type TradeKind = 'item' | 'hero';
 type Goods = {
     kind: 'item';
@@ -258,6 +290,20 @@ type Effect = {
     by: string;
     target: string;
     amount: number;
+}
+/** Output only: an action starts. Every effect after it, up to the next `act`, is this action's. at: battle ms into this tick, 0..1999. */
+ | {
+    k: 'act';
+    actor: string;
+    action: ActionId;
+    at: number;
+}
+/** Output only: a heal landed; amount is the HP actually restored. */
+ | {
+    k: 'heal';
+    by: string;
+    target: string;
+    amount: number;
 };
 type GameState = {
     v: typeof SIM_VERSION;
@@ -294,18 +340,21 @@ type GameState = {
         stats: Stats;
         dealt: number;
     } | null;
+    battle: Battle;
 };
 type StepResult = {
     state: GameState;
     effects: Effect[];
 };
 
+type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss';
 type EnemyDef = {
     id: string;
     name: string;
     glyph: string;
     zone: number;
     kind: EnemyKind;
+    archetype: Archetype;
     stats: Stats;
     xp: number;
     gold: [number, number];
@@ -359,6 +408,55 @@ type RarityRule = {
     vendorGoldPerZone: number;
     reforgeCost: number;
 };
+type WeightRule = {
+    kind: 'fixed';
+    weight: number;
+}
+/** 0 while the lowest ally is at or above belowBp of max HP; then scale × d² / (belowBp/2)², d = belowBp − lowestBp */
+ | {
+    kind: 'ally_need';
+    belowBp: number;
+    scale: number;
+};
+type TargetRule = 
+/** No target to choose (attack_all). */
+{
+    kind: 'none';
+}
+/** The front foe (encounter.enemies[0]) weighs `front`, every other foe `other`. */
+ | {
+    kind: 'front';
+    front: number;
+    other: number;
+}
+/** The foe with the lowest current HP (first on a tie) weighs `weakest`, every other foe `other`. */
+ | {
+    kind: 'weakest';
+    weakest: number;
+    other: number;
+}
+/** A living foe of this class weighs `match`, every other living foe `other`. */
+ | {
+    kind: 'class';
+    cls: HeroClass;
+    match: number;
+    other: number;
+}
+/** One candidate, weight 1: the living ally with the lowest HP %, first in order on a tie. */
+ | {
+    kind: 'ally_lowest';
+};
+type Tactic = {
+    action: ActionId;
+    weight: WeightRule;
+    target: TargetRule;
+    /** Skipped while fewer allies than this live (the unit counts itself). */
+    minAllies?: number;
+};
+type Tactics = {
+    heroes: Record<HeroClass, Tactic[]>;
+    enemies: Record<Archetype | 'world_boss', Tactic[]>;
+};
 type Content = {
     zones: ZoneDef[];
     enemies: Record<string, EnemyDef>;
@@ -385,6 +483,7 @@ type Content = {
             costs: number[];
         };
     };
+    tactics: Tactics;
     xpToNext: (level: number) => number;
 };
 
@@ -400,7 +499,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "21ecdbaf9e864e9d";
+declare const GOLDEN_HASH = "0343e76688254278";
 
 declare function hashState(state: GameState): string;
 
@@ -415,4 +514,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { type Affix, type AffixDef, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, SERVER_EVENT_KINDS, SIM_VERSION, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };

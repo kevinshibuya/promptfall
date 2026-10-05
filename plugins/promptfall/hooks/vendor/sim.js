@@ -1,3 +1,19 @@
+// packages/sim/src/battle.ts
+var TICK_MS = 2e3;
+var STEP_MS = 100;
+var GAUGE_FULL = 1e4;
+var ACTION_STEPS = 5;
+var FILL_K = 10;
+var FILL_BP = 16667;
+var POWER_BP = 2e4;
+var SPAWN_GAUGE_MAX = 5e3;
+function fill(spd) {
+  return Math.max(1, Math.floor((spd + FILL_K) * FILL_BP / 1e3));
+}
+function scaled(raw, powerBp = POWER_BP) {
+  return Math.max(1, Math.floor(raw * powerBp / 1e4));
+}
+
 // packages/sim/src/content/affixes.ts
 var W = ["weapon"];
 var A = ["armour"];
@@ -189,6 +205,7 @@ function build() {
         glyph: GLYPHS[archetype],
         zone,
         kind,
+        archetype,
         stats,
         xp: xp * bossMult,
         gold: [goldMin * bossMult, goldMax * bossMult],
@@ -396,6 +413,59 @@ var rarity = {
   }
 };
 
+// packages/sim/src/content/tactics.ts
+var ENEMY_ATTACK = [
+  // A knight weighs 11 against 2 for any other hero: 11/15 ≈ 73% with a full party, today's pull.
+  {
+    action: "attack",
+    weight: { kind: "fixed", weight: 10 },
+    target: { kind: "class", cls: "knight", match: 11, other: 2 }
+  }
+];
+var heroTactics = {
+  knight: [
+    {
+      action: "attack",
+      weight: { kind: "fixed", weight: 10 },
+      target: { kind: "front", front: 3, other: 1 }
+    }
+  ],
+  black_mage: [
+    { action: "attack_all", weight: { kind: "fixed", weight: 10 }, target: { kind: "none" } }
+  ],
+  white_mage: [
+    {
+      action: "attack",
+      weight: { kind: "fixed", weight: 10 },
+      target: { kind: "weakest", weakest: 1, other: 0 }
+    },
+    // Alone she only fights: healing herself could outlast the enemy forever.
+    {
+      action: "heal",
+      weight: { kind: "ally_need", belowBp: 5e3, scale: 30 },
+      target: { kind: "ally_lowest" },
+      minAllies: 2
+    }
+  ],
+  archer: [
+    {
+      action: "attack",
+      weight: { kind: "fixed", weight: 10 },
+      target: { kind: "weakest", weakest: 4, other: 1 }
+    }
+  ]
+};
+var enemyTactics = {
+  brute: ENEMY_ATTACK,
+  swift: ENEMY_ATTACK,
+  tank: ENEMY_ATTACK,
+  caster: ENEMY_ATTACK,
+  boss: ENEMY_ATTACK,
+  turn_boss: ENEMY_ATTACK,
+  world_boss: ENEMY_ATTACK
+};
+var tactics = { heroes: heroTactics, enemies: enemyTactics };
+
 // packages/sim/src/content/tavern.ts
 var tavern = {
   baseCost: 200,
@@ -474,6 +544,7 @@ var content = {
   rarity,
   tavern,
   expansions,
+  tactics,
   xpToNext: (level) => 110 * level * level
 };
 
@@ -537,7 +608,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "21ecdbaf9e864e9d";
+var GOLDEN_HASH = "0343e76688254278";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -705,6 +776,7 @@ function spawnEnemy(s, encounter, defId, kind) {
   const hp = def ? def.stats.hp : 1;
   const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp };
   encounter.enemies.push(enemy);
+  s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
 }
 function pickWaveEnemy(s) {
   const zone = content.zones[s.zone - 1];
@@ -831,6 +903,7 @@ function checkWipe(s, effects) {
   }
   const retreatedTo = Math.max(1, s.zone - 1);
   effects.push({ k: "wipe", retreatedTo });
+  s.battle = { gauges: [], queue: [], busy: 0 };
   s.encounter = null;
   s.pendingTurnBoss = false;
   s.stats.wipes += 1;
@@ -900,7 +973,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 3;
+var SIM_VERSION = 4;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SERVER_EVENT_KINDS = [
   "listed",
@@ -942,7 +1015,8 @@ function createInitialState(seed) {
     pendingTurnBoss: false,
     lootLog: [],
     stats: { kills: 0, bosses: 0, wipes: 0 },
-    boss: null
+    boss: null,
+    battle: { gauges: [], queue: [], busy: 0 }
   };
   const roster = ["knight_1", "black_mage_1", "white_mage_1", "archer_1"].map(
     (id) => generateHero(state, "common", id)
@@ -1034,7 +1108,78 @@ function rerollAffix(s, item, index) {
   affix.value = min + draw(s, max - min + 1);
 }
 
+// packages/sim/src/picker.ts
+function heroBodies(s) {
+  return livingParty(s).map((h) => ({ id: h.id, hp: h.hp, max: heroStats(s, h).hp, cls: h.cls }));
+}
+function enemyBodies(s) {
+  const out = [];
+  for (const e of s.encounter?.enemies ?? [])
+    if (e.hp > 0) out.push({ id: e.id, hp: e.hp, max: Math.max(1, e.maxHp), cls: null });
+  return out;
+}
+function tacticsOf(unit) {
+  if (unit.side === "hero") return content.tactics.heroes[unit.hero.cls] ?? [];
+  if (unit.enemy.kind === "world_boss") return content.tactics.enemies.world_boss;
+  const archetype = content.enemies[unit.enemy.def]?.archetype;
+  return archetype ? content.tactics.enemies[archetype] : [];
+}
+function lowestShare(bodies) {
+  let best;
+  for (const b of bodies) if (!best || b.hp * best.max < best.hp * b.max) best = b;
+  return best;
+}
+function tacticWeight(rule, allies) {
+  if (rule.kind === "fixed") return rule.weight;
+  const lowest = lowestShare(allies);
+  if (!lowest) return 0;
+  const d = rule.belowBp - Math.floor(lowest.hp * 1e4 / lowest.max);
+  if (d <= 0) return 0;
+  return Math.floor(rule.scale * d * d * 4 / (rule.belowBp * rule.belowBp));
+}
+function targets(rule, allies, foes) {
+  switch (rule.kind) {
+    case "none":
+      return foes.length > 0 ? [[null, 1]] : [];
+    case "front":
+      return foes.map((f, i) => [f.id, i === 0 ? rule.front : rule.other]);
+    case "weakest": {
+      let weakest;
+      for (const f of foes) if (!weakest || f.hp < weakest.hp) weakest = f;
+      return foes.map((f) => [f.id, f === weakest ? rule.weakest : rule.other]);
+    }
+    case "class":
+      return foes.map((f) => [f.id, f.cls === rule.cls ? rule.match : rule.other]);
+    case "ally_lowest": {
+      const lowest = lowestShare(allies);
+      return lowest ? [[lowest.id, 1]] : [];
+    }
+  }
+}
+function pickAction(s, unit) {
+  const heroes = heroBodies(s);
+  const enemies2 = enemyBodies(s);
+  const allies = unit.side === "hero" ? heroes : enemies2;
+  const foes = unit.side === "hero" ? enemies2 : heroes;
+  const weights2 = {};
+  const byKey = /* @__PURE__ */ new Map();
+  for (const tactic of tacticsOf(unit)) {
+    if (tactic.minAllies !== void 0 && tactic.minAllies > allies.length) continue;
+    const w = tacticWeight(tactic.weight, allies);
+    if (w <= 0) continue;
+    for (const [targetId, tw] of targets(tactic.target, allies, foes)) {
+      if (tw <= 0) continue;
+      const key = `${tactic.action}:${targetId ?? "*"}`;
+      weights2[key] = (weights2[key] ?? 0) + w * tw;
+      byKey.set(key, { action: tactic.action, targetId });
+    }
+  }
+  if (byKey.size === 0) return null;
+  return byKey.get(drawWeighted(s, weights2)) ?? null;
+}
+
 // packages/sim/src/combat.ts
+var STEPS = TICK_MS / STEP_MS;
 function damage(s, atk, def) {
   const v = 9e3 + draw(s, 2001);
   return Math.max(1, Math.floor(atk * v / 1e4) - Math.floor(def / 2));
@@ -1058,11 +1203,6 @@ function enemyStats(s, enemy) {
   if (enemy.kind === "world_boss") return scaledBossStats(s);
   return content.enemies[enemy.def]?.stats ?? NO_STATS;
 }
-function lowestHpEnemy(enemies2) {
-  let best;
-  for (const e of enemies2) if (!best || e.hp < best.hp) best = e;
-  return best;
-}
 function hitEnemy(s, by, enemy, amount, effects) {
   effects.push({ k: "hit", by, target: enemy.id, amount });
   if (enemy.kind === "world_boss") {
@@ -1072,95 +1212,129 @@ function hitEnemy(s, by, enemy, amount, effects) {
   enemy.hp = Math.max(0, enemy.hp - amount);
   if (enemy.hp === 0) onEnemyKilled(s, enemy, effects);
 }
-function heroAct(s, hero, effects, round) {
+function gaugeOf(s, id) {
+  let entry = s.battle.gauges.find((e) => e.id === id);
+  if (!entry) {
+    entry = { id, g: 0 };
+    s.battle.gauges.push(entry);
+  }
+  return entry;
+}
+function fall(s, hero, effects) {
+  effects.push({ k: "hero_fell", heroId: hero.id });
+  gaugeOf(s, hero.id).g = 0;
+  s.battle.queue = s.battle.queue.filter((id) => id !== hero.id);
+}
+function heroAction(s, hero, choice, effects) {
   const encounter = s.encounter;
-  if (!encounter || encounter.enemies.length === 0) return;
   const stats = heroStats(s, hero);
-  switch (hero.cls) {
-    case "knight": {
-      const target = encounter.enemies[0];
-      if (target)
-        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
-      return;
-    }
-    case "black_mage": {
-      const atk = Math.floor(stats.atk * 6e3 / 1e4);
-      for (const target of [...encounter.enemies]) {
-        if (!s.encounter?.enemies.includes(target)) continue;
-        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects);
-      }
-      return;
-    }
-    case "white_mage": {
-      const living = livingParty(s);
-      let lowest;
-      let lowestMax = 1;
-      for (const h of living.length > 1 ? living : []) {
-        const max = heroStats(s, h).hp;
-        if (!lowest || h.hp < lowest.hp) {
-          lowest = h;
-          lowestMax = max;
-        }
-      }
-      if (!round.healed && lowest && lowest.hp * 1e4 < lowestMax * 7e3) {
-        round.healed = true;
-        lowest.hp = Math.min(lowestMax, lowest.hp + Math.floor(stats.atk * 8e3 / 1e4));
-        return;
-      }
-      const target = lowestHpEnemy(encounter.enemies);
-      if (target)
-        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects);
-      return;
-    }
-    case "archer": {
-      const target = lowestHpEnemy(encounter.enemies);
+  switch (choice.action) {
+    case "attack": {
+      const target = encounter?.enemies.find((e) => e.id === choice.targetId);
       if (!target) return;
-      let amount = damage(s, stats.atk, enemyStats(s, target).def);
-      if (drawBp(s) < 2e3) amount *= 2;
+      let amount = scaled(damage(s, stats.atk, enemyStats(s, target).def));
+      if (hero.cls === "archer" && drawBp(s) < 2e3) amount *= 2;
       hitEnemy(s, hero.id, target, amount, effects);
       return;
     }
+    case "attack_all": {
+      const atk = Math.floor(stats.atk * 6e3 / 1e4);
+      for (const target of [...encounter?.enemies ?? []]) {
+        if (!s.encounter?.enemies.includes(target)) continue;
+        hitEnemy(s, hero.id, target, scaled(damage(s, atk, enemyStats(s, target).def)), effects);
+      }
+      return;
+    }
+    case "heal": {
+      const target = findHero(s, choice.targetId ?? "");
+      if (!target || target.hp <= 0) return;
+      const max = heroStats(s, target).hp;
+      const amount = Math.min(
+        Math.max(0, max - target.hp),
+        scaled(Math.floor(stats.atk * 8e3 / 1e4))
+      );
+      if (amount <= 0) return;
+      target.hp += amount;
+      effects.push({ k: "heal", by: hero.id, target: target.id, amount });
+      return;
+    }
   }
 }
-function enemyAct(s, enemy, effects) {
-  const living = livingParty(s);
-  if (living.length === 0) return;
-  const knights = living.filter((h) => h.cls === "knight");
-  let target;
-  if (knights.length > 0 && drawBp(s) < 6e3) target = knights[draw(s, knights.length)];
-  else target = living[draw(s, living.length)];
-  if (!target) return;
-  const stats = enemyStats(s, enemy);
-  const amount = damage(s, stats.atk, heroStats(s, target).def);
+function enemyAction(s, enemy, choice, effects) {
+  const target = findHero(s, choice.targetId ?? "");
+  if (!target || target.hp <= 0) return;
+  const amount = scaled(damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def));
   target.hp = Math.max(0, target.hp - amount);
   effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
-  if (target.hp === 0) effects.push({ k: "hero_fell", heroId: target.id });
+  if (target.hp === 0) fall(s, target, effects);
 }
-function resolveRound(s, effects) {
+function unitOf(s, id) {
+  const hero = livingParty(s).find((h) => h.id === id);
+  if (hero) return { side: "hero", hero };
+  const enemy = s.encounter?.enemies.find((e) => e.id === id && e.hp > 0);
+  return enemy ? { side: "enemy", enemy } : void 0;
+}
+function syncGauges(s) {
+  const onField = /* @__PURE__ */ new Set();
+  for (const h of livingParty(s)) onField.add(h.id);
+  for (const e of s.encounter?.enemies ?? []) onField.add(e.id);
+  s.battle.gauges = s.battle.gauges.filter((e) => onField.has(e.id));
+  s.battle.queue = s.battle.queue.filter((id) => onField.has(id));
+  for (const id of onField) gaugeOf(s, id);
+}
+function advanceBattle(s, effects) {
   s.tick += 1;
   if (checkWipe(s, effects)) return;
-  const encounter = s.encounter;
-  if (!encounter) return;
-  const actors = [];
-  for (const hero of livingParty(s))
-    actors.push({ side: "hero", id: hero.id, spd: heroStats(s, hero).spd });
-  for (const enemy of encounter.enemies) {
-    actors.push({ side: "enemy", id: enemy.id, spd: enemyStats(s, enemy).spd });
-  }
-  actors.sort((a, b) => b.spd - a.spd);
-  const round = { healed: false };
-  for (const actor of actors) {
-    const current = s.encounter;
-    if (!current || current.enemies.length === 0) return;
-    if (actor.side === "hero") {
-      const hero = s.roster.find((h) => h.id === actor.id);
-      if (!hero || hero.hp <= 0 || !s.party.includes(hero.id)) continue;
-      heroAct(s, hero, effects, round);
-    } else {
-      const enemy = current.enemies.find((e) => e.id === actor.id);
-      if (!enemy || enemy.hp <= 0) continue;
-      enemyAct(s, enemy, effects);
-      if (checkWipe(s, effects)) return;
+  syncGauges(s);
+  const battle = s.battle;
+  const perStep = /* @__PURE__ */ new Map();
+  const fillOf = (unit) => {
+    const id = unit.side === "hero" ? unit.hero.id : unit.enemy.id;
+    let f = perStep.get(id);
+    if (f === void 0) {
+      f = fill(unit.side === "hero" ? heroStats(s, unit.hero).spd : enemyStats(s, unit.enemy).spd);
+      perStep.set(id, f);
+    }
+    return f;
+  };
+  for (let step2 = 0; step2 < STEPS; step2++) {
+    const encounter = s.encounter;
+    if (!encounter || encounter.enemies.length === 0) {
+      battle.busy = Math.max(0, battle.busy - (STEPS - step2));
+      return;
+    }
+    const units = [
+      ...livingParty(s).map((hero) => ({ side: "hero", hero })),
+      ...encounter.enemies.filter((e) => e.hp > 0).map((enemy) => ({ side: "enemy", enemy }))
+    ];
+    const filled = [];
+    units.forEach((unit, order) => {
+      const id = unit.side === "hero" ? unit.hero.id : unit.enemy.id;
+      if (battle.queue.includes(id)) return;
+      const entry = gaugeOf(s, id);
+      entry.g += fillOf(unit);
+      if (entry.g >= GAUGE_FULL) {
+        filled.push({ id, over: entry.g - GAUGE_FULL, order });
+        entry.g = GAUGE_FULL;
+      }
+    });
+    filled.sort((a, b) => b.over - a.over || a.order - b.order);
+    for (const f of filled) battle.queue.push(f.id);
+    if (battle.busy > 0) battle.busy -= 1;
+    while (battle.busy === 0 && battle.queue.length > 0) {
+      const id = battle.queue.shift() ?? "";
+      const unit = unitOf(s, id);
+      if (!unit) continue;
+      gaugeOf(s, id).g = 0;
+      const choice = pickAction(s, unit);
+      if (!choice) continue;
+      effects.push({ k: "act", actor: id, action: choice.action, at: step2 * STEP_MS });
+      battle.busy = ACTION_STEPS;
+      if (unit.side === "hero") heroAction(s, unit.hero, choice, effects);
+      else {
+        enemyAction(s, unit.enemy, choice, effects);
+        if (checkWipe(s, effects)) return;
+      }
     }
   }
 }
@@ -1434,12 +1608,14 @@ function bossEngaged(state, event) {
   if (state.boss !== null) return unapplicable(state, event, "already_engaged");
   return draft(state, (s) => {
     const { hp } = event.stats;
+    const id = newId(s, "e");
     s.encounter = {
-      enemies: [{ id: newId(s, "e"), def: "world_boss", kind: "world_boss", hp, maxHp: hp }],
+      enemies: [{ id, def: "world_boss", kind: "world_boss", hp, maxHp: hp }],
       queue: [],
       waveSize: 0,
       spawnedInWave: 0
     };
+    s.battle.gauges.push({ id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
     s.boss = {
       bossId: event.bossId,
       name: event.name,
@@ -1452,6 +1628,9 @@ function bossEngaged(state, event) {
 function bossDisengaged(state, event) {
   if (state.boss?.bossId !== event.bossId) return unapplicable(state, event, "not_engaged");
   return draft(state, (s) => {
+    const id = s.encounter?.enemies.find((e) => e.kind === "world_boss")?.id;
+    s.battle.gauges = s.battle.gauges.filter((e) => e.id !== id);
+    s.battle.queue = s.battle.queue.filter((q) => q !== id);
     s.encounter = null;
     s.boss = null;
   });
@@ -1477,8 +1656,11 @@ function rewarded(state, event) {
 var handlers = {
   tick: (state) => draft(state, (s, effects) => {
     refillFromQueue(s);
-    if (s.encounter && s.encounter.enemies.length > 0) resolveRound(s, effects);
-    else spawnOnEmptyTick(s, effects);
+    if (s.encounter && s.encounter.enemies.length > 0) advanceBattle(s, effects);
+    else {
+      spawnOnEmptyTick(s, effects);
+      s.battle.busy = 0;
+    }
   }),
   tool_call: (state) => draft(state, (s) => onToolCall(s)),
   turn_end: (state) => draft(state, (s) => onTurnEnd(s)),
@@ -1522,13 +1704,22 @@ function replay(state, events) {
   return { state: current, effects };
 }
 export {
+  ACTION_STEPS,
+  FILL_BP,
+  FILL_K,
+  GAUGE_FULL,
   GOLDEN_HASH,
   GOLDEN_SEED,
+  POWER_BP,
   RARITIES,
   SERVER_EVENT_KINDS,
   SIM_VERSION,
+  SPAWN_GAUGE_MAX,
+  STEP_MS,
+  TICK_MS,
   content,
   createInitialState,
+  fill,
   goldenEvents,
   hashState,
   heroStats,

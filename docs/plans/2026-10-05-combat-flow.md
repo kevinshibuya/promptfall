@@ -397,8 +397,8 @@ Red before: the golden test fails on the old literal.
 ledger logic. A failure that
 needs a rules change in the ledger: stop and report `blocked: <test and why>`.
 
-- [ ] Golden literal and tests
-- [ ] `pnpm vendor`, repo tests, fixtures, commit
+- [x] Golden literal and tests
+- [x] `pnpm vendor`, repo tests, fixtures, commit
 
 ### Task 6: The stage plays one action at a time
 
