@@ -113,6 +113,16 @@ how "full" shows in time, and the order the stage plays events in.
   review wave runs `reviewer` on Opus and `codex-review`; the Fable `reviewer` leg cannot run
   while Fable is out, and the plan says so.
 
+### 1.12 Review amendments (plan review wave, 2026-10-05)
+
+- Heroes start a fight with empty gauges, as 1.2 says, in play. Test fixtures that need an
+  action in the first tick (contract rules 35 and 36, the plugin's `dropping()` helper) start
+  with full party gauges instead; no contract rule changes (Kevin, review Q18, recommended,
+  accepted).
+- 1.10's "today's 60% on a knight" was a miscount: today it is about 73% (60% aimed plus a third
+  of the random 40%). The plan keeps today's feel with weights 11 and 2.
+- 1.5's tempo is checked as each hero acting every 1.7 to 2.5 combat ticks.
+
 ## 2. Facts gathered (2026-10-05)
 
 - A `tick` player event has no fields. It runs one round: every living hero and enemy acts
