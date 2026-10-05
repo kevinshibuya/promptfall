@@ -597,9 +597,9 @@ Then the full check line.
 
 **Boundaries:** No band change. No toast change.
 
-- [ ] Log lines and pacing
-- [ ] Register wiring, empty-tick check
-- [ ] Tests, run the check, commit
+- [x] Log lines and pacing
+- [x] Register wiring, empty-tick check (the register-level wiring test moves to Task 9's band tests: `game` is private to register.tsx)
+- [x] Tests, run the check, commit
 
 ### Task 8: The strip builder and its goldens
 

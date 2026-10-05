@@ -12,6 +12,8 @@ export type Mode = 'primary' | 'secondary' | 'paused' | 'off'
 export type HeroView = {
   id: string
   name: string
+  /** The name without its epithet: the combat log and the party window. */
+  shortName: string
   cls: string
   glyph: string
   level: number

@@ -146,6 +146,7 @@ function setup(kv = new MemoryKeyValue()) {
   const client = new Recorder(ledger)
   const patches: Patch[] = []
   const effects: string[] = []
+  const calls: { count: number; view: boolean }[] = []
   const engine = new GameEngine({
     client,
     kv,
@@ -154,8 +155,9 @@ function setup(kv = new MemoryKeyValue()) {
     publish: async (patch) => {
       patches.push(patch)
     },
-    onEffects: (list) => {
+    onEffects: (list, _at, view) => {
       for (const e of list) effects.push(e.k)
+      calls.push({ count: list.length, view: view !== null })
     },
     after: (ms, fn) => {
       timers.push({ ms, fn, done: false })
@@ -179,6 +181,7 @@ function setup(kv = new MemoryKeyValue()) {
     engine,
     patches,
     effects,
+    calls,
     timers,
     fire,
     notices,
@@ -566,4 +569,14 @@ test('committedBoss follows the committed state, not the local one', async () =>
   for (let i = 0; i < 3; i++) engine.apply({ t: 'tick' }, at())
   expect(engine.state()?.boss?.dealt).toBeGreaterThan(committed?.dealt ?? 0)
   expect(engine.committedBoss()).toEqual(committed)
+})
+
+test('the effects dep fires on every applied tick, an effect-less one too, with the view', async () => {
+  const a = setup()
+  await a.engine.start()
+  a.calls.length = 0
+  // The first tick of a fight is pure filling: gauges start empty, nobody acts.
+  a.engine.apply({ t: 'tick' }, a.at())
+  expect(a.calls).toHaveLength(1)
+  expect(a.calls[0]).toEqual({ count: 0, view: true })
 })

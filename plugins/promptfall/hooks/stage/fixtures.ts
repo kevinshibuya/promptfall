@@ -13,6 +13,7 @@ function hero(
   return {
     id,
     name,
+    shortName: name,
     cls,
     glyph: '@',
     level,
