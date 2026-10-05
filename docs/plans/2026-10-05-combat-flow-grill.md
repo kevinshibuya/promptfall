@@ -89,6 +89,30 @@ how "full" shows in time, and the order the stage plays events in.
 - The combat PR changes the stage (one action at a time, heals visible) and adds a small text
   gauge per hero to today's party line, so the queue can be checked by eye before UI PR 1.
 
+### 1.10 The picker (Q15, Q16, recommended, accepted)
+
+- The picker chooses an action and its target together: every (action, target) pair a unit
+  could take gets a weight from rules about the current battle, and one seeded draw picks a
+  pair. Heroes, enemies and the world boss all use it. The rules are content data per class
+  and per enemy archetype, so later skills and techniques are new entries, not new code.
+- Starting rules (the shape; the balance harness tunes the numbers):
+  - Knight: Attack; the front enemy weighs 3, each other enemy 1.
+  - Archer: Attack; the weakest enemy weighs 4, the others 1; the 20% double damage stays.
+  - Black mage: Attack hits every enemy at 60%; no target to choose.
+  - White mage: Heal weighs 0 while every ally is at 50% or more, then grows as the weakest
+    ally falls (about 3 heals in 4 at 25%, nearly always under 10%); Attack has a fixed weight
+    and targets the weakest enemy.
+  - Enemies and the world boss: Attack; a knight weighs 3, every other hero 1 (with a full
+    party, today's 60% on a knight).
+
+### 1.11 Closing (Q17, recommended, accepted)
+
+- The grill closes. Spec amendments land with the combat PR: §4.1 (a tick advances a slice of
+  battle time), §4.3 (actions and the picker), §7 (`SIM_VERSION` 4).
+- The plan is written next on Opus (Fable out); its header reads `Execution model: opus`. The
+  review wave runs `reviewer` on Opus and `codex-review`; the Fable `reviewer` leg cannot run
+  while Fable is out, and the plan says so.
+
 ## 2. Facts gathered (2026-10-05)
 
 - A `tick` player event has no fields. It runs one round: every living hero and enemy acts
@@ -116,3 +140,12 @@ how "full" shows in time, and the order the stage plays events in.
 - Pinned by tests: the golden hashes (`packages/sim/src/golden.test.ts`), the round order and
   heal rules (`combat.test.ts:42-211`), determinism (`determinism.test.ts`), the tick buckets
   (contract suite rule 8), world boss rules 33-40.
+
+## 3. For the planner
+
+- One PR, `feat/combat-flow` into `ai-staging`, ahead of the UI remake's PR 1.
+- The UI remake record (`docs/plans/2026-10-05-ui-remake-grill.md`, 1.14 and 1.15) consumes
+  this PR's output: per-hero gauge values the view exposes, one event per action with its
+  battle-time offset, heal events. Shape those for the window band, not only for today's text.
+- Every pinned test in section 2 changes: the golden hashes, the round-order and heal tests in
+  `combat.test.ts`. The determinism and contract suites must stay green unchanged.
