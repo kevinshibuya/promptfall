@@ -147,6 +147,11 @@ white border, text in the game's pixel font. The band's HUD under the stage and 
 the pane are made of windows.
 _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
+**Combat log**:
+The running account of the encounter, one short line per event (hits, kills, drops, level-ups,
+deaths, sales), printed in the band's message window as it happens.
+_Avoid_: battle log, feed, history, last drop
+
 **Cue**:
 A short sound the primary session plays alongside a toast. Every cue has a toast; most
 toasts have no cue.

@@ -133,6 +133,21 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
 - The combat flow itself is a sim change with its own grill, plan and PR, not part of this
   grill.
 
+### 1.15 Order, gauges, the acting hero, closing (Q28 to Q31, recommended, accepted)
+
+- The combat flow (1.14) is its own pipeline: its grill runs next, in this session; its PR
+  lands first. Order: combat PR, then UI PR 1 (band), UI PR 2, UI PR 3, then phase 4 PR 2
+  (art). This amends 1.1, which put the remake straight after phase 4 PR 1.
+- Party window, final: per hero column, a header with the name and level ("Aldric L4"), a
+  white divider, an H row (number plus bar), and an unlabelled action gauge row that fills
+  left to right and turns gold when full and queued. The reference's Lv row is dropped. The
+  strip stays about 5 rows.
+- The acting hero gets a ▶ beside its name in the party window header while its action plays,
+  on top of the stage's lunge.
+- The UI grill closes here. Three nodes move to the combat grill: log pacing under one action
+  at a time (1.13's skipping rule may go), the gauge's fill rate and how "full" shows in time,
+  and the order the stage plays events in.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
@@ -154,3 +169,17 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
 - A wave holds at most 3 enemies at once (`packages/sim/src/progression.ts:153`); with 3
   enemies and 3 heroes at 120 columns the stage is full edge to edge.
 - The `hit` effect carries `by`, `target` and `amount` only (`hooks/vendor/sim.d.ts:257-261`).
+
+## 3. For the planner
+
+- Start from this record, `docs/design/ui-remake/README.md`, ADR 0005, and the comparison page
+  (https://claude.ai/artifact/MnNPLXiqrkMG3BxW8CjCMh, direction B). The mockups are style
+  studies; the references (1.12) win where they disagree.
+- The combat grill's record settles the gauge data, the action events and the log pacing the
+  band consumes. Plan UI PR 1 after it.
+- Task 1 is the spikes (1.10). The transcription of the eight references, slot by slot
+  (design-from-references), comes before any layout code.
+- Spec amendments land with the PRs that make them true: §2 (band rows at rest and with a
+  boss, once the strip's height is final), §10 (the band's strip, the band tabs as a command
+  line, the pane as windows, the pane size).
+- Every PR ships its windows on every surface (1.3): RGBA image, Svg, box-drawing text.
