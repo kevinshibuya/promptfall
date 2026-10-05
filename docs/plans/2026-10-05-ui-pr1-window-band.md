@@ -377,9 +377,9 @@ terminals with and without images. `pnpm lint` passes.
 **Boundaries:** Nothing under `plugins/`. If question 1 and 5 both fail on a surface and rung (b)
 also fails there: stop, report `blocked: no rung holds hotkeys on <surface>`.
 
-- [ ] Spike plugin: band probe (questions 1, 2, 5), pane probe (3, 4)
-- [ ] Drive cmux and Terminal.app, fill the table
-- [ ] Decisions, run the check, commit
+- [x] Spike plugin: band probe (questions 1, 2, 5), pane probe (3, 4)
+- [x] Drive cmux and Terminal.app, fill the table
+- [x] Decisions, run the check, commit (WINDOW_SCALE 1; rung (a′) on terminals, (c) on the Svg surfaces until Kevin's desktop row)
 
 ### Task 2: Transcribe the references
 
