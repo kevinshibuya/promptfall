@@ -124,3 +124,20 @@ test('the alt names the wave, the enemies and the heroes', () => {
     'Zone 1, wave 2: Goblin Scout 42/60, Field Rat 10/20, Road Slime 30/90 vs Aldric L5, Mira L4, Tomas L5',
   )
 })
+
+test('minions joining a boss stand clear of the boss and the party, and the boss draws whole', () => {
+  // Tool calls spawn wave enemies into a boss encounter (spec: at most 3 enemies at once).
+  const v = boss()
+  const w = wave()
+  v.enemies = [...v.enemies, w.enemies[0]!, w.enemies[1]!]
+  const m = at(v, [], NOW, { columns: 116, rows: 17 })
+  const b = actor(m.actors, 'e9')
+  const minions = [actor(m.actors, 'e1'), actor(m.actors, 'e2')]
+  const heroes = ['h1', 'h2', 'h3'].map((h) => actor(m.actors, h))
+  for (const e of [b, ...minions]) for (const h of heroes) expect(overlaps(e, h)).toBe(false)
+  expect(overlaps(b, minions[0]!)).toBe(false)
+  // Whatever overlap is left falls on the minions, under the boss, never over it.
+  const order = m.actors.map((a) => a.key)
+  expect(order.indexOf('e9')).toBeGreaterThan(order.indexOf('e1'))
+  expect(order.indexOf('e9')).toBeGreaterThan(order.indexOf('e2'))
+})

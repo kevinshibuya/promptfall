@@ -15,6 +15,7 @@ import {
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
+  SPRITE_PX,
   ZONE_GROUND,
 } from './tuning'
 
@@ -91,11 +92,28 @@ export function stageAt(
     started.find((m) => m.actor === actor && m.kind === kind)
 
   const actors: StageActor[] = []
+  const bosses: StageActor[] = []
   const live = new Set(view.enemies.map((e) => e.id))
+  // Where the party starts: an enemy never stands in it.
+  const lastHero = view.heroes.slice(0, 3).at(-1)
+  const heroLeft = lastHero
+    ? width -
+      edge -
+      variant(spriteFor('hero', lastHero.cls), opts.compact).width -
+      (Math.min(view.heroes.length, 3) - 1) * pitch
+    : width
+  // Enemies stand in slot order, each clear of the one before when there is room: a boss is
+  // wider than the pitch, and minions can join its encounter.
+  let nextFree = edge
+  const gap = opts.compact ? 0 : ACTOR_PITCH - SPRITE_PX
 
   for (const known of timeline.known()) {
     const sprite = SPRITES[known.spriteId] ?? FALLBACK
     const art = variant(sprite, opts.compact)
+    const slotX = edge + known.slot * pitch
+    const roomLeft = heroLeft - gap - art.width
+    const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
+    nextFree = Math.max(nextFree, baseX + art.width + gap)
     let alpha = 1
     if (!live.has(known.id)) {
       // Departed: whole until its dissolve starts, then fading; gone once the dissolve is over.
@@ -106,12 +124,13 @@ export function stageAt(
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
     const lunge = motionOf(known.id, 'lunge')
     const flashing = motionOf(known.id, 'flash') !== undefined
-    actors.push({
+    const boss = known.kind !== 'wave'
+    ;(boss ? bosses : actors).push({
       key: known.id,
       spriteId: sprite.id,
       art,
       palette: flashing ? art.palette.map((c, i) => (i === 0 ? c : FLASH_RGB)) : art.palette,
-      x: edge + known.slot * pitch + lungeOffset(lunge, now),
+      x: baseX + lungeOffset(lunge, now),
       y: height - art.height - bob,
       flipX: false,
       alpha,
@@ -120,6 +139,9 @@ export function stageAt(
       accent: null,
     })
   }
+
+  // Bosses draw over their minions, never under.
+  actors.push(...bosses)
 
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
