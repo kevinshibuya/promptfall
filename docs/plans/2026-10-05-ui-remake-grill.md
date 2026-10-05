@@ -104,6 +104,35 @@ Style direction: B, Command Windows (`docs/design/ui-remake/README.md`).
   member with H, M and Lv rows; HP is numbers only (the bar is the Pokémon graft); the enemy
   window lists groups with counts; a small tactics window sits top right.
 
+### 1.13 Strip details (Q22 to Q27, recommended, accepted)
+
+- The message window sits between the enemy window and the party window: about 32 characters
+  at 120 columns, wider on wider terminals. The strip is about 5 rows; the band at rest is
+  about 13 rows (spec §2 amended once the strip is final).
+- A hit reads on one line: "Aldric hits Wood Goblin for 12." Kills, drops and level-ups use
+  Dragon Quest's wording ("Wood Goblin is defeated!", "Found a Silk Robe!", "Morwen reached
+  level 5!").
+- Pacing: lines queue; when the queue falls more than one tick behind, pending hit lines are
+  skipped (never kills, drops, level-ups, deaths or sales) and typing speeds up. Likely amended
+  by the combat flow below, which plays one action at a time.
+- One line of the pixel font is one terminal row; windows are laid out in whole cells.
+- Party window: a header row with the names, a white divider, an "H" row (number plus the
+  borrowed bar), an "Lv" row. A hero's column turns orange under 25% HP and red at 0 (to check
+  against Dragon Quest V during transcription). Amended by 1.14 for the action gauge.
+- A small tactics window shows "Push on" or "Farm here" (the `farm` state), toggled with `f`.
+
+### 1.14 Action gauges (Kevin, raised during round 3)
+
+- Kevin is changing combat to an Active Time Battle flow, as in the Super Famicom Final Fantasy
+  games: every unit's gauge fills; a unit with a full gauge joins a queue; units act one at a
+  time in the order their gauges filled; the action (basic attack, skill, technique) is picked
+  at random, weighted by how much sense it makes (a healer heals an ally under 50%). Skills and
+  techniques are future work; the flow comes first.
+- For this remake: the party window shows each hero's action gauge filling. Enemy gauges are
+  never shown.
+- The combat flow itself is a sim change with its own grill, plan and PR, not part of this
+  grill.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
