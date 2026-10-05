@@ -3,6 +3,7 @@ import type { GameHandle } from '../engine'
 import { IN_PROCESS } from '../server'
 import { CHAT_MAX_CHARS } from '../vendor/protocol.js'
 import { gates } from '../view'
+import type { TextFit } from './format'
 import {
   type After,
   chatRefusalText,
@@ -64,12 +65,13 @@ export function chatBody(
   world: WorldState,
   chat: ChatState,
   actions: ChatActions,
+  fit: TextFit = 'truncate',
 ) {
   const { Box, Text, Input } = els
   const body = []
   if (chat.error) {
     body.push(
-      <Text key="chat-error" color="red" wrap="truncate">
+      <Text key="chat-error" color="red" wrap={fit}>
         {chat.error}
       </Text>,
     )
@@ -85,11 +87,11 @@ export function chatBody(
   for (const m of shown) {
     body.push(
       <Box key={`chat-${m.id}`} flexDirection="row" gap={1}>
-        {/* The name never shrinks: a long line truncates its text, not the colon onto a new row. */}
+        {/* The name never shrinks: a long line truncates (or wraps) its text, not the colon onto a new row. */}
         <Box key={`chat-name-${m.id}`} flexShrink={0}>
           <Text dimColor>{`${m.name}:`}</Text>
         </Box>
-        <Text wrap="truncate">{m.text}</Text>
+        <Text wrap={fit}>{m.text}</Text>
       </Box>,
     )
   }

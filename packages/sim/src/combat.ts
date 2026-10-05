@@ -43,7 +43,8 @@ function lowestHpEnemy(enemies: Enemy[]): Enemy | undefined {
   return best
 }
 
-function hitEnemy(s: GameState, enemy: Enemy, amount: number, effects: Effect[]): void {
+function hitEnemy(s: GameState, by: string, enemy: Enemy, amount: number, effects: Effect[]): void {
+  effects.push({ k: 'hit', by, target: enemy.id, amount })
   // The world boss never dies here: the server tallies what the party dealt.
   if (enemy.kind === 'world_boss') {
     if (s.boss) s.boss.dealt += amount
@@ -62,7 +63,8 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[], round: Round): voi
   switch (hero.cls) {
     case 'knight': {
       const target = encounter.enemies[0]
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects)
+      if (target)
+        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects)
       return
     }
     case 'black_mage': {
@@ -70,7 +72,7 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[], round: Round): voi
       for (const target of [...encounter.enemies]) {
         // A kill earlier in the sweep may have closed the encounter (zone boss).
         if (!s.encounter?.enemies.includes(target)) continue
-        hitEnemy(s, target, damage(s, atk, enemyStats(s, target).def), effects)
+        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects)
       }
       return
     }
@@ -93,7 +95,8 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[], round: Round): voi
         return
       }
       const target = lowestHpEnemy(encounter.enemies)
-      if (target) hitEnemy(s, target, damage(s, stats.atk, enemyStats(s, target).def), effects)
+      if (target)
+        hitEnemy(s, hero.id, target, damage(s, stats.atk, enemyStats(s, target).def), effects)
       return
     }
     case 'archer': {
@@ -101,7 +104,7 @@ function heroAct(s: GameState, hero: Hero, effects: Effect[], round: Round): voi
       if (!target) return
       let amount = damage(s, stats.atk, enemyStats(s, target).def)
       if (drawBp(s) < 2000) amount *= 2
-      hitEnemy(s, target, amount, effects)
+      hitEnemy(s, hero.id, target, amount, effects)
       return
     }
   }
@@ -118,6 +121,7 @@ function enemyAct(s: GameState, enemy: Enemy, effects: Effect[]): void {
   const stats = enemyStats(s, enemy)
   const amount = damage(s, stats.atk, heroStats(s, target).def)
   target.hp = Math.max(0, target.hp - amount)
+  effects.push({ k: 'hit', by: enemy.id, target: target.id, amount })
   if (target.hp === 0) effects.push({ k: 'hero_fell', heroId: target.id })
 }
 

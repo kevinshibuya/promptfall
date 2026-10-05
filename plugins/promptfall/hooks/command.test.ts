@@ -32,7 +32,7 @@ function harness(on: On, seed: Record<string, unknown> = {}) {
     return { value: { isPlaced: true } }
   })
   const clock = mock.clock(on, { now: 1_000_000 })
-  return { states, opened, clock }
+  return { data, states, opened, clock }
 }
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
@@ -87,5 +87,41 @@ test('/promptfall in a secondary session takes the lease', async ($, on) => {
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(states.get('mode')).toBe('secondary')
   await $.command.run({ ...RUN, command: 'promptfall', args: 'heroes' })
+  expect(states.get('mode')).toBe('primary')
+})
+
+test('the settings commands write the store and the atom, and answer', async ($, on) => {
+  const { data, states } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({ ...RUN, command: 'promptfall', args })
+  expect((await run('sound on')).text).toBe('Sound on')
+  expect((await run('motion still')).text).toBe('Motion: still')
+  expect((await run('renderer raster')).text).toBe(
+    'Renderer: raster (applies at the next session start)',
+  )
+  const stored = { sound: true, motion: 'still', renderer: 'raster' }
+  expect(data.get('promptfall:settings')).toEqual(stored)
+  expect(states.get('settings')).toEqual(stored)
+  expect((await run('sound off')).text).toBe('Sound off')
+  expect((data.get('promptfall:settings') as { sound: boolean }).sound).toBe(false)
+})
+
+test('a bad setting value answers its usage and writes nothing', async ($, on) => {
+  const { data } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = (args: string) => $.command.run({ ...RUN, command: 'promptfall', args })
+  expect((await run('sound loud')).text).toBe('usage: /promptfall sound on|off')
+  expect((await run('motion')).text).toBe('usage: /promptfall motion full|still')
+  expect((await run('renderer svg')).text).toBe('usage: /promptfall renderer auto|image|raster')
+  expect(data.has('promptfall:settings')).toBe(false)
+})
+
+test('a settings command claims the lease, so this session is the one that plays', async ($, on) => {
+  const { states } = harness(on, {
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('secondary')
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'sound on' })
   expect(states.get('mode')).toBe('primary')
 })

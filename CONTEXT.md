@@ -127,3 +127,21 @@ _Avoid_: score, participation, damage share
 What the server rolls for a contributor when a world boss dies or expires, delivered as
 the server event `rewarded`.
 _Avoid_: loot (that is a drop), prize, payout
+
+### Presentation
+
+**Stage**:
+The animated battle scene in the band's Party tab: the encounter's enemies on the left, the
+party on the right, side-on. Drawn on every surface, in whatever pixels the surface has;
+glyph rows are never the stage's fallback.
+_Avoid_: scene, arena, battlefield, viewport
+
+**Sprite**:
+The pixel art of one hero class, enemy, world boss or item, with its animation frames.
+Replaces the glyph where pixels draw; the glyph stays as its fallback.
+_Avoid_: portrait (the hero template's field name, unused), icon, image
+
+**Cue**:
+A short sound the primary session plays alongside a toast. Every cue has a toast; most
+toasts have no cue.
+_Avoid_: sound effect, sfx, alert, chime

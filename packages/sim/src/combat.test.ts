@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import { scaledBossStats } from './combat'
 import { content } from './content'
-import { heroStats } from './progression'
+import { heroStats, livingParty } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
 import type { Effect, Enemy, EnemyKind, Event, GameState, Item } from './types'
@@ -138,6 +139,90 @@ describe('combat', () => {
     expect(after.atk).toBe(before.atk + Math.floor((baseAtk * 12000) / 10000) + 5)
     expect(after.spd).toBe(before.spd + 2)
     expect(after.def).toBe(before.def)
+  })
+})
+
+describe('the hit effect', () => {
+  type Hit = Extract<Effect, { k: 'hit' }>
+  const hits = (effects: Effect[]): Hit[] => effects.filter((e): e is Hit => e.k === 'hit')
+
+  it('one round yields one hit per attack, in actor order, with the right ids', () => {
+    const s = injectEnemy(injectEnemy(createInitialState(5), 'road_slime'), 'road_slime')
+    const enemies = s.encounter?.enemies ?? []
+    const heroIds = new Set(livingParty(s).map((h) => h.id))
+    const enemyIds = new Set(enemies.map((e) => e.id))
+    const r = run(s, [{ t: 'tick' }])
+    const list = hits(r.effects)
+    expect(list.length).toBeGreaterThan(0)
+    for (const h of list) {
+      expect(h.amount).toBeGreaterThan(0)
+      const heroSide = heroIds.has(h.by)
+      expect(heroSide || enemyIds.has(h.by)).toBe(true)
+      expect(heroSide ? enemyIds.has(h.target) : heroIds.has(h.target)).toBe(true)
+    }
+    // Every living actor acts once, in the round's speed order (stable: heroes before enemies).
+    const actors = [
+      ...livingParty(s).map((h) => ({ id: h.id, spd: heroStats(s, h).spd })),
+      ...enemies.map((e) => ({ id: e.id, spd: content.enemies[e.def]?.stats.spd ?? 0 })),
+    ].sort((a, b) => b.spd - a.spd)
+    const order = list.map((h) => h.by).filter((by, i, all) => all[i - 1] !== by)
+    expect(order).toEqual(actors.map((a) => a.id).filter((id) => order.includes(id)))
+    expect(new Set(order).size).toBe(order.length)
+    // The black mage sweeps: one hit per enemy.
+    const mage = livingParty(s).find((h) => h.cls === 'black_mage')
+    if (mage) expect(list.filter((h) => h.by === mage.id)).toHaveLength(enemies.length)
+  })
+
+  it('a world-boss hit reports its amount while the boss hp stays put', () => {
+    const engaged = run(createInitialState(1), [
+      {
+        t: 'boss_engaged',
+        bossId: 'wb1',
+        name: 'The Promptwyrm',
+        glyph: '☠',
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+      },
+    ]).state
+    const boss = engaged.encounter?.enemies[0]
+    if (!boss) throw new Error('no boss')
+    const r = run(engaged, [{ t: 'tick' }])
+    const onBoss = hits(r.effects).filter((h) => h.target === boss.id)
+    expect(onBoss.length).toBeGreaterThan(0)
+    const dealt = onBoss.reduce((sum, h) => sum + h.amount, 0)
+    expect(r.state.boss?.dealt).toBe((engaged.boss?.dealt ?? 0) + dealt)
+    expect(r.state.encounter?.enemies[0]?.hp).toBe(boss.hp)
+    expect(hits(r.effects).some((h) => h.by === boss.id)).toBe(scaledBossStats(engaged).atk > 0)
+  })
+
+  it('a heal yields no hit', () => {
+    const s0 = injectEnemy(createInitialState(5), 'road_slime')
+    const mage = s0.roster.find((h) => h.cls === 'white_mage')
+    const knight = s0.roster.find((h) => h.cls === 'knight')
+    if (!mage || !knight) throw new Error('roster')
+    const max = heroStats(s0, knight).hp
+    const s: GameState = {
+      ...s0,
+      roster: s0.roster.map((h) => (h.id === knight.id ? { ...h, hp: Math.floor(max / 2) } : h)),
+    }
+    const r = run(s, [{ t: 'tick' }])
+    expect(hits(r.effects).filter((h) => h.by === mage.id)).toEqual([])
+  })
+
+  it("a kill's drop follows the hit that killed its enemy", () => {
+    for (let seed = 1; seed < 400; seed++) {
+      const s0 = injectEnemy(createInitialState(seed), 'goblin_scout')
+      const enc = s0.encounter
+      const enemy = enc?.enemies[0]
+      if (!enc || !enemy) throw new Error('enc')
+      const s: GameState = { ...s0, encounter: { ...enc, enemies: [{ ...enemy, hp: 1 }] } }
+      const r = run(s, [{ t: 'tick' }])
+      const at = r.effects.findIndex((e) => e.k === 'drop' || e.k === 'drop_vendored')
+      if (at < 0) continue
+      const before = hits(r.effects.slice(0, at))
+      expect(before.at(-1)?.target).toBe(enemy.id)
+      return
+    }
+    throw new Error('no drop in 400 seeds')
   })
 })
 

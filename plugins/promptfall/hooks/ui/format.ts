@@ -51,3 +51,6 @@ export const CLASS_INITIAL: Record<string, string> = {
 export function waveLabel(wave: number): string {
   return wave >= 11 ? 'boss' : `wave ${wave}/10`
 }
+
+/** How a row's text meets its width: cut on a terminal's cell grid, wrapped in proportional text. */
+export type TextFit = 'truncate' | 'wrap'

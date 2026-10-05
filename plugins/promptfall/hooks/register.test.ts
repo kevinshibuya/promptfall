@@ -1,11 +1,12 @@
-import type { On } from 'claude-code'
+import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState, step } from './vendor/sim.js'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
@@ -1008,4 +1009,279 @@ test('a reload during a live boss keeps the held snapshot, so the boss is not an
   })
   await poller.start()
   expect(toasts).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// The stage's renderer probe and the loop's wake
+
+const PARTY_BAND = {
+  component: 'AbovePrompt' as const,
+  requestId: 'band-probe',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 20,
+    bodyColumns: 120,
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+}
+
+/** A terminal session whose blits answer `answer`; records each blit. */
+function probing(on: On, answer: { deny?: string }, seed: Record<string, unknown> = {}) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  engineBottom(on)
+  const blits: (UiBlitArgs & { at: number })[] = []
+  on('ui.blit', (_$, e) => {
+    blits.push({ ...e, at: time.now() })
+    return { value: answer }
+  })
+  on('ui.invalidate', (_$, e, next) => next(e))
+  return { time, data, last, blits }
+}
+
+test('the probe settles on image when the blit is taken', async ($, on) => {
+  const { time, last, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  const mounted = await ui.find({ key: 'probe' })
+  expect(mounted).toBeDefined()
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('image')
+  const probe = blits.find((b) => b.key === 'probe')
+  expect(probe).toBeDefined()
+  expect(probe && 'source' in probe ? probe.source : null).not.toEqual(mounted?.props.source)
+  await ui.unmount()
+})
+
+test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
+  const { time, last } = probing(on, {
+    deny: `${PROBE_ALT_DENY} (env: terminal=Apple_Terminal, not asked yet, no answer)`,
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('raster')
+  await ui.unmount()
+})
+
+test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
+  const { time, last, blits } = probing(on, {
+    deny: 'no Image of its own is mounted under key "probe" in band-probe',
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer') ?? 'unknown').toBe('unknown')
+  await ui.unmount()
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(2)
+  await again.unmount()
+})
+
+test('a forced renderer sends no probe', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('renderer')).toBe('raster')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a collapsed band arms no probe', async ($, on) => {
+  const { time, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const narrow = { ...PARTY_BAND, props: { ...PARTY_BAND.props, bodyColumns: 80 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
+  await time.advance(PROBE_DELAY_MS * 2)
+  expect(blits).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('effects with a hit wake the stage loop', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'still', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  for (let i = 0; i < 20 && (last.get('view') as GameView).enemies.length === 0; i++) {
+    await time.advance(5_000)
+  }
+  const tick = time.now() + 5_000
+  await time.advance(5_000 + EVENT_FRAME_MS)
+  expect(
+    blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS),
+  ).toBe(true)
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Sound cues
+
+/** The in-process ledger's record for an account whose state the test chose. */
+function record(state: GameState): Record<string, unknown> {
+  return {
+    'promptfall:deviceToken': 'token-1',
+    'promptfall:pf:token:token-1': 'acct-1',
+    'promptfall:pf:acct:acct-1:record': {
+      account: {
+        accountId: 'acct-1',
+        seed: state.seed,
+        createdAt: 0,
+        displayName: null,
+        linked: null,
+      },
+      state,
+      seq: 0,
+      refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
+    },
+  }
+}
+
+/** A state whose next tick kills a 1 hp Goblin Scout and drops an item of `rarity`, with no level up. */
+function dropping(rarity: string): GameState {
+  for (let seed = 1; seed < 20_000; seed++) {
+    const s0 = createInitialState(seed)
+    const s: GameState = {
+      ...s0,
+      encounter: {
+        enemies: [{ id: 'e-test', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 }],
+        queue: [],
+        waveSize: 3,
+        spawnedInWave: 3,
+      },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drop = effects.find((e) => e.k === 'drop')
+    if (
+      drop?.k === 'drop' &&
+      drop.item.rarity === rarity &&
+      !effects.some((e) => e.k === 'level_up')
+    ) {
+      return s
+    }
+  }
+  throw new Error(`no ${rarity} drop`)
+}
+
+const SOUND_ON = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'auto' } }
+
+function sounding(on: On, seed: Record<string, unknown>) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  engineBottom(on)
+  const plays: { asset: string; gain: number | undefined }[] = []
+  on('audio.play', (_$, e) => {
+    plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
+    return { value: undefined }
+  })
+  return { time, data, last, plays }
+}
+
+for (const [rarity, asset] of [
+  ['epic', 'cues/drop.wav'],
+  ['rare', 'cues/drop.wav'],
+  ['legendary', 'cues/legendary.wav'],
+] as const) {
+  test(`a ${rarity} drop on a primary with sound on plays ${asset}`, async ($, on) => {
+    const { time, plays } = sounding(on, { ...record(dropping(rarity)), ...SOUND_ON })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(plays).toEqual([{ asset, gain: CUE_GAIN }])
+  })
+}
+
+test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('common')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('sound off plays nothing on an epic drop', async ($, on) => {
+  const { time, plays } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('sound turned on in another session reaches the primary without a restart', async ($, on) => {
+  const { time, plays, data } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // Another session's /promptfall sound on writes the machine's store, not this session's atom.
+  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  await time.advance(5_000)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: CUE_GAIN }])
+})
+
+test('a secondary plays nothing', async ($, on) => {
+  const { time, plays, last } = sounding(on, {
+    ...record(dropping('epic')),
+    ...SOUND_ON,
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('/promptfall off hides the band, not the cues', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('epic')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
+  await time.advance(5_000)
+  expect(plays.map((p) => p.asset)).toEqual(['cues/drop.wav'])
+})
+
+test('a world boss already up when the session starts plays no cue', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  net.world = () => snap({ boss: LIVE_BOSS })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toEqual([])
+})
+
+test('the world boss appearing plays the boss cue; going down plays none', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = null
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  await time.advance(5_000)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toHaveLength(1)
+  expect(plays.filter((p) => p.asset !== 'cues/boss.wav')).toEqual([])
 })
