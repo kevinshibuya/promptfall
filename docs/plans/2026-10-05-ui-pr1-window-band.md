@@ -757,5 +757,5 @@ cmux and Terminal.app with its result; the PR is open.
 its own test.
 
 - [x] Spec, ADRs, glossary
-- [ ] Driven pass
-- [ ] Ticks, PR
+- [x] Driven pass
+- [x] Ticks, PR
