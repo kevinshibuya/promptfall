@@ -1,4 +1,4 @@
-import { resolveRound } from './combat'
+import { advanceBattle } from './combat'
 import {
   dismiss,
   equip,
@@ -40,8 +40,12 @@ const handlers: Handlers = {
   tick: (state) =>
     draft(state, (s, effects) => {
       refillFromQueue(s)
-      if (s.encounter && s.encounter.enemies.length > 0) resolveRound(s, effects)
-      else spawnOnEmptyTick(s, effects)
+      if (s.encounter && s.encounter.enemies.length > 0) advanceBattle(s, effects)
+      else {
+        spawnOnEmptyTick(s, effects)
+        // A whole tick of battle time passed with nobody fighting.
+        s.battle.busy = 0
+      }
     }),
   tool_call: (state) => draft(state, (s) => onToolCall(s)),
   turn_end: (state) => draft(state, (s) => onTurnEnd(s)),

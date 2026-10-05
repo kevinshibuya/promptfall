@@ -68,7 +68,7 @@ test('the rarity slot takes the hero rarity colour', () => {
 })
 
 test('a flashing actor draws white; a lunging hero steps toward the enemies', () => {
-  const effects = [hit('h1', 'e1')]
+  const effects: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
   const mid = at(wave(), effects, NOW + LUNGE_MS / 2)
   expect(actor(mid.actors, 'h1').x).toBe(116 - ACTOR_EDGE - 16 - LUNGE_PX)
   const e1 = actor(mid.actors, 'e1')

@@ -19,6 +19,12 @@ export type HeroView = {
   maxHp: number
   alive: boolean
   rarity: string
+  /** 0..10000, the hero's action gauge after the last applied tick. */
+  gauge: number
+  /** True while the hero waits in the action queue. */
+  queued: boolean
+  /** fill(spd): gauge gained per 100 ms of battle time, so a renderer can fill smoothly. */
+  gaugePerStep: number
 }
 export type EnemyView = {
   id: string

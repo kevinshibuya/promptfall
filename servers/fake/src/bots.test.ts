@@ -111,7 +111,13 @@ describe('bots over HTTP', () => {
       expect(record?.state.tick).toBeGreaterThan(rollBotState(1, i).tick)
     }
     expect(world.online).toBe(COUNT + 1)
-    expect(world.zones.length).toBeGreaterThanOrEqual(2)
+    // Presence per zone matches where each bot's committed state stands, plus the viewer in zone 1.
+    const counts = new Map<number, number>([[1, 1]])
+    for (const r of records) if (r) counts.set(r.state.zone, (counts.get(r.state.zone) ?? 0) + 1)
+    const expected = [...counts].map(([zone, count]) => ({ zone, count }))
+    expect([...world.zones].sort((a, b) => a.zone - b.zone)).toEqual(
+      expected.sort((a, b) => a.zone - b.zone),
+    )
     expect(calls).toEqual([])
   }, 120_000)
 

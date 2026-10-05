@@ -1,7 +1,7 @@
 import type { On, RenderElement, UiBlitArgs } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
-import { boss, turnBoss, wave, worldBoss } from './stage/fixtures'
+import { boss, fallen, turnBoss, wave, worldBoss } from './stage/fixtures'
 import {
   DESKTOP_COLUMN_PX_CEILING,
   DESKTOP_ROW_PX,
@@ -619,7 +619,7 @@ test('Loot and World keep four rows, draw no stage and blit nothing', async ($, 
   await ui.unmount()
 })
 
-test('a round of hits blits the stage at the event rate', async ($, on) => {
+test('an action blits the stage at the event rate', async ($, on) => {
   const { data, blits, clock, states } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -627,13 +627,16 @@ test('a round of hits blits the stage at the event rate', async ($, on) => {
   for (let i = 0; i < 20 && (states.get('view') as GameView).enemies.length === 0; i++) {
     await clock.advance(5_000)
   }
-  // The next tick fights a round.
-  await clock.advance(5_000)
-  const before = blits.length
-  await clock.advance(1_000)
-  const round = blits.slice(before)
-  expect(round.length).toBeGreaterThanOrEqual(10)
-  for (const b of round) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+  // Gauges start empty, so the first action comes a few ticks in: find a busy second.
+  let busiest = 0
+  for (let i = 0; i < 60 && busiest < 10; i++) {
+    const before = blits.length
+    await clock.advance(1_000)
+    const second = blits.slice(before)
+    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+    busiest = Math.max(busiest, second.length)
+  }
+  expect(busiest).toBeGreaterThanOrEqual(10)
   await ui.unmount()
 })
 
@@ -659,6 +662,48 @@ test('a survey hides the stage and nothing blits', async ($, on) => {
   await ui.unmount()
 })
 
+test('the party line draws each gauge: a cell per full third, yellow while queued, dim when down', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.view = fallen()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  // The terminal row's Texts are flat and unkeyed: the gauges are the three ` ▰▱` cells.
+  type Node = { children?: unknown[]; props: Record<string, unknown> }
+  const textOf = (n: Node) => (n.children ?? []).join('')
+  const row = await ui.find({ key: 'row-party' })
+  const gauges = ((row?.children ?? []) as Node[]).filter((c) => /^ [▰▱]{3}$/.test(textOf(c)))
+  expect(gauges).toHaveLength(3)
+  const [aldric, mira, tomas] = gauges
+  expect(aldric && textOf(aldric)).toBe(' ▰▰▱')
+  expect(aldric?.props.color).toBeUndefined()
+  expect(mira && textOf(mira)).toBe(' ▰▰▰')
+  expect(mira?.props.color).toBe('yellow')
+  expect(tomas && textOf(tomas)).toBe(' ▱▱▱')
+  expect(tomas?.props.dimColor).toBe(true)
+  await ui.unmount()
+})
+
+test('at 116 columns each hero segment is 31 cells and the front enemy keeps 14', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.view = wave()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(116, 20) })
+  const line = [...((await ui.find({ key: 'row-party' }))?.text ?? '')]
+  expect(line).toHaveLength(116)
+  for (const [i, hero] of wave().heroes.entries()) {
+    const segment = line.slice(i * 34, i * 34 + 31).join('')
+    expect(segment.startsWith(hero.name)).toBe(true)
+    expect(segment).toMatch(/ \d+\/\d+ [▰▱]{3}$/)
+    if (i < 2) expect(line.slice(i * 34 + 31, i * 34 + 34).join('')).toBe(' · ')
+  }
+  const enemy = line.slice(102).join('')
+  expect(enemy).toHaveLength(14)
+  expect(enemy.startsWith('⚔ ')).toBe(true)
+  await ui.unmount()
+})
+
 test('in boss mode the party line fits its width: the boss name gives way, not the heroes', async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, { renderer: 'raster' })
@@ -674,6 +719,10 @@ test('in boss mode the party line fits its width: the boss name gives way, not t
     expect([...line].length).toBeLessThanOrEqual(width)
     expect(line.match(/15\/69/g)).toHaveLength(3)
     expect(line).toContain('42,604/52,000')
+    // The hero gauges take 12 columns, so under about 130 the boss keeps ⚔ and its HP but not its
+    // name (accepted until the UI remake's window band replaces this line).
+    if (width < 130) expect(line).toContain('⚔ 42,604/52,000')
+    else expect(line).toContain(`⚔ ${BOSS.name.slice(0, 4)}`)
     await ui.unmount()
   }
 })

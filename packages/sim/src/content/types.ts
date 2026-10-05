@@ -1,4 +1,6 @@
-import type { EnemyKind, HeroClass, Rarity, Slot, Stat, Stats } from '../types'
+import type { ActionId, EnemyKind, HeroClass, Rarity, Slot, Stat, Stats } from '../types'
+
+export type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss'
 
 export type EnemyDef = {
   id: string
@@ -6,6 +8,7 @@ export type EnemyDef = {
   glyph: string
   zone: number
   kind: EnemyKind
+  archetype: Archetype
   stats: Stats
   xp: number
   gold: [number, number]
@@ -54,6 +57,32 @@ export type RarityRule = {
   vendorGoldPerZone: number
   reforgeCost: number
 }
+export type WeightRule =
+  | { kind: 'fixed'; weight: number }
+  /** 0 while the lowest ally is at or above belowBp of max HP; then scale × d² / (belowBp/2)², d = belowBp − lowestBp */
+  | { kind: 'ally_need'; belowBp: number; scale: number }
+export type TargetRule =
+  /** No target to choose (attack_all). */
+  | { kind: 'none' }
+  /** The front foe (encounter.enemies[0]) weighs `front`, every other foe `other`. */
+  | { kind: 'front'; front: number; other: number }
+  /** The foe with the lowest current HP (first on a tie) weighs `weakest`, every other foe `other`. */
+  | { kind: 'weakest'; weakest: number; other: number }
+  /** A living foe of this class weighs `match`, every other living foe `other`. */
+  | { kind: 'class'; cls: HeroClass; match: number; other: number }
+  /** One candidate, weight 1: the living ally with the lowest HP %, first in order on a tie. */
+  | { kind: 'ally_lowest' }
+export type Tactic = {
+  action: ActionId
+  weight: WeightRule
+  target: TargetRule
+  /** Skipped while fewer allies than this live (the unit counts itself). */
+  minAllies?: number
+}
+export type Tactics = {
+  heroes: Record<HeroClass, Tactic[]>
+  enemies: Record<Archetype | 'world_boss', Tactic[]>
+}
 export type Content = {
   zones: ZoneDef[]
   enemies: Record<string, EnemyDef>
@@ -68,5 +97,6 @@ export type Content = {
     inventory: { step: number; max: number; costs: number[] }
     roster: { step: number; max: number; costs: number[] }
   }
+  tactics: Tactics
   xpToNext: (level: number) => number
 }

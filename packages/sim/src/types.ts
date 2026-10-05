@@ -1,4 +1,4 @@
-export const SIM_VERSION = 3 as const
+export const SIM_VERSION = 4 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -40,6 +40,16 @@ export type Encounter = {
   waveSize: number
   spawnedInWave: number
 }
+/** Battle time state carried across ticks. Arrays, not records: canonical order is insertion order. */
+export type Battle = {
+  /** One entry per unit on the field (living party heroes, encounter enemies). 0..GAUGE_FULL. */
+  gauges: { id: string; g: number }[]
+  /** Unit ids whose gauge is full, in the order they filled. Head acts next. */
+  queue: string[]
+  /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
+  busy: number
+}
+export type ActionId = 'attack' | 'attack_all' | 'heal'
 export type TradeKind = 'item' | 'hero'
 export type Goods = { kind: 'item'; item: Item } | { kind: 'hero'; hero: Hero }
 
@@ -141,6 +151,10 @@ export type Effect =
   | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }
   /** Output only: one per attack, by and target actor ids (Hero.id or Enemy.id); feeds no hash. */
   | { k: 'hit'; by: string; target: string; amount: number }
+  /** Output only: an action starts. Every effect after it, up to the next `act`, is this action's. at: battle ms into this tick, 0..1999. */
+  | { k: 'act'; actor: string; action: ActionId; at: number }
+  /** Output only: a heal landed; amount is the HP actually restored. */
+  | { k: 'heal'; by: string; target: string; amount: number }
 
 export type GameState = {
   v: typeof SIM_VERSION
@@ -167,6 +181,7 @@ export type GameState = {
   stats: { kills: number; bosses: number; wipes: number }
   /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
   boss: { bossId: string; name: string; glyph: string; stats: Stats; dealt: number } | null
+  battle: Battle
 }
 
 export type StepResult = { state: GameState; effects: Effect[] }

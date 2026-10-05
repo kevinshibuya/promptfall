@@ -11,7 +11,14 @@ import type {
   WorldState,
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
-import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
+import {
+  content,
+  fill,
+  type GameState,
+  heroStats,
+  type Item,
+  type LootEntry,
+} from './vendor/sim.js'
 
 const LOOT_LINES = 12
 
@@ -191,9 +198,12 @@ export function toGameView(
   account: AccountView,
 ): GameView {
   const heroes: HeroView[] = []
+  // An older version's state has no battle; the band shows its reset notice over empty gauges.
+  const battle = state.battle ?? { gauges: [], queue: [], busy: 0 }
   for (const id of state.party) {
     const hero = state.roster.find((h) => h.id === id)
     if (!hero) continue
+    const stats = heroStats(state, hero)
     heroes.push({
       id: hero.id,
       name: heroName(hero.template, hero.epithet),
@@ -201,9 +211,12 @@ export function toGameView(
       glyph: content.heroTemplates[hero.template]?.glyph ?? '@',
       level: hero.level,
       hp: hero.hp,
-      maxHp: heroStats(state, hero).hp,
+      maxHp: stats.hp,
       alive: hero.hp > 0,
       rarity: hero.rarity,
+      gauge: battle.gauges.find((g) => g.id === hero.id)?.g ?? 0,
+      queued: battle.queue.includes(hero.id),
+      gaugePerStep: fill(stats.spd),
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {

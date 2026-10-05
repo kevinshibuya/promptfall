@@ -6,7 +6,7 @@ import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stag
 import { effectToast } from './toasts'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState, step } from './vendor/sim.js'
+import { createInitialState, GAUGE_FULL, type GameState, hashState, step } from './vendor/sim.js'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
@@ -1121,11 +1121,16 @@ test('effects with a hit wake the stage loop', async ($, on) => {
   for (let i = 0; i < 20 && (last.get('view') as GameView).enemies.length === 0; i++) {
     await time.advance(5_000)
   }
-  const tick = time.now() + 5_000
-  await time.advance(5_000 + EVENT_FRAME_MS)
-  expect(
-    blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS),
-  ).toBe(true)
+  // Gauges start empty: the first ticks with an enemy carry no action. With motion still only
+  // effects wake the loop, so a blit right after a tick means that tick's effects woke it.
+  let next = time.now() + 5_000
+  let woke = false
+  for (let i = 0; i < 12 && !woke; i++, next += 5_000) {
+    await time.advance(next + EVENT_FRAME_MS - time.now())
+    const tick = next
+    woke = blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS)
+  }
+  expect(woke).toBe(true)
   await ui.unmount()
 })
 
@@ -1172,6 +1177,8 @@ function dropping(rarity: string): GameState {
         waveSize: 3,
         spawnedInWave: 3,
       },
+      // Full party gauges: the party acts in the tick's first step and kills the 1 HP enemy.
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
     }
     const effects = step(s, { t: 'tick' }).effects
     const drop = effects.find((e) => e.k === 'drop')

@@ -1,4 +1,5 @@
 import { content } from '../content'
+import { livingParty } from '../progression'
 import { createInitialState } from '../state'
 import { step } from '../step'
 import type { Effect, Event, GameState, Item, Rarity } from '../types'
@@ -25,6 +26,10 @@ export type ScenarioReport = {
   levels: number[]
   dropsByRarity: Record<Rarity, number>
   roundsPerKillZone1: number
+  /** Party hero actions ÷ (combat ticks × living party heroes at each tick's start). */
+  heroActsPerCombatTick: number
+  /** Longest action queue seen at the end of a tick. */
+  maxQueue: number
 }
 
 /** atk + def an item adds to its wearer. */
@@ -77,7 +82,11 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     levels: [],
     dropsByRarity: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 },
     roundsPerKillZone1: 0,
+    heroActsPerCombatTick: 0,
+    maxQueue: 0,
   }
+  let heroActs = 0
+  let heroTicks = 0
   let zone1Rounds = 0
   let zone1Kills = 0
 
@@ -90,6 +99,12 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
       zone1Kills += state.stats.kills - before.stats.kills
     }
     if (event.t === 'tick') report.ticks += 1
+    // A combat tick is one that ran the battle loop: only those count in state.tick.
+    if (state.tick > before.tick) {
+      heroTicks += livingParty(before).length
+      for (const e of r.effects) if (e.k === 'act' && before.party.includes(e.actor)) heroActs += 1
+    }
+    report.maxQueue = Math.max(report.maxQueue, state.battle.queue.length)
     if (event.t === 'tool_call') report.toolCalls += 1
     for (const effect of r.effects) onEffect(effect)
   }
@@ -130,6 +145,8 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
   report.kills = state.stats.kills
   report.gold = state.gold
   report.levels = state.party.map((id) => state.roster.find((h) => h.id === id)?.level ?? 0)
+  report.heroActsPerCombatTick =
+    heroTicks > 0 ? Math.round((heroActs / heroTicks) * 1000) / 1000 : 0
   report.roundsPerKillZone1 = zone1Kills > 0 ? Math.floor(zone1Rounds / zone1Kills) : 0
   return report
 }

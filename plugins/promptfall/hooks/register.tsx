@@ -558,7 +558,8 @@ class GameSession implements GameHandle {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
     if (at !== undefined) this.lastAt = at
-    this.stage.timeline.onEffects(effects, at ?? this.lastAt)
+    // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
+    this.stage.timeline.onEffects(effects, at ?? this.lastAt, this.cadence || TURN_CADENCE_MS)
     for (const loop of this.loops.values()) loop.wake()
     for (const effect of effects) {
       if (effect.k === 'rejected') {

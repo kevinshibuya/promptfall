@@ -25,13 +25,31 @@ export function HpBar(els: Els, hp: number, max: number, cells = 10) {
   )
 }
 
-/** One hero's segment of the party line: 27 columns. */
-const HERO_SEGMENT = 27
+/** One hero's segment of the party line: 31 columns. */
+const HERO_SEGMENT = 31
 const SEPARATOR = ' · '
 const PARTY_BAR = 6
+/** The action gauge after the HP: a space and three cells. */
+const GAUGE_CELLS = 3
+const GAUGE_FULL = 10000
+
+/** ` ▰▰▱`: a filled cell per full third of the gauge; yellow while queued, dim when down. */
+export function GaugeCells(els: Els, hero: GameView['heroes'][number], key: string) {
+  const { Text } = els
+  const filled = Math.max(
+    0,
+    Math.min(GAUGE_CELLS, Math.floor((hero.gauge * GAUGE_CELLS) / GAUGE_FULL)),
+  )
+  const color = hero.alive && hero.queued ? 'yellow' : undefined
+  return (
+    <Text key={key} color={color} dimColor={!hero.alive} wrap="truncate">
+      {` ${'▰'.repeat(filled)}${'▱'.repeat(GAUGE_CELLS - filled)}`}
+    </Text>
+  )
+}
 
 /**
- * The line under the stage: `<name> L<level> <bar> <hp>/<max>` per hero, joined by ` · `, then
+ * The line under the stage: `<name> L<level> <bar> <hp>/<max> <gauge>` per hero, joined by ` · `, then
  * the front enemy (or, in boss mode, the world boss with its predicted bar) right-aligned in
  * what is left of `width`. With `wrap` (the Svg surfaces, whose text is proportional and whose
  * band grows) each hero and the enemy is a whole segment, and a segment that does not fit starts
@@ -63,9 +81,10 @@ export function PartyLine(
         <Text key={`hp-${i}`}>{` ${hero.hp}/${hero.maxHp}`}</Text>
       ) : (
         <Text key={`hp-${i}`} wrap="truncate">
-          {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR)}
+          {padStart(`${hero.hp}/${hero.maxHp}`, HERO_SEGMENT - 13 - PARTY_BAR - 1 - GAUGE_CELLS)}
         </Text>
       ),
+      GaugeCells(els, hero, `gauge-${i}`),
     ]
     return wrap
       ? [

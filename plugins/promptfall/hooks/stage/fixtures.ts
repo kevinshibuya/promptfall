@@ -1,8 +1,29 @@
 // Hand-built game views for the stage tests and scripts/stage-goldens.ts.
 import type { EnemyView, GameView, HeroView } from '../../types'
 
-function hero(id: string, name: string, cls: string, level: number, rarity: string): HeroView {
-  return { id, name, cls, glyph: '@', level, hp: 50, maxHp: 50, alive: true, rarity }
+function hero(
+  id: string,
+  name: string,
+  cls: string,
+  level: number,
+  rarity: string,
+  gauge: { gauge: number; queued: boolean; alive?: boolean },
+): HeroView {
+  const alive = gauge.alive ?? true
+  return {
+    id,
+    name,
+    cls,
+    glyph: '@',
+    level,
+    hp: alive ? 50 : 0,
+    maxHp: 50,
+    alive,
+    rarity,
+    gauge: gauge.gauge,
+    queued: gauge.queued,
+    gaugePerStep: 250,
+  }
 }
 
 function enemy(
@@ -17,9 +38,9 @@ function enemy(
 }
 
 export const HEROES: readonly HeroView[] = [
-  hero('h1', 'Aldric', 'knight', 5, 'common'),
-  hero('h2', 'Mira', 'black_mage', 4, 'rare'),
-  hero('h3', 'Tomas', 'white_mage', 5, 'legendary'),
+  hero('h1', 'Aldric', 'knight', 5, 'common', { gauge: 6700, queued: false }),
+  hero('h2', 'Mira', 'black_mage', 4, 'rare', { gauge: 10000, queued: true }),
+  hero('h3', 'Tomas', 'white_mage', 5, 'legendary', { gauge: 2000, queued: false }),
 ]
 
 function view(enemies: EnemyView[], zone = 1, wave = 2): GameView {
@@ -85,4 +106,13 @@ export function worldBoss(): GameView {
 
 export function empty(): GameView {
   return view([])
+}
+
+/** A party with a fallen hero, for the gauge tests: Tomas is down, his gauge empty. */
+export function fallen(): GameView {
+  const v = wave()
+  v.heroes = v.heroes.map((h) =>
+    h.id === 'h3' ? { ...h, hp: 0, alive: false, gauge: 0, queued: false } : h,
+  )
+  return v
 }

@@ -1,6 +1,6 @@
 import type { HeroClass, Rarity, Slot } from '../types'
 import { RARITIES } from '../types'
-import type { Content } from './types'
+import type { Content, Tactic } from './types'
 
 const CLASSES: HeroClass[] = ['knight', 'black_mage', 'white_mage', 'archer']
 const SLOTS: Slot[] = ['weapon', 'armour', 'accessory']
@@ -8,6 +8,31 @@ const STARTER_TEMPLATES = ['archer_1', 'black_mage_1', 'knight_1', 'white_mage_1
 const RARITY_COUNTS = [0, 1, 2, 3, 4]
 const LEVEL_CAPS = [20, 30, 40, 45, 50]
 const STAT_MULTS = [10000, 11000, 12000, 13500, 15000]
+
+const ARCHETYPES = ['brute', 'swift', 'tank', 'caster', 'boss', 'turn_boss', 'world_boss'] as const
+
+function isWeight(n: unknown): boolean {
+  return typeof n === 'number' && Number.isInteger(n) && n >= 0
+}
+
+function checkTactics(problems: string[], where: string, list: Tactic[] | undefined): void {
+  if (!list || list.length === 0) {
+    problems.push(`${where}: needs at least one tactic`)
+    return
+  }
+  list.forEach((tactic, i) => {
+    const at = `${where} tactic ${i} (${tactic.action})`
+    const w = tactic.weight
+    const weights = w.kind === 'fixed' ? [w.weight] : [w.belowBp, w.scale]
+    const t = tactic.target
+    if (t.kind === 'front') weights.push(t.front, t.other)
+    if (t.kind === 'weakest') weights.push(t.weakest, t.other)
+    if (t.kind === 'class') weights.push(t.match, t.other)
+    if (tactic.minAllies !== undefined) weights.push(tactic.minAllies)
+    if (!weights.every(isWeight)) problems.push(`${at}: weights must be non-negative integers`)
+    if (w.kind === 'ally_need' && w.belowBp < 2) problems.push(`${at}: belowBp must be at least 2`)
+  })
+}
 
 function checkWeights(problems: string[], where: string, weights: Record<Rarity, number>): void {
   for (const r of RARITIES) {
@@ -102,6 +127,10 @@ export function validateContent(content: Content): string[] {
     if (!CLASSES.includes(t.cls)) problems.push(`hero template '${key}': unknown class`)
     if (t.base.hp < 1) problems.push(`hero template '${key}': base hp must be >= 1`)
   }
+
+  // Tactics
+  for (const cls of CLASSES) checkTactics(problems, `tactics ${cls}`, content.tactics.heroes[cls])
+  for (const a of ARCHETYPES) checkTactics(problems, `tactics ${a}`, content.tactics.enemies[a])
 
   // Traits and epithets
   if (Object.keys(content.traits).length < 6) problems.push('traits: needs at least 6')
