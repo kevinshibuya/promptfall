@@ -91,9 +91,19 @@ Checked against Claude Code v2.1.287's mods API.
 
 ### 4.1 Cadence and encounter rules
 
-- One combat round every 2 seconds while a model turn is running, every 5
-  seconds while the session is idle. Cadence is the client's scheduling; the sim
-  itself is purely event-driven and knows no wall clock.
+- Every tick advances 2 seconds of battle time, in 100 ms steps. Ticks come
+  every 2 seconds while a model turn is running and every 5 seconds while the
+  session is idle; the client stretches each tick's 2 seconds of playback over
+  its cadence, so an idle battle plays 2.5 times slower between actions while
+  each action's animation keeps its speed. Cadence is the client's scheduling;
+  the sim itself is purely event-driven and knows no wall clock.
+- Every hero and enemy on the field, the world boss included, has an action
+  gauge that fills by speed (proportional to speed plus a constant), during
+  actions too. A full gauge joins the action queue; units act one at a time in
+  the order their gauges filled, each action taking 500 ms of battle time, and
+  the actor's gauge empties. Heroes keep their gauges across waves and through a
+  rest; a spawned enemy starts between 0 and 50%; a fallen hero's gauge empties;
+  a wipe empties them all. Only the party's gauges are shown.
 - `tool.call` spawns one enemy into the current encounter. At most 3 enemies
   fight at once; up to 10 more queue; beyond that new spawns are dropped so a
   very long turn cannot create a death wall.
@@ -133,6 +143,21 @@ Checked against Claude Code v2.1.287's mods API.
 - Stats: HP, attack, defence, speed. Growth per level by class table. XP from
   kills. A per-class resource (mana, stamina) is deferred until a skill system
   gives it a use.
+- Actions: every class attacks. The Knight hits one enemy, the front one most
+  often; the Black Mage hits every enemy at 60% attack; the Archer hits one
+  enemy, the weakest most often, with a 20% chance of double damage; the White
+  Mage attacks the weakest enemy or heals. Every damage and heal amount is
+  doubled against the pre-gauge game, since a unit acts about once every two
+  ticks. A heal restores 0.8 × attack to the living ally with the lowest HP
+  share, capped at max HP, and never revives. Enemies attack a hero, a Knight
+  most often.
+- A weighted picker chooses each action and its target together: every
+  (action, target) pair a unit could take gets a weight from rules about the
+  battle, and one seeded draw picks a pair. The rules are content data per hero
+  class and per enemy archetype (`packages/sim/src/content/tactics.ts`), so a
+  later skill or technique is a new entry, not new code. Heal weighs nothing
+  while every ally is at 50% HP or more and rises the lower the weakest falls
+  (about 3 heals in 4 at 25%); a White Mage alone never heals.
 - Acquisition: recruit contracts drop from zone bosses and, at a lower rate,
   turn bosses; a tavern recruits for gold at published odds. Roster cap 24,
   expandable with gold.
@@ -246,7 +271,7 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
 - Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. Any change to the
   sim bumps it, and a state behind the server's sim version is reset (phase 3
-  bumps it to 3). API: create an initial state from a seed, step a state with one
+  bumps it to 3, the combat flow to 4). API: create an initial state from a seed, step a state with one
   event into a new state plus effects, hash a state. Effects are UI notifications
   and carry no authority.
 - The client runs the sim locally for instant feedback, buffers the events it
@@ -386,6 +411,7 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Party tab (phase 4): the stage, 8 rows at rest, the encounter's enemies on the
   left and the party on the right, side-on, standing on a one-row ground strip
   coloured per zone; under it the party line (each hero's name, level, HP bar,
+  HP and a three-cell action gauge, yellow while the hero waits in the queue,
   then the front enemy as `⚔ Goblin Brute 42/60`) and the status row (zone,
   wave, gold, last drop). The stage grows to 12 rows for a turn boss and 17 for a
   zone or world boss, at the boss's spawn, and shrinks back after its death
@@ -406,9 +432,14 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
   or cast pose), hit flash, death dissolve, spawn fade-in, floating damage
   numbers, and a drop popping out of the defeated enemy. Driven by the sim's
-  `hit` effect. About 12 frames a second during an event, the idle bob at 2,
+  output-only effects: `act` starts an action at its battle-time offset, then
+  come its `hit` and `heal` effects. One action plays at a time: the actor
+  lunges once and all of its hits land at one impact (the Black Mage's spell
+  hits every enemy at once); a heal shows a green rising number and no flash.
+  Action starts stretch to the cadence and never overlap, across ticks too.
+  About 12 frames a second during an event, the idle bob at 2,
   nothing while the band is hidden, collapsed or on another tab. The desktop
-  redraws once a round with the round's motion as SMIL. Account setting "Motion:
+  redraws once a tick with the tick's motion as SMIL. Account setting "Motion:
   full / still", default full; still drops the idle bob.
 - World tab rows (phase 3): the count online and the names in your zone, you
   excluded; the world boss line while one is live (name, global HP bar, time

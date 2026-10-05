@@ -503,7 +503,7 @@ result; `gh pr view` shows the PR.
 **Boundaries:** No code changes in this task except fixes the manual pass finds, each committed
 on its own with the failing step named.
 
-- [ ] Spec amendments
+- [x] Spec amendments
 - [ ] Full check line
 - [ ] Manual pass, record results
 - [ ] PR, stop
