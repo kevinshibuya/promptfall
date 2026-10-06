@@ -1,4 +1,3 @@
-import type { Elements, RenderElement } from 'claude-code'
 import type { GameView, WorldState } from '../../types'
 import {
   CHAT_BUCKET_CAPACITY,
@@ -8,21 +7,6 @@ import {
   type MarketRefusal,
 } from '../vendor/protocol.js'
 import { gates } from '../view'
-
-export type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> & {
-  /** Absent on mobile: presets stand in for typed prices. */
-  Input: Elements['terminal']['Input'] | undefined
-}
-
-/** A Select where the surface has one; one Button per option elsewhere. */
-export type PickFn = (
-  key: string,
-  label: string,
-  options: { value: string; label: string }[],
-  onPick: (value: string) => Promise<void>,
-  /** The option shown as picked. */
-  value?: string,
-) => RenderElement
 
 /** A merge-updater over one atom, written at the hook. */
 export type Updater<T> = (fn: (current: T) => T) => Promise<void>

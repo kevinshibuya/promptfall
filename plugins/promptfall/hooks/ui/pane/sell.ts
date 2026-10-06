@@ -10,19 +10,10 @@ import { sellState } from '../sell'
 import { formatRemaining } from '../time'
 import { page, type Rect } from './frame'
 import type { PaneInput } from './input'
-import type { PaneAction, Stop } from './types'
+import type { PanelBuild } from './list'
+import type { PaneAction, PaneField, Stop } from './types'
 
 export type { Rect } from './frame'
-
-export type SellBuild = {
-  win: Win
-  /** `menu:<i>` per item, in order. */
-  stops: Stop[]
-  /** The message window's lines for rule 7. */
-  state: [string, string]
-  /** True while the price form shows and the surface has an Input. */
-  priceInput: boolean
-}
 
 const gold = (n: number) => `${formatCount(n)}G`
 const SLOT_WORD: Record<string, string> = {
@@ -33,14 +24,14 @@ const SLOT_WORD: Record<string, string> = {
 
 type Row = { text: string; rgb?: number; action?: PaneAction }
 
-export function sellWindow(input: PaneInput, at: Rect): SellBuild {
+export function sellWindow(input: PaneInput, at: Rect): PanelBuild {
   const sell = input.dialog.sell
   if (!sell) throw new Error('sellWindow without a sell flow')
   const panel = sellState(input.view, input.world, sell, input.remainingMs)
   const rows: Row[] = []
   let header: Span[] = [{ text: 'Sell' }]
   let state: [string, string] = ['', 'q: back.']
-  let priceInput = false
+  let field: PaneField | null = null
   if (panel.kind === 'gone') {
     rows.push({ text: 'It is no longer yours.' })
   } else {
@@ -73,8 +64,14 @@ export function sellWindow(input: PaneInput, at: Rect): SellBuild {
         }
       }
       if (input.hasInput) {
-        rows.push({ text: 'Set a price', action: { t: 'price' } })
-        priceInput = true
+        rows.push({ text: 'Set a price', action: { t: 'field', key: 'price' } })
+        field = {
+          key: 'price',
+          label: 'price',
+          placeholder: 'gold',
+          value: sell.price,
+          submitLabel: 'list',
+        }
       } else {
         for (const p of panel.presets) rows.push({ text: gold(p), action: { t: 'list', price: p } })
       }
@@ -130,7 +127,7 @@ export function sellWindow(input: PaneInput, at: Rect): SellBuild {
     cursor: true,
     index: i,
   }))
-  return { win, stops, state, priceInput }
+  return { win, stops, at: cursor, state, field }
 }
 
 function clipSpan(s: Span, width: number): Span {

@@ -164,8 +164,8 @@ _Avoid_: portrait (the hero template's field name, unused), icon, image
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
-line with cut corners, text in the game's pixel font. The band's strip and the pane's Inventory
-and Heroes tabs are made of windows; the other tabs follow in UI PR 3.
+line with cut corners, text in the game's pixel font. The band's strip and all eight of the
+pane's tabs are made of windows.
 _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
 **Strip**:
@@ -192,6 +192,21 @@ The window that opens over the Inventory or Heroes list on Enter: the actions th
 ▶ row (Equip, Sell, Vendor; Party, Dismiss), each with a gold hotkey letter. The equip and
 reforge picks are command windows too.
 _Avoid_: context menu, action menu, popup
+
+**Filter window**:
+The Market's command window for the search: kind and sort flip in place; base, class and rarity
+open a pick. `f` opens it from the list's `Filters` row.
+_Avoid_: filter bar, search form
+
+**Form window**:
+A window in the detail window's place that collects a choice before it is sent: the sell window
+and the new buy order. Its picks take its place while open, and `q` returns to it.
+_Avoid_: dialog, modal, panel
+
+**Field**:
+A typed input under the pane's picture: the sell price, the order price or the chat line. One at
+a time; Enter submits it and Tab leaves it (Escape closes the pane).
+_Avoid_: text box, input bar, compose box
 
 **Ring stop**:
 A hidden one-space Button the pane mounts per list row, command item, Yes and No, tab and back.

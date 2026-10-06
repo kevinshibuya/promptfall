@@ -2,8 +2,9 @@ import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
-import { item, paneInput, paneView } from '../ui/pane/fixtures'
+import { item, listing, marketPage, paneInput, paneView } from '../ui/pane/fixtures'
 import { inventoryPane } from '../ui/pane/inventory'
+import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
@@ -195,6 +196,41 @@ test('the fullest pane fits the Svg budget', () => {
   })
   const listed = build.scene.windows.find((w) => w.key === 'list')
   expect(listed?.lines.length).toBe(15)
+  const svg = sceneSvg(build.scene, [], { smil: false, width: build.scene.columns * CELL_W })
+  expect(svg.length).toBeLessThan(PANE_SVG_MAX_CHARS)
+})
+
+test('the fullest Market pane fits the Svg budget', () => {
+  // Wide, 120 × 24, ten listings with 30-character names and sprites, both page rows, the Base
+  // pick open over the list.
+  const listings = Array.from({ length: 10 }, (_, i) =>
+    listing(`L${i}`, {
+      kind: i % 3 === 0 ? 'hero' : 'item',
+      name: `${'Wondrous Gleaming Listing'.padEnd(26, 'x')}${String(i).padStart(4, '0')}`,
+      rarity: 'legendary',
+      sellerName: 'a-long-seller-name',
+      price: 999_999,
+      base: i % 3 === 0 ? null : i % 2 === 0 ? 'silk_robe' : 'iron_sword',
+      cls: i % 3 === 0 ? 'black_mage' : null,
+    }),
+  )
+  const base = paneInput({
+    tab: 'market',
+    market: {
+      ...marketPage(),
+      query: { kind: 'item', sort: 'price', page: 1 },
+      page: { listings, page: 1, total: 43 },
+    },
+  })
+  const build = marketPane({
+    ...base,
+    dialog: { ...base.dialog, menu: { kind: 'pick', field: 'base', at: 20 } },
+  })
+  const keys = build.stops.filter((s) => s.key.startsWith('row:'))
+  expect(keys).toHaveLength(0)
+  const list = build.scene.windows.find((w) => w.key === 'list')
+  expect(list?.lines.length).toBe(13)
+  expect(build.scene.windows.find((w) => w.key === 'menu')).toBeDefined()
   const svg = sceneSvg(build.scene, [], { smil: false, width: build.scene.columns * CELL_W })
   expect(svg.length).toBeLessThan(PANE_SVG_MAX_CHARS)
 })

@@ -8,7 +8,16 @@
 // ring moves without telling the plugin.
 import type { Elements, On, RenderElement, RenderSurface } from 'claude-code'
 import { atom, update } from 'claude-code'
-import type { DialogState, DialogTab, SellState } from '../../../types'
+import type {
+  DialogState,
+  DialogTab,
+  MarketState,
+  OrdersState,
+  PaneMenu,
+  PickField,
+  SellState,
+  Settings,
+} from '../../../types'
 import type { GameHandle } from '../../engine'
 import { fnv1a64 } from '../../stage/hash'
 import { encodeImage } from '../../stage/image'
@@ -20,30 +29,31 @@ import type { Tile, Win } from '../../windows/kit'
 import { sceneCells } from '../../windows/raster'
 import { sceneSvg } from '../../windows/svg'
 import { CELL_H, CELL_W, WINDOW_SCALE } from '../../windows/tuning'
+import { confirmBuy, loadMarket } from '../market'
+import { ordersTrade, placeOrder } from '../orders'
 import { openSell, sellTrade } from '../sell'
 import type { After, Updater } from '../trade'
-import type { PaneAction, PaneBuild, Stop } from './types'
+import type { PaneAction, PaneBuild, PaneFieldKey, Stop } from './types'
 
 const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 
 export const PANE_ID = 'promptfall'
 
-type PaneTab = 'inventory' | 'heroes'
-type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
+type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Link'> &
   Partial<Pick<Elements['terminal'], 'Input' | 'Image' | 'Raster'>> &
   Partial<Pick<Elements['desktop'], 'Svg'>>
 
 /** The build each pane instance drew last, for the focus hook: its ring order, cursors and tab. */
-const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
+const last = new Map<string, { build: PaneBuild; tab: DialogTab }>()
 /**
  * The stop keys each instance drew last. The engine keeps the ring by position, so when the
  * stops change under it (a menu opens, a tab switches, a recruit or a drop inserts a row) the ring
  * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
 const lastStops = new Map<string, string>()
-/** The instances whose ring sits on the price Input: a re-focus there would eat the typing. */
+/** The instances whose ring sits on a field: a re-focus there would eat the typing. */
 const onInput = new Set<string>()
-export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
+export function remember(requestId: string, tab: DialogTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
 }
 /** The pane draws no stops now (another tab, or closed): its next stops count as changed. */
@@ -53,7 +63,7 @@ export function forget(requestId: string): void {
   onInput.delete(requestId)
 }
 
-/** The ring went onto the price Input (the person's Tab, or the `price` action's own focus). */
+/** The ring went onto a field (the person's Tab, or the `field` action's own focus). */
 export function ringOnInput(requestId: string, on: boolean): void {
   if (on) onInput.add(requestId)
   else onInput.delete(requestId)
@@ -67,13 +77,19 @@ export function stopsSignature(build: PaneBuild, window: string): string {
   return `${window}#${build.stops.map((s) => s.key).join('|')}`
 }
 
+/** The keys a field under the picture can have: the focus hook passes them. */
+const FIELD_KEYS: ReadonlySet<string> = new Set<PaneFieldKey>(['price', 'order-price', 'compose'])
+export function isFieldKey(element: string | undefined): boolean {
+  return element !== undefined && FIELD_KEYS.has(element)
+}
+
 /**
  * True when the ring should go back on the ▶: the signature differs from the last one the ring
- * was placed against, and the ring is not on the price Input. The first drawing of an instance
- * only records it (its autoFocus places the ring). `placed` records it once the focus took.
+ * was placed against, and the ring is not on a field. The first drawing of an instance only
+ * records it (its autoFocus places the ring). `placed` records it once the focus took.
  */
-export function needsRefocus(requestId: string, signature: string, priceInput: boolean): boolean {
-  if (!priceInput) onInput.delete(requestId)
+export function needsRefocus(requestId: string, signature: string, fieldShown: boolean): boolean {
+  if (!fieldShown) onInput.delete(requestId)
   const was = lastStops.get(requestId)
   if (was === undefined) {
     lastStops.set(requestId, signature)
@@ -102,10 +118,10 @@ function imageOf(win: Win) {
   return made
 }
 
-export type PriceInput = {
-  value: string
-  onInput: (text: string) => void
-  onSubmit: (text: string) => void
+/** What a field's typing and Enter do, by the field's key. */
+export type FieldCallbacks = {
+  onInput: (key: PaneFieldKey, text: string) => void
+  onSubmit: (key: PaneFieldKey, text: string) => void
 }
 
 export type PaneDraw = {
@@ -117,7 +133,9 @@ export type PaneDraw = {
   run: (action: PaneAction) => void
   /** Rung (c): moves the ▶ one cursor stop. */
   move: (by: 1 | -1) => void
-  price: PriceInput | null
+  field: FieldCallbacks
+  /** The renderer probe's Image while the renderer is unknown (terminals), else null. */
+  probe: RenderElement | null
 }
 
 /** Rung (a′) on terminals, (c) elsewhere (the spike sheet). */
@@ -126,7 +144,7 @@ export function hiddenRing(surface: RenderSurface): boolean {
 }
 
 export function paneElement(d: PaneDraw): RenderElement {
-  const { Box, Button, Input } = d.els
+  const { Box, Button, Input, Link } = d.els
   const { scene } = d.build
   const terminal = d.surface === 'terminal'
   const stops = (
@@ -146,6 +164,7 @@ export function paneElement(d: PaneDraw): RenderElement {
           onPress={() => d.run(s.action)}
         />
       ))}
+      {d.probe}
     </Box>
   )
 
@@ -218,20 +237,26 @@ export function paneElement(d: PaneDraw): RenderElement {
       {stops}
     </Box>
   )
-  const price =
-    d.build.priceInput && d.price && Input ? (
-      <Box key="pane-price" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
+  const f = d.build.field
+  const field =
+    f && Input ? (
+      <Box key="pane-field" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
         <Input
-          key="price"
-          label="price"
-          placeholder="gold"
-          value={d.price.value}
-          submitLabel="list"
-          onInput={(text: string) => d.price?.onInput(text)}
-          onSubmit={(text: string) => d.price?.onSubmit(text)}
+          key={f.key}
+          label={f.label}
+          placeholder={f.placeholder}
+          value={f.value}
+          submitLabel={f.submitLabel}
+          onInput={(text: string) => d.field.onInput(f.key, text)}
+          onSubmit={(text: string) => d.field.onSubmit(f.key, text)}
         />
       </Box>
     ) : null
+  const link = d.build.link ? (
+    <Box key="pane-link" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
+      <Link key="link-url" href={d.build.link.url} label={d.build.link.url} />
+    </Box>
+  ) : null
   const rung = hiddenRing(d.surface) ? null : (
     <Box key="pane-rung" flexDirection="row" gap={1}>
       <Button key="rung-up" label="▲" hotkey="k" onPress={() => d.move(-1)} />
@@ -250,7 +275,8 @@ export function paneElement(d: PaneDraw): RenderElement {
   return (
     <Box key="pane" flexDirection="column">
       {row}
-      {price}
+      {field}
+      {link}
       {rung}
     </Box>
   )
@@ -287,15 +313,58 @@ export function focusMove(
   return { t: 'keep' }
 }
 
-/** The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row. */
-export function withCursor(d: DialogState, tab: PaneTab, stop: Stop): DialogState {
+/**
+ * `focusMove` from the build's ▶, with "Leaving a field": a move off a field onto a tab, back or
+ * claim stop lands on the ▶ itself, not on the next row in the direction of travel (Shift+Tab from
+ * the chat field would wrap onto the oldest message).
+ */
+export function focusFrom(
+  build: PaneBuild,
+  element: string | undefined,
+  leaving: boolean,
+): FocusMove {
+  const move = focusMove(build, element, build.focus)
+  const home = build.stops.find((s) => s.key === build.focus)
+  return leaving && move.t === 'land' && move.redirect && home ? { ...move, stop: home } : move
+}
+
+/**
+ * True when a landing moves the ▶: onto another stop, or by a redirect. The ring landing on the ▶
+ * itself (an `autoFocus`, a re-focus) says nothing the dialog state does not, and writing it would
+ * pin a default: Market's ▶ drawn on Filters before the page loads would stay there after it.
+ */
+export function writesCursor(build: PaneBuild, move: FocusMove): boolean {
+  return move.t === 'land' && (move.redirect || move.stop.key !== build.focus)
+}
+
+/**
+ * The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row: the sell
+ * window's, a menu's, or on Orders the order form's.
+ */
+export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogState {
   const index = stop.index ?? 0
   if (stop.key.startsWith('row:')) {
     return { ...d, cursor: { ...d.cursor, [tab]: { id: stop.key.slice(4), index } } }
   }
   if (d.sell) return { ...d, sell: { ...d.sell, at: index } }
   if (d.menu) return { ...d, menu: { ...d.menu, at: index } }
+  if (tab === 'orders') return { ...d, formAt: index }
   return d
+}
+
+/**
+ * The open window as the re-focus signature names it: the sell flow, a menu (`filter`,
+ * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`), the order form, or the tab.
+ */
+export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): string {
+  const m = d.menu
+  if (d.sell) return `sell:${d.sell.id}`
+  if (m?.kind === 'filter') return 'filter'
+  if (m?.kind === 'pick') return `pick:${m.field}`
+  if (m?.kind === 'confirm') return `confirm:${m.action}:${m.id}`
+  if (m) return `${m.kind}:${'itemId' in m ? m.itemId : m.id}`
+  if (tab === 'orders' && form) return 'form'
+  return tab
 }
 
 /** Rung (c)'s ▲ and ▼: the cursor stop `by` away from the ▶, wrapping. */
@@ -317,11 +386,14 @@ export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
     const l = last.get(e.requestId)
     if (!l) return next(e)
-    ringOnInput(e.requestId, e.element === 'price')
-    const move = focusMove(l.build, e.element, l.build.focus)
+    // Leaving a field puts the ring back on the ▶: the engine stop between keeps the field's mark.
+    const leaving = onInput.has(e.requestId) && e.element !== undefined && !isFieldKey(e.element)
+    if (e.element !== undefined) ringOnInput(e.requestId, isFieldKey(e.element))
+    const move = focusFrom(l.build, e.element, leaving)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}
-    await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
+    if (writesCursor(l.build, move))
+      await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
     return next(move.redirect ? { ...e, element: move.stop.key } : e)
   })
   // Escape always closes the pane (the spike: a refused close strands the keyboard). A closed
@@ -341,10 +413,62 @@ export type ActionContext = {
   after: After
   /** How long until the goods in the sell flow trade, as a refusal says it; undefined when they do. */
   remaining: (sell: SellState) => string | undefined
-  /** Puts the ring on the price Input. */
-  focusPrice: () => Promise<void>
+  /** Puts the ring on a field. */
+  focusField: (key: PaneFieldKey) => Promise<void>
   /** The dialog state now, for the actions that read it (party, the sell flow). */
   dialog: () => Promise<DialogState>
+  updMarket: Updater<MarketState>
+  updOrders: Updater<OrdersState>
+  market: () => Promise<MarketState>
+  orders: () => Promise<OrdersState>
+  setSettings: (patch: Partial<Settings>) => Promise<void>
+  setCollapsed: (collapsed: boolean) => Promise<void>
+  /** The tab now, for Back on Orders. */
+  tab: () => Promise<DialogTab>
+}
+
+type ConfirmAction = Extract<PaneMenu, { kind: 'confirm' }>['action']
+
+/**
+ * Closes the Yes/No for `action` on `id` and says whether it was open, in one update: a second
+ * Yes pressed before the redraw finds it closed and does nothing (no second buy).
+ */
+async function answered(ctx: ActionContext, action: ConfirmAction, id: string): Promise<boolean> {
+  let open = false
+  await ctx.upd((d) => {
+    const m = d.menu
+    open = m?.kind === 'confirm' && m.action === action && m.id === id
+    return open ? { ...d, menu: null } : d
+  })
+  return open
+}
+
+/** The Market filter window's row for each filter a pick sets. */
+const FILTER_ROW: Partial<Record<PickField, number>> = { base: 2, cls: 2, minRarity: 3 }
+
+/**
+ * Back, the first that applies: a Market pick returns to the filter window on its row; an order
+ * pick closes, showing the form again; any other menu closes; else the sell flow closes; else, on
+ * Orders, an open form closes.
+ */
+async function back(ctx: ActionContext): Promise<void> {
+  const d = await ctx.dialog()
+  const m = d.menu
+  if (m?.kind === 'pick' && FILTER_ROW[m.field] !== undefined) {
+    const filter: PaneMenu = { kind: 'filter', at: FILTER_ROW[m.field] ?? 0 }
+    await ctx.upd((s) => ({ ...s, menu: filter }))
+    return
+  }
+  if (m) {
+    await ctx.upd((s) => ({ ...s, menu: null }))
+    return
+  }
+  if (d.sell) {
+    await ctx.upd((s) => ({ ...s, sell: null }))
+    return
+  }
+  if ((await ctx.tab()) === 'orders' && (await ctx.orders()).form)
+    await ctx.updOrders((o) => ({ ...o, form: null }))
 }
 
 export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
@@ -354,14 +478,15 @@ export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void
 async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
   switch (a.t) {
     case 'tab':
-      await ctx.upd((d) => ({ ...d, menu: null }))
+      // A sell flow belongs to Inventory or Heroes: no other tab draws it, so it closes here.
+      await ctx.upd((d) => ({ ...d, menu: null, sell: null }))
       await ctx.openTab(a.tab)
       return
     case 'open':
       await ctx.upd((d) => ({ ...d, menu: a.menu }))
       return
     case 'back':
-      await ctx.upd((d) => (d.menu ? { ...d, menu: null } : d.sell ? { ...d, sell: null } : d))
+      await back(ctx)
       return
     case 'event':
       await ctx.act(a.event)
@@ -403,13 +528,69 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
       await sellTrade(running, call, updSell, close, ctx.after, ctx.remaining(sell))
       return
     }
-    case 'price':
-      await ctx.focusPrice()
+    case 'field':
+      await ctx.focusField(a.key)
       return
     case 'claim':
       ctx.game()?.claim()
       return
     case 'none':
+      return
+    case 'query': {
+      const running = ctx.game()
+      if (!running) return
+      // The menu first: a pick never stays open through a slow fetch.
+      await ctx.upd((d) => ({ ...d, menu: a.menu, cursor: { ...d.cursor, market: null } }))
+      await loadMarket(running, a.query, ctx.updMarket, ctx.after)
+      return
+    }
+    case 'buy': {
+      const running = ctx.game()
+      if (!running || !(await answered(ctx, 'buy', a.listingId))) return
+      await confirmBuy(running, a.listingId, (await ctx.market()).query, ctx.updMarket, ctx.after)
+      return
+    }
+    case 'cancel': {
+      const running = ctx.game()
+      const action = a.what === 'listing' ? 'cancel-listing' : 'cancel-order'
+      if (!running || !(await answered(ctx, action, a.id))) return
+      await ordersTrade(
+        running,
+        a.what === 'listing'
+          ? (c, auth) => c.cancelListing(auth, a.id)
+          : (c, auth) => c.cancelOrder(auth, a.id),
+        ctx.updOrders,
+        ctx.after,
+      )
+      return
+    }
+    case 'form': {
+      // Opening a form puts its ▶ on the first row; a pick changing it keeps the ▶.
+      const opening = a.form !== null && (await ctx.orders()).form === null
+      await ctx.updOrders((o) => ({ ...o, form: a.form }))
+      await ctx.upd((d) => ({ ...d, menu: a.menu, ...(opening ? { formAt: 0 } : {}) }))
+      return
+    }
+    case 'place': {
+      const running = ctx.game()
+      if (!running) return
+      await placeOrder(running, await ctx.orders(), ctx.updOrders, ctx.after)
+      return
+    }
+    case 'setting':
+      await ctx.setSettings(a.patch)
+      return
+    case 'band':
+      await ctx.setCollapsed(a.collapsed)
+      return
+    case 'off':
+      ctx.game()?.setOff(true)
+      return
+    case 'link':
+      ctx.game()?.link()
+      return
+    case 'reset':
+      if (await answered(ctx, 'reset', '')) ctx.game()?.reset()
       return
   }
 }

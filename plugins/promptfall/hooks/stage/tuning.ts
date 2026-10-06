@@ -50,8 +50,6 @@ export const SVG_FALLBACK_FRAME_MS = 167
  * band always fills it; this is a ceiling, not a measurement (ADR 0004).
  */
 export const DESKTOP_COLUMN_PX_CEILING = 16
-/** The columns a 16 px list sprite takes in a desktop row: 16 px at about 8 points a column. */
-export const DESKTOP_LIST_SPRITE_COLUMNS = 2
 /** The desktop's points per band column and per text row (live check and pass, 2026-10-04). */
 export const DESKTOP_COLUMN_PX = 8
 export const DESKTOP_ROW_PX = 19

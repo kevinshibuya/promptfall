@@ -53,3 +53,17 @@ Only fields the player types into (chat, order forms) stay real `Input`s, under 
   105 × 50 Terminal.app, 7 in 80 × 24. The windows need 16 at least, so an inline pane in an
   ordinary terminal shows only the message window asking for room. A docked pane (fullscreen
   terminals from 110 columns) gets its full height.
+
+## Amended (2026-10-06, UI PR 3)
+
+- All eight tabs are windows now. The only things under the picture are the typed fields (the
+  sell price, the order price, the chat line) and the GitHub device-flow link, one at a time,
+  because a URL baked into a picture can't be opened. On a terminal the pane gives them their
+  rows by building the picture again without them. Escape in a field closes the pane, as it
+  does anywhere else, so the field says `Tab: leave the field.`
+- A short pane drops the tab window and keeps its hotkeys. That answers PR 2's inline problem
+  for wide panes: an inline pane in a 105 × 50 terminal gets 14 rows, and both layouts fit 14
+  without the tab window. A narrow pane at exactly 14 rows with a field showing still asks for
+  room, and 80 × 24 inline (7 rows) still doesn't fit.
+- The pane probes the renderer itself while it is unknown. A docked pane collapses the band, and
+  a collapsed band never probed, so the pane drew raster in cmux until the renderer was forced.

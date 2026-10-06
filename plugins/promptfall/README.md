@@ -48,10 +48,11 @@ switch during an outage drops what could not be sent, and the reply says how man
 ### Market
 
 Rare, epic and legendary items and heroes trade between players. The Market tab (`m`) browses
-listings ten at a time: toggle items or heroes and cheapest or newest, filter by base (items),
-class (heroes) and minimum rarity, page with `prev` and `next`. `buy` asks `Buy <name> for
-<price>g?`; `y` confirms, `n` cancels. The goods arrive with a 24-hour cooldown before they can
-be listed again, and a bought hero arrives at level 1.
+listings ten at a time. `f` (the `Filters` row) opens the filter window: Kind and Sort flip in
+place, Base (items), Class (heroes) and Rarity open a pick. `Previous page` and `Next page` are
+rows at either end of the list. Enter on a listing asks `Buy <name> for <price>G?`; `y` buys, `n`
+or `q` backs out. Your own listings read `yours`. The goods arrive with a 24-hour cooldown before
+they can be listed again, and a bought hero arrives at level 1.
 
 Sell (`s`) in a Rare+ item's or hero's command window opens the sell window. An item lists the
 buy orders it matches first, each with what you get: Enter on one sells at once at the order's
@@ -60,10 +61,12 @@ the listing fee (2%, at least 1 gold, kept on cancel) and what you get after the
 and Enter lists it. A hero must be out of the party and wear nothing; goods in cooldown say when they
 become tradeable. Listings and orders expire after 7 days.
 
-The Orders tab (`r`) lists your listings and buy orders, each with `cancel` and the time left,
-the count of returns waiting (cancelled goods that found no free slot; they arrive when one
-frees), and `New order`: a base, a minimum rarity, an optional affix and a maximum price, held
-in escrow until the order fills, is cancelled or expires. Trading needs a linked account and an
+The Orders tab (`r`) lists the count of returns waiting (cancelled goods that found no free
+slot; they arrive when one frees), your listings and your buy orders. Enter on one asks to cancel
+it: a listing keeps its fee, an order's held gold comes back. `New buy order` opens a form in the
+detail window's place: a base, a minimum rarity and an optional affix (each a pick), then a
+maximum price in the field under the picture, held in escrow until the order fills, is cancelled
+or expires. Enter in the field, or `Place order`, places it. Trading needs a linked account and an
 open market; cancelling works either way. Sales, purchases and returns toast and show in the
 loot log.
 
@@ -75,14 +78,16 @@ band's World tab (`w`) has three rows: who is online and who shares your zone
 (`13 online · zone 1: Ashgrove, Brindle`, or `nobody else here`), your highest zone, kills and
 wipes, and the last chat line. The first row dims when no poll has answered for 45 seconds.
 
-The Chat tab (`c` in the dialog) shows the last 14 messages, newest at the bottom, and a compose
-box; Enter posts. Posting needs a linked account, and any session may post, the one playing or
+The Chat tab (`c` in the dialog) shows one message a row, newest at the bottom, with the ▶
+message whole beside the list. Up pages back through the last 200. The compose field sits under
+the picture but is not focused when the tab opens, so the tab keys still work: Enter on any row
+puts you in it, Enter there posts, and Tab leaves it (Escape closes the pane). Posting needs a linked account, and any session may post, the one playing or
 not. The server refuses, and the tab flashes for 5 seconds: a line over 200 characters (an emoji
 counts two), more than 5 quick messages (then one every 10 seconds), a blocked word, or an empty
 line. During an outage a post answers `Server unreachable`. On mobile the tab is read-only.
 
 The Leaderboards tab (`b`) shows who is online by zone, the 20 highest zones reached, and this
-week's world boss damage (the week starts Monday 00:00 UTC). Your row is cyan. Names are GitHub logins; an unlinked account shows as `adventurer`.
+week's world boss damage (the week starts Monday 00:00 UTC). Your rows are gold. Names are GitHub logins; an unlinked account shows as `adventurer`.
 
 Each part sits behind a server flag: when the server turns chat, presence or the boards off, the
 tab says so within one poll. The in-process ledger has chat off: its World tab reads
@@ -117,11 +122,12 @@ phase 2 is behind it: the band reads the older-version notice, and `/promptfall 
 
 ### Account tab
 
-`Link GitHub` shows a code and a link, and polls until the server approves it, then reads
-`Linked as <login>`. The fakes approve on the first poll: the in-process ledger links you as
+The settings are rows: Sound (`s`), Motion (`n`), Renderer (`x`), then the band shown or
+collapsed and Band off. `Link GitHub` shows a code in the detail window and the link under the
+picture, and polls until the server approves it, then reads `Linked as <login>`. The fakes approve on the first poll: the in-process ledger links you as
 `player`, the HTTP fake as its `--player-name`. The polling belongs to the session, so closing the
-dialog does not stop it. `Reset this machine's data` deletes every Promptfall key in the store but
-the lease and starts a fresh account on the same server. It is how a state from an older version
+dialog does not stop it. `Reset this machine's data` asks Yes or No, opening on No, then deletes
+every Promptfall key in the store but the lease and starts a fresh account on the same server. It is how a state from an older version
 of the game is cleared: the band then reads the older-version notice and the Account tab is the
 one tab that still works.
 
@@ -136,13 +142,13 @@ would answer a survey.
 | `p` / `l` / `w` | Party, loot log, world tabs | |
 | `c` | Collapse to one row, or expand | |
 | `i` / `h` / `m` / `r` / `a` / `o` | | Inventory, Heroes, Market, Orders, Account, Odds tabs |
-| `c` / `b` | | Chat and Leaderboards tabs (outside the compose box) |
-| `y` / `n` | | Confirm or cancel a purchase; Yes or No in Inventory and Heroes |
+| `c` / `b` | | Chat and Leaderboards tabs (outside a field) |
+| `y` / `n` | | Yes or No |
 
-### Inventory and Heroes
+### The pane
 
-These two tabs are windows: a list with a ▶, the ▶ row's details beside it (or under it below
-96 columns), and a message window at the foot saying what the keys do.
+Every tab is windows: a list with a ▶, the ▶ row's details beside it (or under it below 96
+columns), and a message window at the foot saying what the keys do.
 
 | Key | Does |
 | --- | --- |
@@ -150,15 +156,19 @@ These two tabs are windows: a list with a ▶, the ▶ row's details beside it (
 | Enter | Open the ▶ row's command window, or run the item under the ▶ |
 | `e` `u` `s` `v` `f` | Equip, Unequip, Sell, Vendor, Reforge (an item's command window) |
 | `p` `s` `d` | Party (or Unpick), Sell, Dismiss (a hero's command window) |
-| `q` | Back out of a command window, a pick, a Yes/No or the sell window |
+| `f` | Market: the filter window |
+| `s` `n` `x` | Account: sound, motion, renderer |
+| Tab | Leave a field (the sell price, the order price, the chat line) |
+| `q` | Back out of a command window, a pick, a Yes/No, the sell window or the order form |
 
-Vendor and Dismiss ask Yes or No first. Party picks three heroes one at a time; the third sends
+Vendor, Dismiss, Buy, the two cancels and Reset ask Yes or No first. Party picks three heroes one at a time; the third sends
 the new party, which takes the field at the next zone change. The last row of Heroes recruits.
 On the desktop, VS Code and mobile a `▲ ▼ ok back` row under the picture does the moving.
 
-The windows need 16 rows. An inline pane in an ordinary terminal gets fewer (14 in a 105 × 50
-Terminal.app) and asks for more room; in fullscreen from 110 columns the pane docks beside the
-conversation at full height.
+The windows need 16 rows with the tab window and 14 without it. A short pane drops the tab
+window (the tab keys still work), so an inline pane in a 105 × 50 Terminal.app draws every tab.
+At 80 × 24 it gets 7 rows and asks for more room; in fullscreen from 110 columns the pane docks
+beside the conversation at full height.
 
 Esc closes the dialog, from a sub-window too. The band collapses to one row by itself under 100 columns or when fewer
 than 4 rows are free, and hides while Claude asks you a question.

@@ -190,9 +190,15 @@ borders in colour.
 - Rarity colours on drop lines: README.
 - Hotkey letters drawn gold in tab labels and command items (grill 1.20): DQ V picks with the
   cursor alone; the game keeps its letter keys, so the letter shows which.
-- Sprites in the Inventory and Heroes list rows (grill 1.20): DQ V lists are text only.
-- Dim columns in list rows (the wearer, the party mark) and the dim Recruit row when gold is short
-  (grill 1.20).
+- Sprites in the Inventory, Heroes and Market list rows (grill 1.20, 1.21): DQ V lists are text
+  only.
+- Dim columns in list rows (the wearer, the party mark, the seller) and the dim rows a short purse
+  can't pay for: Recruit, the expansions, Place order (grill 1.20, 1.21).
+- Your own leaderboard rows in gold (grill 1.21): the old text tab drew them cyan, which DQ V's
+  palette has no place for.
+- The divider under list headings (`My listings`, `Highest zone`, `Expansions`; grill 1.21): DQ V
+  lists have no sections, and the absence list rules out a second label colour, so the window's
+  own rule marks them.
 
 ## Deltas from the spine, decided
 

@@ -145,3 +145,43 @@ Other facts the run turned up:
   state already names, so no cursor write is lost; nothing may assume the hook sees it.
 - **`PRICE_INPUT_ROWS = 1`.**
 - **Tiles: yes.** The image mount uses the tile tree.
+
+## PR 3 fields spike
+
+Task 1 of `docs/plans/2026-10-06-ui-pr3-remaining-tabs.md`. `/spike-pane` gains a `Link` under
+its `Input` (key `link-url`, label `https://github.com/login/device`), a log line for each close
+(who closed, where the ring was) and one for each move off the `Input`. Its `ui.close` hook no
+longer refuses the first close.
+
+### Questions
+
+1. **Escape in a field.** With the ring on the `Input`, does Escape close the pane, or move the
+   ring off the field with the pane still holding the keyboard?
+2. **Tab off a field.** From the `Input`, where does Tab go?
+3. **The Link.** How many rows does it take on a terminal? Does it join the ring?
+
+### Findings
+
+Run on 2026-10-06 by the implementing session (Claude Code 2.1.292). cmux was driven with
+`cmux send`, `send-key` and `read-screen` in a background workspace; Terminal.app with `do script`
+and `bg.js keycode` (no activation).
+
+| Surface | 1. Escape in the `Input` | 2. Tab off the `Input` | 3. Link rows | 3. Link in the ring |
+| --- | --- | --- | --- | --- |
+| cmux (inline, then docked at 66 columns) | closes the pane | the engine stop, then `s0` (`left price -> (engine stop)`). Up from `s0` lands on the `Input` with no engine stop between; Up off the `Input` goes to `back` | 1 (an OSC 8 link) | no: Tab from the `Input` passes the engine stop to `s0`, and no `ui.focus` ever names the Link |
+| Terminal.app (inline, 80 × 24; the body 7 rows) | closes the pane | as on cmux | 1 at 80 columns, drawn as the label then the URL (`https://github.com/login/device https://github.com/login/device`, 63 cells); under 63 cells it wraps to 2 | no, as on cmux |
+| Desktop app | Kevin's | Kevin's | n/a (an anchor) | Kevin's |
+| Ghostty (standalone) | | | | |
+
+One stray: early in the cmux run the pane lost the keyboard after it re-laid itself docked, and
+the next keys reached the nested prompt. Re-running the command took it back; Shift+Tab and the
+arrows reached the pane every other time.
+
+### Decisions
+
+- **`FIELD_HELP = 'Tab: leave the field.'`**: Escape closes the pane from a field too.
+- **`LINK_ROWS = 2`**: one row on cmux, but Terminal.app draws the label and then the URL, which
+  wraps under 63 cells. Two rows cover a narrow raster pane.
+- **The Link holds no stop and never reaches the focus hook.** Task 8 needs no pass rule for it;
+  the field rule stands (Tab off the field reaches the engine stop, then the first stop, which the
+  "Leaving a field" rule sends to `build.focus`).

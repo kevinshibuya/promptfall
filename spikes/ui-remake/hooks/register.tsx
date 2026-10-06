@@ -1,7 +1,8 @@
 // UI remake spikes (docs/plans/2026-10-05-ui-remake-spikes.md). Throwaway: never shipped, never in CI.
 // `claude --plugin-dir spikes/ui-remake`: the band shows the paint-over and hidden-hotkey probes;
 // `/spike-ui` opens the pane with the sharpness runs, the focus ring and the click probe;
-// `/spike-pane` opens the PR 2 pane probe: the hidden ring, the arrows, Escape, tiles, the Input.
+// `/spike-pane` opens the PR 2 pane probe: the hidden ring, the arrows, Escape, tiles, the Input;
+// PR 3 adds a Link under the Input and logs closes and moves off the Input.
 import type { Register, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 
 const PANE = 'spike-ui'
@@ -422,8 +423,8 @@ function plainWindow(columns: number, rows: number) {
 }
 type Size = { columns: number; rows: number; gapRows: number }
 function gridSize(bodyColumns: number, bodyRows: number): Size {
-  // Two rows for the log and the Input.
-  const room = bodyRows - 2
+  // Rows for the log, the Input and the Link.
+  const room = bodyRows - 3
   const rows = Math.max(2, Math.min(WIN_ROWS, Math.floor((room - 1) / 2)))
   return {
     columns: Math.min(WIN_COLUMNS, Math.floor(bodyColumns / 3)),
@@ -467,13 +468,13 @@ const log = (line: string) => {
   if (paneLog.length > 4) paneLog.shift()
 }
 let redirected = false
-let refusedClose = false
+let lastFocus: string | null = null
 let typed = ''
 
 function registerPaneSpike(on: Parameters<Register>[0]): void {
   on('command.run', { command: 'spike-pane' }, async ($) => {
     redirected = false
-    refusedClose = false
+    lastFocus = null
     paneLog.length = 0
     await $.ui.open({ id: PANE2, title: 'pane spike', focus: true, closeOnEscape: true, rows: 24 })
     return { text: 'Pane spike opened.' }
@@ -482,6 +483,10 @@ function registerPaneSpike(on: Parameters<Register>[0]): void {
   on('ui.focus', { requestId: PANE2 }, async ($, e, next) => {
     const origin = e.origin.kind === 'plugin' ? 'plugin' : 'person'
     log(`focus ${e.element ?? '(engine stop)'} by ${origin}`)
+    // PR 3 spike: where a move off the Input goes.
+    if (lastFocus === 'price' && e.element !== 'price')
+      log(`left price -> ${e.element ?? '(engine stop)'}`)
+    lastFocus = e.element ?? null
     $.ui.invalidate('ui.render')
     if (e.element === 's5' && !redirected) {
       redirected = true
@@ -497,19 +502,16 @@ function registerPaneSpike(on: Parameters<Register>[0]): void {
     return next(e)
   })
 
+  // PR 3 spike: every close passes; the log names who closed (Escape in the Input).
   on('ui.close', { id: PANE2 }, async ($, e, next) => {
-    if (e.origin.kind === 'person' && !refusedClose) {
-      refusedClose = true
-      log('close refused')
-      $.ui.invalidate('ui.render')
-      return { deny: 'spike: first person close refused' }
-    }
+    log(`close by ${e.origin.kind} (focus ${lastFocus ?? '-'})`)
+    $.ui.invalidate('ui.render')
     return next(e)
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE2 }, async ($, e, next) => {
     const els = $.ui.resolve(e)
-    const { Box, Text, Button } = els
+    const { Box, Text, Button, Link } = els
     const Input = 'Input' in els ? els.Input : undefined
     const terminal = e.surface === 'terminal'
     const size = terminal
@@ -607,6 +609,11 @@ function registerPaneSpike(on: Parameters<Register>[0]): void {
             }}
           />
         )}
+        <Link
+          key="link-url"
+          href="https://github.com/login/device"
+          label="https://github.com/login/device"
+        />
       </Box>
     )
   })

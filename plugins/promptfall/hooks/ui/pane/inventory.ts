@@ -10,8 +10,9 @@ import { CLASS_LABEL, clip, formatCount } from '../format'
 import type { Slot } from '../sell'
 import { formatRemaining } from '../time'
 import { cursorRow, type MenuItem, paneLayout, paneSlots } from './frame'
-import type { PaneInput } from './input'
+import type { FrameInput, PaneInput } from './input'
 import { type ListRow, type ListSpec, listPane } from './list'
+import { sellWindow } from './sell'
 import type { PaneAction, PaneBuild } from './types'
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
@@ -24,7 +25,7 @@ const VALUE_CELLS = 5
 export function rowSpans(
   inner: number,
   art: Span | null,
-  name: Span & { text: string },
+  name: (Span & { text: string }) | Span[],
   columns: { text: string; cells: number; rgb?: number }[],
 ): Span[] {
   // The ▶ cell and a gap come first (listWindow adds them).
@@ -42,13 +43,16 @@ export function rowSpans(
     rightCells += c.cells
   }
   const nameCells = Math.max(0, width - leftCells - rightCells - 1)
-  const shown = clip(name.text, nameCells)
-  return [
-    ...left,
-    { ...name, text: shown },
-    { gap: Math.max(1, nameCells - [...shown].length + 1) },
-    ...right,
-  ]
+  // A label with its hotkey letter is a span list: clipped across its spans, left to right.
+  const named: Span[] = []
+  let used = 0
+  for (const s of Array.isArray(name) ? name : [name]) {
+    if (!('text' in s)) continue
+    const shown = clip(s.text, nameCells - used)
+    named.push({ ...s, text: shown })
+    used += [...shown].length
+  }
+  return [...left, ...named, { gap: Math.max(1, nameCells - used + 1) }, ...right]
 }
 
 function itemDetail(input: PaneInput, item: ItemView, inner: number): Line[] {
@@ -131,7 +135,7 @@ export function itemCommands(input: PaneInput, item: ItemView): Command[] {
 const header = (text: string): Span[] => [{ text }]
 
 /** The list window's inner width: the same whatever sub-window is open. */
-export function listInner(input: PaneInput): number {
+export function listInner(input: FrameInput): number {
   const layout = paneLayout(input.columns, input.rows)
   return layout.kind === 'small' ? 0 : paneSlots(layout, { kind: 'none' }).list.columns - 2
 }
@@ -140,7 +144,7 @@ export function inventoryPane(input: PaneInput): PaneBuild {
   const { view, dialog } = input
   const items = view.inventory
   const cursor = cursorRow(
-    dialog.cursor.inventory,
+    dialog.cursor.inventory ?? null,
     items.map((i) => i.id),
   )
   const inner = listInner(input)
@@ -174,9 +178,8 @@ export function inventoryPane(input: PaneInput): PaneBuild {
   })
   const current = items[cursor]
   const menu: PaneMenu | null = input.readOnly ? null : dialog.menu
-  const menuItem = menu
-    ? items.find((i) => i.id === ('itemId' in menu ? menu.itemId : menu.id))
-    : undefined
+  const subject = !menu ? null : 'itemId' in menu ? menu.itemId : 'id' in menu ? menu.id : null
+  const menuItem = subject !== null ? items.find((i) => i.id === subject) : undefined
 
   const spec: ListSpec = {
     title: [{ text: `Inventory ${items.length}/${view.inventoryCap} · ${gold(view.gold)}` }],
@@ -187,6 +190,10 @@ export function inventoryPane(input: PaneInput): PaneBuild {
     detail: current ? (w) => itemDetail(input, current, w) : null,
     menu: null,
     yesNo: null,
+    panel: !input.readOnly && dialog.sell ? (rect) => sellWindow(input, rect) : null,
+    error: dialog.sell?.error ?? null,
+    field: null,
+    link: null,
     state:
       items.length === 0
         ? ['Items drop as the party fights.', '']
