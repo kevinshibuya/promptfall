@@ -256,3 +256,13 @@ test('wide and narrow scenes, with each sub-window, pass tilePositions', () => {
   const narrow = linesOf(win(marketPane(input({}, {}, { columns: 40 })), 'list'))
   expect(narrow[1]?.includes('mira')).toBe(false)
 })
+
+test('the narrow band keeps the seller and the price in its four lines', () => {
+  const b = marketPane(input({}, {}, { columns: 60 }))
+  expect(linesOf(win(b, 'detail'))).toEqual([
+    ' Steel Longsword',
+    ' Rare weapon',
+    ' Seller mira',
+    ' Price 1,200G',
+  ])
+})

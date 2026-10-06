@@ -12,7 +12,7 @@ import { baseValue, PRESETS } from '../orders'
 import { wrap } from '../strip'
 import { formatRemaining } from '../time'
 import { gateLine } from '../trade'
-import { cursorRow, type MenuItem, menuWindow, type Rect } from './frame'
+import { cursorRow, type MenuItem, menuWindow, paneLayout, type Rect } from './frame'
 import type { MessageLine, PaneInput } from './input'
 import { capital, gold, listInner, rowSpans } from './inventory'
 import { type ListRow, type ListSpec, listPane, type PanelBuild } from './list'
@@ -49,7 +49,19 @@ const head = (t: string, inner: number, rgb = TEXT_RGB): Line => ({
   rule: true,
 })
 
+const narrow = (input: PaneInput) => paneLayout(input.columns, input.rows).kind === 'narrow'
+
 function listingDetail(input: PaneInput, l: ListingView, inner: number): Line[] {
+  const expires = text(`Expires in ${formatRemaining(input.remainingMs(l.expiresAt))}`, inner)
+  // The narrow band holds four lines: the price and the expiry before the affixes.
+  if (narrow(input)) {
+    return [
+      head(l.name, inner, RARITY_RGB[l.rarity] ?? TEXT_RGB),
+      text(kindLine(l), inner),
+      text(`Listed for ${gold(l.price)}`, inner),
+      expires,
+    ]
+  }
   return [
     head(l.name, inner, RARITY_RGB[l.rarity] ?? TEXT_RGB),
     text(kindLine(l), inner),
@@ -61,6 +73,14 @@ function listingDetail(input: PaneInput, l: ListingView, inner: number): Line[] 
 }
 
 function orderDetail(input: PaneInput, o: OrderView, inner: number): Line[] {
+  if (narrow(input)) {
+    return [
+      head('Buy order', inner),
+      text(`${o.name} ${o.minRarity}+${o.affix ? `, ${o.affix}` : ''}`, inner),
+      text(`Up to ${gold(o.maxPrice)}, held`, inner),
+      text(`Expires in ${formatRemaining(input.remainingMs(o.expiresAt))}`, inner),
+    ]
+  }
   return [
     head('Buy order', inner),
     text(o.name, inner),

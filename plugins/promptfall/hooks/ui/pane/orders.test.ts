@@ -238,3 +238,19 @@ test('wide and narrow scenes, with each sub-window, pass tilePositions', () => {
     }
   }
 })
+
+test('the narrow band keeps the price and the expiry', () => {
+  expect(linesOf(win(ordersPane(input({}, {}, { columns: 60 })), 'detail'))).toEqual([
+    ' Silk Robe',
+    ' Rare armour',
+    ' Listed for 900G',
+    ' Expires in 6d',
+  ])
+  const order = ordersPane(input({}, at('o-O1', 2), { columns: 60 }))
+  expect(linesOf(win(order, 'detail'))).toEqual([
+    ' Buy order',
+    ' Steel Longsword rare+, Vicious',
+    ' Up to 1,200G, held',
+    ' Expires in 6d',
+  ])
+})

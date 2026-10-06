@@ -25,16 +25,18 @@ type Font = {
   }
 }
 
-/** Printable ASCII, then the two marks the strip writes that ASCII lacks. */
+/** Printable ASCII, then the marks the windows write that ASCII lacks (≤: a buy order's cap). */
 export const SET = [
   ...Array.from({ length: 0x7f - 0x20 }, (_, i) => String.fromCharCode(0x20 + i)),
   '·',
   '…',
+  '≤',
 ]
 
 /** The font character each baked character is drawn from. */
 function source(ch: string): string {
   if (ch === '·') return '・'
+  if (ch === '≤') return '≦'
   const code = ch.charCodeAt(0)
   if (code >= 0x21 && code <= 0x7e) return String.fromCharCode(code + 0xfee0)
   return ch

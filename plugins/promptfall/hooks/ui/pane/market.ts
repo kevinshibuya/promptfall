@@ -11,7 +11,7 @@ import { CLASS_LABEL, clip } from '../format'
 import { wrap } from '../strip'
 import { formatRemaining } from '../time'
 import { gateLine } from '../trade'
-import { cursorRow, hotkeySpans, type MenuItem } from './frame'
+import { cursorRow, hotkeySpans, type MenuItem, paneLayout } from './frame'
 import type { MessageLine, PaneInput } from './input'
 import { capital, gold, listInner, rowSpans } from './inventory'
 import { type ListRow, type ListSpec, listPane } from './list'
@@ -151,6 +151,14 @@ export function kindLine(l: ListingView): string {
 
 function listingDetail(input: PaneInput, l: ListingView, inner: number): Line[] {
   const mine = l.sellerId === input.view.accountId
+  const seller = text(clip(mine ? 'Your listing' : `Seller ${l.sellerName}`, inner - 1))
+  const head: Line = {
+    spans: [{ gap: 1 }, { text: clip(l.name, inner - 1), rgb: RARITY_RGB[l.rarity] ?? TEXT_RGB }],
+    rule: true,
+  }
+  // The narrow band holds four lines: the seller and the price before the affixes.
+  if (paneLayout(input.columns, input.rows).kind === 'narrow')
+    return [head, text(kindLine(l)), seller, text(`Price ${gold(l.price)}`)]
   return [
     {
       spans: [{ gap: 1 }, { text: clip(l.name, inner - 1), rgb: RARITY_RGB[l.rarity] ?? TEXT_RGB }],

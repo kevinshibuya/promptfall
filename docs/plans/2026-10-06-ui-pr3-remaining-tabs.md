@@ -968,9 +968,14 @@ exist.
 
 **Boundaries:** No strip golden changes; no PR 2 pane golden changes.
 
-- [ ] Scenarios and fixtures
-- [ ] Generate, look at every PNG; the budget test
-- [ ] Run the check, commit `test(pane): the PR 3 scenarios, goldens and PNGs, the Market budget`
+Execution note (2026-10-06): the PNG pass found `≤` missing from the baked font (it drew `?`);
+`scripts/font.ts` now bakes it from Misaki's `≦`. It also found the narrow Market detail losing
+the seller and price to its four-line band; the narrow Market and Orders details now keep those
+lines first.
+
+- [x] Scenarios and fixtures
+- [x] Generate, look at every PNG; the budget test
+- [x] Run the check, commit `test(pane): the PR 3 scenarios, goldens and PNGs, the Market budget`
 
 ### Task 11: Docs, the driven pass, the pull request
 
