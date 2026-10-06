@@ -168,7 +168,9 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
 
     const terminal = e.surface === 'terminal'
     const hasInput = 'Input' in table
-    const bodyRows = terminal ? Math.min(PANE_ROWS, e.props.scroll.bodyRows) : PANE_ROWS
+    const bodyRows = terminal ? e.props.scroll.bodyRows : PANE_ROWS
+    /** The picture's rows: the body less what sits under it, at most PANE_ROWS. */
+    const pictureRows = (under: number) => Math.min(PANE_ROWS, bodyRows - under)
     const frame = (rows: number) => ({
       tab,
       dialog,
@@ -197,9 +199,9 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         : // The Account tab works without a game view: a state from an older version is reset here.
           noViewPane({ ...frame(rows), server, hasGame: running !== null, hasInput })
     // On a terminal a field or the Link takes rows under the picture: build again without them.
-    let build = buildAt(bodyRows)
-    if (terminal && build.field) build = buildAt(bodyRows - FIELD_ROWS)
-    else if (terminal && build.link) build = buildAt(bodyRows - LINK_ROWS)
+    let build = buildAt(pictureRows(0))
+    if (terminal && build.field) build = buildAt(pictureRows(FIELD_ROWS))
+    else if (terminal && build.link) build = buildAt(pictureRows(LINK_ROWS))
     remember(e.requestId, tab, build)
 
     const requestId = e.requestId

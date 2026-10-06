@@ -52,8 +52,9 @@ export function chatPane(input: PaneInput): PaneBuild {
 
   const ids = messages.map((m, i) => (i === messages.length - 1 ? NEWEST : `m-${m.id}`))
   const saved = dialog.cursor.chat ?? null
-  // No cursor, or one on the newest: the ▶ follows new messages.
-  const cursor = !saved || saved.id === NEWEST ? ids.length - 1 : cursorRow(saved, ids)
+  // No cursor, one on the newest, or one on the empty line: the ▶ follows new messages.
+  const follows = !saved || saved.id === NEWEST || saved.id === 'empty'
+  const cursor = follows ? ids.length - 1 : cursorRow(saved, ids)
   const on = messages[cursor]
 
   let state: [MessageLine, MessageLine]

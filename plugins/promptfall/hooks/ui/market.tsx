@@ -17,11 +17,17 @@ export async function loadMarket(
     const r = await game.market.browse(query)
     if ('reason' in r) throw new Error('Playing in another session')
     await game.sync()
-    await upd((s) => ({
-      ...s,
-      busy: false,
-      page: { listings: r.listings.map(listingView), page: r.page, total: r.total },
-    }))
+    // A later query may have gone out meanwhile: only the current one's page lands.
+    const current = JSON.stringify(query)
+    await upd((s) =>
+      JSON.stringify(s.query) === current
+        ? {
+            ...s,
+            busy: false,
+            page: { listings: r.listings.map(listingView), page: r.page, total: r.total },
+          }
+        : s,
+    )
   } catch (error) {
     await upd((s) => ({ ...s, busy: false }))
     await flash(upd, after, errorText(error))

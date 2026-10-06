@@ -5,6 +5,8 @@ import type { GameHandle } from '../../engine'
 import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from '../../state'
 import type { PlayerEvent } from '../../vendor/sim.js'
 import type { PaneScene, Win } from '../../windows/kit'
+import { loadMarket } from '../market'
+import { placeOrder } from '../orders'
 import { chatPane } from './chat'
 import { chatWorld, marketPage, paneInput, paneView } from './fixtures'
 import { inventoryPane } from './inventory'
@@ -387,6 +389,7 @@ test('buy closes the menu and buys once; cancel cancels; reset closes the menu a
   await runAction({ t: 'buy', listingId: 'L1' }, context(state, [], game))
   expect(state.d.menu).toBeNull()
   expect(calls.filter((c) => c.startsWith('buy'))).toEqual(['buy L1'])
+  state.d = { ...state.d, menu: { kind: 'confirm', action: 'cancel-listing', id: 'L4', at: 0 } }
   await runAction({ t: 'cancel', what: 'listing', id: 'L4' }, context(state, [], game))
   expect(calls).toContain('cancelListing L4')
   state.d = { ...state.d, menu: { kind: 'confirm', action: 'reset', id: '', at: 0 } }
@@ -505,4 +508,83 @@ test('the ring landing on the ▶ itself writes no cursor, so a drawn default st
   // A person's move, and a redirect, write it.
   expect(writesCursor(after, focusMove(after, 'row:L2', after.focus))).toBe(true)
   expect(writesCursor(after, focusMove(after, 'back', after.focus))).toBe(true)
+})
+
+test('a second Yes before the redraw buys, cancels or resets nothing more', async () => {
+  const { calls, game } = stubGame()
+  const state: { d: DialogState } = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'confirm', action: 'buy', id: 'L1', at: 0 } },
+  }
+  const ctx = context(state, [], game)
+  await Promise.all([
+    runAction({ t: 'buy', listingId: 'L1' }, ctx),
+    runAction({ t: 'buy', listingId: 'L1' }, ctx),
+  ])
+  expect(calls.filter((c) => c.startsWith('buy'))).toEqual(['buy L1'])
+  // With no Yes/No open, cancel and reset do nothing.
+  await runAction({ t: 'cancel', what: 'order', id: 'O1' }, ctx)
+  await runAction({ t: 'reset' }, ctx)
+  expect(calls).not.toContain('reset')
+})
+
+test('a tab switch closes the sell flow and any sub-window', async () => {
+  const sell = { kind: 'item' as const, id: 'i1', matching: [], price: '', error: null, at: 1 }
+  const state: { d: DialogState } = {
+    d: { ...DIALOG_DEFAULT, sell, menu: { kind: 'filter', at: 0 } },
+  }
+  await runAction({ t: 'tab', tab: 'market' }, context(state, []))
+  expect([state.d.sell, state.d.menu]).toEqual([null, null])
+  // So a move in Market's filter window writes its row, not a hidden sell window's.
+  const stop: Stop = { key: 'menu:2', action: { t: 'none' }, cursor: true, index: 2 }
+  const open = { ...state.d, menu: { kind: 'filter' as const, at: 0 } }
+  expect(withCursor(open, 'market', stop).menu).toEqual({ kind: 'filter', at: 2 })
+})
+
+test('a Chat cursor left on the empty line follows the messages when they come', () => {
+  const view = { ...paneView(), account: { ...paneView().account, chatOpen: true } }
+  const b = chatPane({
+    ...paneInput({ tab: 'chat', view, world: chatWorld(30) }),
+    dialog: { ...DIALOG_DEFAULT, cursor: { chat: { id: 'empty', index: 0 } } },
+  })
+  expect(b.focus).toBe('row:newest')
+})
+
+test('a market page for a query no longer current is dropped', async () => {
+  const pending: ((page: number) => void)[] = []
+  const game = {
+    market: {
+      browse: (q: { page: number }) =>
+        new Promise((resolve) => {
+          pending.push(() => resolve({ listings: [], page: q.page, total: 0 }))
+        }),
+    },
+    sync: async () => undefined,
+  } as unknown as GameHandle
+  let market: MarketState = MARKET_DEFAULT
+  const upd = async (fn: (m: MarketState) => MarketState) => {
+    market = fn(market)
+  }
+  const items = { kind: 'item' as const, sort: 'price' as const, page: 0 }
+  const heroes = { kind: 'hero' as const, sort: 'price' as const, page: 3 }
+  const first = loadMarket(game, items, upd, () => undefined)
+  const second = loadMarket(game, heroes, upd, () => undefined)
+  await Promise.resolve()
+  pending[1]?.(3)
+  await second
+  pending[0]?.(0)
+  await first
+  expect(market.query).toEqual(heroes)
+  expect(market.page?.page).toBe(3)
+})
+
+test('placeOrder sends nothing for a price out of range', async () => {
+  const { calls, game } = stubGame()
+  const form = { base: 'iron_sword', minRarity: 'rare' as const, affixId: null, maxPrice: '0' }
+  await placeOrder(
+    game,
+    { ...ORDERS_DEFAULT, form },
+    async () => undefined,
+    () => undefined,
+  )
+  expect(calls).toEqual([])
 })

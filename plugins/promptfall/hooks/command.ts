@@ -3,6 +3,7 @@ import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings }
 import type { GameHandle } from './engine'
 import {
   BOARDS_DEFAULT,
+  DIALOG_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   parseSettings,
@@ -39,6 +40,7 @@ const TABS: readonly DialogTab[] = [
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
+const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
@@ -106,6 +108,8 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
 
     const tab = TABS.find((t) => t === arg) ?? 'inventory'
     await update($, dialogTabAtom, () => tab)
+    // The pane opens on the tab's list: a sub-window or a sell flow left open stays behind.
+    await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, menu: null, sell: null }))
     await $.ui.open({
       id: PANE_ID,
       title: 'Promptfall',

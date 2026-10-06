@@ -42,21 +42,42 @@ test('the table: a heading, one line per rarity with zone, boss and tavern, as t
   const boss = shares(zone?.bossRarityWeights ?? {})
   const tavern = shares(content.tavern.odds)
   for (const [i, r] of RARITIES.entries()) {
-    const want = `  ${r.padEnd(10)}${(z[i] ?? '').padStart(8)}${(boss[i] ?? '').padStart(8)}${(tavern[i] ?? '').padStart(8)}`
+    const want = `${i === 0 ? '▶' : ' '} ${r.padEnd(10)}${(z[i] ?? '').padStart(8)}${(boss[i] ?? '').padStart(8)}${(tavern[i] ?? '').padStart(8)}`
     expect(lines[i + 1]).toBe(want.trimEnd())
     expect(list?.lines[i + 1]?.spans[2]).toMatchObject({ rgb: RARITY_RGB[r] })
   }
   expect(lines[6]).toBe('  Expansions')
   expect(list?.lines[6]?.rule).toBe(true)
+  // The rarity rows are stops that do nothing; the ▶ starts on the first.
+  expect(b.focus).toBe('row:r-common')
+  expect(message(b)[0]).toBe('Tab or arrows: move.')
+})
+
+test('a short pane shows the table: the ▶ starts on it and Down walks on to the expansions', () => {
+  // 120 × 16 keeps the tab window: 7 list lines. The expansion rows sit on the second page.
+  const b = oddsPane(input({}, {}, { rows: 16 }))
+  const lines = linesOf(win(b, 'list'))
+  expect(lines[1]?.startsWith('▶ common')).toBe(true)
+  expect(lines.some((l) => l.includes('legendary'))).toBe(true)
+  const on = oddsPane(
+    input({}, { cursor: { odds: { id: 'expand-roster', index: 6 } } }, { rows: 16 }),
+  )
+  expect(linesOf(win(on, 'list')).some((l) => /^ {2}Inventory \+10 slots +500G$/.test(l))).toBe(
+    true,
+  )
 })
 
 test('the expansion rows: their events, dim when gold is short, at max with no stop', () => {
   const b = oddsPane(input())
-  expect(cursors(b).map((s) => [s.key, s.action])).toEqual([
+  expect(
+    cursors(b)
+      .slice(5)
+      .map((s) => [s.key, s.action]),
+  ).toEqual([
     ['row:expand-inventory', { t: 'event', event: { t: 'expand_inventory' } }],
     ['row:expand-roster', { t: 'event', event: { t: 'expand_roster' } }],
   ])
-  expect(linesOf(win(b, 'list'))[7]).toMatch(/^▶ Inventory \+10 slots +500G$/)
+  expect(linesOf(win(b, 'list'))[7]).toMatch(/^ {2}Inventory \+10 slots +500G$/)
   const short = oddsPane(input({ gold: 450 }))
   expect(win(short, 'list')?.lines[7]?.spans).toContainEqual({
     text: 'Inventory +10 slots',
@@ -68,27 +89,26 @@ test('the expansion rows: their events, dim when gold is short, at max with no s
   })
   const max = oddsPane(input({ nextInventoryCost: null }))
   expect(linesOf(win(max, 'list'))[7]).toBe('  Inventory at max')
-  expect(cursors(max).map((s) => s.key)).toEqual(['row:expand-roster'])
-  const none = oddsPane(input({ nextInventoryCost: null, nextRosterCost: null }))
-  expect(cursors(none).map((s) => s.key)).toEqual(['row:empty'])
-  expect(message(none)[0]).toBe('Tab or arrows: move.')
+  expect(cursors(max).at(-1)?.key).toBe('row:expand-roster')
+  expect(cursors(max).some((s) => s.key === 'row:expand-inventory')).toBe(false)
 })
 const TEXT = 0xf0f0e8
 
 test('read-only rows do nothing', () => {
   const b = oddsPane(input({}, {}, { readOnly: true }))
-  expect(cursors(b).map((s) => s.action)).toEqual([{ t: 'none' }, { t: 'none' }])
+  expect(cursors(b).every((s) => s.action.t === 'none')).toBe(true)
+  expect(cursors(b)).toHaveLength(7)
 })
 
 test('the detail of each expansion, and the message', () => {
-  const b = oddsPane(input())
+  const b = oddsPane(input({}, { cursor: { odds: { id: 'expand-inventory', index: 5 } } }))
   expect(linesOf(win(b, 'detail'))).toEqual([
     ' Inventory',
     ' 3 of 20 slots',
     ' +10 for 500G',
     ' You have 1,240G',
   ])
-  const roster = oddsPane(input({}, { cursor: { odds: { id: 'expand-roster', index: 1 } } }))
+  const roster = oddsPane(input({}, { cursor: { odds: { id: 'expand-roster', index: 6 } } }))
   expect(linesOf(win(roster, 'detail'))).toEqual([
     ' Roster',
     ' 5 of 6 heroes',

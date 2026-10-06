@@ -44,7 +44,7 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-orders-form': {imageHash: "d817a7b8f776aca6", cellsHash: "9ef8e99379b78d88", svgHash: "9b7cedbe4299bf3e", svgChars: 23410},
   'pane-account': {imageHash: "ea6076d71ced9160", cellsHash: "8420f22c0ab272e2", svgHash: "865c59fcbe0e2cff", svgChars: 22766},
   'pane-account-link': {imageHash: "8496cc7467addc45", cellsHash: "31ec15e32c2955d9", svgHash: "e8c9fe036f04d1d4", svgChars: 24452},
-  'pane-odds': {imageHash: "ee95fe1358f3841a", cellsHash: "3fb08fc9158b320e", svgHash: "ddee64b9a0d7e046", svgChars: 27099},
+  'pane-odds': {imageHash: "7f00ce1c8c553df7", cellsHash: "747e9b50cfe20f1f", svgHash: "abcc0f7c7612f7f7", svgChars: 24187},
   'pane-chat': {imageHash: "2e74efb23715606a", cellsHash: "8f4715240f05171f", svgHash: "be9c497a9a79fd15", svgChars: 24790},
   'pane-leaderboards': {imageHash: "49556278714a8f11", cellsHash: "f6197fcff9d0a4b3", svgHash: "8101a329ec5407c9", svgChars: 26422},
   'pane-short': {imageHash: "7fe70ca006e499e5", cellsHash: "b84e798c19e1f5ec", svgHash: "3ca054d588285970", svgChars: 22569},

@@ -1,10 +1,10 @@
 import type { OrdersState, RarityName } from '../../types'
 import type { GameHandle } from '../engine'
+import { validPrice } from '../vendor/ledger.js'
 import { type Item, vendorValue } from '../vendor/sim.js'
 import { listingView, orderView } from '../view'
 import { type After, errorText, flash, refusalText, type Updater } from './trade'
 
-const _NONE = 'none'
 /** Preset max prices where the surface has no Input: multiples of the base's vendor value. */
 export const PRESETS = [2, 3, 5, 8]
 
@@ -66,6 +66,7 @@ export async function placeOrder(
 ): Promise<void> {
   const form = current.form
   if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
+  if (!validPrice(Number(form.maxPrice))) return
   await upd((o) => ({ ...o, busy: true }))
   const input = {
     base: form.base,

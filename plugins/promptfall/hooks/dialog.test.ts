@@ -872,3 +872,32 @@ test('without gold the expansion is refused in the message window', async ($, on
   expect(await paneText(ui)).toMatch(/Refused: /)
   await ui.unmount()
 })
+
+// ---------------------------------------------------------------------------
+// Review fixes
+
+test('on a tall terminal the sell price field leaves the picture its 24 rows', async ($, on) => {
+  const { player } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.unmount()
+  const tall = { ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: 30 } } }
+  const pane = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...tall })
+  await pane.press({ key: 'row:iR' })
+  await hot(pane, 's')
+  expect(await pane.find({ key: 'price' })).toBeDefined()
+  expect((await pane.find({ type: 'Raster' }))?.props.rows).toBe(24)
+  await pane.unmount()
+})
+
+test('/promptfall market opens on the list, closing a sell flow left open', async ($, on) => {
+  const { player } = await marketHarness(on)
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'row:iR' })
+  await hot(ui, 's')
+  expect((states.get('dialog') as { sell: unknown }).sell).not.toBeNull()
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'market' })
+  const d = states.get('dialog') as { sell: unknown; menu: unknown }
+  expect([d.sell, d.menu]).toEqual([null, null])
+  await ui.unmount()
+})

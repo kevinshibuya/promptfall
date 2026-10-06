@@ -427,6 +427,22 @@ export type ActionContext = {
   tab: () => Promise<DialogTab>
 }
 
+type ConfirmAction = Extract<PaneMenu, { kind: 'confirm' }>['action']
+
+/**
+ * Closes the Yes/No for `action` on `id` and says whether it was open, in one update: a second
+ * Yes pressed before the redraw finds it closed and does nothing (no second buy).
+ */
+async function answered(ctx: ActionContext, action: ConfirmAction, id: string): Promise<boolean> {
+  let open = false
+  await ctx.upd((d) => {
+    const m = d.menu
+    open = m?.kind === 'confirm' && m.action === action && m.id === id
+    return open ? { ...d, menu: null } : d
+  })
+  return open
+}
+
 /** The Market filter window's row for each filter a pick sets. */
 const FILTER_ROW: Partial<Record<PickField, number>> = { base: 2, cls: 2, minRarity: 3 }
 
@@ -462,7 +478,8 @@ export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void
 async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
   switch (a.t) {
     case 'tab':
-      await ctx.upd((d) => ({ ...d, menu: null }))
+      // A sell flow belongs to Inventory or Heroes: no other tab draws it, so it closes here.
+      await ctx.upd((d) => ({ ...d, menu: null, sell: null }))
       await ctx.openTab(a.tab)
       return
     case 'open':
@@ -529,15 +546,14 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
     }
     case 'buy': {
       const running = ctx.game()
-      if (!running) return
-      await ctx.upd((d) => ({ ...d, menu: null }))
+      if (!running || !(await answered(ctx, 'buy', a.listingId))) return
       await confirmBuy(running, a.listingId, (await ctx.market()).query, ctx.updMarket, ctx.after)
       return
     }
     case 'cancel': {
       const running = ctx.game()
-      if (!running) return
-      await ctx.upd((d) => ({ ...d, menu: null }))
+      const action = a.what === 'listing' ? 'cancel-listing' : 'cancel-order'
+      if (!running || !(await answered(ctx, action, a.id))) return
       await ordersTrade(
         running,
         a.what === 'listing'
@@ -574,8 +590,7 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
       ctx.game()?.link()
       return
     case 'reset':
-      await ctx.upd((d) => ({ ...d, menu: null }))
-      ctx.game()?.reset()
+      if (await answered(ctx, 'reset', '')) ctx.game()?.reset()
       return
   }
 }

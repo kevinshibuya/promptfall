@@ -51,8 +51,12 @@ export function oddsPane(input: PaneInput): PaneBuild {
       share(zone?.bossRarityWeights, r),
       share(content.tavern.odds, r),
     ]
+    // Stops that do nothing, as the board rows are: the page follows the ▶, so the table must
+    // take one or a short pane would never show it.
     rows.push({
+      key: `row:r-${r}`,
       spans: tableLine({ text: r, rgb: RARITY_RGB[r] ?? TEXT_RGB }, columns),
+      action: { t: 'none' },
       alt: `${r}: zone ${columns[0]}, boss ${columns[1]}, tavern ${columns[2]}`,
     })
   }
@@ -120,7 +124,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
     panel: null,
     error: null,
     state: [
-      ids.length > 0 ? `Enter: buy it. ${MOVE_HELP}` : MOVE_HELP,
+      on?.startsWith('expand-') ? `Enter: buy it. ${MOVE_HELP}` : MOVE_HELP,
       `Drop odds in zone ${view.zone}, its boss, and the tavern.`,
     ],
     field: null,
