@@ -1,13 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, type Mounted, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView } from '../types'
-import { spriteFor } from './sprites/index'
-import { DESKTOP_LIST_SPRITE_COLUMNS } from './stage/tuning'
-import { CHAT_READ_ONLY, chatBody } from './ui/chat'
-import { ordersBody } from './ui/orders'
 import { paneText } from './ui/pane/testing'
-import { listSpriteColumns } from './ui/sprites'
-import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState, type Item } from './vendor/sim.js'
@@ -198,17 +192,6 @@ for (const surface of SURFACES) {
     await ui.unmount()
   })
 }
-
-test("the other tabs keep today's tab row: Market draws its Buttons with their names", async ($, on) => {
-  harness(on, seeded())
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  expect((await ui.find({ key: 'tab-market' }))?.props.label).toBe(' ')
-  await ui.press({ key: 'tab-market' })
-  expect((await ui.find({ key: 'tab-market' }))?.props.label).toBe('Market')
-  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
-  await ui.unmount()
-})
 
 // ---------------------------------------------------------------------------
 // The market, against a ledger behind a mocked $.http.fetch at http://test.
@@ -418,48 +401,6 @@ async function startOnTest(
   return { ui, states, clock }
 }
 
-test('the Market tab renders the listings', async ($, on) => {
-  const { player } = await marketHarness(on)
-  const { ui } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-market' })
-  expect(await ui.find({ text: /Steel Longsword \(rare\)/ })).toBeDefined()
-  expect(await ui.find({ text: /Brindle · 100g/ })).toBeDefined()
-  expect(await ui.find({ text: /page 1\/1 · 3 listings/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('a filter change goes back to page 0 and refetches', async ($, on) => {
-  const { player, sent } = await marketHarness(on, { listings: 12 })
-  const { ui } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-market' })
-  await ui.press({ key: 'market-next' })
-  const browses = () => sent.filter((r) => r.path === '/v1/listings' && r.method === 'GET')
-  expect(browses().at(-1)?.query.page).toBe('1')
-  await ui.select({ key: 'market-rarity', value: 'epic' })
-  expect(browses().at(-1)?.query).toMatchObject({ page: '0', minRarity: 'epic' })
-  expect(await ui.find({ text: /No listings match/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('buy asks first, then buys once and the item arrives', async ($, on) => {
-  const { player, sent } = await marketHarness(on)
-  const { ui, states } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-market' })
-  const listing = (await ui.findAll({ type: 'Button' })).find((b: { key?: string }) =>
-    /^buy-L/.test(b.key ?? ''),
-  )
-  if (!listing?.key) throw new Error('no buy button')
-  await ui.press({ key: listing.key })
-  expect(await ui.find({ text: /Buy Steel Longsword for 10[0-2]g\?/ })).toBeDefined()
-  await ui.press({ key: 'buy-confirm' })
-  const buys = sent.filter((r) => r.method === 'POST' && /\/buy$/.test(r.path))
-  expect(buys).toHaveLength(1)
-  const view = states.get('view') as GameView
-  expect(view.inventory.some((i) => i.id.startsWith('t'))).toBe(true)
-  expect(view.gold).toBeLessThan(5000)
-  await ui.unmount()
-})
-
 test('the sell window lists matching orders with nets, then Set a price; a typed price shows the fee', async ($, on) => {
   const { player } = await marketHarness(on)
   const { ui, states } = await startOnTest($, on, player)
@@ -484,12 +425,7 @@ test('the sell window lists matching orders with nets, then Set a price; a typed
 test("a bought item's sell window says when it becomes tradeable, with no price Input", async ($, on) => {
   const { player } = await marketHarness(on)
   const { ui, states } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-market' })
-  const listing = (await ui.findAll({ type: 'Button' })).find((b: { key?: string }) =>
-    /^buy-L/.test(b.key ?? ''),
-  )
-  await ui.press({ key: listing?.key ?? '' })
-  await ui.press({ key: 'buy-confirm' })
+  await buyFirst(ui)
   const bought = (states.get('view') as GameView).inventory.find((i) => i.id.startsWith('t'))
   await ui.press({ key: 'tab-inventory' })
   await ui.press({ key: `row:${bought?.id}` })
@@ -526,74 +462,168 @@ test('a server switch closes the sell window and the command window', async ($, 
   await ui.unmount()
 })
 
-test('the order form places a NewOrder', async ($, on) => {
-  const { player, sent } = await marketHarness(on)
-  const { ui } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-orders' })
-  await ui.press({ key: 'order-new' })
-  await ui.select({ key: 'order-base', value: 'iron_sword' })
-  await ui.select({ key: 'order-rarity', value: 'epic' })
-  await ui.select({ key: 'order-affix', value: 'brutal' })
-  await ui.input({ key: 'order-price', text: '200' })
-  const posted = sent.filter((r) => r.method === 'POST' && r.path === '/v1/orders')
-  expect(posted.map((r) => r.body)).toEqual([
-    { base: 'iron_sword', minRarity: 'epic', affixId: 'brutal', maxPrice: 200 },
-  ])
-  expect(await ui.find({ text: /Iron Sword epic\+ with Brutal/ })).toBeDefined()
-  await ui.unmount()
-})
+// ---------------------------------------------------------------------------
+// Market
 
-test('the gates show for an unlinked player and a closed market', async ($, on) => {
-  const a = await marketHarness(on, { linked: false })
-  const { ui } = await startOnTest($, on, a.player)
+/** The listing row stops the Market pane mounts. */
+async function listingRows(ui: Ui): Promise<string[]> {
+  return (await ui.findAll({ type: 'Button' }))
+    .map((b) => b.key ?? '')
+    .filter((k) => /^row:L/.test(k))
+}
+
+/** Opens the Market and says Yes to the first listing. */
+async function buyFirst(ui: Ui) {
   await ui.press({ key: 'tab-market' })
-  expect(
-    await ui.find({ text: 'Link your GitHub account: press a for the Account tab' }),
-  ).toBeDefined()
-  expect(
-    (await ui.findAll({ type: 'Button' })).some((b: { key?: string }) =>
-      /^buy-L/.test(b.key ?? ''),
-    ),
-  ).toBe(false)
+  const [row] = await listingRows(ui)
+  if (!row) throw new Error('no listing row')
+  await ui.press({ key: row })
+  await ui.press({ key: 'yes' })
+}
+
+for (const surface of SURFACES) {
+  test(`the Market tab loads page 0 and draws its windows, with no text rows, on ${surface}`, async ($, on) => {
+    const { player, sent } = await marketHarness(on)
+    const { ui } = await startOnTest($, on, player)
+    await ui.unmount()
+    const pane = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await pane.press({ key: 'tab-market' })
+    const browses = sent.filter((r) => r.path === '/v1/listings' && r.method === 'GET')
+    expect(browses.at(-1)?.query.page).toBe('0')
+    const text = await paneText(pane)
+    expect(text).toMatch(/Market: items, cheapest/)
+    expect(text).toMatch(/Steel Longsword/)
+    expect(text).toMatch(/Brindle/)
+    expect(text).toMatch(/100G/)
+    expect(await pane.find({ type: 'Text', text: /Steel Longsword/ })).toBeUndefined()
+    expect(await listingRows(pane)).toHaveLength(3)
+    await pane.unmount()
+  })
+}
+
+test('Filters, then the kind item, flips the kind and refetches page 0', async ($, on) => {
+  const { player, sent } = await marketHarness(on, { listings: 12 })
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-market' })
+  await ui.press({ key: 'row:next' })
+  const browses = () => sent.filter((r) => r.path === '/v1/listings' && r.method === 'GET')
+  expect(browses().at(-1)?.query.page).toBe('1')
+  await ui.press({ key: 'row:filters' })
+  expect(await paneText(ui)).toMatch(/Change the search\./)
+  await ui.press({ key: 'menu:0' })
+  expect(browses().at(-1)?.query).toMatchObject({ page: '0', kind: 'hero' })
+  // The filter window stays open, its ▶ on Kind.
+  expect(await paneText(ui)).toMatch(/Kind: heroes/)
+  expect(await paneText(ui)).toMatch(/No listings match\./)
   await ui.unmount()
 })
 
-test('a server switch drops a pending buy confirmation and the market page', async ($, on) => {
+test('a listing row asks first, then Yes buys once and the item arrives', async ($, on) => {
   const { player, sent } = await marketHarness(on)
   const { ui, states } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-market' })
-  const listing = (await ui.findAll({ type: 'Button' })).find((b: { key?: string }) =>
-    /^buy-L/.test(b.key ?? ''),
-  )
-  await ui.press({ key: listing?.key ?? '' })
-  expect(await ui.find({ text: /^Buy Steel Longsword/ })).toBeDefined()
-  await $.command.run({
-    origin: { kind: 'composer' },
-    presentation: { isFullscreen: false, columns: 120 },
-    command: 'promptfall',
-    args: 'server local',
-  })
-  const market = states.get('market') as { confirm: string | null; page: unknown }
-  expect(market.confirm).toBeNull()
-  expect(market.page).toBeNull()
-  expect(await ui.find({ key: 'buy-confirm' })).toBeUndefined()
+  const [row] = await listingRows(ui)
+  await ui.press({ key: row ?? '' })
+  expect(await paneText(ui)).toMatch(/Buy Steel Longsword for 10[0-2]G\?/)
+  await ui.press({ key: 'yes' })
+  const buys = sent.filter((r) => r.method === 'POST' && /\/buy$/.test(r.path))
+  expect(buys).toHaveLength(1)
+  const view = states.get('view') as GameView
+  expect(view.inventory.some((i) => i.id.startsWith('t'))).toBe(true)
+  expect(view.gold).toBeLessThan(5000)
+  await ui.unmount()
+})
+
+test('the gate shows for an unlinked player and a listing row asks nothing', async ($, on) => {
+  const a = await marketHarness(on, { linked: false })
+  const { ui } = await startOnTest($, on, a.player)
+  await ui.press({ key: 'tab-market' })
+  expect(await paneText(ui)).toMatch(/Link your GitHub account: press a for the Account tab/)
+  const [row] = await listingRows(ui)
+  await ui.press({ key: row ?? '' })
+  expect(await ui.find({ key: 'yes' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a server switch drops a pending buy Yes/No and the market page', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-market' })
+  const [row] = await listingRows(ui)
+  await ui.press({ key: row ?? '' })
+  expect(await ui.find({ key: 'yes' })).toBeDefined()
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect((states.get('dialog') as { menu: unknown }).menu).toBeNull()
+  expect((states.get('market') as { page: unknown }).page).toBeNull()
+  expect(await ui.find({ key: 'yes' })).toBeUndefined()
   expect(sent.filter((r) => /\/buy$/.test(r.path))).toHaveLength(0)
   await ui.unmount()
 })
 
-test('a session that is not playing still browses the market', async ($, on) => {
+test('a session that is not playing still browses the market, and its rows buy nothing', async ($, on) => {
   const { player } = await marketHarness(on)
   const { ui, states } = await startOnTest($, on, player, {
     'promptfall:lease': { owner: 'other', until: 9_999_999_999_999 },
   })
   expect(states.get('mode')).toBe('secondary')
   await ui.press({ key: 'tab-market' })
-  expect(await ui.find({ text: /Steel Longsword \(rare\)/ })).toBeDefined()
+  expect(await paneText(ui)).toMatch(/Steel Longsword/)
+  const [row] = await listingRows(ui)
+  await ui.press({ key: row ?? '' })
+  expect(await ui.find({ key: 'yes' })).toBeUndefined()
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Orders
+
+test('New buy order, its picks and a typed price place a NewOrder', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-orders' })
+  await ui.press({ key: 'row:new' })
+  expect(await paneText(ui)).toMatch(/Pick what to buy, then a price\./)
+  // Base: the bases sorted by id, Iron Sword the 15th.
+  await ui.press({ key: 'menu:0' })
+  expect(await paneText(ui)).toMatch(/Which base\?/)
+  await ui.press({ key: 'menu:14' })
+  // Rarity: rare, epic, legendary.
+  await ui.press({ key: 'menu:1' })
+  await ui.press({ key: 'menu:1' })
+  // Affix: any, then the affixes sorted by id, Brutal first.
+  await ui.press({ key: 'menu:2' })
+  await ui.press({ key: 'menu:1' })
+  expect(await paneText(ui)).toMatch(/Base: Iron Sword/)
+  await ui.input({ key: 'order-price', text: '200', kind: 'change' })
+  expect(await paneText(ui)).toMatch(/Buy order: Iron Sword epic\+, with Brutal, up to 200G\./)
+  await ui.input({ key: 'order-price', text: '200' })
+  const posted = sent.filter((r) => r.method === 'POST' && r.path === '/v1/orders')
+  expect(posted.map((r) => r.body)).toEqual([
+    { base: 'iron_sword', minRarity: 'epic', affixId: 'brutal', maxPrice: 200 },
+  ])
+  expect(await paneText(ui)).toMatch(/Iron Sword epic\+/)
+  expect(await ui.find({ key: 'order-price' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a listing row, then Yes, cancels the listing', async ($, on) => {
+  const { ledger, player, sent } = await marketHarness(on)
+  const listed = await ledger.list(
+    { deviceToken: player.deviceToken },
+    { kind: 'item', id: 'iR', price: 900 },
+  )
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-orders' })
+  expect(await paneText(ui)).toMatch(/My listings/)
+  const row = (await ui.findAll({ type: 'Button' })).find((b) => /^row:l-/.test(b.key ?? ''))
+  expect(row).toBeDefined()
+  await ui.press({ key: row?.key ?? '' })
+  expect(await paneText(ui)).toMatch(/Cancel the listing of Steel Longsword\? The fee is kept\./)
+  await ui.press({ key: 'yes' })
   expect(
-    (await ui.findAll({ type: 'Button' })).some((b: { key?: string }) =>
-      /^buy-L/.test(b.key ?? ''),
-    ),
-  ).toBe(false)
+    sent.filter((r) => r.method === 'DELETE' && r.path.startsWith('/v1/listings/')),
+  ).toHaveLength(1)
+  expect(listed).toBeDefined()
   await ui.unmount()
 })
 
@@ -607,34 +637,35 @@ const RUN = {
 
 const chatPosts = (sent: Sent[]) => sent.filter((r) => r.method === 'POST' && r.path === '/v1/chat')
 
-test('the Chat tab lists the messages newest at the bottom, with the compose box on both surfaces', async ($, on) => {
-  const { ledger, player, bot } = await marketHarness(on)
-  await ledger.chat({ deviceToken: bot.deviceToken }, 'first line')
-  await ledger.chat({ deviceToken: bot.deviceToken }, 'second line')
-  const { ui } = await startOnTest($, on, player)
-  await ui.unmount()
-  for (const surface of SURFACES) {
+for (const surface of SURFACES) {
+  test(`the Chat tab shows the newest message and the compose field, not focused, on ${surface}`, async ($, on) => {
+    const { ledger, player, bot } = await marketHarness(on)
+    await ledger.chat({ deviceToken: bot.deviceToken }, 'first line')
+    await ledger.chat({ deviceToken: bot.deviceToken }, 'second line')
+    const { ui } = await startOnTest($, on, player)
+    await ui.unmount()
     const pane = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
     await pane.press({ key: 'tab-chat' })
-    const texts = (await pane.findAll({ type: 'Text' })).map((t) => t.text)
-    const first = texts.indexOf('first line')
-    expect(first).toBeGreaterThanOrEqual(0)
-    expect(texts.indexOf('second line')).toBeGreaterThan(first)
-    expect(await pane.find({ text: 'Brindle:' })).toBeDefined()
-    expect(await pane.find({ key: 'chat-compose' })).toBeDefined()
+    const text = await paneText(pane)
+    expect(text).toMatch(/Brindle: first line/)
+    expect(text).toMatch(/Brindle: second line/)
+    const compose = await pane.find({ key: 'compose' })
+    expect(compose?.type).toBe('Input')
+    expect(compose?.props.autoFocus).toBeUndefined()
+    expect(await pane.find({ key: 'row:newest' })).toBeDefined()
     await pane.unmount()
-  }
-})
+  })
+}
 
-test('Enter posts the line, it shows before the next poll, and the box empties', async ($, on) => {
+test('Enter posts the line, it shows before the next poll, and the field empties', async ($, on) => {
   const { player, sent } = await marketHarness(on)
   const { ui } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-chat' })
-  await ui.input({ key: 'chat-compose', text: 'hello', kind: 'change' })
-  await ui.input({ key: 'chat-compose', text: 'hello' })
+  await ui.input({ key: 'compose', text: 'hello', kind: 'change' })
+  await ui.input({ key: 'compose', text: 'hello' })
   expect(chatPosts(sent).map((r) => r.body)).toEqual([{ text: 'hello' }])
-  expect(await ui.find({ type: 'Text', text: 'hello' })).toBeDefined()
-  expect((await ui.find({ key: 'chat-compose' }))?.props.value).toBe('')
+  expect(await paneText(ui)).toMatch(/player: hello/)
+  expect((await ui.find({ key: 'compose' }))?.props.value).toBe('')
   await ui.unmount()
 })
 
@@ -642,19 +673,19 @@ test('a refusal flashes for 5 s; a thrown post flashes Server unreachable and se
   const { player, net, sent } = await marketHarness(on)
   const { ui, states, clock } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-chat' })
-  await ui.input({ key: 'chat-compose', text: 'a'.repeat(201) })
-  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'a'.repeat(201) })
+  expect(await paneText(ui)).toMatch(/Too long: 200 characters at most/)
   await clock.advance(5_000)
-  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeUndefined()
+  expect(await paneText(ui)).not.toMatch(/Too long/)
   // Past the wire limit (2000): refused here as too long, not sent and read as an outage.
   const posts = chatPosts(sent).length
-  await ui.input({ key: 'chat-compose', text: 'b'.repeat(2001) })
-  expect(await ui.find({ text: 'Too long: 200 characters at most' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'b'.repeat(2001) })
+  expect(await paneText(ui)).toMatch(/Too long: 200 characters at most/)
   expect(chatPosts(sent)).toHaveLength(posts)
   await clock.advance(5_000)
   net.chatDown = true
-  await ui.input({ key: 'chat-compose', text: 'anyone there?' })
-  expect(await ui.find({ text: 'Server unreachable' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'anyone there?' })
+  expect(await paneText(ui)).toMatch(/Server unreachable/)
   expect(states.get('notice') ?? null).toBeNull()
   await ui.unmount()
 })
@@ -665,21 +696,21 @@ test('in an outage Enter flashes Server unreachable and posts nothing', async ($
   net.batchesDown = true
   await clock.advance(16_000)
   await ui.press({ key: 'tab-chat' })
-  await ui.input({ key: 'chat-compose', text: 'hello' })
-  expect(await ui.find({ text: 'Server unreachable' })).toBeDefined()
+  await ui.input({ key: 'compose', text: 'hello' })
+  expect(await paneText(ui)).toMatch(/Server unreachable/)
   expect(chatPosts(sent)).toHaveLength(0)
   await ui.unmount()
 })
 
-test("the snapshot's closed chat wins over the bootstrap config; unlinked reads the link gate", async ($, on) => {
+test("the snapshot's closed chat wins over the bootstrap config", async ($, on) => {
   const a = await marketHarness(on)
   a.net.worldFlags = { 'chat.enabled': false }
   const { ui, states, clock } = await startOnTest($, on, a.player)
   await clock.advance(15_000)
   expect((states.get('view') as GameView).account.chatOpen).toBe(true)
   await ui.press({ key: 'tab-chat' })
-  expect(await ui.find({ text: 'Chat is closed.' })).toBeDefined()
-  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
+  expect(await paneText(ui)).toMatch(/Chat is closed\./)
+  expect(await ui.find({ key: 'compose' })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -687,50 +718,9 @@ test('an unlinked player reads the link gate in the Chat tab', async ($, on) => 
   const a = await marketHarness(on, { linked: false })
   const { ui } = await startOnTest($, on, a.player)
   await ui.press({ key: 'tab-chat' })
-  expect(
-    await ui.find({ text: 'Link your GitHub account: press a for the Account tab' }),
-  ).toBeDefined()
-  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
+  expect(await paneText(ui)).toMatch(/Link your GitHub account: press a for the Account tab/)
+  expect(await ui.find({ key: 'compose' })).toBeUndefined()
   await ui.unmount()
-})
-
-test('without an Input the Chat tab reads that posting needs a terminal or the desktop app', () => {
-  const els = { Box: 'Box', Text: 'Text', Button: 'Button', Input: undefined } as unknown as Els
-  const world = {
-    snapshot: null,
-    fetchedAt: null,
-    stale: false,
-    messages: [{ id: 1, name: 'Brindle', text: 'hi', at: 1 }],
-    chatMark: 1,
-    clock: null,
-    committedDealt: null,
-  }
-  const view = {
-    account: {
-      linked: 'player',
-      server: 'http://test',
-      marketOpen: true,
-      chatOpen: true,
-      presenceOpen: true,
-      leaderboardsOpen: true,
-      bossOpen: true,
-      returns: 0,
-    },
-  } as GameView
-  const body = JSON.stringify(
-    chatBody(
-      els,
-      view,
-      world,
-      { draft: '', busy: false, error: null },
-      {
-        setDraft: async () => undefined,
-        post: async () => undefined,
-      },
-    ),
-  )
-  expect(body).toContain(CHAT_READ_ONLY)
-  expect(body).not.toContain('chat-compose')
 })
 
 test('a secondary session posts too', async ($, on) => {
@@ -740,31 +730,56 @@ test('a secondary session posts too', async ($, on) => {
   })
   expect(states.get('mode')).toBe('secondary')
   await ui.press({ key: 'tab-chat' })
-  await ui.input({ key: 'chat-compose', text: 'from the other tab' })
+  await ui.input({ key: 'compose', text: 'from the other tab' })
   expect(chatPosts(sent)).toHaveLength(1)
-  expect(await ui.find({ type: 'Text', text: 'from the other tab' })).toBeDefined()
+  expect(await paneText(ui)).toMatch(/from the other tab/)
   await ui.unmount()
 })
 
-test('the Leaderboards tab fetches on open, shows the zone counts and both boards, mine highlighted', async ($, on) => {
+test('in-process the Chat tab says chat needs a server', async ($, on) => {
+  harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-chat' })
+  expect(await paneText(ui)).toMatch(/Chat needs a server: \/promptfall server <url>/)
+  expect(await ui.find({ key: 'compose' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a padded paste goes out cleaned, and a server refusal flashes in its words', async ($, on) => {
+  const { player, sent } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-chat' })
+  await ui.input({ key: 'compose', text: `${' '.repeat(2100)}hi` })
+  expect(chatPosts(sent).map((r) => r.body)).toEqual([{ text: 'hi' }])
+  expect(await paneText(ui)).not.toMatch(/Server unreachable/)
+  await ui.input({ key: 'compose', text: 'what the heck' })
+  expect(await paneText(ui)).toMatch(/That word is not allowed here/)
+  await ui.unmount()
+})
+
+test('the Leaderboards tab fetches on open and shows both boards and who is online', async ($, on) => {
   const { player, sent } = await marketHarness(on)
   const { ui } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-leaderboards' })
   expect(sent.some((r) => r.method === 'GET' && r.path === '/v1/leaderboards')).toBe(true)
-  expect(await ui.find({ text: 'Online by zone: z1 1' })).toBeDefined()
-  expect(await ui.find({ text: 'Highest zone' })).toBeDefined()
-  expect(await ui.find({ type: 'Text', text: /^\d\. Brindle {2}zone 1$/ })).toBeDefined()
-  const mine = await ui.find({ type: 'Text', text: /^\d\. player {2}zone 1$/ })
-  expect(mine?.props.color).toBe('cyan')
-  expect(await ui.find({ text: 'no boss damage yet this week' })).toBeDefined()
+  const text = await paneText(ui)
+  expect(text).toMatch(/Online by zone: z1 1/)
+  expect(text).toMatch(/Highest zone/)
+  expect(text).toMatch(/\d\. Brindle +zone 1/)
+  expect(text).toMatch(/\d\. player +zone 1/)
+  expect(text).toMatch(/No boss damage yet this week\./)
+  expect(
+    (await ui.findAll({ type: 'Button' })).filter((b) => /^row:z-/.test(b.key ?? '')),
+  ).toHaveLength(2)
   await ui.unmount()
 })
 
-test('closed leaderboards say so', async ($, on) => {
+test('closed leaderboards say so in place', async ($, on) => {
   const a = await marketHarness(on, { flags: { 'leaderboards.enabled': false } })
   const { ui } = await startOnTest($, on, a.player)
   await ui.press({ key: 'tab-leaderboards' })
-  expect(await ui.find({ text: 'Leaderboards are closed.' })).toBeDefined()
+  expect(await paneText(ui)).toMatch(/Leaderboards are closed\./)
   await ui.unmount()
 })
 
@@ -780,46 +795,29 @@ test('/promptfall chat and /promptfall leaderboards open on those tabs', async (
   await ui.unmount()
 })
 
-test('in-process the Chat tab says chat needs a server', async ($, on) => {
-  harness(on, seeded())
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  await ui.press({ key: 'tab-chat' })
-  expect(await ui.find({ text: 'Chat needs a server: /promptfall server <url>' })).toBeDefined()
-  expect(await ui.find({ key: 'chat-compose' })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('a padded paste goes out cleaned, and a server refusal flashes in its words', async ($, on) => {
-  const { player, sent } = await marketHarness(on)
-  const { ui } = await startOnTest($, on, player)
-  await ui.press({ key: 'tab-chat' })
-  await ui.input({ key: 'chat-compose', text: `${' '.repeat(2100)}hi` })
-  expect(chatPosts(sent).map((r) => r.body)).toEqual([{ text: 'hi' }])
-  expect(await ui.find({ text: 'Server unreachable' })).toBeUndefined()
-  await ui.input({ key: 'chat-compose', text: 'what the heck' })
-  expect(await ui.find({ text: 'That word is not allowed here' })).toBeDefined()
-  await ui.unmount()
-})
+// ---------------------------------------------------------------------------
+// Account and Odds
 
 for (const surface of SURFACES) {
-  test(`the Account tab shows the settings and a press changes them on ${surface}`, async ($, on) => {
+  test(`the Account rows show the settings and a press changes them on ${surface}`, async ($, on) => {
     const { states, data } = harness(on, seeded())
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
     await ui.press({ key: 'tab-account' })
-    expect(await ui.find({ text: 'Sound: off' })).toBeDefined()
-    expect(await ui.find({ text: 'Motion: full' })).toBeDefined()
-    expect(await ui.find({ text: /^Renderer: auto \(/ })).toBeDefined()
-    await ui.press({ key: 'setting-sound' })
-    await ui.press({ key: 'setting-motion' })
-    await ui.press({ key: 'setting-renderer' })
+    const before = await paneText(ui)
+    expect(before).toMatch(/Sound:? +off/)
+    expect(before).toMatch(/Motion:? +full/)
+    expect(before).toMatch(/Renderer:? +auto \(/)
+    await ui.press({ key: 'row:sound' })
+    await ui.press({ key: 'row:motion' })
+    await ui.press({ key: 'row:renderer' })
     const next = { sound: true, motion: 'still', renderer: 'image' }
     expect(data.get('promptfall:settings')).toEqual(next)
     expect(states.get('settings')).toEqual(next)
-    expect(await ui.find({ text: 'Sound: on' })).toBeDefined()
-    expect(await ui.find({ text: 'Motion: still' })).toBeDefined()
-    expect(await ui.find({ text: 'Renderer: image (from next start)' })).toBeDefined()
+    const after = await paneText(ui)
+    expect(after).toMatch(/Sound:? +on/)
+    expect(after).toMatch(/Motion:? +still/)
+    expect(after).toMatch(/Renderer:? +image \(from next start\)/)
     await ui.unmount()
   })
 }
@@ -831,7 +829,7 @@ test('an Account press merges into the stored settings, not an older copy in thi
   data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
   await ui.press({ key: 'tab-account' })
-  await ui.press({ key: 'setting-motion' })
+  await ui.press({ key: 'row:motion' })
   expect(data.get('promptfall:settings')).toEqual({
     sound: true,
     motion: 'still',
@@ -840,151 +838,37 @@ test('an Account press merges into the stored settings, not an older copy in thi
   await ui.unmount()
 })
 
-// ---------------------------------------------------------------------------
-// List sprites
-
-const RENDERER = (renderer: string) => ({ sound: false, motion: 'full', renderer })
-
-test('market listings lead with the item or the hero class sprite', async ($, on) => {
-  const { player } = await marketHarness(on, { heroListing: true })
-  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
-  await ui.press({ key: 'tab-market' })
-  // Items: the 8 × 2 half-block sprite.
-  expect(await ui.findAll({ type: 'Raster' })).toHaveLength(3)
-  // Heroes: nothing on half-blocks.
-  await ui.press({ key: 'market-kind' })
-  expect(await ui.find({ text: /\(rare\)/ })).toBeDefined()
-  expect(await ui.findAll({ type: 'Raster' })).toHaveLength(0)
+test('the Band row collapses the band', async ($, on) => {
+  const { states } = harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:band' })
+  expect((states.get('prefs') as { collapsed: boolean }).collapsed).toBe(true)
+  expect(await paneText(ui)).toMatch(/Band +collapsed/)
   await ui.unmount()
-  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
-  const heroes = await desk.findAll({ type: 'Svg' })
-  expect(heroes).toHaveLength(1)
-  await desk.press({ key: 'market-kind' })
-  const items = await desk.findAll({ type: 'Svg' })
-  expect(items.map((s) => s.props.alt)).toEqual([
-    'Steel Longsword',
-    'Steel Longsword',
-    'Steel Longsword',
-  ])
-  await desk.unmount()
 })
 
-const NARROW = { ...PANE, props: { ...PANE.props, bodyColumns: 40, placement: 'dock' as const } }
-
-type Node = { type?: string; props: Record<string, unknown>; children: unknown[]; text?: string }
-
-/** A node's text: its own, or its string children's, recursively. */
-function textOf(node: Node): string {
-  if (typeof node.text === 'string') return node.text
-  return (node.children ?? [])
-    .map((c) => (typeof c === 'string' ? c : typeof c === 'object' && c ? textOf(c as Node) : ''))
-    .join('')
-}
-
-/** Every horizontal, non-wrapping Box under `node` with the cells its Texts and gaps take. */
-function rowCells(node: Node): number[] {
-  const kids = (node.children ?? []).filter((c): c is Node => typeof c === 'object' && c !== null)
-  const own =
-    node.type === 'Box' && node.props.flexDirection === 'row' && node.props.flexWrap !== 'wrap'
-      ? (() => {
-          const texts = kids.filter((k) => k.type === 'Text')
-          const gap = Number(node.props.gap ?? 0)
-          const len = texts.reduce((n, t) => n + [...textOf(t)].length, 0)
-          return texts.length > 0 ? [len + gap * Math.max(0, texts.length - 1)] : []
-        })()
-      : []
-  return [...own, ...kids.flatMap(rowCells)]
-}
-
-test('the list sprite takes 2, 8 or the desktop columns in a row, 0 where none draws', () => {
-  const sword = spriteFor('item', 'iron_sword')
-  expect(listSpriteColumns('image', 'terminal', sword)).toBe(2)
-  expect(listSpriteColumns('raster', 'terminal', sword)).toBe(8)
-  expect(listSpriteColumns('unknown', 'terminal', sword)).toBe(0)
-  expect(listSpriteColumns('raster', 'desktop', sword)).toBe(DESKTOP_LIST_SPRITE_COLUMNS)
-})
-
-test('market listing rows fit a 30-column pane', async ($, on) => {
-  const { player } = await marketHarness(on, { affixed: true })
-  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
+test('the Odds tab draws the table, and the inventory row buys the expansion', async ($, on) => {
+  const { states } = harness(on, { ...seeded(), gold: 2000 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-odds' })
+  const text = await paneText(ui)
+  expect(text).toMatch(/Rarity +Zone +Boss +Tavern/)
+  expect(text).toMatch(/Inventory \+10 slots/)
+  const cap = (states.get('view') as GameView).inventoryCap
+  await ui.press({ key: 'row:expand-inventory' })
+  expect((states.get('view') as GameView).inventoryCap).toBe(cap + 10)
   await ui.unmount()
-  const thin = { ...NARROW, props: { ...NARROW.props, bodyColumns: 30 } }
-  const term = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...thin })
-  await term.press({ key: 'tab-market' })
-  const rows = (await term.findAll({ type: 'Box' })).filter((b) =>
-    String(b.props.key ?? '').startsWith('listing-'),
-  )
-  expect(rows.length).toBeGreaterThan(0)
-  for (const r of rows) {
-    for (const cells of rowCells(r as Node)) expect(cells).toBeLessThanOrEqual(30 - (8 + 1))
-  }
-  await term.unmount()
 })
 
-test('orders and chat rows wrap on the desktop and truncate on a terminal', () => {
-  const els = { Box: 'Box', Text: 'Text', Button: 'Button', Input: undefined } as unknown as Els
-  const view = { account: { linked: 'player', chatOpen: true, marketOpen: true } } as GameView
-  const orders = {
-    busy: false,
-    error: null,
-    form: null,
-    mine: {
-      returns: 0,
-      listings: [{ id: 'L1', name: 'Steel Longsword', rarity: 'rare', price: 120, expiresAt: 9 }],
-      orders: [
-        {
-          id: 'O1',
-          name: 'Steel Longsword',
-          minRarity: 'rare',
-          affix: null,
-          maxPrice: 1,
-          expiresAt: 9,
-        },
-      ],
-    },
-  } as unknown as Parameters<typeof ordersBody>[4]
-  const actions = {} as Parameters<typeof ordersBody>[7]
-  const rows = (fit: 'wrap' | 'truncate') =>
-    JSON.stringify(
-      ordersBody(els, (() => null) as never, view, null, orders, true, () => 60_000, actions, fit),
-    )
-  expect(rows('wrap')).not.toContain('"truncate"')
-  expect(rows('wrap')).toContain('"flexWrap":"wrap"')
-  expect(rows('truncate')).toContain('"truncate"')
-  const world = {
-    snapshot: null,
-    fetchedAt: null,
-    stale: false,
-    messages: [{ id: 1, name: 'Brindle', text: 'a long line about the boss', at: 1 }],
-    chatMark: 1,
-    clock: null,
-    committedDealt: null,
-  }
-  const chat = (fit: 'wrap' | 'truncate') =>
-    JSON.stringify(
-      chatBody(
-        els,
-        view,
-        world,
-        { draft: '', busy: false, error: null },
-        { setDraft: async () => undefined, post: async () => undefined },
-        fit,
-      ),
-    )
-  expect(chat('wrap')).not.toContain('"truncate"')
-  expect(chat('truncate')).toContain('"truncate"')
-})
-
-test('a market listing row puts its sprite at the top', async ($, on) => {
-  const { player } = await marketHarness(on, { affixed: true })
-  const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
+test('without gold the expansion is refused in the message window', async ($, on) => {
+  harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-odds' })
+  await ui.press({ key: 'row:expand-inventory' })
+  expect(await paneText(ui)).toMatch(/Refused: /)
   await ui.unmount()
-  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...NARROW })
-  await desk.press({ key: 'tab-market' })
-  const rows = (await desk.findAll({ type: 'Box' })).filter((b) =>
-    /^listing-[^-]+$/.test(String(b.props.key ?? '')),
-  )
-  expect(rows.length).toBeGreaterThan(0)
-  for (const r of rows) expect(r.props.alignItems).toBe('flex-start')
-  await desk.unmount()
 })

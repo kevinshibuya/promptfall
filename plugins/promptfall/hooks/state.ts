@@ -28,7 +28,6 @@ export const MARKET_DEFAULT: MarketState = {
   query: { kind: 'item', sort: 'price', page: 0 },
   page: null,
   busy: false,
-  confirm: null,
   error: null,
 }
 export const ORDERS_DEFAULT: OrdersState = { mine: null, form: null, busy: false, error: null }

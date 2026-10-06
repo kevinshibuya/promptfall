@@ -154,8 +154,6 @@ export type MarketState = {
   query: MarketQuery
   page: { listings: ListingView[]; page: number; total: number } | null
   busy: boolean
-  /** The listing id waiting for `y` to buy. */
-  confirm: string | null
   error: string | null
 }
 export type OrdersState = {

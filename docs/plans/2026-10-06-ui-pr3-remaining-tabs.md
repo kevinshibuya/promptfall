@@ -940,8 +940,8 @@ old Button keys.
 
 **Boundaries:** No band change beyond Task 8's probe move. Nothing the builders draw changes here.
 
-- [ ] Dialog wiring, field callbacks, no-view pane; remove the old bodies and helpers
-- [ ] Replace the dialog and register tests; run the check, commit
+- [x] Dialog wiring, field callbacks, no-view pane; remove the old bodies and helpers
+- [x] Replace the dialog and register tests; run the check, commit
 
 ### Task 10: Scenarios, goldens and the Svg budget
 
