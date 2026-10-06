@@ -628,9 +628,9 @@ not exist.
 
 **Boundaries:** As Task 6.
 
-- [ ] List, recruit row, detail; tests
-- [ ] Command window, Yes/No; tests
-- [ ] Run the check, commit
+- [x] List, recruit row, detail; tests
+- [x] Command window, Yes/No; tests
+- [x] Run the check, commit
 
 ### Task 8: The mount
 
