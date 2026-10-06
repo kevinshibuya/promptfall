@@ -282,6 +282,85 @@ hand-verified; made inline on Opus, Fable out; Kevin can overturn either):
   so the focus hook needs no scroll state it cannot compute outside the render. DQ's lists page
   too. The roster reaches 48 and an equip pick can list most of it, so every sub-window pages.
 
+### 1.21 Planning gaps for UI PR 3 (2026-10-06, planner's calls)
+
+Made while planning UI PR 3 (`docs/plans/2026-10-06-ui-pr3-remaining-tabs.md`) inline on Opus 5.5.
+Kevin asked for the whole pass on Opus, with no Fable. Kevin approved every call here, the
+review rulings below included, on 2026-10-06.
+
+Shared:
+
+- **Every tab is a list window with a detail window beside or under it.** PR 2's frame carries
+  all six. Market lists listings, Orders your listings and orders, Account its settings, Odds
+  the odds table and the expansions, Chat the messages, Leaderboards both boards. Why: one
+  layout, one cursor rule, one paging rule. The tab window now heads all eight tabs (1.20's
+  ruling said PR 3 brings it).
+- **A list can hold lines that take no stop.** Headings (`My listings`, `Highest zone`) carry
+  DQ's divider under them and no ▶. The `Returns waiting` line and the Odds table rows work the same way.
+  Why: Orders, Odds and Leaderboards have sections, and the absence list rules out a second
+  label colour, so the divider marks them.
+- **Forms take the detail window's place, as the sell window does.** The new buy order is a
+  form window. Its picks (base, rarity, affix) take the form's place while open, and `q` or a
+  pick returns to it. The price is a field under the picture (1.5). Mobile lists presets.
+- **Fields and links sit under the picture.** The sell price, the order price and the chat line
+  are `Input`s. The GitHub device-flow URL is a real `Link`, because a URL baked into a picture
+  can't be opened. One field or link at a time.
+- **Short panes drop the tab window.** When the rows can't hold the tab window and the layout's
+  floor, the tab window goes; the tab hotkeys still work, and every list title already names
+  its tab. Why: PR 2's open item 1. An inline pane in a 105 × 50 terminal gets 14 rows and the
+  windows need 16, so after this PR all eight tabs would show only "needs more room" inline,
+  where the six text tabs work today. Without the tab window, 14 rows fit both layouts.
+  Inline at 80 × 24 (7 rows) still doesn't fit.
+- **The pane probes the renderer itself.** A docked pane collapses the band, and a collapsed
+  band never probes, so the pane drew raster in cmux until `/promptfall renderer image` was set
+  (PR 2 pass, note 2). The pane mounts the band's probe Image while the renderer is unknown.
+- **Reset asks Yes/No.** It can't be undone, the same reason Vendor and Dismiss ask.
+
+Per tab:
+
+- **Market.** The list's first row is `Filters` (hotkey `f`). It opens a filter window:
+  `Kind`, `Sort` toggle in place, `Base` (or `Class`) and `Rarity` open a pick window, and a pick
+  returns to the filter window. `Previous page` and `Next page` are rows, before and after the
+  ten listings, because the server pages by ten and mobile reaches only cursor rows. The title
+  carries the search and the gold (`Market: items, rare+, cheapest · 1,240G`). Enter on a
+  listing asks Yes/No (`Buy Silk Robe for 1,200G?`, `y` and `n` as today). Your own listings
+  read `yours` and Enter does nothing on them. The listing sprites stay, as in Inventory (none
+  on raster). `MarketState.confirm` goes: the Yes/No is the dialog's menu, like Vendor's.
+- **Orders.** Rows: the returns line, `My listings` and its rows, `My buy orders` and its rows,
+  then `New buy order`. Enter on a listing or an order asks Yes/No to cancel it, naming what
+  happens to the fee or the escrow.
+- **Account.** The rows are the actions: `Sound`, `Motion`, `Renderer` (hotkeys `s n x` as
+  today), `Band` (collapse or show), `Band off`, `Link GitHub`, `Reset this machine's data`. The
+  detail window holds today's read-only lines. Settings and Reset work in read-only mode, as
+  today; Link doesn't. With no game view, the pane shows the tab window, the message
+  `Promptfall has not started in this session.`, and on Account the server, the client and
+  Reset.
+- **Odds.** The table is one block of lines, a rarity per row with zone, boss and tavern
+  columns. The two expansions follow as rows, dim when gold is short (as Recruit).
+- **Chat.** Messages are rows, one line each, clipped, and the detail window shows the ▶
+  message whole. The ▶ starts on the newest and follows new ones until moved; moving it back
+  onto the newest follows again. Up pages back through the 200 the client holds (today shows
+  14). Enter focuses the compose field. **The field is not focused when the tab opens**
+  (today's compose box is): with the ring on a row the tab hotkeys work, and Enter is one key
+  to the field. The call most likely to be overturned.
+- **Leaderboards.** Both boards in one list, under their headings; the rows are stops that do
+  nothing, so Up and Down page through 40 rows. The detail window shows who is online by zone.
+  Your rows are gold, a graft (today's cyan has no place in DQ's palette).
+
+Review rulings (2026-10-06, the plan's one review wave: `reviewer` on Opus, 16 findings, each
+hand-verified; made inline on Opus; Kevin can overturn any):
+
+- **Chat pages from the newest back.** Pages cut from the top would leave the newest page with as
+  few as one message. Cut from the end, the newest page is always full.
+- **Leaving a field puts the ring back on the ▶.** Otherwise Shift+Tab from the chat field wraps
+  onto the oldest message.
+- **Every list has a cursor stop.** An empty or closed tab's one line becomes a stop that does
+  nothing (on an empty Chat, it focuses the field). With no cursor stop the ring sits on a tab
+  Button and Enter would switch tabs (1.20's ruling).
+- **Reset's Yes/No opens on No.** The ▶ can clamp onto Reset when `Link GitHub` vanishes above it.
+- **Known cost of short panes:** a pane under 96 columns at exactly 14 rows reads "needs more
+  room" while a field shows. Wide inline panes (96 columns up) fit.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+

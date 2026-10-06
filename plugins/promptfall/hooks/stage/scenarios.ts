@@ -1,9 +1,22 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
-import { paneInput } from '../ui/pane/fixtures'
+import { accountPane, noViewPane } from '../ui/pane/account'
+import { chatPane } from '../ui/pane/chat'
+import {
+  boardsLoaded,
+  chatWorld,
+  marketPage,
+  ordersMine,
+  paneInput,
+  paneView,
+} from '../ui/pane/fixtures'
 import { heroesPane } from '../ui/pane/heroes'
 import type { PaneInput } from '../ui/pane/input'
 import { inventoryPane } from '../ui/pane/inventory'
+import { boardsPane } from '../ui/pane/leaderboards'
+import { marketPane } from '../ui/pane/market'
+import { oddsPane } from '../ui/pane/odds'
+import { ordersPane } from '../ui/pane/orders'
 import type { PaneBuild } from '../ui/pane/types'
 import { type StripInput, stripScene, stripTracks } from '../ui/strip'
 import type { Effect } from '../vendor/sim.js'
@@ -319,6 +332,19 @@ export const PANE_SCENARIOS = [
   'pane-heroes-picks',
   'pane-sell',
   'pane-small',
+  'pane-market',
+  'pane-market-filter',
+  'pane-market-buy',
+  'pane-market-narrow',
+  'pane-orders',
+  'pane-orders-form',
+  'pane-account',
+  'pane-account-link',
+  'pane-odds',
+  'pane-chat',
+  'pane-leaderboards',
+  'pane-short',
+  'pane-no-view',
 ] as const
 export type PaneScenario = (typeof PANE_SCENARIOS)[number]
 export type PaneGolden = StripGolden
@@ -396,7 +422,103 @@ export function pane(name: PaneScenario): PaneBuild {
       )
     case 'pane-small':
       return inventoryPane(paneInput({ columns: 36 }))
+    case 'pane-market':
+      return marketPane(market())
+    case 'pane-market-filter':
+      return marketPane(market({ menu: { kind: 'filter', at: 1 } }))
+    case 'pane-market-buy':
+      return marketPane(market({ menu: { kind: 'confirm', action: 'buy', id: 'L3', at: 0 } }))
+    case 'pane-market-narrow':
+      return marketPane(market({}, { columns: 60 }))
+    case 'pane-orders':
+      return ordersPane(
+        withDialog({}, { tab: 'orders', orders: ordersMine(), remainingMs: (d) => d }),
+      )
+    case 'pane-orders-form':
+      return ordersPane(
+        withDialog(
+          { formAt: 4 },
+          {
+            tab: 'orders',
+            orders: {
+              ...ordersMine(),
+              form: {
+                base: 'steel_longsword',
+                minRarity: 'rare',
+                affixId: 'keen',
+                maxPrice: '1200',
+              },
+            },
+          },
+        ),
+      )
+    case 'pane-account':
+      return accountPane(withDialog({}, { tab: 'account' }))
+    case 'pane-account-link':
+      return accountPane(
+        withDialog(
+          {
+            link: { code: 'ABCD1234', url: 'https://github.com/login/device' },
+            cursor: { account: { id: 'reset', index: 5 } },
+          },
+          {
+            tab: 'account',
+            view: { ...paneView(), account: { ...paneView().account, linked: null } },
+          },
+        ),
+      )
+    case 'pane-odds':
+      return oddsPane(
+        paneInput({
+          tab: 'odds',
+          view: { ...paneView(), nextInventoryCost: 500, nextRosterCost: 2000 },
+        }),
+      )
+    case 'pane-chat':
+      return chatPane(
+        paneInput({
+          tab: 'chat',
+          view: {
+            ...paneView(),
+            account: { ...paneView().account, chatOpen: true, server: 'http://fake' },
+          },
+          world: chatWorld(30),
+        }),
+      )
+    case 'pane-leaderboards':
+      return boardsPane(
+        paneInput({
+          tab: 'leaderboards',
+          view: { ...paneView(), account: { ...paneView().account, leaderboardsOpen: true } },
+          boards: boardsLoaded(),
+        }),
+      )
+    case 'pane-short':
+      return marketPane(market({}, { rows: 14 }))
+    case 'pane-no-view': {
+      const { tab, dialog, mode, readOnly, notice, columns, rows } = paneInput({ tab: 'account' })
+      return noViewPane({
+        tab,
+        dialog,
+        mode,
+        readOnly,
+        notice,
+        columns,
+        rows,
+        server: 'in-process',
+        hasGame: true,
+        hasInput: true,
+      })
+    }
   }
+}
+
+/** The Market on the fixture page, listings expiring in 6 days. */
+function market(
+  patch: Partial<PaneInput['dialog']> = {},
+  input: Partial<PaneInput> = {},
+): PaneInput {
+  return withDialog(patch, { tab: 'market', market: marketPage(), remainingMs: (d) => d, ...input })
 }
 
 /** Every window's picture, composed onto one canvas at its cells (transparent between). */

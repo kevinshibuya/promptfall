@@ -1,7 +1,6 @@
 import { atom, type On, read, update } from 'claude-code'
 import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
-import { encode } from '../sprites/base64'
 import { GaugeTrack } from '../stage/gauges'
 import { encodeImage } from '../stage/image'
 import { layoutFor } from '../stage/layout'
@@ -15,7 +14,6 @@ import {
   DESKTOP_COLUMN_PX_CEILING,
   DESKTOP_ROW_PX,
   FULL_MIN_COLUMNS,
-  PROBE_ALT_DENY,
   PROBE_DELAY_MS,
   STAGE_MAX_COLUMNS,
   SVG_INTERACTIVE,
@@ -33,6 +31,7 @@ import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
 import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
+import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { type StripInput, stripScene, stripTracks } from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
@@ -59,15 +58,9 @@ import { worldRows } from './world-rows'
 
 export { worldRows }
 
-/** One transparent pixel: what the probe's Image draws first. */
-const PROBE_A = { rgba: encode(Uint8Array.of(0, 0, 0, 0)), width: 1, height: 1 }
-/** One pixel of alpha 1: a source different from PROBE_A, so the blit is a real swap. */
-const PROBE_B = { rgba: encode(Uint8Array.of(0, 0, 0, 1)), width: 1, height: 1 }
 /** The desktop strip's SMIL horizon: the idle cadence, 5 s, plus a second. */
 const SVG_STRIP_HORIZON_MS = 6000
 
-/** A probe armed and not yet answered; module state, so a reload may arm one more. */
-let probePending = false
 /** For a band drawn without a running game (a hot reload before session.start): drawing only. */
 const looseTimeline = new StageTimeline()
 const looseGauges = new GaugeTrack()
@@ -227,18 +220,18 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         )
         // A renderer forced at session start set the atom; one forced later applies from the next
         // start, so this session still probes.
-        probe = <Image key="probe" source={PROBE_A} columns={1} rows={1} alt=" " />
-        if (!probePending) {
-          probePending = true
+        probe = probeElement(els, renderer)
+        if (probe && armProbe()) {
           const requestId = e.requestId
           $.clock.after(PROBE_DELAY_MS, () => {
             void (async () => {
-              const r = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B })
-              probePending = false
-              // Only the no-pictures deny settles on raster; any other leaves it unknown.
-              if (r.deny === undefined) await update($, rendererAtom, () => 'image')
-              else if (r.deny.startsWith(PROBE_ALT_DENY))
-                await update($, rendererAtom, () => 'raster')
+              // A blit that throws settles nothing, like any other deny.
+              const deny = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B }).then(
+                (r) => r.deny,
+                (error: unknown) => String(error),
+              )
+              const verdict = probeVerdict(deny)
+              if (verdict) await update($, rendererAtom, () => verdict)
             })()
           })
         }

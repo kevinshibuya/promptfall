@@ -73,16 +73,17 @@ export function paneLayout(columns: number, rows: number): PaneLayout {
     middle: { y: 0, rows: 0 },
   }
   if (W < PANE_MIN_COLUMNS) return small
+  const kind = W >= PANE_WIDE_COLUMNS ? 'wide' : 'narrow'
+  const floor = kind === 'wide' ? WIDE_MIDDLE_MIN : NARROW_MIDDLE_MIN
   const tabRows = 2 + tabLines(W - 4).length
-  const middle = { y: tabRows, rows: H - MESSAGE_ROWS - tabRows }
-  if (W >= PANE_WIDE_COLUMNS) {
-    return middle.rows < WIDE_MIDDLE_MIN
-      ? small
-      : { kind: 'wide', columns: W, rows: H, tabRows, middle }
+  const middle = H - MESSAGE_ROWS - tabRows
+  if (middle >= floor)
+    return { kind, columns: W, rows: H, tabRows, middle: { y: tabRows, rows: middle } }
+  // Short panes drop the tab window (grill 1.21): its hotkeys stay mounted, the list titles name the tab.
+  if (H - MESSAGE_ROWS >= floor) {
+    return { kind, columns: W, rows: H, tabRows: 0, middle: { y: 0, rows: H - MESSAGE_ROWS } }
   }
-  return middle.rows < NARROW_MIDDLE_MIN
-    ? small
-    : { kind: 'narrow', columns: W, rows: H, tabRows, middle }
+  return small
 }
 
 /** A label with its hotkey letter (the first occurrence, ignoring case) drawn gold. */
@@ -147,6 +148,14 @@ export function page(index: number, shown: number): number {
   return Math.floor(Math.max(0, index) / shown) * shown
 }
 
+/** The first row of the page holding `index`, pages cut from the last row back (Chat). */
+export function pageFromEnd(index: number, shown: number, total: number): number {
+  if (shown <= 0 || total <= shown) return 0
+  const at = Math.max(0, Math.min(total - 1, index))
+  const end = total - Math.floor((total - 1 - at) / shown) * shown
+  return Math.max(0, end - shown)
+}
+
 /** The page footer while rows are hidden: `16-30/40`, with `▼` while a later page exists. */
 function pageFooter(start: number, shown: number, total: number): Span[] | undefined {
   if (total <= shown) return undefined
@@ -158,7 +167,7 @@ function pageFooter(start: number, shown: number, total: number): Span[] | undef
 
 /**
  * A list window: each line gets the ▶ cell and a gap in front; the page holding `cursor` shows,
- * with its footer. `cursor` -1 shows no ▶.
+ * with its footer. `cursor` -1 shows no ▶. `fromEnd` cuts the pages from the last line back.
  */
 export function listWindow(opts: {
   key: string
@@ -170,9 +179,12 @@ export function listWindow(opts: {
   lines: Line[]
   cursor: number
   alt: string
+  fromEnd?: boolean
 }): Win {
   const shown = Math.max(1, opts.rows - 2)
-  const start = page(opts.cursor, shown)
+  const start = opts.fromEnd
+    ? pageFromEnd(opts.cursor, shown, opts.lines.length)
+    : page(opts.cursor, shown)
   const lines = opts.lines.slice(start, start + shown).map((line, i) => ({
     ...line,
     spans: [{ cursor: start + i === opts.cursor }, { gap: 1 }, ...line.spans],

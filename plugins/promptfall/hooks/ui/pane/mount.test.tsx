@@ -1,14 +1,20 @@
 import type { On } from 'claude-code'
 import { expect, type TestBody, test } from 'claude-code/testing'
-import type { DialogState } from '../../../types'
-import { DIALOG_DEFAULT } from '../../state'
+import type { DialogState, MarketState, OrdersState } from '../../../types'
+import type { GameHandle } from '../../engine'
+import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from '../../state'
 import type { PlayerEvent } from '../../vendor/sim.js'
 import type { PaneScene, Win } from '../../windows/kit'
-import { paneInput } from './fixtures'
+import { loadMarket } from '../market'
+import { placeOrder } from '../orders'
+import { chatPane } from './chat'
+import { chatWorld, marketPage, paneInput, paneView } from './fixtures'
 import { inventoryPane } from './inventory'
+import { marketPane } from './market'
 import {
   type ActionContext,
   closed,
+  focusFrom,
   focusMove,
   needsRefocus,
   type PaneDraw,
@@ -19,6 +25,7 @@ import {
   stepCursor,
   stopsSignature,
   withCursor,
+  writesCursor,
 } from './mount'
 import type { PaneBuild, Stop } from './types'
 
@@ -55,7 +62,8 @@ const BUILD: PaneBuild = {
   scene: SCENE,
   stops: [tab('inventory'), tab('market'), row('a', 0), row('b', 1), row('c', 2), BACK],
   focus: 'row:a',
-  priceInput: false,
+  field: null,
+  link: null,
 }
 const PROPS = {
   title: 'Promptfall',
@@ -80,7 +88,8 @@ function testPane(on: On, renderer: PaneDraw['renderer']) {
       build: BUILD,
       run: () => undefined,
       move: () => undefined,
-      price: null,
+      field: { onInput: () => undefined, onSubmit: () => undefined },
+      probe: null,
     }),
   )
 }
@@ -194,20 +203,35 @@ test('rung (c) steps the ▶ among the cursor stops, wrapping', () => {
   expect(stepCursor(BUILD, -1)?.key).toBe('row:c')
 })
 
-function context(state: { d: DialogState }, events: PlayerEvent[]): ActionContext {
+function context(
+  state: { d: DialogState; market?: MarketState; orders?: OrdersState; tab?: 'orders' },
+  events: PlayerEvent[],
+  game: GameHandle | null = null,
+): ActionContext {
   return {
     upd: async (fn) => {
       state.d = fn(state.d)
     },
-    game: () => null,
+    game: () => game,
     act: async (event) => {
       events.push(event)
     },
     openTab: async () => undefined,
     after: () => undefined,
     remaining: () => undefined,
-    focusPrice: async () => undefined,
+    focusField: async () => undefined,
     dialog: async () => state.d,
+    updMarket: async (fn) => {
+      state.market = fn(state.market ?? MARKET_DEFAULT)
+    },
+    updOrders: async (fn) => {
+      state.orders = fn(state.orders ?? ORDERS_DEFAULT)
+    },
+    market: async () => state.market ?? MARKET_DEFAULT,
+    orders: async () => state.orders ?? ORDERS_DEFAULT,
+    setSettings: async () => undefined,
+    setCollapsed: async () => undefined,
+    tab: async () => state.tab ?? 'inventory',
   }
 }
 
@@ -298,4 +322,269 @@ test('no re-focus while the ring is on the price Input; leaving the price form e
   expect(needsRefocus('p', b, true)).toBe(false)
   // The price form is gone (listed): the ring goes back on the ▶.
   expect(needsRefocus('p', stopsSignature(BUILD, 'inventory'), false)).toBe(true)
+})
+
+/** A game handle stub: the market reads and trades the PR 3 actions reach, recorded. */
+function stubGame() {
+  const calls: string[] = []
+  const handle = {
+    market: {
+      browse: async (q: { page: number }) => {
+        calls.push(`browse ${q.page}`)
+        return { listings: [], page: q.page, total: 0 }
+      },
+      myOrders: async () => {
+        calls.push('myOrders')
+        return { listings: [], orders: [], returns: 0 }
+      },
+    },
+    sync: async () => undefined,
+    trade: async (call: (client: Record<string, unknown>, auth: string) => Promise<unknown>) =>
+      call(
+        {
+          buy: async (_auth: string, id: string) => {
+            calls.push(`buy ${id}`)
+            return { ok: true }
+          },
+          cancelListing: async (_auth: string, id: string) => {
+            calls.push(`cancelListing ${id}`)
+            return { ok: true }
+          },
+        },
+        'auth',
+      ),
+    reset: () => {
+      calls.push('reset')
+    },
+  }
+  return { calls, game: handle as unknown as GameHandle }
+}
+
+test('query clears cursor.market, sets the menu, then browses through the game handle', async () => {
+  const { calls, game } = stubGame()
+  const state: { d: DialogState; market?: MarketState } = {
+    d: {
+      ...DIALOG_DEFAULT,
+      cursor: { market: { id: 'L1', index: 1 } },
+      menu: { kind: 'pick', field: 'base', at: 3 },
+    },
+  }
+  const query = { kind: 'item' as const, sort: 'price' as const, page: 0, base: 'iron_sword' }
+  await runAction({ t: 'query', query, menu: { kind: 'filter', at: 2 } }, context(state, [], game))
+  expect(state.d.cursor.market).toBeNull()
+  expect(state.d.menu).toEqual({ kind: 'filter', at: 2 })
+  expect(calls).toEqual(['browse 0'])
+  expect(state.market?.query).toEqual(query)
+  // Without a game handle it does nothing.
+  const none = { d: DIALOG_DEFAULT }
+  await runAction({ t: 'query', query, menu: null }, context(none, []))
+  expect(none.d).toBe(DIALOG_DEFAULT)
+})
+
+test('buy closes the menu and buys once; cancel cancels; reset closes the menu and resets', async () => {
+  const { calls, game } = stubGame()
+  const state: { d: DialogState } = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'confirm', action: 'buy', id: 'L1', at: 0 } },
+  }
+  await runAction({ t: 'buy', listingId: 'L1' }, context(state, [], game))
+  expect(state.d.menu).toBeNull()
+  expect(calls.filter((c) => c.startsWith('buy'))).toEqual(['buy L1'])
+  state.d = { ...state.d, menu: { kind: 'confirm', action: 'cancel-listing', id: 'L4', at: 0 } }
+  await runAction({ t: 'cancel', what: 'listing', id: 'L4' }, context(state, [], game))
+  expect(calls).toContain('cancelListing L4')
+  state.d = { ...state.d, menu: { kind: 'confirm', action: 'reset', id: '', at: 0 } }
+  await runAction({ t: 'reset' }, context(state, [], game))
+  expect(state.d.menu).toBeNull()
+  expect(calls.at(-1)).toBe('reset')
+})
+
+test('Back: a Market pick returns to its filter row; an order pick keeps the form; then the form closes', async () => {
+  const form = { base: 'steel_longsword', minRarity: 'rare' as const, affixId: null, maxPrice: '' }
+  const market = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'pick' as const, field: 'minRarity' as const, at: 2 } },
+  }
+  await runAction({ t: 'back' }, context(market, []))
+  expect(market.d.menu).toEqual({ kind: 'filter', at: 3 })
+  await runAction({ t: 'back' }, context(market, []))
+  expect(market.d.menu).toBeNull()
+  const orders: { d: DialogState; orders?: OrdersState; tab: 'orders' } = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'pick', field: 'orderBase', at: 0 } },
+    orders: { ...ORDERS_DEFAULT, form },
+    tab: 'orders',
+  }
+  await runAction({ t: 'back' }, context(orders, []))
+  expect(orders.d.menu).toBeNull()
+  expect(orders.orders?.form).toEqual(form)
+  await runAction({ t: 'back' }, context(orders, []))
+  expect(orders.orders?.form).toBeNull()
+})
+
+test('form opens with its ▶ on the first row; a pick changing it keeps the ▶', async () => {
+  const form = { base: 'steel_longsword', minRarity: 'rare' as const, affixId: null, maxPrice: '' }
+  const state: { d: DialogState; orders?: OrdersState } = { d: { ...DIALOG_DEFAULT, formAt: 4 } }
+  await runAction({ t: 'form', form, menu: null }, context(state, []))
+  expect([state.orders?.form, state.d.formAt]).toEqual([form, 0])
+  state.d = { ...state.d, formAt: 1, menu: { kind: 'pick', field: 'orderRarity', at: 0 } }
+  await runAction(
+    { t: 'form', form: { ...form, minRarity: 'epic' }, menu: null },
+    context(state, []),
+  )
+  expect([state.orders?.form?.minRarity, state.d.formAt, state.d.menu]).toEqual(['epic', 1, null])
+})
+
+test('on Orders with only the form open, a focus onto menu:3 writes formAt', () => {
+  const stop: Stop = { key: 'menu:3', action: { t: 'none' }, cursor: true, index: 3 }
+  expect(withCursor(DIALOG_DEFAULT, 'orders', stop).formAt).toBe(3)
+  expect(withCursor(DIALOG_DEFAULT, 'market', stop)).toBe(DIALOG_DEFAULT)
+})
+
+test('leaving the chat field onto back lands on the newest row, not the oldest', () => {
+  const view = { ...paneView(), account: { ...paneView().account, chatOpen: true } }
+  const b = chatPane({ ...paneInput({ tab: 'chat', view, world: chatWorld(30) }) })
+  const left = focusFrom(b, 'back', true)
+  expect(left.t === 'land' ? left.stop.key : null).toBe('row:newest')
+  // Without the field's mark, Tab past back wraps forward to the oldest row, as in PR 2.
+  const wrapped = focusFrom(b, 'back', false)
+  expect(wrapped.t === 'land' ? wrapped.stop.key : null).toBe('row:m-1')
+  expect(focusFrom(b, 'compose', true)).toEqual({ t: 'pass' })
+})
+
+const withUnder = (field: PaneBuild['field'], link: PaneBuild['link']): PaneBuild => ({
+  ...BUILD,
+  field,
+  link,
+})
+function underPane(on: On, build: PaneBuild) {
+  on('ui.render', { component: 'Pane', requestId: 'pane-test' }, async ($, e) =>
+    paneElement({
+      els: $.ui.resolve(e) as PaneDraw['els'],
+      surface: e.surface,
+      renderer: 'raster',
+      bodyColumns: e.props.bodyColumns,
+      build,
+      run: () => undefined,
+      move: () => undefined,
+      field: { onInput: () => undefined, onSubmit: () => undefined },
+      probe: null,
+    }),
+  )
+}
+
+for (const surface of ['terminal', 'desktop'] as const) {
+  test(`a build's link draws a Link under the picture on ${surface}`, async ($, on) => {
+    underPane(on, withUnder(null, { url: 'https://github.com/login/device' }))
+    const ui = await mountPane($, surface)
+    // An inline element carries no key in the drawn tree: the Link is found by its type.
+    const link = await ui.find({ type: 'Link' })
+    expect([link?.type, link?.props.href]).toEqual(['Link', 'https://github.com/login/device'])
+    await ui.unmount()
+  })
+}
+
+test("a build's compose field draws an Input keyed compose with its props", async ($, on) => {
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: 'hi',
+    submitLabel: 'send',
+  }
+  underPane(on, withUnder(field, null))
+  const ui = await mountPane($, 'terminal')
+  const input = await ui.find({ key: 'compose' })
+  expect([input?.type, input?.props.label, input?.props.value]).toEqual(['Input', 'say', 'hi'])
+  await ui.unmount()
+})
+
+test('the ring landing on the ▶ itself writes no cursor, so a drawn default stays a default', async () => {
+  // Market drawn before its page loads: the ▶ defaults to Filters, and autoFocus lands there.
+  const before = marketPane({ ...paneInput({ tab: 'market' }) })
+  expect(before.focus).toBe('row:filters')
+  const landed = focusMove(before, 'row:filters', before.focus)
+  expect(writesCursor(before, landed)).toBe(false)
+  // So once the page loads the ▶ starts on the first listing.
+  const after = marketPane({ ...paneInput({ tab: 'market', market: marketPage() }) })
+  expect(after.focus).toBe('row:L1')
+  // A person's move, and a redirect, write it.
+  expect(writesCursor(after, focusMove(after, 'row:L2', after.focus))).toBe(true)
+  expect(writesCursor(after, focusMove(after, 'back', after.focus))).toBe(true)
+})
+
+test('a second Yes before the redraw buys, cancels or resets nothing more', async () => {
+  const { calls, game } = stubGame()
+  const state: { d: DialogState } = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'confirm', action: 'buy', id: 'L1', at: 0 } },
+  }
+  const ctx = context(state, [], game)
+  await Promise.all([
+    runAction({ t: 'buy', listingId: 'L1' }, ctx),
+    runAction({ t: 'buy', listingId: 'L1' }, ctx),
+  ])
+  expect(calls.filter((c) => c.startsWith('buy'))).toEqual(['buy L1'])
+  // With no Yes/No open, cancel and reset do nothing.
+  await runAction({ t: 'cancel', what: 'order', id: 'O1' }, ctx)
+  await runAction({ t: 'reset' }, ctx)
+  expect(calls).not.toContain('reset')
+})
+
+test('a tab switch closes the sell flow and any sub-window', async () => {
+  const sell = { kind: 'item' as const, id: 'i1', matching: [], price: '', error: null, at: 1 }
+  const state: { d: DialogState } = {
+    d: { ...DIALOG_DEFAULT, sell, menu: { kind: 'filter', at: 0 } },
+  }
+  await runAction({ t: 'tab', tab: 'market' }, context(state, []))
+  expect([state.d.sell, state.d.menu]).toEqual([null, null])
+  // So a move in Market's filter window writes its row, not a hidden sell window's.
+  const stop: Stop = { key: 'menu:2', action: { t: 'none' }, cursor: true, index: 2 }
+  const open = { ...state.d, menu: { kind: 'filter' as const, at: 0 } }
+  expect(withCursor(open, 'market', stop).menu).toEqual({ kind: 'filter', at: 2 })
+})
+
+test('a Chat cursor left on the empty line follows the messages when they come', () => {
+  const view = { ...paneView(), account: { ...paneView().account, chatOpen: true } }
+  const b = chatPane({
+    ...paneInput({ tab: 'chat', view, world: chatWorld(30) }),
+    dialog: { ...DIALOG_DEFAULT, cursor: { chat: { id: 'empty', index: 0 } } },
+  })
+  expect(b.focus).toBe('row:newest')
+})
+
+test('a market page for a query no longer current is dropped', async () => {
+  const pending: ((page: number) => void)[] = []
+  const game = {
+    market: {
+      browse: (q: { page: number }) =>
+        new Promise((resolve) => {
+          pending.push(() => resolve({ listings: [], page: q.page, total: 0 }))
+        }),
+    },
+    sync: async () => undefined,
+  } as unknown as GameHandle
+  let market: MarketState = MARKET_DEFAULT
+  const upd = async (fn: (m: MarketState) => MarketState) => {
+    market = fn(market)
+  }
+  const items = { kind: 'item' as const, sort: 'price' as const, page: 0 }
+  const heroes = { kind: 'hero' as const, sort: 'price' as const, page: 3 }
+  const first = loadMarket(game, items, upd, () => undefined)
+  const second = loadMarket(game, heroes, upd, () => undefined)
+  await Promise.resolve()
+  pending[1]?.(3)
+  await second
+  pending[0]?.(0)
+  await first
+  expect(market.query).toEqual(heroes)
+  expect(market.page?.page).toBe(3)
+})
+
+test('placeOrder sends nothing for a price out of range', async () => {
+  const { calls, game } = stubGame()
+  const form = { base: 'iron_sword', minRarity: 'rare' as const, affixId: null, maxPrice: '0' }
+  await placeOrder(
+    game,
+    { ...ORDERS_DEFAULT, form },
+    async () => undefined,
+    () => undefined,
+  )
+  expect(calls).toEqual([])
 })

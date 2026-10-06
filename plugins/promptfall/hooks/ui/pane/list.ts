@@ -1,6 +1,6 @@
-// What the Inventory and Heroes panes share: a list window with a detail window beside or under
-// it, a command, pick or Yes/No window over it, or the sell window in its place; the tab and
-// message windows; and the ring stops in order (tabs, the cursor stops, back, claim).
+// What every tab's pane shares: a list window with a detail window beside or under it, a command,
+// pick or Yes/No window over it, or a panel (the sell window, the order form) in its place; the
+// tab and message windows; and the ring stops in order (tabs, the cursor stops, back, claim).
 import type { Line, Span, Win } from '../../windows/kit'
 import {
   assemble,
@@ -16,17 +16,31 @@ import {
   tabWindow,
   yesNoWindow,
 } from './frame'
-import { messageLines, type PaneInput } from './input'
-import { sellWindow } from './sell'
-import type { PaneAction, PaneBuild, Stop } from './types'
+import { type FrameInput, type MessageLine, messageLines } from './input'
+import type { PaneAction, PaneBuild, PaneField, Stop } from './types'
 
 export type ListRow = {
-  /** The row stop's key: `row:<id>`. */
-  key: string
+  /** `row:<id>`; absent for a line that takes no stop (a heading, a note). */
+  key?: string
+  hotkey?: string
   spans: Span[]
-  action: PaneAction
+  /** Present exactly when `key` is. */
+  action?: PaneAction
+  /** A heading: DQ's divider under the line. */
+  rule?: true
   /** The row as a screen reader reads it. */
   alt: string
+}
+
+/** A window in the detail window's place: the sell window, the order form. */
+export type PanelBuild = {
+  win: Win
+  /** `menu:<i>` per item. */
+  stops: Stop[]
+  /** The panel's ▶ item; -1 with none. */
+  at: number
+  state: [MessageLine, MessageLine]
+  field: PaneField | null
 }
 
 export type ListSpec = {
@@ -34,18 +48,35 @@ export type ListSpec = {
   /** How the list's alt opens: `Inventory 3 of 20`. */
   altTitle: string
   rows: readonly ListRow[]
-  /** The line drawn when there are no rows; it takes no stop. */
+  /** The line drawn when there are no rows. */
   empty: string
-  /** The ▶ row; -1 when there are no rows. */
+  /** The ▶ as a stop position among the rows with a key; -1 with none. */
   cursor: number
   /** The detail window's lines for an inner width, its header line first; null draws none. */
   detail: ((inner: number) => Line[]) | null
   /** An open command or pick window: its items carry their actions. */
-  menu: { header: Span[]; items: readonly (MenuItem & { action: PaneAction })[]; at: number } | null
+  menu: {
+    header: Span[]
+    items: readonly (MenuItem & { action: PaneAction })[]
+    at: number
+    /** A pick over a panel: takes the panel's slot. */
+    wholeColumn?: true
+  } | null
   /** An open Yes/No: Yes runs `yes`, No goes back. */
   yesNo: { at: number; yes: PaneAction } | null
+  /** A window in the detail window's place; `build` is called with its slot. */
+  panel: ((at: Rect) => PanelBuild) | null
+  /** Rule 4's text: the tab's error. */
+  error: string | null
   /** The message window's lines when rules 1 to 4 do not apply. */
-  state: [string, string]
+  state: [MessageLine, MessageLine]
+  /** Pages cut from the last line back (Chat). */
+  fromEnd?: true
+  /** The `row:empty` stop's action when no row has a key; `none` when absent. */
+  emptyAction?: PaneAction
+  /** The field when no panel brings one (Chat's compose), else null. */
+  field: PaneField | null
+  link: { url: string } | null
 }
 
 function tabStops(): Stop[] {
@@ -57,35 +88,52 @@ function tabStops(): Stop[] {
   }))
 }
 
-function tailStops(input: PaneInput): Stop[] {
+function tailStops(input: FrameInput): Stop[] {
   const stops: Stop[] = [{ key: 'back', hotkey: 'q', action: { t: 'back' }, cursor: false }]
   if (input.readOnly && input.mode === 'secondary')
     stops.push({ key: 'claim', hotkey: 'p', action: { t: 'claim' }, cursor: false })
   return stops
 }
 
-export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
+export function listPane(input: FrameInput, spec: ListSpec): PaneBuild {
   const layout = paneLayout(input.columns, input.rows)
   if (layout.kind === 'small') {
-    const [first, second] = messageLines(input, spec.state)
+    const [first, second] = messageLines(input, spec.error, spec.state)
     return {
       scene: assemble(layout, { message: messageWindow(layout, first, second) }),
       stops: tabStops(),
       focus: null,
-      priceInput: false,
+      field: null,
+      link: null,
     }
   }
-  const sell = !input.readOnly && input.dialog.sell ? input.dialog.sell : null
+  const whole = spec.menu?.wholeColumn === true
+  const panel = !whole && spec.panel ? spec.panel : null
   let sub: Sub = { kind: 'none' }
-  let sellRows = 0
-  if (sell) {
-    // A dry run on a tall rect counts the sell window's rows for the narrow band's height.
-    const probe = sellWindow(input, { x: 0, y: 0, columns: layout.columns, rows: 1000 })
-    sellRows = probe.win.lines.length - 1
-    sub = { kind: 'menu', items: sellRows }
-  } else if (spec.yesNo) sub = { kind: 'yesno' }
+  if (panel) {
+    // A dry run on a tall rect counts the panel's rows for the narrow band's height.
+    const probe = panel({ x: 0, y: 0, columns: layout.columns, rows: 1000 })
+    sub = { kind: 'menu', items: probe.win.lines.length - 1 }
+  } else if (spec.menu && whole) sub = { kind: 'menu', items: spec.menu.items.length }
+  else if (spec.yesNo) sub = { kind: 'yesno' }
   else if (spec.menu) sub = { kind: 'menu', items: spec.menu.items.length }
-  const slots = paneSlots(layout, sub, sell !== null)
+  const slots = paneSlots(layout, sub, panel !== null || whole)
+
+  // The rows with a key are the stops; with none, the first line is a stop that does nothing.
+  const keyed = spec.rows.flatMap((r, line) => (r.key ? [{ row: r, line }] : []))
+  const at = keyed.length === 0 ? -1 : Math.max(0, Math.min(keyed.length - 1, spec.cursor))
+  const cursorLine = keyed[at]?.line ?? -1
+  let cursorStops: Stop[] =
+    keyed.length === 0
+      ? [{ key: 'row:empty', action: spec.emptyAction ?? { t: 'none' }, cursor: true, index: 0 }]
+      : keyed.map((k, i) => ({
+          key: k.row.key as string,
+          ...(k.row.hotkey ? { hotkey: k.row.hotkey } : {}),
+          action: k.row.action ?? { t: 'none' },
+          cursor: true,
+          index: i,
+        }))
+  let focus: string | null = keyed[at]?.row.key ?? 'row:empty'
 
   const list = listWindow({
     key: 'list',
@@ -93,26 +141,20 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
     title: spec.title,
     lines:
       spec.rows.length > 0
-        ? spec.rows.map((r) => ({ spans: r.spans }))
+        ? spec.rows.map((r) => ({ spans: r.spans, ...(r.rule ? { rule: true } : {}) }))
         : [{ spans: [{ text: spec.empty }] }],
-    cursor: spec.cursor,
+    cursor: cursorLine,
+    ...(spec.fromEnd ? { fromEnd: true } : {}),
     alt: `${spec.altTitle}: ${
       spec.rows.length > 0
-        ? spec.rows.map((r, i) => (i === spec.cursor ? `▶ ${r.alt}` : r.alt)).join('; ')
+        ? spec.rows.map((r, i) => (i === cursorLine ? `▶ ${r.alt}` : r.alt)).join('; ')
         : spec.empty
     }`,
   })
 
   const right = []
-  let cursorStops: Stop[] = spec.rows.map((r, i) => ({
-    key: r.key,
-    action: r.action,
-    cursor: true,
-    index: i,
-  }))
-  let focus: string | null = spec.rows[spec.cursor]?.key ?? null
   let state = spec.state
-  let priceInput = false
+  let field = spec.field
   let yesNo: Win | undefined
 
   const detail = (rect: Rect) => {
@@ -130,14 +172,14 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
   if (slots.detail && spec.detail) right.push(detail(slots.detail))
   else if (slots.detail) right.push({ key: 'detail', ...slots.detail, lines: [], alt: '' })
 
-  if (sell && slots.menu) {
-    const built = sellWindow(input, slots.menu)
+  if (panel && slots.menu) {
+    const built = panel(slots.menu)
     right.push(built.win)
     cursorStops = built.stops
-    focus = built.stops.length > 0 ? `menu:${Math.min(sell.at, built.stops.length - 1)}` : null
+    focus = built.at >= 0 && built.stops.length > 0 ? `menu:${built.at}` : null
     state = built.state
-    priceInput = built.priceInput
-  } else if (spec.yesNo && slots.yesNo) {
+    field = built.field
+  } else if (spec.yesNo && slots.yesNo && !whole) {
     yesNo = yesNoWindow(slots.yesNo.x, slots.yesNo.y, spec.yesNo.at)
     cursorStops = [
       { key: 'yes', hotkey: 'y', action: spec.yesNo.yes, cursor: true, index: 0 },
@@ -145,14 +187,14 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
     ]
     focus = spec.yesNo.at === 1 ? 'no' : 'yes'
   } else if (spec.menu && slots.menu) {
-    const at = Math.max(0, Math.min(spec.menu.items.length - 1, spec.menu.at))
+    const menuAt = Math.max(0, Math.min(spec.menu.items.length - 1, spec.menu.at))
     right.push(
       menuWindow({
         key: 'menu',
         ...slots.menu,
         header: spec.menu.header,
         items: spec.menu.items,
-        at,
+        at: menuAt,
       }),
     )
     cursorStops = spec.menu.items.map((item, i) => ({
@@ -162,12 +204,12 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
       cursor: true,
       index: i,
     }))
-    focus = spec.menu.items.length > 0 ? `menu:${at}` : null
+    focus = spec.menu.items.length > 0 ? `menu:${menuAt}` : null
   }
 
-  const [first, second] = messageLines(input, state)
+  const [first, second] = messageLines(input, spec.error, state)
   const scene = assemble(layout, {
-    tab: tabWindow(layout.columns, input.tab),
+    ...(layout.tabRows > 0 ? { tab: tabWindow(layout.columns, input.tab) } : {}),
     list,
     right,
     ...(yesNo ? { yesNo } : {}),
@@ -177,6 +219,7 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
     scene,
     stops: [...tabStops(), ...cursorStops, ...tailStops(input)],
     focus,
-    priceInput,
+    field,
+    link: spec.link,
   }
 }
