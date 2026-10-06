@@ -119,7 +119,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const mode: Mode = (await read($, modeAtom)) ?? 'primary'
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
     const listRenderer = await read($, rendererAtom)
-    const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
+    const dialog: DialogState = { ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }
     const notice = await read($, noticeAtom)
     const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
 

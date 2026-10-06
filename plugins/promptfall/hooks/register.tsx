@@ -667,13 +667,13 @@ export const register: Register = (on) => {
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))
         },
         dialogLink: async (link) => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link }))
         },
         clearDialog: async () => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
         readNotice: () => read($, noticeAtom),
@@ -736,13 +736,13 @@ export const register: Register = (on) => {
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), paneNotice: text }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))
         },
         dialogLink: async (link) => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link }))
         },
         clearDialog: async () => {
-          await update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), link: null, sell: null }))
+          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link: null, sell: null }))
         },
         readWorld: () => read($, worldAtom),
         readNotice: () => read($, noticeAtom),

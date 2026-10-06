@@ -26,7 +26,7 @@ export async function openSell(
   id: string,
   upd: Updater<DialogState>,
 ): Promise<void> {
-  await upd((d) => ({ ...d, sell: { kind, id, matching: [], price: '', error: null } }))
+  await upd((d) => ({ ...d, sell: { kind, id, matching: [], price: '', error: null, at: 0 } }))
   if (kind !== 'item') return
   try {
     // A fresh drop reaches the server with the next batch: flush it before asking what matches.

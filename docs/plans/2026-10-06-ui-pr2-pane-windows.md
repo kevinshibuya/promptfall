@@ -457,7 +457,7 @@ the new file. Red before: `ui/pane/types.ts` does not exist.
 
 **Boundaries:** No behaviour change.
 
-- [ ] Types and defaults; run the check, commit
+- [x] Types and defaults; run the check, commit
 
 ### Task 4: The pane frame
 
