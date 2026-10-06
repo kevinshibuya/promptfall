@@ -160,18 +160,18 @@ test('cursorRow: the id, else the stored index clamped, else the top', () => {
 
 test('messageLines: too small, read-only secondary, a refusal', () => {
   const state: [string, string] = ['Enter: actions.', 'second']
-  const small = messageLines(paneInput({ columns: 36 }), state)
+  const small = messageLines(paneInput({ columns: 36 }), null, state)
   expect([textOf(small[0]), textOf(small[1])]).toEqual([
     'The pane needs more room.',
     'Widen it or give it more rows.',
   ])
-  const ro = messageLines(paneInput({ readOnly: true, mode: 'secondary' }), state)
+  const ro = messageLines(paneInput({ readOnly: true, mode: 'secondary' }), null, state)
   expect(ro[0]).toEqual([
     { text: 'Playing in another session: this view is read-only.', rgb: WARN_RGB },
   ])
   expect(textOf(ro[1])).toBe('p: play here.')
   const dialog = { ...paneInput().dialog, paneNotice: 'not_enough_gold' }
-  const refused = messageLines(paneInput({ dialog }), state)
+  const refused = messageLines(paneInput({ dialog }), null, state)
   expect(refused[0]).toEqual([{ text: 'Refused: not_enough_gold', rgb: DOWN_RGB }])
   expect(textOf(refused[1])).toBe('second')
 })

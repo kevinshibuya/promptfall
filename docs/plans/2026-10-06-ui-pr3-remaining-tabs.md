@@ -543,7 +543,7 @@ every question answered and a desktop row answered or marked Kevin's; the decisi
 
 **Boundaries:** No new window, action or layout.
 
-- [ ] Types, `PaneInput`, fixtures, `messageLines`; run the check, commit
+- [x] Types, `PaneInput`, fixtures, `messageLines`; run the check, commit
 
 ### Task 3: The frame grows lines, panels, fields and short panes
 

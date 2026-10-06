@@ -1,7 +1,14 @@
 // Hand-built pane inputs for the pane tests and the pane goldens.
 import type { GameView, ItemView, RosterHeroView } from '../../../types'
 import { wave } from '../../stage/fixtures'
-import { DIALOG_DEFAULT } from '../../state'
+import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  SETTINGS_DEFAULT,
+} from '../../state'
 import type { PaneInput } from './input'
 
 export function item(id: string, patch: Partial<ItemView> = {}): ItemView {
@@ -104,6 +111,17 @@ export function paneInput(patch: Partial<PaneInput> = {}): PaneInput {
     art: true,
     hasInput: true,
     remainingMs: () => 0,
+    market: MARKET_DEFAULT,
+    orders: ORDERS_DEFAULT,
+    chat: CHAT_DEFAULT,
+    boards: BOARDS_DEFAULT,
+    account: {
+      server: 'in-process',
+      leaseOwner: null,
+      settings: SETTINGS_DEFAULT,
+      renderer: 'image',
+      collapsed: false,
+    },
     ...patch,
   }
 }

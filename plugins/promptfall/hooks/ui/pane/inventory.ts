@@ -140,7 +140,7 @@ export function inventoryPane(input: PaneInput): PaneBuild {
   const { view, dialog } = input
   const items = view.inventory
   const cursor = cursorRow(
-    dialog.cursor.inventory,
+    dialog.cursor.inventory ?? null,
     items.map((i) => i.id),
   )
   const inner = listInner(input)
@@ -174,9 +174,8 @@ export function inventoryPane(input: PaneInput): PaneBuild {
   })
   const current = items[cursor]
   const menu: PaneMenu | null = input.readOnly ? null : dialog.menu
-  const menuItem = menu
-    ? items.find((i) => i.id === ('itemId' in menu ? menu.itemId : menu.id))
-    : undefined
+  const subject = !menu ? null : 'itemId' in menu ? menu.itemId : 'id' in menu ? menu.id : null
+  const menuItem = subject !== null ? items.find((i) => i.id === subject) : undefined
 
   const spec: ListSpec = {
     title: [{ text: `Inventory ${items.length}/${view.inventoryCap} · ${gold(view.gold)}` }],

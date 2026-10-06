@@ -278,6 +278,10 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const rows = terminal
         ? Math.min(PANE_ROWS, e.props.scroll.bodyRows - (pricing ? PRICE_INPUT_ROWS : 0))
         : PANE_ROWS
+      // The atom keeps this render subscribed; the store is the truth (another session may write it).
+      await read($, settingsAtom)
+      const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
+      const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
       const input: PaneInput = {
         tab,
         view,
@@ -292,6 +296,17 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         art: !terminal || renderer === 'image',
         hasInput: Input !== undefined,
         remainingMs,
+        market,
+        orders,
+        chat,
+        boards,
+        account: {
+          server,
+          leaseOwner: (await read($, leaseOwnerAtom)) ?? null,
+          settings,
+          renderer,
+          collapsed: prefs.collapsed,
+        },
       }
       const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
       remember(e.requestId, tab, build)
@@ -300,7 +315,11 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const window = dialog.sell
         ? `sell:${dialog.sell.id}`
         : menu
-          ? `${menu.kind}:${'itemId' in menu ? menu.itemId : menu.id}`
+          ? menu.kind === 'filter'
+            ? menu.kind
+            : menu.kind === 'pick'
+              ? `pick:${menu.field}`
+              : `${menu.kind}:${'itemId' in menu ? menu.itemId : menu.id}`
           : tab
       const signature = stopsSignature(build, window)
       if (needsRefocus(requestId, signature, build.priceInput)) {

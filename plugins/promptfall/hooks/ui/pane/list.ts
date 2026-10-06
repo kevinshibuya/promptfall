@@ -67,7 +67,7 @@ function tailStops(input: PaneInput): Stop[] {
 export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
   const layout = paneLayout(input.columns, input.rows)
   if (layout.kind === 'small') {
-    const [first, second] = messageLines(input, spec.state)
+    const [first, second] = messageLines(input, input.dialog.sell?.error ?? null, spec.state)
     return {
       scene: assemble(layout, { message: messageWindow(layout, first, second) }),
       stops: tabStops(),
@@ -165,7 +165,7 @@ export function listPane(input: PaneInput, spec: ListSpec): PaneBuild {
     focus = spec.menu.items.length > 0 ? `menu:${at}` : null
   }
 
-  const [first, second] = messageLines(input, state)
+  const [first, second] = messageLines(input, input.dialog.sell?.error ?? null, state)
   const scene = assemble(layout, {
     tab: tabWindow(layout.columns, input.tab),
     list,

@@ -22,6 +22,7 @@ export const DIALOG_DEFAULT: DialogState = {
   link: null,
   sell: null,
   cursor: { inventory: null, heroes: null },
+  formAt: 0,
 }
 export const MARKET_DEFAULT: MarketState = {
   query: { kind: 'item', sort: 'price', page: 0 },

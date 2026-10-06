@@ -136,7 +136,7 @@ export function heroesPane(input: PaneInput): PaneBuild {
     })
   }
   const ids = rows.map((r) => r.key.slice(4))
-  const cursor = cursorRow(dialog.cursor.heroes, ids)
+  const cursor = cursorRow(dialog.cursor.heroes ?? null, ids)
   const current = roster.find((h) => h.id === ids[cursor])
 
   const picks = dialog.partyPick

@@ -28,13 +28,12 @@ const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG
 
 export const PANE_ID = 'promptfall'
 
-type PaneTab = 'inventory' | 'heroes'
 type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
   Partial<Pick<Elements['terminal'], 'Input' | 'Image' | 'Raster'>> &
   Partial<Pick<Elements['desktop'], 'Svg'>>
 
 /** The build each pane instance drew last, for the focus hook: its ring order, cursors and tab. */
-const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
+const last = new Map<string, { build: PaneBuild; tab: DialogTab }>()
 /**
  * The stop keys each instance drew last. The engine keeps the ring by position, so when the
  * stops change under it (a menu opens, a tab switches, a recruit or a drop inserts a row) the ring
@@ -43,7 +42,7 @@ const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
 const lastStops = new Map<string, string>()
 /** The instances whose ring sits on the price Input: a re-focus there would eat the typing. */
 const onInput = new Set<string>()
-export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
+export function remember(requestId: string, tab: DialogTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
 }
 /** The pane draws no stops now (another tab, or closed): its next stops count as changed. */
@@ -288,7 +287,7 @@ export function focusMove(
 }
 
 /** The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row. */
-export function withCursor(d: DialogState, tab: PaneTab, stop: Stop): DialogState {
+export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogState {
   const index = stop.index ?? 0
   if (stop.key.startsWith('row:')) {
     return { ...d, cursor: { ...d.cursor, [tab]: { id: stop.key.slice(4), index } } }
