@@ -67,6 +67,29 @@ export async function ordersTrade(
   return done
 }
 
+/**
+ * Places the order form: one order at a time (Enter and Place order both submit), and only a
+ * whole-number price; the form closes once the order is placed.
+ */
+export async function placeOrder(
+  game: GameHandle,
+  current: OrdersState,
+  upd: Updater<OrdersState>,
+  after: After,
+): Promise<void> {
+  const form = current.form
+  if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
+  await upd((o) => ({ ...o, busy: true }))
+  const input = {
+    base: form.base,
+    minRarity: form.minRarity,
+    affixId: form.affixId,
+    maxPrice: Number(form.maxPrice),
+  }
+  const done = await ordersTrade(game, (c, a) => c.placeOrder(a, input), upd, after)
+  if (done) await upd((o) => ({ ...o, form: null }))
+}
+
 /** The rare vendor value of a base: what the presets multiply. */
 export function baseValue(base: string, rarity: RarityName): number {
   const probe: Item = { id: 'p', base, rarity, affixes: [], equippedBy: null, tradeableAt: null }

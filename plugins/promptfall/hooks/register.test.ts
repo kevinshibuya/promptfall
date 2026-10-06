@@ -1084,6 +1084,19 @@ test('any other deny leaves the renderer unknown, and a later render probes agai
   await again.unmount()
 })
 
+test('a pane drawn while the renderer is unknown probes too, and a taken blit settles on image', async ($, on) => {
+  // A docked pane collapses the band, which then never probes (UI PR 3).
+  const { time, last, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  const probe = await ui.find({ key: 'probe' })
+  expect([probe?.type, probe?.props.columns, probe?.props.rows]).toEqual(['Image', 1, 1])
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe').map((b) => b.requestId)).toEqual(['promptfall'])
+  expect(last.get('renderer')).toBe('image')
+  await ui.unmount()
+})
+
 test('a forced renderer sends no probe', async ($, on) => {
   const { time, last, blits } = probing(
     on,

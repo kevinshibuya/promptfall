@@ -875,10 +875,17 @@ the form open, a `ui.focus` onto `menu:3` writes `formAt: 3`. Red before: the ac
 
 **Boundaries:** No change to what any builder draws. The band draws exactly as before.
 
-- [ ] `confirmBuy`, `placeOrder`; the new actions; Back; tests
-- [ ] The field and the Link; the focus hook; tests
-- [ ] The probe module; the band on it; the pane's probe; tests
-- [ ] Run the check, commit
+Execution note (2026-10-06): the hooks loader never follows `$` across an import, so
+`probeElement(els, $, …)` cannot load. `ui/probe.tsx` holds what the callers share (the Image,
+`PROBE_B`, the pending flag as `armProbe()`, the verdict as `probeVerdict(deny)`); the band and the
+dialog each send the blit with `$` in their own module. The pane's probe test lives in
+`register.test.ts` beside the band's, since only the plugin's own module may call `$.clock.after`.
+A Link is an inline element: the drawn tree keeps no key on it, so tests find it by type.
+
+- [x] `confirmBuy`, `placeOrder`; the new actions; Back; tests
+- [x] The field and the Link; the focus hook; tests
+- [x] The probe module; the band on it; the pane's probe; tests
+- [x] Run the check, commit
 
 ### Task 9: The dialog wiring
 

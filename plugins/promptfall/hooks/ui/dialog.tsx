@@ -15,6 +15,7 @@ import type {
 } from '../../types'
 import type { GameHandle } from '../engine'
 import { spriteFor } from '../sprites/index'
+import { PROBE_DELAY_MS } from '../stage/tuning'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
@@ -35,7 +36,7 @@ import { chatBody, postChat } from './chat'
 import type { TextFit } from './format'
 import { boardsBody, loadBoards } from './leaderboards'
 import { confirmBuy, loadMarket, marketBody } from './market'
-import { loadOrders, ordersBody, ordersTrade } from './orders'
+import { loadOrders, ordersBody, ordersTrade, placeOrder } from './orders'
 import { heroesPane } from './pane/heroes'
 import type { PaneInput } from './pane/input'
 import { inventoryPane } from './pane/inventory'
@@ -45,6 +46,7 @@ import {
   needsRefocus,
   type PaneDraw,
   paneElement,
+  paneWindow,
   placed,
   registerPaneHooks,
   remember,
@@ -55,6 +57,7 @@ import {
   withCursor,
 } from './pane/mount'
 import type { PaneAction } from './pane/types'
+import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { ListSprite, listSpriteColumns } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
@@ -171,6 +174,12 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       updDialog((d) => (d.sell ? { ...d, sell: fn(d.sell) } : d))
     const after: After = (ms, fn) => {
       $.clock.after(ms, fn)
+    }
+    /** Merges into the store, not a render's copy: another session may have changed it. */
+    const setSettings = async (patch: Partial<Settings>) => {
+      const next = { ...parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)), ...patch }
+      await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
+      await update($, settingsAtom, () => next)
     }
     const els: Els = { Box, Text, Button, Input: 'Input' in table ? table.Input : undefined }
     const clientNow = await $.clock.now()
@@ -303,16 +312,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       else if (terminal && build.link) build = builder(inputAt(bodyRows - LINK_ROWS))
       remember(e.requestId, tab, build)
       const requestId = e.requestId
-      const menu = dialog.menu
-      const window = dialog.sell
-        ? `sell:${dialog.sell.id}`
-        : menu
-          ? menu.kind === 'filter'
-            ? menu.kind
-            : menu.kind === 'pick'
-              ? `pick:${menu.field}`
-              : `${menu.kind}:${'itemId' in menu ? menu.itemId : menu.id}`
-          : tab
+      const window = paneWindow(dialog, tab, orders.form !== null)
       const signature = stopsSignature(build, window)
       if (needsRefocus(requestId, signature, build.field !== null)) {
         const key = build.focus
@@ -346,8 +346,32 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           if (r.deny === undefined) ringOnInput(requestId, true)
         },
         dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
+        updMarket,
+        updOrders,
+        market: async () => (await read($, marketAtom)) ?? MARKET_DEFAULT,
+        orders: async () => (await read($, ordersAtom)) ?? ORDERS_DEFAULT,
+        setSettings,
+        setCollapsed: async (collapsed) => {
+          await update($, prefsAtom, (p) => ({ ...(p ?? PREFS_DEFAULT), collapsed }))
+        },
+        tab: async () => (await read($, dialogTabAtom)) ?? 'inventory',
       }
       const run = (a: PaneAction) => void runAction(a, ctx)
+      // A docked pane collapses the band, which then never probes: the pane probes too.
+      const probe = terminal ? probeElement(table as PaneDraw['els'], renderer) : null
+      if (probe && armProbe()) {
+        $.clock.after(PROBE_DELAY_MS, () => {
+          void (async () => {
+            // A blit that throws settles nothing, like any other deny.
+            const deny = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B }).then(
+              (r) => r.deny,
+              (error: unknown) => String(error),
+            )
+            const verdict = probeVerdict(deny)
+            if (verdict) await update($, rendererAtom, () => verdict)
+          })()
+        })
+      }
       return paneElement({
         els: table as PaneDraw['els'],
         surface: e.surface,
@@ -359,6 +383,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           const stop = stepCursor(build, by)
           if (stop) void updDialog((d) => withCursor(d, tab, stop))
         },
+        probe,
         field: {
           onInput: (key, text) => {
             if (key === 'price') void updSell((s) => ({ ...s, price: text }))
@@ -413,8 +438,11 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           {
             setQuery: (q) => loadMarket(running, q, updMarket, after),
             ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
-            confirm: async () =>
-              confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
+            confirm: async () => {
+              const current = (await read($, marketAtom)) ?? market
+              if (current.confirm)
+                await confirmBuy(running, current.confirm, current.query, updMarket, after)
+            },
           },
           paneWidth,
           (l) => {
@@ -461,26 +489,8 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             closeForm: () => updOrders((o) => ({ ...o, form: null })),
             setForm: (patch) =>
               updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
-            submit: async () => {
-              const current = (await read($, ordersAtom)) ?? orders
-              const form = current.form
-              // Enter and `place` both submit: one order at a time.
-              if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
-              await updOrders((o) => ({ ...o, busy: true }))
-              const input = {
-                base: form.base,
-                minRarity: form.minRarity,
-                affixId: form.affixId,
-                maxPrice: Number(form.maxPrice),
-              }
-              const done = await ordersTrade(
-                running,
-                (c, a) => c.placeOrder(a, input),
-                updOrders,
-                after,
-              )
-              if (done) await updOrders((o) => ({ ...o, form: null }))
-            },
+            submit: async () =>
+              placeOrder(running, (await read($, ordersAtom)) ?? orders, updOrders, after),
           },
           fit,
         ),
@@ -525,12 +535,6 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       await read($, settingsAtom)
       const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       const renderer = await read($, rendererAtom)
-      const setSettings = async (patch: Partial<Settings>) => {
-        // Merge into the store, not this render's copy: another session may have changed it.
-        const next = { ...parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)), ...patch }
-        await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
-        await update($, settingsAtom, () => next)
-      }
       const rendererText =
         settings.renderer === 'auto'
           ? `auto (${renderer})`

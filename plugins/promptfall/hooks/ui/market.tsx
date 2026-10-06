@@ -43,15 +43,14 @@ export async function loadMarket(
   }
 }
 
-/** Buys the listing waiting for confirmation, then syncs and refetches. */
+/** Buys a listing the person said Yes to, then syncs and refetches `query`. */
 export async function confirmBuy(
   game: GameHandle,
-  market: MarketState,
+  id: string,
+  query: MarketQuery,
   upd: Updater<MarketState>,
   after: After,
 ): Promise<void> {
-  const id = market.confirm
-  if (!id) return
   await upd((s) => ({ ...s, confirm: null, busy: true }))
   try {
     const r = await game.trade((client, auth) => client.buy(auth, id))
@@ -59,7 +58,7 @@ export async function confirmBuy(
   } catch (error) {
     await flash(upd, after, errorText(error))
   }
-  await loadMarket(game, market.query, upd, after)
+  await loadMarket(game, query, upd, after)
 }
 
 /** The query with one filter set, or cleared by `any`; back to page 0. */

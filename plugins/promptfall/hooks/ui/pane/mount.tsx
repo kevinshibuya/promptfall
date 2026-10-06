@@ -8,7 +8,16 @@
 // ring moves without telling the plugin.
 import type { Elements, On, RenderElement, RenderSurface } from 'claude-code'
 import { atom, update } from 'claude-code'
-import type { DialogState, DialogTab, SellState } from '../../../types'
+import type {
+  DialogState,
+  DialogTab,
+  MarketState,
+  OrdersState,
+  PaneMenu,
+  PickField,
+  SellState,
+  Settings,
+} from '../../../types'
 import type { GameHandle } from '../../engine'
 import { fnv1a64 } from '../../stage/hash'
 import { encodeImage } from '../../stage/image'
@@ -20,6 +29,8 @@ import type { Tile, Win } from '../../windows/kit'
 import { sceneCells } from '../../windows/raster'
 import { sceneSvg } from '../../windows/svg'
 import { CELL_H, CELL_W, WINDOW_SCALE } from '../../windows/tuning'
+import { confirmBuy, loadMarket } from '../market'
+import { ordersTrade, placeOrder } from '../orders'
 import { openSell, sellTrade } from '../sell'
 import type { After, Updater } from '../trade'
 import type { PaneAction, PaneBuild, PaneFieldKey, Stop } from './types'
@@ -123,6 +134,8 @@ export type PaneDraw = {
   /** Rung (c): moves the ▶ one cursor stop. */
   move: (by: 1 | -1) => void
   field: FieldCallbacks
+  /** The renderer probe's Image while the renderer is unknown (terminals), else null. */
+  probe: RenderElement | null
 }
 
 /** Rung (a′) on terminals, (c) elsewhere (the spike sheet). */
@@ -151,6 +164,7 @@ export function paneElement(d: PaneDraw): RenderElement {
           onPress={() => d.run(s.action)}
         />
       ))}
+      {d.probe}
     </Box>
   )
 
@@ -299,7 +313,25 @@ export function focusMove(
   return { t: 'keep' }
 }
 
-/** The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row. */
+/**
+ * `focusMove` from the build's ▶, with "Leaving a field": a move off a field onto a tab, back or
+ * claim stop lands on the ▶ itself, not on the next row in the direction of travel (Shift+Tab from
+ * the chat field would wrap onto the oldest message).
+ */
+export function focusFrom(
+  build: PaneBuild,
+  element: string | undefined,
+  leaving: boolean,
+): FocusMove {
+  const move = focusMove(build, element, build.focus)
+  const home = build.stops.find((s) => s.key === build.focus)
+  return leaving && move.t === 'land' && move.redirect && home ? { ...move, stop: home } : move
+}
+
+/**
+ * The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row: the sell
+ * window's, a menu's, or on Orders the order form's.
+ */
 export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogState {
   const index = stop.index ?? 0
   if (stop.key.startsWith('row:')) {
@@ -307,7 +339,23 @@ export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogSt
   }
   if (d.sell) return { ...d, sell: { ...d.sell, at: index } }
   if (d.menu) return { ...d, menu: { ...d.menu, at: index } }
+  if (tab === 'orders') return { ...d, formAt: index }
   return d
+}
+
+/**
+ * The open window as the re-focus signature names it: the sell flow, a menu (`filter`,
+ * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`), the order form, or the tab.
+ */
+export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): string {
+  const m = d.menu
+  if (d.sell) return `sell:${d.sell.id}`
+  if (m?.kind === 'filter') return 'filter'
+  if (m?.kind === 'pick') return `pick:${m.field}`
+  if (m?.kind === 'confirm') return `confirm:${m.action}:${m.id}`
+  if (m) return `${m.kind}:${'itemId' in m ? m.itemId : m.id}`
+  if (tab === 'orders' && form) return 'form'
+  return tab
 }
 
 /** Rung (c)'s ▲ and ▼: the cursor stop `by` away from the ▶, wrapping. */
@@ -329,8 +377,10 @@ export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
     const l = last.get(e.requestId)
     if (!l) return next(e)
-    ringOnInput(e.requestId, isFieldKey(e.element))
-    const move = focusMove(l.build, e.element, l.build.focus)
+    // Leaving a field puts the ring back on the ▶: the engine stop between keeps the field's mark.
+    const leaving = onInput.has(e.requestId) && e.element !== undefined && !isFieldKey(e.element)
+    if (e.element !== undefined) ringOnInput(e.requestId, isFieldKey(e.element))
+    const move = focusFrom(l.build, e.element, leaving)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}
     await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
@@ -357,6 +407,42 @@ export type ActionContext = {
   focusField: (key: PaneFieldKey) => Promise<void>
   /** The dialog state now, for the actions that read it (party, the sell flow). */
   dialog: () => Promise<DialogState>
+  updMarket: Updater<MarketState>
+  updOrders: Updater<OrdersState>
+  market: () => Promise<MarketState>
+  orders: () => Promise<OrdersState>
+  setSettings: (patch: Partial<Settings>) => Promise<void>
+  setCollapsed: (collapsed: boolean) => Promise<void>
+  /** The tab now, for Back on Orders. */
+  tab: () => Promise<DialogTab>
+}
+
+/** The Market filter window's row for each filter a pick sets. */
+const FILTER_ROW: Partial<Record<PickField, number>> = { base: 2, cls: 2, minRarity: 3 }
+
+/**
+ * Back, the first that applies: a Market pick returns to the filter window on its row; an order
+ * pick closes, showing the form again; any other menu closes; else the sell flow closes; else, on
+ * Orders, an open form closes.
+ */
+async function back(ctx: ActionContext): Promise<void> {
+  const d = await ctx.dialog()
+  const m = d.menu
+  if (m?.kind === 'pick' && FILTER_ROW[m.field] !== undefined) {
+    const filter: PaneMenu = { kind: 'filter', at: FILTER_ROW[m.field] ?? 0 }
+    await ctx.upd((s) => ({ ...s, menu: filter }))
+    return
+  }
+  if (m) {
+    await ctx.upd((s) => ({ ...s, menu: null }))
+    return
+  }
+  if (d.sell) {
+    await ctx.upd((s) => ({ ...s, sell: null }))
+    return
+  }
+  if ((await ctx.tab()) === 'orders' && (await ctx.orders()).form)
+    await ctx.updOrders((o) => ({ ...o, form: null }))
 }
 
 export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
@@ -373,7 +459,7 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
       await ctx.upd((d) => ({ ...d, menu: a.menu }))
       return
     case 'back':
-      await ctx.upd((d) => (d.menu ? { ...d, menu: null } : d.sell ? { ...d, sell: null } : d))
+      await back(ctx)
       return
     case 'event':
       await ctx.act(a.event)
@@ -422,6 +508,64 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
       ctx.game()?.claim()
       return
     case 'none':
+      return
+    case 'query': {
+      const running = ctx.game()
+      if (!running) return
+      // The menu first: a pick never stays open through a slow fetch.
+      await ctx.upd((d) => ({ ...d, menu: a.menu, cursor: { ...d.cursor, market: null } }))
+      await loadMarket(running, a.query, ctx.updMarket, ctx.after)
+      return
+    }
+    case 'buy': {
+      const running = ctx.game()
+      if (!running) return
+      await ctx.upd((d) => ({ ...d, menu: null }))
+      await confirmBuy(running, a.listingId, (await ctx.market()).query, ctx.updMarket, ctx.after)
+      return
+    }
+    case 'cancel': {
+      const running = ctx.game()
+      if (!running) return
+      await ctx.upd((d) => ({ ...d, menu: null }))
+      await ordersTrade(
+        running,
+        a.what === 'listing'
+          ? (c, auth) => c.cancelListing(auth, a.id)
+          : (c, auth) => c.cancelOrder(auth, a.id),
+        ctx.updOrders,
+        ctx.after,
+      )
+      return
+    }
+    case 'form': {
+      // Opening a form puts its ▶ on the first row; a pick changing it keeps the ▶.
+      const opening = a.form !== null && (await ctx.orders()).form === null
+      await ctx.updOrders((o) => ({ ...o, form: a.form }))
+      await ctx.upd((d) => ({ ...d, menu: a.menu, ...(opening ? { formAt: 0 } : {}) }))
+      return
+    }
+    case 'place': {
+      const running = ctx.game()
+      if (!running) return
+      await placeOrder(running, await ctx.orders(), ctx.updOrders, ctx.after)
+      return
+    }
+    case 'setting':
+      await ctx.setSettings(a.patch)
+      return
+    case 'band':
+      await ctx.setCollapsed(a.collapsed)
+      return
+    case 'off':
+      ctx.game()?.setOff(true)
+      return
+    case 'link':
+      ctx.game()?.link()
+      return
+    case 'reset':
+      await ctx.upd((d) => ({ ...d, menu: null }))
+      ctx.game()?.reset()
       return
   }
 }
