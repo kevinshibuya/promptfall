@@ -901,3 +901,20 @@ test('/promptfall market opens on the list, closing a sell flow left open', asyn
   expect([d.sell, d.menu]).toEqual([null, null])
   await ui.unmount()
 })
+
+test('at 13 rows the sell window lists presets rather than lose the pane to its field', async ($, on) => {
+  const { player } = await marketHarness(on)
+  const { ui } = await startOnTest($, on, player)
+  await ui.unmount()
+  // 100 columns is wide: 13 rows hold the windows, 12 (the field's row taken) would not.
+  const short = { ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: 13 } } }
+  const pane = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
+  await pane.press({ key: 'row:iR' })
+  await hot(pane, 's')
+  const text = await paneText(pane)
+  expect(text).not.toMatch(/needs more room/)
+  expect(text).toMatch(/Sell Steel Longsword/)
+  expect(await pane.find({ key: 'price' })).toBeUndefined()
+  expect((await pane.find({ type: 'Raster' }))?.props.rows).toBe(13)
+  await pane.unmount()
+})

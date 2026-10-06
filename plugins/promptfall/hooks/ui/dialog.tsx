@@ -38,6 +38,7 @@ import { loadMarket } from './market'
 import { loadOrders, placeOrder } from './orders'
 import { accountPane, noViewPane } from './pane/account'
 import { chatPane } from './pane/chat'
+import { paneLayout } from './pane/frame'
 import { heroesPane } from './pane/heroes'
 import type { PaneInput } from './pane/input'
 import { inventoryPane } from './pane/inventory'
@@ -180,7 +181,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       columns: Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns),
       rows,
     })
-    const buildAt = (rows: number): PaneBuild =>
+    const buildAt = (rows: number, input = hasInput): PaneBuild =>
       view
         ? BUILDERS[tab]({
             ...frame(rows),
@@ -188,7 +189,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             world,
             running: running !== null,
             art: !terminal || renderer === 'image',
-            hasInput,
+            hasInput: input,
             remainingMs,
             market,
             orders,
@@ -197,11 +198,18 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             account: { server, leaseOwner, settings, renderer, collapsed: prefs.collapsed },
           })
         : // The Account tab works without a game view: a state from an older version is reset here.
-          noViewPane({ ...frame(rows), server, hasGame: running !== null, hasInput })
+          noViewPane({ ...frame(rows), server, hasGame: running !== null, hasInput: input })
     // On a terminal a field or the Link takes rows under the picture: build again without them.
     let build = buildAt(pictureRows(0))
-    if (terminal && build.field) build = buildAt(pictureRows(FIELD_ROWS))
-    else if (terminal && build.link) build = buildAt(pictureRows(LINK_ROWS))
+    if (terminal && build.field) {
+      // A field whose row would push the picture under its floor is left out: the picture keeps
+      // its rows and the pane builds as a surface without an Input (presets for prices). Else the
+      // pane would read "needs more room", and the band would take the rows it freed.
+      const room =
+        paneLayout(Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns), pictureRows(FIELD_ROWS))
+          .kind !== 'small'
+      build = room ? buildAt(pictureRows(FIELD_ROWS)) : buildAt(pictureRows(0), false)
+    } else if (terminal && build.link) build = buildAt(pictureRows(LINK_ROWS))
     remember(e.requestId, tab, build)
 
     const requestId = e.requestId
