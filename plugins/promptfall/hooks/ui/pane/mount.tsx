@@ -329,6 +329,15 @@ export function focusFrom(
 }
 
 /**
+ * True when a landing moves the ▶: onto another stop, or by a redirect. The ring landing on the ▶
+ * itself (an `autoFocus`, a re-focus) says nothing the dialog state does not, and writing it would
+ * pin a default: Market's ▶ drawn on Filters before the page loads would stay there after it.
+ */
+export function writesCursor(build: PaneBuild, move: FocusMove): boolean {
+  return move.t === 'land' && (move.redirect || move.stop.key !== build.focus)
+}
+
+/**
  * The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row: the sell
  * window's, a menu's, or on Orders the order form's.
  */
@@ -383,7 +392,8 @@ export function registerPaneHooks(on: On): void {
     const move = focusFrom(l.build, e.element, leaving)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}
-    await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
+    if (writesCursor(l.build, move))
+      await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
     return next(move.redirect ? { ...e, element: move.stop.key } : e)
   })
   // Escape always closes the pane (the spike: a refused close strands the keyboard). A closed

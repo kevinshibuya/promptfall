@@ -6,8 +6,9 @@ import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from '../../state'
 import type { PlayerEvent } from '../../vendor/sim.js'
 import type { PaneScene, Win } from '../../windows/kit'
 import { chatPane } from './chat'
-import { chatWorld, paneInput, paneView } from './fixtures'
+import { chatWorld, marketPage, paneInput, paneView } from './fixtures'
 import { inventoryPane } from './inventory'
+import { marketPane } from './market'
 import {
   type ActionContext,
   closed,
@@ -22,6 +23,7 @@ import {
   stepCursor,
   stopsSignature,
   withCursor,
+  writesCursor,
 } from './mount'
 import type { PaneBuild, Stop } from './types'
 
@@ -489,4 +491,18 @@ test("a build's compose field draws an Input keyed compose with its props", asyn
   const input = await ui.find({ key: 'compose' })
   expect([input?.type, input?.props.label, input?.props.value]).toEqual(['Input', 'say', 'hi'])
   await ui.unmount()
+})
+
+test('the ring landing on the ▶ itself writes no cursor, so a drawn default stays a default', async () => {
+  // Market drawn before its page loads: the ▶ defaults to Filters, and autoFocus lands there.
+  const before = marketPane({ ...paneInput({ tab: 'market' }) })
+  expect(before.focus).toBe('row:filters')
+  const landed = focusMove(before, 'row:filters', before.focus)
+  expect(writesCursor(before, landed)).toBe(false)
+  // So once the page loads the ▶ starts on the first listing.
+  const after = marketPane({ ...paneInput({ tab: 'market', market: marketPage() }) })
+  expect(after.focus).toBe('row:L1')
+  // A person's move, and a redirect, write it.
+  expect(writesCursor(after, focusMove(after, 'row:L2', after.focus))).toBe(true)
+  expect(writesCursor(after, focusMove(after, 'back', after.focus))).toBe(true)
 })
