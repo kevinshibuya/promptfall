@@ -602,9 +602,9 @@ module does not exist.
 
 **Boundaries:** No mounting. No change to `ui/dialog.tsx`.
 
-- [ ] List, detail, stops, `cursorRow`; tests
-- [ ] Command window, picks, Yes/No, the sell column; tests
-- [ ] Run the check, commit
+- [x] List, detail, stops, `cursorRow`; tests
+- [x] Command window, picks, Yes/No, the sell column; tests
+- [x] Run the check, commit
 
 ### Task 7: The Heroes windows
 
