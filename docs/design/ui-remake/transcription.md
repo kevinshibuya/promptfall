@@ -188,6 +188,11 @@ borders in colour.
   (grill 1.7).
 - The purse window: the tactics window's shape holding gold and the tactics (grill 1.13, 1.16).
 - Rarity colours on drop lines: README.
+- Hotkey letters drawn gold in tab labels and command items (grill 1.20): DQ V picks with the
+  cursor alone; the game keeps its letter keys, so the letter shows which.
+- Sprites in the Inventory and Heroes list rows (grill 1.20): DQ V lists are text only.
+- Dim columns in list rows (the wearer, the party mark) and the dim Recruit row when gold is short
+  (grill 1.20).
 
 ## Deltas from the spine, decided
 

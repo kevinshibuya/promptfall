@@ -2,12 +2,26 @@ import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
+import { item, paneInput, paneView } from '../ui/pane/fixtures'
+import { inventoryPane } from '../ui/pane/inventory'
+import { sceneSvg } from '../windows/svg'
+import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
-import { GOLDENS, STRIP_GOLDENS } from './goldens/index'
+import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes } from './image'
 import type { StageActor, StageModel } from './model'
 import { encodeRaster, rasterPairs } from './raster'
-import { goldenOf, SCENARIOS, STRIP_SCENARIOS, stage, strip, stripGoldenOf } from './scenarios'
+import {
+  goldenOf,
+  PANE_SCENARIOS,
+  pane,
+  paneGoldenOf,
+  SCENARIOS,
+  STRIP_SCENARIOS,
+  stage,
+  strip,
+  stripGoldenOf,
+} from './scenarios'
 import { renderSvg } from './svg'
 import type { Motion } from './timeline'
 import {
@@ -149,3 +163,38 @@ for (const name of STRIP_SCENARIOS) {
     expect(stripGoldenOf(strip(name))).toEqual(STRIP_GOLDENS[name])
   })
 }
+
+for (const name of PANE_SCENARIOS) {
+  test(`pane golden: ${name}`, () => {
+    expect(paneGoldenOf(pane(name))).toEqual(PANE_GOLDENS[name])
+  })
+}
+
+test('the fullest pane fits the Svg budget', () => {
+  // Wide, 120 × 24, 15 rows of 30-character names with sprites, a full detail window, a command
+  // window open over it.
+  const view = paneView()
+  view.inventory = Array.from({ length: 20 }, (_, i) =>
+    item(`x${i}`, {
+      base: i % 2 === 0 ? 'silk_robe' : 'iron_sword',
+      name: `${'Wondrous Gleaming Item'.padEnd(26, 'x')}${String(i).padStart(4, '0')}`,
+      rarity: 'legendary',
+      affixes: ['+9 Strength', '+9 Defence', '+9% Speed', '+9 Magic'],
+      equippedBy: i === 0 ? null : 'h1',
+      tradeableAt: 5_000_000,
+    }),
+  )
+  const base = paneInput({ view, remainingMs: () => 3_600_000 })
+  const build = inventoryPane({
+    ...base,
+    dialog: {
+      ...base.dialog,
+      menu: { kind: 'actions', tab: 'inventory', id: 'x0', at: 0 },
+      cursor: { inventory: { id: 'x0', index: 0 }, heroes: null },
+    },
+  })
+  const listed = build.scene.windows.find((w) => w.key === 'list')
+  expect(listed?.lines.length).toBe(15)
+  const svg = sceneSvg(build.scene, [], { smil: false, width: build.scene.columns * CELL_W })
+  expect(svg.length).toBeLessThan(PANE_SVG_MAX_CHARS)
+})

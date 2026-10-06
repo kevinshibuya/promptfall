@@ -170,15 +170,27 @@ export type SellState = {
   matching: OrderView[]
   price: string
   error: string | null
+  /** The sell window's ▶ row. */
+  at: number
 }
+/** A sub-window open over the Inventory or Heroes list (grill 1.20). `at` is its ▶ row. */
+export type PaneMenu =
+  | { kind: 'actions'; tab: 'inventory' | 'heroes'; id: string; at: number }
+  | { kind: 'equip'; itemId: string; at: number }
+  | { kind: 'reforge'; itemId: string; at: number }
+  | { kind: 'confirm'; action: 'vendor' | 'dismiss'; id: string; at: number } // at 0 Yes, 1 No
+/** The ▶ row of a list: the id it was on, and its index then (for when the id is gone). */
+export type PaneCursor = { id: string; index: number }
 export type DialogState = {
-  itemPick: string | null
+  /** The open sub-window over the Inventory or Heroes list. */
+  menu: PaneMenu | null
   partyPick: string[]
   paneNotice: string | null
   /** The device-flow code while a GitHub link is polling. */
   link: { code: string; url: string } | null
-  /** The sell panel over Inventory or Heroes. */
+  /** The sell flow; the sell window shows exactly while this is set. */
   sell: SellState | null
+  cursor: { inventory: PaneCursor | null; heroes: PaneCursor | null }
 }
 
 // The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`):

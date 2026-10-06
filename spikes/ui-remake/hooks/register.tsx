@@ -1,6 +1,7 @@
 // UI remake spikes (docs/plans/2026-10-05-ui-remake-spikes.md). Throwaway: never shipped, never in CI.
 // `claude --plugin-dir spikes/ui-remake`: the band shows the paint-over and hidden-hotkey probes;
-// `/spike-ui` opens the pane with the sharpness runs, the focus ring and the click probe.
+// `/spike-ui` opens the pane with the sharpness runs, the focus ring and the click probe;
+// `/spike-pane` opens the PR 2 pane probe: the hidden ring, the arrows, Escape, tiles, the Input.
 import type { Register, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 
 const PANE = 'spike-ui'
@@ -226,6 +227,7 @@ export const register: Register = (on) => {
       invalidate: () => $.ui.invalidate('ui.render'),
     }
     await $.command.register({ name: 'spike-ui', description: 'UI remake spike pane' })
+    await $.command.register({ name: 'spike-pane', description: 'UI PR 2 pane spike' })
     return next(e)
   })
 
@@ -239,6 +241,8 @@ export const register: Register = (on) => {
     await $.ui.open({ id: PANE, title: 'ui remake spike', focus: true, rows: 34 })
     return { text: 'Spike pane opened.' }
   })
+
+  registerPaneSpike(on)
 
   on('ui.focus', { requestId: PANE }, async (_$, e, next) => {
     focusLog.push(`${e.element ?? '(engine stop)'} by ${e.origin.kind}`)
@@ -383,6 +387,226 @@ export const register: Register = (on) => {
           rows={v.rows}
           alt={v.label}
         />
+      </Box>
+    )
+  })
+}
+
+// The PR 2 pane spike (docs/plans/2026-10-06-ui-pr2-pane-windows.md, Task 1).
+const PANE2 = 'spike-pane'
+// The plan's sizes; the grid shrinks to the body it is given (a small cmux window seats ~9 rows).
+const WIN_COLUMNS = 40
+const WIN_ROWS = 6
+const WIN_FIELD = 0xff303028
+const WIN_FRAME = 0xfff0f0e8
+const GAP_COLUMNS = 8
+const GAP_ROWS = 4
+const STOPS = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7']
+
+/** A plain window rectangle: field with a 2 px frame. */
+function plainWindow(columns: number, rows: number) {
+  const w = columns * CELL_W
+  const h = rows * CELL_H
+  const out = new Uint8Array(w * h * 4)
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const p = x < 2 || y < 2 || x >= w - 2 || y >= h - 2 ? WIN_FRAME : WIN_FIELD
+      const i = (y * w + x) * 4
+      out[i] = (p >>> 16) & 0xff
+      out[i + 1] = (p >>> 8) & 0xff
+      out[i + 2] = p & 0xff
+      out[i + 3] = (p >>> 24) & 0xff
+    }
+  }
+  return { rgba: b64(out), width: w, height: h }
+}
+type Size = { columns: number; rows: number; gapRows: number }
+function gridSize(bodyColumns: number, bodyRows: number): Size {
+  // Two rows for the log and the Input.
+  const room = bodyRows - 2
+  const rows = Math.max(2, Math.min(WIN_ROWS, Math.floor((room - 1) / 2)))
+  return {
+    columns: Math.min(WIN_COLUMNS, Math.floor(bodyColumns / 3)),
+    rows,
+    gapRows: Math.max(1, Math.min(GAP_ROWS, room - 2 * rows)),
+  }
+}
+const plainCache = new Map<string, ReturnType<typeof plainWindow>>()
+function plain(columns: number, rows: number) {
+  const k = `${columns}x${rows}`
+  const hit = plainCache.get(k)
+  if (hit) return hit
+  const made = plainWindow(columns, rows)
+  plainCache.set(k, made)
+  return made
+}
+
+// The tile tree: a row of three columns; the middle one holds the gap between its windows, so
+// w4 sits 4 rows lower than w3 and w5. 120 × 16 cells.
+function gridSvg(size: Size): string {
+  const W = size.columns * CELL_W
+  const H = size.rows * CELL_H
+  const at: [number, number][] = [
+    [0, 0],
+    [0, H],
+    [W, 0],
+    [W, H + size.gapRows * CELL_H],
+    [2 * W, 0],
+    [2 * W, H],
+  ]
+  const rects = at.map(
+    ([x, y]) =>
+      `<rect x="${x + 1}" y="${y + 1}" width="${W - 2}" height="${H - 2}" fill="#303028" stroke="#f0f0e8" stroke-width="2"/>`,
+  )
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${3 * W} ${2 * H + size.gapRows * CELL_H}" shape-rendering="crispEdges">${rects.join('')}</svg>`
+}
+
+const paneLog: string[] = []
+const log = (line: string) => {
+  paneLog.push(line)
+  if (paneLog.length > 4) paneLog.shift()
+}
+let redirected = false
+let refusedClose = false
+let typed = ''
+
+function registerPaneSpike(on: Parameters<Register>[0]): void {
+  on('command.run', { command: 'spike-pane' }, async ($) => {
+    redirected = false
+    refusedClose = false
+    paneLog.length = 0
+    await $.ui.open({ id: PANE2, title: 'pane spike', focus: true, closeOnEscape: true, rows: 24 })
+    return { text: 'Pane spike opened.' }
+  })
+
+  on('ui.focus', { requestId: PANE2 }, async ($, e, next) => {
+    const origin = e.origin.kind === 'plugin' ? 'plugin' : 'person'
+    log(`focus ${e.element ?? '(engine stop)'} by ${origin}`)
+    $.ui.invalidate('ui.render')
+    if (e.element === 's5' && !redirected) {
+      redirected = true
+      log('redirect s5 -> s6')
+      return next({ ...e, element: 's6' })
+    }
+    return next(e)
+  })
+
+  on('ui.press', { requestId: PANE2 }, async ($, e, next) => {
+    log(`press ${String(e.element)}`)
+    $.ui.invalidate('ui.render')
+    return next(e)
+  })
+
+  on('ui.close', { id: PANE2 }, async ($, e, next) => {
+    if (e.origin.kind === 'person' && !refusedClose) {
+      refusedClose = true
+      log('close refused')
+      $.ui.invalidate('ui.render')
+      return { deny: 'spike: first person close refused' }
+    }
+    return next(e)
+  })
+
+  on('ui.render', { component: 'Pane', requestId: PANE2 }, async ($, e, next) => {
+    const els = $.ui.resolve(e)
+    const { Box, Text, Button } = els
+    const Input = 'Input' in els ? els.Input : undefined
+    const terminal = e.surface === 'terminal'
+    const size = terminal
+      ? gridSize(e.props.bodyColumns, e.props.scroll.bodyRows)
+      : { columns: WIN_COLUMNS, rows: WIN_ROWS, gapRows: GAP_ROWS }
+    const onQ = () => {
+      log('q pressed')
+      $.ui.invalidate('ui.render')
+      void $.ui.focus({ requestId: PANE2, key: 's1' }).then((r) => {
+        log(`focus(s1) ${r.deny ?? 'ok'}`)
+        $.ui.invalidate('ui.render')
+      })
+    }
+    const hidden = (
+      <Box
+        key="ring"
+        width={0}
+        overflow="hidden"
+        {...(terminal ? {} : { position: 'absolute' as const, top: 0, left: 0 })}
+      >
+        {STOPS.map((k) => (
+          <Button
+            key={k}
+            label=" "
+            plain
+            {...(k === 's3' ? { autoFocus: true as const } : {})}
+            onPress={() => undefined}
+          />
+        ))}
+        <Button key="back" label=" " hotkey="q" plain onPress={onQ} />
+      </Box>
+    )
+    let grid = null
+    if (terminal && 'Image' in els) {
+      const { Image } = els
+      const win = (k: string) => (
+        <Image
+          key={k}
+          source={plain(size.columns, size.rows)}
+          columns={size.columns}
+          rows={size.rows}
+          alt={k}
+        />
+      )
+      grid = (
+        <Box key="grid" flexDirection="row">
+          <Box key="c0" flexDirection="column">
+            {win('w0')}
+            {win('w1')}
+          </Box>
+          <Box key="c1" flexDirection="column">
+            {win('w2')}
+            <Box key="gap" width={GAP_COLUMNS} height={size.gapRows} />
+            {win('w3')}
+          </Box>
+          <Box key="c2" flexDirection="column">
+            {win('w4')}
+            {win('w5')}
+          </Box>
+        </Box>
+      )
+    } else if (!terminal && 'Svg' in els) {
+      const { Svg } = els
+      grid = (
+        <Svg
+          key="grid"
+          source={gridSvg(size)}
+          alt="pane spike grid"
+          width={3 * size.columns * CELL_W}
+          height={(2 * size.rows + size.gapRows) * CELL_H}
+        />
+      )
+    }
+    if (!grid) return next(e)
+    return (
+      <Box key="pane" flexDirection="column">
+        <Text key="log">{`${size.columns}x${size.rows} gap ${size.gapRows} | ${paneLog.join(' | ') || '-'}`}</Text>
+        <Box key="top" flexDirection="row">
+          {grid}
+          {hidden}
+        </Box>
+        {Input && (
+          <Input
+            key="price"
+            label="price"
+            placeholder="gold"
+            value={typed}
+            submitLabel="list"
+            onInput={(v: string) => {
+              typed = v
+            }}
+            onSubmit={(v: string) => {
+              log(`submit ${v}`)
+              $.ui.invalidate('ui.render')
+            }}
+          />
+        )}
       </Box>
     )
   })

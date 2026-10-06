@@ -31,7 +31,7 @@ function lay(
     } else if (p.kind === 'cursor') {
       const cell = row[x]
       if (cell) Object.assign(cell, { ch: '▶', fg: BORDER_RGB })
-    } else {
+    } else if (p.kind === 'bar') {
       const filled = Math.round((p.cells * p.fill) / 10000)
       for (let i = 0; i < p.cells; i++) {
         const cell = row[x + i]
@@ -61,11 +61,12 @@ export function sceneCells(scene: Scene): string {
     Array.from({ length: scene.columns }, () => ({ ch: ' ', fg: CLEAR, bg: CLEAR })),
   )
   for (const win of scene.windows) {
+    const top = win.y ?? 0
     const right = win.columns - 1
     const bottom = win.rows - 1
     for (let y = 0; y <= bottom; y++) {
       for (let x = 0; x <= right; x++) {
-        const cell = grid[y]?.[win.x + x]
+        const cell = grid[top + y]?.[win.x + x]
         if (!cell) continue
         const edgeX = x === 0 || x === right
         const edgeY = y === 0 || y === bottom
@@ -76,10 +77,10 @@ export function sceneCells(scene: Scene): string {
         Object.assign(cell, { ch, fg: BORDER_RGB, bg: FIELD_RGB })
       }
     }
-    cut(grid, win, win.title, 0)
-    cut(grid, win, win.footer, bottom)
+    cut(grid, win, win.title, top)
+    cut(grid, win, win.footer, top + bottom)
     for (const [r, line] of win.lines.slice(0, win.rows - 2).entries()) {
-      lay(grid, line.spans, win.x + 1, r + 1, win.columns - 2, line.reveal)
+      lay(grid, line.spans, win.x + 1, top + r + 1, win.columns - 2, line.reveal)
     }
   }
   const words = new Uint32Array(scene.columns * scene.rows * 3)

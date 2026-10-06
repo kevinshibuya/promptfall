@@ -471,6 +471,18 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Dialog via `/promptfall [tab]`: Inventory, Heroes, Account, Odds in phase 1;
   Market and Orders in phase 2; Chat and Leaderboards in phase 3. Opened with
   focus, closes on Escape, holds toasts.
+- Inventory and Heroes draw as Dragon Quest V windows (UI PR 2, ADR 0005): a tab
+  window, a list window with a ▶ cursor, a detail window beside it from 96
+  columns (under it below that), command and pick windows, a Yes/No, and a
+  message window. The picture takes at most 24 rows and 120 columns, centred on
+  a wider pane; under 40 columns, or with too few rows, only the message window
+  shows, asking for more room. Keys: Tab or the arrows move the ▶, Enter opens
+  the row's command window or runs the item under the ▶, `q` backs out of a
+  sub-window, Escape closes the pane, and each item's letter (drawn gold) runs
+  it. Vendor and Dismiss ask Yes or No first. Long lists page with a
+  `16-30/40` footer and a ▼ while more follow. The desktop, VS Code and mobile
+  add a `▲ ▼ ok back` row under the picture: their focus ring moves without
+  telling the plugin. The other six tabs keep their text rows.
 - Chat tab (`c`): the messages the pane fits, newest at the bottom, a compose
   input with Enter to post, the gate said in place (unlinked, chat off), a 5
   second flash on a refusal naming the rule, read-only on mobile. Any session
@@ -481,8 +493,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   and minimum rarity, sorted by price or newest, 10 per page, Buy on a hotkey
   with a confirm step. Orders tab: my listings, my buy orders, a form for a
   new order, the count waiting in returns. Selling starts from the Inventory
-  and Heroes tabs: matching buy orders first, then the fixed-price form, with
-  fee and net shown before confirming. Market and Orders are always listed; a
+  and Heroes command windows: a sell window takes the detail window's place,
+  matching buy orders first (each with the net), then Set a price, which
+  focuses a price field under the picture; the message window shows the fee
+  and net for a typed price. Mobile has no field and lists preset prices. Market and Orders are always listed; a
   closed market or an unlinked account is said in place, with a hotkey to the
   Account tab.
 - Account tab: link GitHub (the device flow: a code, a URL, a poll), the
@@ -496,8 +510,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `/promptfall sound on|off`, fixed gain. Four cues, each with a toast: drop
   (Rare, Epic), legendary drop, level up, world boss appeared. Only the primary
   session plays them; `/promptfall off` hides the band, not the cues.
-- Item sprites (phase 4): 16 px icons in the dialog's Inventory, Heroes and
-  Market lists on Image and Svg, a 2-row icon in half-block terminals.
+- Item sprites (phase 4): 16 px icons in the Inventory and Heroes list
+  windows on Image and Svg, none on half-block terminals (the raster windows
+  leave the two cells blank); the Market keeps its icons as before.
 
 ## 11. Art (phase 4)
 

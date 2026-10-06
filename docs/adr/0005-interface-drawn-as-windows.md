@@ -41,3 +41,15 @@ Only fields the player types into (chat, order forms) stay real `Input`s, under 
 - Hotkeys need Buttons on screen. Terminals and the desktop keep them in a zero-width Box, out
   of view; VS Code and mobile, untested, show them as a row under the strip
   (`docs/plans/2026-10-05-ui-remake-spikes.md`).
+
+## Amended (2026-10-06, UI PR 2)
+
+- The pane's ▶ follows the focus ring through hidden one-space Buttons, one per row or item.
+  That works on terminals. The desktop's ring moves without raising `ui.focus`, so the desktop
+  pane (and VS Code and mobile, untested) shows a `▲ ▼ ok back` row under the picture.
+- The engine keeps the ring by position. When rows appear or go under it, the pane puts the
+  ring back on the ▶ itself.
+- An inline pane gets the rows the layout spares, not the 24 it asks for: 14 body rows in a
+  105 × 50 Terminal.app, 7 in 80 × 24. The windows need 16 at least, so an inline pane in an
+  ordinary terminal shows only the message window asking for room. A docked pane (fullscreen
+  terminals from 110 columns) gets its full height.

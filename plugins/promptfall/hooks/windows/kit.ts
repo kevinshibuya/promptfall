@@ -1,8 +1,11 @@
 // The window model all three encoders draw (ADR 0005): windows laid out in cells, their text in
 // the baked pixel font, their frame as Dragon Quest V draws it
 // (docs/design/ui-remake/transcription.md). No surface code here.
+import { encode } from '../sprites/base64'
+import { decodePixels } from '../sprites/index'
+import type { SpriteArt } from '../sprites/types'
 import { glyph } from './glyphs'
-import { BORDER_PX, CELL_H, CELL_W, MARGIN_PX, PAD_PX, TEXT_RGB } from './tuning'
+import { ART_CELLS, BORDER_PX, CELL_H, CELL_W, MARGIN_PX, PAD_PX, TEXT_RGB } from './tuning'
 
 /** A run of text, or a bar, or the ▶ cursor cell, laid left to right in a line. */
 export type Span =
@@ -10,6 +13,7 @@ export type Span =
   | { bar: number; cells: number; rgb: number } // bar: fill 0..10000 over `cells` cells, BAR_BACK_RGB behind
   | { cursor: boolean } // one cell: ▶ when true, blank when false
   | { gap: number } // blank cells
+  | { art: SpriteArt } // ART_CELLS cells: the sprite fitted into 16 × 16 px; raster draws two blank cells
 
 export type Line = {
   spans: readonly Span[]
@@ -24,6 +28,8 @@ export type Win = {
   key: string
   /** Cells, border included. A strip window spans every row of the strip: y = 0, rows = scene rows. */
   x: number
+  /** The window's top row in the scene; 0 when absent (every strip window). */
+  y?: number
   columns: number
   rows: number
   /** Drawn into the top border from column 1, with one border cell kept on each side. */
@@ -37,6 +43,48 @@ export type Win = {
 }
 
 export type Scene = { columns: number; rows: number; windows: readonly Win[]; alt: string }
+
+/** How the image mount stacks a scene's windows: Ink lays Images out in Boxes, not at (x, y). */
+export type Tile =
+  | { win: string } // a window, by key
+  | { gap: { columns: number; rows: number } } // blank cells
+  | { row: readonly Tile[] } // children left to right
+  | { column: readonly Tile[] } // children top to bottom
+
+export type PaneScene = Scene & { tiles: Tile }
+
+/** Each window's (x, y) as the tile tree places it; a builder's tiles must agree with its windows. */
+export function tilePositions(scene: PaneScene): Map<string, { x: number; y: number }> {
+  const byKey = new Map(scene.windows.map((w) => [w.key, w]))
+  const out = new Map<string, { x: number; y: number }>()
+  const walk = (tile: Tile, x: number, y: number): { columns: number; rows: number } => {
+    if ('win' in tile) {
+      const win = byKey.get(tile.win)
+      if (!win) throw new Error(`tile names no window: ${tile.win}`)
+      out.set(tile.win, { x, y })
+      return { columns: win.columns, rows: win.rows }
+    }
+    if ('gap' in tile) return tile.gap
+    let columns = 0
+    let rows = 0
+    if ('row' in tile) {
+      for (const child of tile.row) {
+        const size = walk(child, x + columns, y)
+        columns += size.columns
+        rows = Math.max(rows, size.rows)
+      }
+    } else {
+      for (const child of tile.column) {
+        const size = walk(child, x, y + rows)
+        rows += size.rows
+        columns = Math.max(columns, size.columns)
+      }
+    }
+    return { columns, rows }
+  }
+  walk(scene.tiles, 0, 0)
+  return out
+}
 
 /** Desktop only: how parts of the scene change over the next `horizon` ms, as SMIL. */
 export type Track =
@@ -78,6 +126,7 @@ export type Placed = { x: number; span: number } & (
   | { kind: 'text'; text: string; rgb: number }
   | { kind: 'bar'; cells: number; fill: number; rgb: number }
   | { kind: 'cursor' }
+  | { kind: 'art'; art: SpriteArt }
 )
 
 /** One string per character (code point), so a character is one cell. */
@@ -90,6 +139,7 @@ export function spanCells(span: Span): number {
   if ('text' in span) return chars(span.text).length
   if ('bar' in span) return span.cells
   if ('cursor' in span) return 1
+  if ('art' in span) return ART_CELLS
   return span.gap
 }
 
@@ -116,10 +166,43 @@ export function placeLine(spans: readonly Span[], width: number, reveal?: number
         out.push({ x, span: i, kind: 'bar', cells, fill: clampFill(span.bar), rgb: span.rgb })
     } else if ('cursor' in span) {
       if (span.cursor) out.push({ x, span: i, kind: 'cursor' })
+    } else if ('art' in span) {
+      if (room >= ART_CELLS) out.push({ x, span: i, kind: 'art', art: span.art })
     }
     x += spanCells(span)
   }
   return out
+}
+
+const fitted = new WeakMap<SpriteArt, { art: SpriteArt; dx: number; dy: number }>()
+
+/**
+ * An art fitted into a sprite span's ART_CELLS × 1 cells (16 × 16 px): at most 16 × 16 draws at
+ * native size; a larger one is scaled down nearest-neighbour by the smallest whole divisor that
+ * fits. `dx`, `dy` centre it in the span.
+ */
+export function fitArt(art: SpriteArt): { art: SpriteArt; dx: number; dy: number } {
+  const hit = fitted.get(art)
+  if (hit) return hit
+  const boxW = ART_CELLS * CELL_W
+  const d = Math.max(1, Math.ceil(art.width / boxW), Math.ceil(art.height / CELL_H))
+  let out = art
+  if (d > 1) {
+    const width = Math.floor(art.width / d)
+    const height = Math.floor(art.height / d)
+    const src = decodePixels(art)
+    const px = new Uint8Array(width * height)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) px[y * width + x] = src[y * d * art.width + x * d] ?? 0
+    out = { width, height, palette: art.palette, pixels: encode(px) }
+  }
+  const made = {
+    art: out,
+    dx: Math.floor((boxW - out.width) / 2),
+    dy: Math.floor((CELL_H - out.height) / 2),
+  }
+  fitted.set(art, made)
+  return made
 }
 
 export function clampFill(fill: number): number {
