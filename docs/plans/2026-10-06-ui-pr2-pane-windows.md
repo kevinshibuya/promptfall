@@ -563,9 +563,9 @@ not exist.
 
 **Boundaries:** `sellBody`'s behaviour does not change in this task. No mounting.
 
-- [ ] `sellState` out of `sellBody`; existing tests green
-- [ ] `sellWindow`; tests
-- [ ] Run the check, commit
+- [x] `sellState` out of `sellBody`; existing tests green
+- [x] `sellWindow`; tests
+- [x] Run the check, commit
 
 ### Task 6: The Inventory windows
 

@@ -1,4 +1,4 @@
-import type { DialogState, GameView, SellState, WorldState } from '../../types'
+import type { DialogState, GameView, ItemView, OrderView, SellState, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { listingFee, saleNet, validPrice } from '../vendor/ledger.js'
 import { orderView } from '../view'
@@ -15,8 +15,9 @@ import {
   type Updater,
 } from './trade'
 
-const ITEM_PRESETS = [2, 3, 5, 8]
-const HERO_PRESETS = [1000, 2500, 6000, 25_000]
+/** Preset prices where the surface has no Input: multiples of an item's shop value. */
+export const ITEM_PRESETS = [2, 3, 5, 8]
+export const HERO_PRESETS = [1000, 2500, 6000, 25_000]
 const SLOTS = ['weapon', 'armour', 'accessory'] as const
 
 /** Opens the sell panel; an item's matching buy orders load behind it. */
@@ -70,6 +71,60 @@ export type SellActions = {
   unequip: (heroId: string, slot: (typeof SLOTS)[number]) => Promise<void>
 }
 
+/** What the sell flow shows, as the panel and the sell window both decide it. */
+export type SellPanel =
+  | { kind: 'gone' }
+  | { kind: 'gate'; name: string; rarity: string; line: string }
+  | { kind: 'cooldown'; name: string; rarity: string; leftMs: number }
+  | { kind: 'party'; name: string; rarity: string }
+  | { kind: 'unequip'; name: string; rarity: string; heroId: string; slots: Slot[] }
+  | {
+      kind: 'price'
+      name: string
+      rarity: string
+      item: ItemView | null
+      /** An item's matching buy orders; a hero has none. */
+      orders: OrderView[] | null
+      /** The typed price: NaN while empty or not a whole number. */
+      price: number
+      presets: number[]
+    }
+
+export type Slot = (typeof SLOTS)[number]
+
+/** The first that applies: gone, the market gate, the cooldown, in a party, unequip first, else the orders and the price. */
+export function sellState(
+  view: GameView,
+  world: WorldState | null,
+  sell: SellState,
+  remainingMs: (deadline: number) => number,
+): SellPanel {
+  const item = sell.kind === 'item' ? view.inventory.find((i) => i.id === sell.id) : undefined
+  const hero = sell.kind === 'hero' ? view.roster.find((h) => h.id === sell.id) : undefined
+  if (!item && !hero) return { kind: 'gone' }
+  const name = item?.name ?? hero?.name ?? sell.id
+  const rarity = item?.rarity ?? hero?.rarity ?? 'common'
+  const gate = gateLine(view, world)
+  if (gate) return { kind: 'gate', name, rarity, line: gate }
+  const tradeableAt = item?.tradeableAt ?? hero?.tradeableAt ?? null
+  const left = tradeableAt === null ? 0 : remainingMs(tradeableAt)
+  if (left > 0) return { kind: 'cooldown', name, rarity, leftMs: left }
+  if (hero) {
+    if (hero.inParty || hero.inPendingParty) return { kind: 'party', name, rarity }
+    const worn = SLOTS.filter((slot) => hero.equipment[slot] !== null)
+    if (worn.length > 0) return { kind: 'unequip', name, rarity, heroId: hero.id, slots: worn }
+  }
+  return {
+    kind: 'price',
+    name,
+    rarity,
+    item: item ?? null,
+    orders: item ? sell.matching : null,
+    price: /^\d+$/.test(sell.price) ? Number(sell.price) : Number.NaN,
+    presets: item ? ITEM_PRESETS.map((m) => m * item.vendorValue) : HERO_PRESETS,
+  }
+}
+
 /** The sell panel: matching orders first, then the price form with the fee and the net. */
 export function sellBody(
   els: Els,
@@ -81,10 +136,9 @@ export function sellBody(
 ) {
   const { Box, Text, Button, Input } = els
   const body = []
-  const item = sell.kind === 'item' ? view.inventory.find((i) => i.id === sell.id) : undefined
-  const hero = sell.kind === 'hero' ? view.roster.find((h) => h.id === sell.id) : undefined
+  const panel = sellState(view, world, sell, remainingMs)
   const close = <Button key="sell-close" label="close" onPress={() => actions.close()} />
-  if (!item && !hero) {
+  if (panel.kind === 'gone') {
     body.push(
       <Box key="sell-gone" flexDirection="row" gap={2}>
         <Text dimColor>It is no longer yours.</Text>
@@ -93,11 +147,11 @@ export function sellBody(
     )
     return body
   }
-  const name = item?.name ?? hero?.name ?? sell.id
-  const rarity = item?.rarity ?? hero?.rarity ?? 'common'
   body.push(
     <Box key="sell-head" flexDirection="row" gap={2}>
-      <Text bold color={RARITY_COLOR[rarity]} wrap="truncate">{`Sell ${name} (${rarity})`}</Text>
+      <Text bold color={RARITY_COLOR[panel.rarity]} wrap="truncate">
+        {`Sell ${panel.name} (${panel.rarity})`}
+      </Text>
       {close}
     </Box>,
   )
@@ -108,57 +162,51 @@ export function sellBody(
       </Text>,
     )
   }
-  const gate = gateLine(view, world)
-  if (gate) {
+  if (panel.kind === 'gate') {
     body.push(
       <Text key="sell-gate" color="yellow">
-        {gate}
+        {panel.line}
       </Text>,
     )
     return body
   }
-  const tradeableAt = item?.tradeableAt ?? hero?.tradeableAt ?? null
-  const left = tradeableAt === null ? 0 : remainingMs(tradeableAt)
-  if (left > 0) {
-    body.push(<Text key="sell-cooldown">{`Tradeable in ${formatRemaining(left)}`}</Text>)
+  if (panel.kind === 'cooldown') {
+    body.push(<Text key="sell-cooldown">{`Tradeable in ${formatRemaining(panel.leftMs)}`}</Text>)
     return body
   }
-  if (hero) {
-    if (hero.inParty || hero.inPendingParty) {
-      body.push(<Text key="sell-party">in party</Text>)
-      return body
-    }
-    const worn = SLOTS.filter((slot) => hero.equipment[slot] !== null)
-    if (worn.length > 0) {
-      body.push(
-        <Box key="sell-unequip" flexDirection="row" gap={1}>
-          <Text>unequip first</Text>
-          {worn.map((slot) => (
-            <Button
-              key={`sell-unequip-${slot}`}
-              label={`unequip ${slot}`}
-              onPress={() => actions.unequip(hero.id, slot)}
-            />
-          ))}
-        </Box>,
-      )
-      return body
-    }
+  if (panel.kind === 'party') {
+    body.push(<Text key="sell-party">in party</Text>)
+    return body
   }
-  if (item) {
+  if (panel.kind === 'unequip') {
+    body.push(
+      <Box key="sell-unequip" flexDirection="row" gap={1}>
+        <Text>unequip first</Text>
+        {panel.slots.map((slot) => (
+          <Button
+            key={`sell-unequip-${slot}`}
+            label={`unequip ${slot}`}
+            onPress={() => actions.unequip(panel.heroId, slot)}
+          />
+        ))}
+      </Box>,
+    )
+    return body
+  }
+  if (panel.orders) {
     body.push(
       <Text key="sell-matching" bold>
         Matching orders
       </Text>,
     )
-    if (sell.matching.length === 0) {
+    if (panel.orders.length === 0) {
       body.push(
         <Text key="sell-matching-none" dimColor>
           No buy orders match.
         </Text>,
       )
     }
-    for (const order of sell.matching) {
+    for (const order of panel.orders) {
       body.push(
         <Box key={`sell-order-${order.id}`} flexDirection="row" gap={1} paddingLeft={2}>
           <Button
@@ -170,7 +218,7 @@ export function sellBody(
       )
     }
   }
-  const price = /^\d+$/.test(sell.price) ? Number(sell.price) : Number.NaN
+  const price = panel.price
   body.push(
     <Text key="sell-list-head" bold>
       List for
@@ -192,10 +240,9 @@ export function sellBody(
       />,
     )
   } else {
-    const presets = item ? ITEM_PRESETS.map((m) => m * item.vendorValue) : HERO_PRESETS
     body.push(
       <Box key="sell-presets" flexDirection="row" gap={1}>
-        {presets.map((p) => (
+        {panel.presets.map((p) => (
           <Button
             key={`sell-preset-${p}`}
             label={formatGold(p)}

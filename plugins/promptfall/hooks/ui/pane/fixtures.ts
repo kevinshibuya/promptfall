@@ -44,9 +44,11 @@ export function rosterHero(id: string, patch: Partial<RosterHeroView> = {}): Ros
  * roster of five: Aldric, Mira, Tomas in the party, Lyra and Bram on the bench.
  */
 export function paneView(): GameView {
+  const base = wave()
   return {
-    ...wave(),
+    ...base,
     gold: 1240,
+    account: { ...base.account, linked: 'kevin', marketOpen: true },
     inventory: [
       item('i1', { equippedBy: 'h1' }),
       item('i2', {
