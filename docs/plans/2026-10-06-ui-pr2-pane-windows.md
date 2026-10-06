@@ -529,9 +529,9 @@ window of 12 items in a 17-row middle is 14 rows and leaves the detail window 3;
 
 **Boundaries:** No mounting, no surface code.
 
-- [ ] Layout and `page`; tests
-- [ ] Tab, message, list, menu, Yes/No windows; `assemble`; `PaneInput`, `messageLines`; tests
-- [ ] Run the check, commit
+- [x] Layout and `page`; tests
+- [x] Tab, message, list, menu, Yes/No windows; `assemble`; `PaneInput`, `messageLines`; tests
+- [x] Run the check, commit
 
 ### Task 5: The sell window
 
