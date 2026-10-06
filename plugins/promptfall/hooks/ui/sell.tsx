@@ -23,7 +23,15 @@ export async function openSell(
     const r = await game.market.matching(id)
     if ('reason' in r) return
     const matching = r.map(orderView)
-    await upd((d) => (d.sell?.id === id ? { ...d, sell: { ...d.sell, matching } } : d))
+    // The orders come before the price items: the ▶ keeps its row as they arrive.
+    await upd((d) =>
+      d.sell?.id === id
+        ? {
+            ...d,
+            sell: { ...d.sell, matching, at: d.sell.at + matching.length - d.sell.matching.length },
+          }
+        : d,
+    )
   } catch {
     // Reads fail quietly: the price form still works.
   }

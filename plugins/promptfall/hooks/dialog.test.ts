@@ -469,6 +469,10 @@ test('the sell window lists matching orders with nets, then Set a price; a typed
   expect(text).toMatch(/Buy orders/)
   expect(text).toMatch(/300G, you get 285G/)
   expect(text.indexOf('Buy orders')).toBeLessThan(text.indexOf('Set a price'))
+  // The orders load after the window opens: the ▶ stays on Set a price, the row it was on.
+  expect(text).toMatch(/▶Set a price/)
+  const sell = (states.get('dialog') as { sell: { at: number; matching: unknown[] } }).sell
+  expect(sell.at).toBe(sell.matching.length)
   await ui.input({ key: 'price', text: '1000', kind: 'change' })
   expect(await paneText(ui)).toMatch(/Fee 20G · you get 950G/)
   // An order accepted from the window fills it.

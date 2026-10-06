@@ -10,11 +10,14 @@ import {
   type ActionContext,
   closed,
   focusMove,
+  needsRefocus,
   type PaneDraw,
   paneElement,
+  placed,
+  ringOnInput,
   runAction,
   stepCursor,
-  stopsChanged,
+  stopsSignature,
   withCursor,
 } from './mount'
 import type { PaneBuild, Stop } from './types'
@@ -250,8 +253,7 @@ test('a closed pane leaves no sub-window and no sell flow', () => {
   expect([d.menu, d.sell, d.partyPick]).toEqual([null, null, ['h1']])
 })
 
-test('a drawing whose stops differ from the last puts the ring back on the ▶', () => {
-  const rows = { ...BUILD }
+test('the ring goes back on the ▶ when the stops or the open window change', () => {
   const menu: PaneBuild = {
     ...BUILD,
     stops: [
@@ -261,13 +263,39 @@ test('a drawing whose stops differ from the last puts the ring back on the ▶',
     ],
     focus: 'menu:0',
   }
+  const sig = (b: PaneBuild, w: string) => stopsSignature(b, w)
+  const place = (s: string) => {
+    if (needsRefocus('t', s, false)) placed('t', s)
+  }
   // The first drawing of an instance: its autoFocus places the ring.
-  expect(stopsChanged('t', rows)).toBe(false)
+  expect(needsRefocus('t', sig(BUILD, 'inventory'), false)).toBe(false)
   // The same stops (a cursor move): the ring is already there.
-  expect(stopsChanged('t', { ...rows, focus: 'row:b' })).toBe(false)
-  // A menu opens, then closes: both change the stops.
-  expect(stopsChanged('t', menu)).toBe(true)
-  expect(stopsChanged('t', rows)).toBe(true)
-  // A row inserted above the ring (a recruit, a drop) changes them too.
-  expect(stopsChanged('t', { ...rows, stops: [row('new', 0), ...rows.stops] })).toBe(true)
+  expect(needsRefocus('t', sig({ ...BUILD, focus: 'row:b' }, 'inventory'), false)).toBe(false)
+  // A menu opens: changed, and stays changed until a focus took.
+  expect(needsRefocus('t', sig(menu, 'actions:a'), false)).toBe(true)
+  expect(needsRefocus('t', sig(menu, 'actions:a'), false)).toBe(true)
+  placed('t', sig(menu, 'actions:a'))
+  // A reforge pick with as many items: the same keys, another window.
+  expect(needsRefocus('t', sig(menu, 'reforge:a'), false)).toBe(true)
+  place(sig(menu, 'reforge:a'))
+  // A row inserted above the ring (a recruit, a drop).
+  place(sig(BUILD, 'inventory'))
+  expect(
+    needsRefocus(
+      't',
+      sig({ ...BUILD, stops: [row('new', 0), ...BUILD.stops] }, 'inventory'),
+      false,
+    ),
+  ).toBe(true)
+})
+
+test('no re-focus while the ring is on the price Input; leaving the price form ends that', () => {
+  const a = stopsSignature(BUILD, 'sell:i')
+  const b = stopsSignature({ ...BUILD, stops: [row('o1', 0), ...BUILD.stops] }, 'sell:i')
+  needsRefocus('p', a, true)
+  ringOnInput('p', true)
+  // Buy orders arrive while the person types a price.
+  expect(needsRefocus('p', b, true)).toBe(false)
+  // The price form is gone (listed): the ring goes back on the ▶.
+  expect(needsRefocus('p', stopsSignature(BUILD, 'inventory'), false)).toBe(true)
 })

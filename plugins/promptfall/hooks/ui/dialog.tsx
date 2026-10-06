@@ -42,13 +42,16 @@ import { inventoryPane } from './pane/inventory'
 import {
   type ActionContext,
   forget,
+  needsRefocus,
   type PaneDraw,
   paneElement,
+  placed,
   registerPaneHooks,
   remember,
+  ringOnInput,
   runAction,
   stepCursor,
-  stopsChanged,
+  stopsSignature,
   withCursor,
 } from './pane/mount'
 import type { PaneAction } from './pane/types'
@@ -236,6 +239,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     )
 
     if (!view) {
+      forget(e.requestId)
       // The Account tab works without a game view: a state from an older version is reset here.
       const body =
         tab === 'account' && game()
@@ -292,10 +296,25 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
       remember(e.requestId, tab, build)
       const requestId = e.requestId
-      if (stopsChanged(e.requestId, build) && build.focus) {
+      const menu = dialog.menu
+      const window = dialog.sell
+        ? `sell:${dialog.sell.id}`
+        : menu
+          ? `${menu.kind}:${'itemId' in menu ? menu.itemId : menu.id}`
+          : tab
+      const signature = stopsSignature(build, window)
+      if (needsRefocus(requestId, signature, build.priceInput)) {
         const key = build.focus
-        // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
-        $.clock.after(0, () => void $.ui.focus({ requestId, key }))
+        if (key === null) placed(requestId, signature)
+        else {
+          // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
+          // Recorded only once it took: a pane without the keyboard tries again next drawing.
+          $.clock.after(0, () => {
+            void $.ui.focus({ requestId, key }).then((r) => {
+              if (r.deny === undefined) placed(requestId, signature)
+            })
+          })
+        }
       }
       const ctx: ActionContext = {
         upd: updDialog,
@@ -312,7 +331,8 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           return at === null ? undefined : formatRemaining(remainingMs(at))
         },
         focusPrice: async () => {
-          await $.ui.focus({ requestId, key: 'price' })
+          const r = await $.ui.focus({ requestId, key: 'price' })
+          if (r.deny === undefined) ringOnInput(requestId, true)
         },
         dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
       }

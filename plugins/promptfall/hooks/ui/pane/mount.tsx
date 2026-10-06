@@ -41,6 +41,8 @@ const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
  * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
 const lastStops = new Map<string, string>()
+/** The instances whose ring sits on the price Input: a re-focus there would eat the typing. */
+const onInput = new Set<string>()
 export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
 }
@@ -48,13 +50,39 @@ export function remember(requestId: string, tab: PaneTab, build: PaneBuild): voi
 export function forget(requestId: string): void {
   last.delete(requestId)
   lastStops.set(requestId, '')
+  onInput.delete(requestId)
 }
-/** True when this drawing's stops differ from the last one's: the ring goes back to the ▶. */
-export function stopsChanged(requestId: string, build: PaneBuild): boolean {
-  const keys = build.stops.map((s) => s.key).join('|')
+
+/** The ring went onto the price Input (the person's Tab, or the `price` action's own focus). */
+export function ringOnInput(requestId: string, on: boolean): void {
+  if (on) onInput.add(requestId)
+  else onInput.delete(requestId)
+}
+/**
+ * What the ring is placed against: the open window (`window`, e.g. `actions:i2`, `reforge:i2`,
+ * `sell:i2`) and the stop keys. Two windows with as many items share their `menu:<i>` keys, so the
+ * window is part of it.
+ */
+export function stopsSignature(build: PaneBuild, window: string): string {
+  return `${window}#${build.stops.map((s) => s.key).join('|')}`
+}
+
+/**
+ * True when the ring should go back on the ▶: the signature differs from the last one the ring
+ * was placed against, and the ring is not on the price Input. The first drawing of an instance
+ * only records it (its autoFocus places the ring). `placed` records it once the focus took.
+ */
+export function needsRefocus(requestId: string, signature: string, priceInput: boolean): boolean {
+  if (!priceInput) onInput.delete(requestId)
   const was = lastStops.get(requestId)
-  lastStops.set(requestId, keys)
-  return was !== undefined && was !== keys
+  if (was === undefined) {
+    lastStops.set(requestId, signature)
+    return false
+  }
+  return was !== signature && !onInput.has(requestId)
+}
+export function placed(requestId: string, signature: string): void {
+  lastStops.set(requestId, signature)
 }
 
 // Image sources by window key and content, so a cursor move re-encodes only what changed.
@@ -289,6 +317,7 @@ export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
     const l = last.get(e.requestId)
     if (!l) return next(e)
+    ringOnInput(e.requestId, e.element === 'price')
     const move = focusMove(l.build, e.element, l.build.focus)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}
