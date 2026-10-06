@@ -285,7 +285,8 @@ hand-verified; made inline on Opus, Fable out; Kevin can overturn either):
 ### 1.21 Planning gaps for UI PR 3 (2026-10-06, planner's calls)
 
 Made while planning UI PR 3 (`docs/plans/2026-10-06-ui-pr3-remaining-tabs.md`) inline on Opus 5.5.
-Kevin asked for the whole pass on Opus, with no Fable. He approves or overturns each.
+Kevin asked for the whole pass on Opus, with no Fable. Kevin approved every call here, the
+review rulings below included, on 2026-10-06.
 
 Shared:
 
