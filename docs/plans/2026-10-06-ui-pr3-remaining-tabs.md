@@ -19,7 +19,8 @@ own calls), `docs/plans/2026-10-06-ui-pr2-pane-windows.md` (the frame this plan 
 
 Planning note: Kevin had this plan written on Opus 5.5 in the main session (2026-10-06) and asked
 for no Fable at any step. Codex is blocked until 2026-10-09 19:43 (0 reset credits), so the review
-wave is `reviewer` on Opus alone.
+wave is `reviewer` on Opus alone. Its 16 findings and three suggestions were hand-verified and
+folded into this version in one fix pass, on Opus (`docs/reviews/2026-10-06-ui-pr3-plan-fix-pass.md`).
 
 ## Global constraints
 
@@ -92,11 +93,18 @@ export type PaneMenu =
 export type DialogState = {
   // … PR 2's fields, with `cursor` widened:
   cursor: Partial<Record<DialogTab, PaneCursor | null>>
+  /** The order form's ▶ row (Orders, while `orders.form` is set and no pick is open). */
+  formAt: number
 }
 ```
 
 `DIALOG_DEFAULT.cursor` stays `{ inventory: null, heroes: null }`; a tab missing from `cursor` reads
-as `null`. PR 2's literals (`{ inventory: …, heroes: null }`) compile unchanged.
+as `null`. PR 2's literals (`{ inventory: …, heroes: null }`) compile unchanged. `DIALOG_DEFAULT`
+gains `formAt: 0`; the `form` action resets it to 0 when it opens a form.
+
+`withCursor` writes, in order: a `row:` key, the list cursor; else with `sell`, `sell.at`; else with
+`menu`, `menu.at`; else on Orders, `formAt`. `stopsSignature`'s window string gains `filter`,
+`pick:<field>`, `confirm:<action>:<id>` and `form` (the order form with no pick open).
 
 `MarketState.confirm` goes in Task 9 (the buy Yes/No is the dialog's `menu`, as Vendor's is).
 
@@ -137,11 +145,14 @@ export type PaneInput = FrameInput & {
   account: AccountInput
 }
 
+/** A message line: plain text in TEXT_RGB, or spans (a gate line in WARN_RGB). */
+export type MessageLine = string | Span[]
+
 /** The message window's two lines. Rules 1 to 4 are the frame's; `error` is rule 4's text. */
 export function messageLines(
   input: FrameInput,
   error: string | null,
-  state: [string, string],
+  state: [MessageLine, MessageLine],
 ): [Span[], Span[]]
 ```
 
@@ -200,7 +211,8 @@ export type PaneBuild = {
 }
 ```
 
-`Stop` does not change. **Back**, in order, the first that applies: a Market pick (`base`, `cls`,
+`Stop` does not change. `query` sets `menu` and clears `cursor.market` before it awaits
+`loadMarket`, so a pick window never stays open through a slow fetch. **Back**, in order, the first that applies: a Market pick (`base`, `cls`,
 `minRarity`) goes back to the filter window with its ▶ on that field's row; an order pick
 (`orderBase`, `orderRarity`, `orderAffix`) closes, showing the form again; any other menu closes;
 else the sell flow closes; else, on Orders, an open form closes; else nothing.
@@ -233,7 +245,9 @@ rows (an inline pane in a 105 × 50 terminal) both wide and narrow fit.
 **Under the picture.** On a terminal the dialog builds once at `min(PANE_ROWS, bodyRows)`; if the
 build has a `field` it builds again with `FIELD_ROWS` fewer rows, if it has a `link` with
 `LINK_ROWS` fewer. A build never has both. The builders are pure, so the second build is cheap.
-This replaces PR 2's pre-check through `sellState`.
+This replaces PR 2's pre-check through `sellState`. Known cost: a narrow pane (under 96 columns)
+at exactly 14 rows with a field showing has a 13-row picture, under the narrow floor without the
+tab window, so it reads "needs more room". A wide inline pane (96 columns and up) fits.
 
 **The panel slot.** A panel (the sell window, the order form) takes the whole right column (wide)
 or the band (narrow), as PR 2's sell window does. A pick opened from a panel takes the panel's
@@ -241,7 +255,20 @@ place: the same slot, `menuWindow`, whole column.
 
 **Paging with lines.** A list holds lines with stops and lines without. The ▶ row's *line* sets
 the page (`page(line, shown)`), as the sell window already does. `ListSpec.cursor` stays the stop
-position (the `cursorRow` result); `listPane` maps it to its line.
+position (the `cursorRow` result); `listPane` maps it to its line. A list with `fromEnd` (Chat)
+cuts its pages from the last line back, so the newest page is always full:
+`end = total − floor((total − 1 − line) / shown) · shown`, the page is lines `max(0, end − shown)`
+up to `end`. Still a pure function of the line and the count.
+
+**A list always has a cursor stop.** When no row has a key (nothing loaded, closed, empty, both
+expansions at max, the no-view pane), the first line becomes the stop `row:empty` with
+`ListSpec.emptyAction` (default `none`). With no cursor stop at all, PR 2's focus hook keeps the
+ring on whatever tab or back Button holds it, and Enter would press it (grill 1.20's ruling).
+
+**Leaving a field.** While the ring is on a field (`ringOnInput`), a move onto a non-cursor stop
+lands on `build.focus`, not on the next cursor stop in the direction of travel: leaving the field
+puts the ring back on the ▶. Without this, Shift+Tab from Chat's field wraps onto the oldest
+message.
 
 ## Window contents
 
@@ -254,7 +281,8 @@ right-aligned columns. A heading line has `rule: true` and no stop. "Dim" is `DI
 **List window.** Title `Market: <search> · 1,240G`, clipped to the window, where `<search>` joins,
 with `, `: `items` or `heroes`; the base's name or the class label when set; `rare+`, `epic+` or
 `legendary+` when set; `cheapest` or `newest`. Rows, in order:
-1. `Filters`, the `f` drawn gold. Action `open` the filter window at 0.
+1. `Filters`, the `f` drawn gold. Action `open` the filter window at 0. `rowSpans` takes the
+   name as one span or a span list (`hotkeySpans`), so a row label can carry its gold letter.
 2. `Previous page`, while `query.page > 0`. Action `query` with `page − 1`, menu null.
 3. One row per listing on the page: `{ art }` (where `art` is on: the item base's sprite, or the
    hero class's), the name in its rarity colour; right-aligned the seller's name, 10 cells, dim
@@ -320,7 +348,8 @@ slot line as Market's; its `detail` wrapped; a blank line; `Listed for 1,200G`;
 `New buy order`: header `New buy order` with a rule; `Gold is held until the order fills or you`;
 `cancel it.`
 
-**Order form** (the panel, while `orders.form` is set): header `New buy order` with a rule; items:
+**Order form** (the panel, while `orders.form` is set, the view is not read-only and `gateLine`
+gives no line, as `ordersBody` hides it today; its ▶ is `dialog.formAt`): header `New buy order` with a rule; items:
 `Base: Steel Longsword` (opens pick `orderBase`), `Rarity: rare+` (pick `orderRarity`), `Affix:
 any` (pick `orderAffix`); then, where the surface has an Input, `Price: 1,200G` or `Set a price`
 (action `field` `order-price`), else one item per preset (`formatCount` of `baseValue × m` for
@@ -349,11 +378,13 @@ while returns wait, else blank.
 - `Sound` / `on` or `off` (hotkey `s`), action `setting` `{ sound: !sound }`.
 - `Motion` / `full` or `still` (`n`), action `setting` with the other.
 - `Renderer` / `auto (image)` (the renderer in brackets), or `raster (from next start)` when
-  forced (`x`), action `setting` with `RENDERER_NEXT` (moved from `dialog.tsx`).
+  forced (`x`, not drawn: the label has no `x`), action `setting` with `RENDERER_NEXT` (moved
+  from `dialog.tsx`).
 - `Band` / `shown` or `collapsed`, action `band` with the other.
 - `Band off`, action `off`.
 - `Link GitHub`, only when not linked, no code pending and not read-only; action `link`.
-- `Reset this machine's data`, action `open` a `confirm` `reset` Yes/No.
+- `Reset this machine's data`, action `open` a `confirm` `reset` Yes/No at 1: the ▶ opens on No,
+  since rows above it can vanish (`Link GitHub`) and the ▶ clamps onto it.
 
 Settings, the band rows and Reset act in read-only mode, as today.
 
@@ -369,7 +400,8 @@ the picture (key `link-url`, label the URL).
 `Enter: change it. ` + `MOVE_HELP`; second line `Settings are kept per machine.`
 
 **No game view.** `noViewPane` (Task 6): the tab window; a list window titled with the tab's label
-holding one line, `Promptfall has not started in this session.`; an empty detail window; the
+holding one line, `Promptfall has not started in this session.` (the `row:empty` stop); an empty
+detail window; the
 message window `Promptfall has not started in this session.`, blank. On Account with a game handle,
 the list holds `Reset this machine's data` (the reset Yes/No) and the detail `Server …` and
 `Client …`. The tab, back and reset stops mount.
@@ -399,7 +431,8 @@ line `Drop odds in zone 3, its boss, and the tavern.`
 **List window.** Title `Chat`. One row per message in `world.messages`, oldest first: the name and
 a colon, dim, then a gap and the text, clipped to the row. The newest's key is `row:newest`, the
 rest `row:m-<id>`. Action `field` `compose` where the field shows, else `none`. No messages: one
-line `No messages yet.`
+line `No messages yet.`, the `row:empty` stop, its action `field` `compose` where the field shows.
+Pages cut from the end (`fromEnd`).
 
 Default ▶ (no `cursor.chat`, or `cursor.chat.id === 'newest'`): the newest row. So the ▶ follows
 new messages until it is moved, and moving it back onto the newest follows again.
@@ -438,7 +471,9 @@ second line `The boss board resets Monday 00:00 UTC.`
 **Files:**
 - `spikes/ui-remake/hooks/register.tsx` (modify): `/spike-pane` gains a `Link` under its `Input`
   (key `link-url`, label `https://github.com/login/device`) and a log line for `ui.close` and for
-  `ui.focus` moves off the Input; nothing else changes.
+  `ui.focus` moves off the Input; its `ui.close` hook stops refusing the first close (PR 2 already
+  answered that question, and a refused close would hand the keyboard to the prompt and confound
+  question 1); nothing else changes.
 - `docs/plans/2026-10-05-ui-remake-spikes.md` (modify): a section `## PR 3 fields spike`.
 
 **Interfaces:** Produces `LINK_ROWS`, `FIELD_HELP`, and whether the `Link` joins the focus ring.
@@ -475,20 +510,27 @@ every question answered and a desktop row answered or marked Kevin's; the decisi
 
 **Files:**
 - `plugins/promptfall/types/index.d.ts` (modify): `PickField`; `PaneMenu`'s new members;
-  `DialogState.cursor` widened, as in Shared contracts.
+  `DialogState.cursor` widened and `formAt`, as in Shared contracts.
+- `plugins/promptfall/hooks/state.ts` (modify): `DIALOG_DEFAULT.formAt = 0`.
 - `plugins/promptfall/hooks/ui/pane/input.ts` (modify): `FrameInput`, `AccountInput`; `PaneInput`
   as in Shared contracts; `messageLines(input, error, state)`.
 - `plugins/promptfall/hooks/ui/pane/fixtures.ts` (modify): `paneInput` fills the new fields
   (`MARKET_DEFAULT`, `ORDERS_DEFAULT`, `CHAT_DEFAULT`, `BOARDS_DEFAULT`, and an `AccountInput` of
   `in-process`, `null`, `SETTINGS_DEFAULT`, `'image'`, `false`).
 - `plugins/promptfall/hooks/ui/pane/list.ts`, `inventory.ts`, `heroes.ts`, `sell.ts` (modify):
-  only what the `messageLines` signature and the `cursor` widening need to compile (Inventory and
-  Heroes pass `sell.error` as `error`; `cursor.inventory ?? null`).
+  only what the `messageLines` signature, the `cursor` widening and the new `PaneMenu` members need
+  to compile (Inventory and Heroes pass `sell.error` as `error`; `cursor.inventory ?? null`;
+  `inventory.ts:178`'s `'itemId' in menu ? menu.itemId : menu.id` becomes a narrowing that
+  handles the `filter` and `pick` members, which carry no id).
 - `plugins/promptfall/hooks/ui/pane/mount.tsx` (modify): `withCursor` and `last` take any
   `DialogTab`; nothing else.
 - `plugins/promptfall/hooks/ui/dialog.tsx` (modify): builds the wider `PaneInput` for the two
-  pane tabs (reads the market, orders, chat, boards, prefs, settings, renderer, lease and server
-  atoms it already reads, or declares them); nothing else.
+  pane tabs (reads the market, orders, chat, boards, prefs, renderer, lease and server atoms it
+  already reads, or declares them; `AccountInput.settings` is
+  `parseSettings(await $.store.get('promptfall:settings'))`, as the Account body reads it today,
+  with the settings atom read only to keep the render subscribed); the window string at line 303
+  handles the new `PaneMenu` members (`menu.kind` for `filter`, `pick:<field>` for a pick);
+  nothing else.
 - `plugins/promptfall/hooks/ui/pane/frame.test.ts`, `inventory.test.ts` (modify): the
   `messageLines` calls.
 
@@ -523,8 +565,10 @@ every question answered and a desktop row answered or marked Kevin's; the decisi
   action → `field`; the field draws with the build's `PaneField` props; no new behaviour.
 - `plugins/promptfall/hooks/ui/dialog.tsx` (modify): the build-twice rule in Layout replaces the
   `sellState` pre-check; the price handlers move to the `field` callbacks.
-- `plugins/promptfall/hooks/ui/pane/frame.test.ts`, `list.test.ts` (create),
-  `sell.test.ts`, `mount.test.tsx` (modify).
+- `plugins/promptfall/hooks/ui/pane/frame.test.ts` (modify: `paneLayout(120, 15)` and
+  `paneLayout(60, tabRows + 13)` turn wide and narrow under the short-pane rule; the floors move
+  to `120 × 12` and `60 × 13`), `list.test.ts` (create), `sell.test.ts`, `inventory.test.ts`,
+  `mount.test.tsx` (modify: `priceInput` → `field`).
 
 **Interfaces:**
 - Consumes: Task 2.
@@ -546,7 +590,9 @@ export type ListRow = {
 export type PanelBuild = {
   win: Win
   stops: Stop[] // `menu:<i>` per item
-  state: [string, string]
+  /** The panel's ▶ item. */
+  at: number
+  state: [MessageLine, MessageLine]
   field: PaneField | null
 }
 
@@ -570,7 +616,11 @@ export type ListSpec = {
   panel: ((at: Rect) => PanelBuild) | null
   /** Rule 4's text: the tab's error. */
   error: string | null
-  state: [string, string]
+  state: [MessageLine, MessageLine]
+  /** Pages cut from the last line back (Chat). */
+  fromEnd?: true
+  /** The `row:empty` stop's action when no row has a key; `none` when absent. */
+  emptyAction?: PaneAction
   /** The field when no panel brings one (Chat's compose), else null. */
   field: PaneField | null
   link: { url: string } | null
@@ -592,7 +642,10 @@ export type ListSpec = {
 layout is wide with `tabRows` 0 and middle 10; at 60 × 14 narrow with middle 10; at 120 × 12 small;
 `assemble` with no tab window passes `tilePositions`; a list of a heading, two rows, a heading,
 one row gives three stops with `index` 0, 1, 2 and the heading lines carry `rule`; with 20 lines
-and the ▶ on the stop at line 18, a 15-row window shows lines 15 to 19; a `panel` replaces the
+and the ▶ on the stop at line 18, a 17-row window (15 lines) shows lines 15 to 19; with
+`fromEnd`, 31 lines and the ▶ on line 30, the window shows lines 16 to 30, and the ▶ on line 10
+shows lines 1 to 15; a list of only keyless lines mounts one `row:empty` cursor stop carrying
+`emptyAction`; a `panel` replaces the
 detail window and its stops replace the rows; a `wholeColumn` menu takes the panel's slot;
 `messageLines` puts `error` in `DOWN_RGB`; the sell window's `Set a price` is a `field` `price`
 action and its build has `field.key` `price`. Red before: `ListRow.key` is required.
@@ -608,8 +661,11 @@ action and its build has `field.key` `price`. Red before: `ListRow.key` is requi
 
 **Files:**
 - `plugins/promptfall/hooks/ui/pane/market.ts` (create): `marketPane(input: PaneInput): PaneBuild`.
+- `plugins/promptfall/hooks/ui/pane/inventory.ts` (modify): `rowSpans`'s name parameter takes
+  `Span | Span[]`; nothing else (PR 2 goldens unchanged).
 - `plugins/promptfall/hooks/ui/pane/fixtures.ts` (modify): `listing(id, patch)` and a market page
-  of three listings (a rare sword by `seller-1`, an epic hero by `acct-1` (yours), a legendary ring)
+  of three listings (a rare sword by `seller-1`, an epic hero by `a1` (yours: `paneView()`'s `accountId`), a
+  legendary ring)
   with `total: 23`.
 - `plugins/promptfall/hooks/ui/pane/market.test.ts` (create).
 
@@ -619,7 +675,8 @@ action and its build has `field.key` `price`. Red before: `ListRow.key` is requi
 - Produces: `marketPane`; `searchText(query: MarketQuery): string` (the title's search, reused by
   the alt and the detail).
 
-**Work:** Per Window contents, "Market". `query` actions carry the whole next `MarketQuery`
+**Work:** Per Window contents, "Market". `rowSpans` (`inventory.ts`, in this task's Files) takes
+the name as a span or a span list. `query` actions carry the whole next `MarketQuery`
 (the builder computes it, as `withFilter` does today; move `withFilter` into this module).
 
 **Acceptance check:** new tests on the fixture page: the title reads
@@ -644,9 +701,8 @@ does not exist.
 **Files:**
 - `plugins/promptfall/hooks/ui/pane/orders.ts` (create): `ordersPane(input: PaneInput): PaneBuild`
   and the order form as a panel.
-- `plugins/promptfall/hooks/ui/orders.tsx` (modify): export `baseValue` and `PRESETS`, and a pure
-  `orderSummary(form): { price: number; line: string }` used by both the old body and the form;
-  `ordersBody`'s output does not change.
+- `plugins/promptfall/hooks/ui/orders.tsx` (modify): export `baseValue` and `PRESETS`; nothing
+  else (`ordersBody`'s output does not change).
 - `plugins/promptfall/hooks/ui/pane/fixtures.ts` (modify): an orders fixture (two listings, one
   order with an affix, `returns: 2`).
 - `plugins/promptfall/hooks/ui/pane/orders.test.ts` (create).
@@ -664,8 +720,9 @@ their Yes/No and `yes` runs `cancel` with the right `what` and id; the Yes/No qu
 empty sections read `None.`; read-only: rows `none`, no `New buy order`; a gate: no `New buy
 order`, the gate line; the form's items with `Set a price` (field `order-price`), with a typed
 valid price `Price: 1,200G` and `Place order` running `place`, with an invalid one `Place order`
-dim and the range line; with `hasInput: false` the four presets; a Base pick takes the form's slot
-and picking returns to the form; `back` rules are the mount's (Task 8), not tested here. Red
+dim and the range line; with `hasInput: false` the four presets; `formAt: 4` puts the ▶ and the
+build's `focus` (`menu:4`) on `Place order`; a Base pick takes the form's slot and picking returns
+to the form; with the form set and read-only, or gated, no form panel shows; `back` rules are the mount's (Task 8), not tested here. Red
 before: the module does not exist.
 
 **Boundaries:** No mounting. `ordersBody` behaves as before.
@@ -722,16 +779,17 @@ read-only rows `none`; the detail lines. Red before: the modules do not exist.
 - `plugins/promptfall/hooks/ui/chat.tsx` (modify): export the gate choice as
   `chatGate(view, world): string | null`, used by `chatBody` and `chatPane`.
 - `plugins/promptfall/hooks/ui/pane/fixtures.ts` (modify): a world with 30 messages and a boards
-  fixture of 20 highest-zone and 20 damage rows, `acct-1` in both.
+  fixture of 20 highest-zone and 20 damage rows, `a1` (`paneView()`'s `accountId`) in both.
 - `plugins/promptfall/hooks/ui/pane/chat.test.ts`, `leaderboards.test.ts` (create).
 
 **Interfaces:** Consumes Tasks 2 and 3. Produces `chatPane`, `boardsPane`, `chatGate`.
 
 **Work:** Per Window contents, "Chat" and "Leaderboards".
 
-**Acceptance check:** Chat: 30 messages at 120 × 24 show the last page with the ▶ on
-`row:newest`; `cursor.chat = { id: 'm-12', index: 11 }` shows the page holding it; 31 messages with
-`cursor.chat` null keep the ▶ on the newest; a row's action is `field` `compose` and the build's
+**Acceptance check:** Chat at 120 × 24 (15 lines shown): 31 and 200 messages each show 15 rows on
+the newest page with the ▶ on `row:newest`; `cursor.chat = { id: 'm-12', index: 11 }` shows the
+page holding it; adding a message with `cursor.chat` null keeps the ▶ on the newest; no messages:
+`row:empty` carries `field` `compose` where the field shows; a row's action is `field` `compose` and the build's
 `field` carries `chat.draft`; the gates and `CHAT_READ_ONLY` (with `hasInput: false`, no field)
 in the message window; the detail wraps a 200-character message. Leaderboards: both headings, the
 rows `1. kevin` / `zone 12`, your rows in `GAUGE_FULL_RGB`, `No boss damage yet this week.`, the
@@ -759,6 +817,10 @@ modules do not exist.
 - `plugins/promptfall/hooks/ui/orders.tsx` (modify): `placeOrder(game, current, upd, after)`, the
   submit today inlined in `dialog.tsx` (one order at a time, the busy guard, the form closes on
   success).
+- `plugins/promptfall/hooks/ui/dialog.tsx` (modify): builds the new `ActionContext` members,
+  passes `probe` and the `field` callbacks to `paneElement`, and calls `confirmBuy` and
+  `placeOrder` with their new signatures from the old Market and Orders wiring, which stays until
+  Task 9; nothing else.
 - `plugins/promptfall/hooks/ui/pane/mount.test.tsx` (modify).
 
 **Interfaces:**
@@ -795,7 +857,10 @@ modules do not exist.
 - The Link: under the picture while `build.link` holds, `Link key="link-url"`, on every surface.
 - The probe: on a terminal while the renderer atom is `unknown`, the pane draws `probeElement`'s
   Image in its zero-width stops Box, so a docked pane with a collapsed band still settles the
-  renderer.
+  renderer. Whether the engine takes a blit to an Image in a clipped Box is untested; if Task 11's
+  pass finds it refused, move the probe to the end of the picture's row Box (1 column) in a
+  separate fix commit.
+- Leaving a field: the focus hook applies Layout's "Leaving a field" rule.
 
 **Acceptance check:** `mount.test.tsx` gains: a press on a `query` stop calls a stub `loadMarket`
 path (through a stub game handle's `market.browse`) and clears `cursor.market`; `back` from a
@@ -804,7 +869,9 @@ path (through a stub game handle's `market.browse`) and clears `cursor.market`; 
 with the id; `reset` calls the handle's `reset`; a build with `link` draws `Link` keyed `link-url`
 on terminal and desktop; a build with `field` `compose` draws an Input keyed `compose`; with the
 renderer `unknown` on a terminal the pane draws the probe Image and a taken blit sets the renderer
-to `image` (and `register.test.ts`'s probe tests still pass). Red before: the actions do not exist.
+to `image` (and the probe tests in `register.test.ts` and `band.test.ts` still pass); with the ring
+on `compose`, a move onto `back` lands on `row:newest`, not on the oldest row; on Orders with only
+the form open, a `ui.focus` onto `menu:3` writes `formAt: 3`. Red before: the actions do not exist.
 
 **Boundaries:** No change to what any builder draws. The band draws exactly as before.
 
@@ -818,7 +885,8 @@ to `image` (and `register.test.ts`'s probe tests still pass). Red before: the ac
 **Files:**
 - `plugins/promptfall/hooks/ui/dialog.tsx` (modify): every tab, and the no-view branch, draws
   `paneElement` of its builder; the field callbacks (`price` as today; `order-price` sets
-  `maxPrice` then `placeOrder`; `compose` sets the draft and runs `postChat`); the Chat tab still
+  `maxPrice` then `placeOrder`; `compose` sets the draft and, unless `chat.busy` as read from the
+atom at submit time (today's guard), runs `postChat`); the Chat tab still
   calls `running.chatSeen(clientNow)` on each draw; `TABS`, `pick`, `percent`, `oddsLine`,
   `RENDERER_NEXT` and the old bodies go.
 - `plugins/promptfall/hooks/ui/market.tsx` (modify): `marketBody`, `withFilter`, `MarketActions`,
@@ -837,7 +905,8 @@ to `image` (and `register.test.ts`'s probe tests still pass). Red before: the ac
   Leaderboards, Account and list-sprite tests (from "the other tabs keep today's tab row" at line
   202, the Market tests at 421-461, 529-610, the Chat and Leaderboards tests at 610-805, the
   Account tests at 806-847, and the sprite and row-fit tests at 848-990) with the tests below; the
-  Inventory, Heroes and sell tests stay.
+  Inventory, Heroes and sell tests stay, except the sell test at 484-500, which buys through
+  `buy-L*` and `buy-confirm`: it buys through the listing's `row:` stop and `yes` instead.
 - `plugins/promptfall/hooks/register.test.ts` (modify): the link tests press `row:link` and read
   `Enter … at` and `Linked as player` through `paneText`; the reset test presses `row:reset`, then
   `yes`.

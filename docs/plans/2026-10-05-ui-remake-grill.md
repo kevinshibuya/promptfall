@@ -346,6 +346,20 @@ Per tab:
   nothing, so Up and Down page through 40 rows. The detail window shows who is online by zone.
   Your rows are gold, a graft (today's cyan has no place in DQ's palette).
 
+Review rulings (2026-10-06, the plan's one review wave: `reviewer` on Opus, 16 findings, each
+hand-verified; made inline on Opus; Kevin can overturn any):
+
+- **Chat pages from the newest back.** Pages cut from the top would leave the newest page with as
+  few as one message. Cut from the end, the newest page is always full.
+- **Leaving a field puts the ring back on the ▶.** Otherwise Shift+Tab from the chat field wraps
+  onto the oldest message.
+- **Every list has a cursor stop.** An empty or closed tab's one line becomes a stop that does
+  nothing (on an empty Chat, it focuses the field). With no cursor stop the ring sits on a tab
+  Button and Enter would switch tabs (1.20's ruling).
+- **Reset's Yes/No opens on No.** The ▶ can clamp onto Reset when `Link GitHub` vanishes above it.
+- **Known cost of short panes:** a pane under 96 columns at exactly 14 rows reads "needs more
+  room" while a field shows. Wide inline panes (96 columns up) fit.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
