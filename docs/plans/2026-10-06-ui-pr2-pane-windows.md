@@ -741,8 +741,8 @@ before: the replaced tests fail on the old Button keys.
 **Boundaries:** The Market, Orders, Account, Odds, Chat and Leaderboards bodies and their header
 do not change. No band change.
 
-- [ ] Dialog wiring, hooks, `rows: PANE_ROWS`, drop `itemPick` and `sellBody`, the server switch
-- [ ] Replace the dialog tests, the outage test; run the check, commit
+- [x] Dialog wiring, hooks, `rows: PANE_ROWS`, drop `itemPick` and `sellBody`, the server switch
+- [x] Replace the dialog tests, the outage test; run the check, commit
 
 ### Task 10: Scenarios, goldens and the Svg budget
 

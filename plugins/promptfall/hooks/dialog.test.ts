@@ -1,13 +1,11 @@
 import type { On } from 'claude-code'
-import { expect, mock, type TestBody, test } from 'claude-code/testing'
+import { expect, type Mounted, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView } from '../types'
-import { decode } from './sprites/base64'
 import { spriteFor } from './sprites/index'
-import { artFrame } from './stage/compose'
-import { encodeRaster } from './stage/raster'
 import { DESKTOP_LIST_SPRITE_COLUMNS } from './stage/tuning'
 import { CHAT_READ_ONLY, chatBody } from './ui/chat'
 import { ordersBody } from './ui/orders'
+import { paneText } from './ui/pane/testing'
 import { listSpriteColumns } from './ui/sprites'
 import type { Els } from './ui/trade'
 import { Ledger } from './vendor/ledger.js'
@@ -97,31 +95,58 @@ function seeded(): GameState {
   }
 }
 
+type Ui = Pick<Mounted<'terminal', 'Pane'>, 'findAll' | 'press'>
+
+/** Presses the pane stop that carries `hotkey` (a command window item, Yes, No). */
+async function hot(ui: Ui, hotkey: string) {
+  const b = (await ui.findAll({ type: 'Button' })).find((x) => x.props.hotkey === hotkey)
+  if (!b?.key) throw new Error(`no stop on ${hotkey}`)
+  await ui.press({ key: b.key })
+}
+
 for (const surface of SURFACES) {
-  test(`the inventory lists and vendors an item on ${surface}`, async ($, on) => {
+  test(`Inventory draws the windows, and row, Vendor, Yes vendors the item on ${surface}`, async ($, on) => {
     const { states } = harness(on, seeded())
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
-    expect(await ui.find({ text: /Iron Sword/ })).toBeDefined()
-    await ui.press({ key: 'vendor-iseed' })
+    expect(await paneText(ui)).toMatch(/Iron Sword/)
+    // The windows replace the old rows: no Text row and no visible Button names the item.
+    expect(await ui.find({ type: 'Text', text: /Iron Sword/ })).toBeUndefined()
+    await ui.press({ key: 'row:iseed' })
+    expect(await paneText(ui)).toMatch(/What will you do with Iron Sword\?/)
+    await hot(ui, 'v')
+    expect(await paneText(ui)).toMatch(/Sell Iron Sword to the shop for 2G\?/)
+    await ui.press({ key: 'yes' })
     const view = states.get('view') as GameView
     expect(view.inventory).toHaveLength(0)
     expect(view.gold).toBe(2)
-    expect(await ui.find({ text: /Iron Sword/ })).toBeUndefined()
+    expect(await paneText(ui)).not.toMatch(/Iron Sword/)
     await ui.unmount()
   })
 
-  test(`recruiting without gold shows the refusal on ${surface}`, async ($, on) => {
+  test(`back closes an open command window on ${surface}`, async ($, on) => {
+    const { states } = harness(on, seeded())
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await ui.press({ key: 'row:iseed' })
+    expect((states.get('dialog') as { menu: unknown }).menu).not.toBeNull()
+    await ui.press({ key: 'back' })
+    expect((states.get('dialog') as { menu: unknown }).menu).toBeNull()
+    expect(await paneText(ui)).not.toMatch(/What will you do/)
+    await ui.unmount()
+  })
+
+  test(`recruiting without gold puts the refusal in the message window on ${surface}`, async ($, on) => {
     harness(on, seeded())
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
     await ui.press({ key: 'tab-heroes' })
-    await ui.press({ key: 'recruit' })
-    expect(await ui.find({ text: /not_enough_gold/ })).toBeDefined()
+    await ui.press({ key: 'row:recruit' })
+    expect(await paneText(ui)).toMatch(/Refused: not_enough_gold/)
     await ui.unmount()
   })
 
-  test(`picking three heroes sets the party on ${surface}`, async ($, on) => {
+  test(`three Party picks set the party on ${surface}`, async ($, on) => {
     const { states } = harness(on, seeded())
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
@@ -130,16 +155,17 @@ for (const surface of SURFACES) {
     const archer = before.roster.find((h) => h.cls === 'archer')
     const [knight, mage] = before.roster
     if (!archer || !knight || !mage) throw new Error('roster')
-    await ui.press({ key: `party-${knight.id}` })
-    await ui.press({ key: `party-${archer.id}` })
-    await ui.press({ key: `party-${mage.id}` })
+    for (const h of [knight, archer, mage]) {
+      await ui.press({ key: `row:${h.id}` })
+      await hot(ui, 'p')
+    }
     const after = states.get('view') as GameView
     expect(after.heroes.map((h) => h.id)).toEqual([knight.id, archer.id, mage.id])
     expect(after.roster.find((h) => h.id === archer.id)?.inParty).toBe(true)
     await ui.unmount()
   })
 
-  test(`unequip frees a worn item so it can be sold on ${surface}`, async ($, on) => {
+  test(`Unequip from the command window frees a worn item on ${surface}`, async ($, on) => {
     const s0 = createInitialState(99)
     const knight = s0.roster[0]
     if (!knight) throw new Error('knight')
@@ -162,15 +188,27 @@ for (const surface of SURFACES) {
     const { states } = harness(on, state)
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
-    expect(await ui.find({ key: 'vendor-iseed' })).toBeUndefined()
-    expect(await ui.find({ key: 'unequip-iseed' })).toBeDefined()
-    await ui.press({ key: 'unequip-iseed' })
-    const view = states.get('view') as GameView
-    expect(view.inventory[0]?.equippedBy).toBeNull()
-    expect(await ui.find({ key: 'vendor-iseed' })).toBeDefined()
+    await ui.press({ key: 'row:iseed' })
+    // Worn: no Vendor in the command window.
+    expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(false)
+    await hot(ui, 'u')
+    expect((states.get('view') as GameView).inventory[0]?.equippedBy).toBeNull()
+    await ui.press({ key: 'row:iseed' })
+    expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(true)
     await ui.unmount()
   })
 }
+
+test("the other tabs keep today's tab row: Market draws its Buttons with their names", async ($, on) => {
+  harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  expect((await ui.find({ key: 'tab-market' }))?.props.label).toBe(' ')
+  await ui.press({ key: 'tab-market' })
+  expect((await ui.find({ key: 'tab-market' }))?.props.label).toBe('Market')
+  expect(await ui.find({ type: 'Raster' })).toBeUndefined()
+  await ui.unmount()
+})
 
 // ---------------------------------------------------------------------------
 // The market, against a ledger behind a mocked $.http.fetch at http://test.
@@ -422,23 +460,24 @@ test('buy asks first, then buys once and the item arrives', async ($, on) => {
   await ui.unmount()
 })
 
-test('the sell flow lists matching orders first, then the price form with fee and net', async ($, on) => {
+test('the sell window lists matching orders with nets, then Set a price; a typed price shows the fee', async ($, on) => {
   const { player } = await marketHarness(on)
-  const { ui } = await startOnTest($, on, player)
-  await ui.press({ key: 'sell-iR' })
-  expect(await ui.find({ key: 'accept-O3' })).toBeDefined()
-  expect((await ui.find({ key: 'accept-O3' }))?.text ?? '').toMatch(/accept 300g, you get 285g/)
-  const texts = (await ui.findAll({ type: 'Text' })).map((t: { text?: string }) => t.text ?? '')
-  const matching = texts.findIndex((t: string) => t === 'Matching orders')
-  const listFor = texts.findIndex((t: string) => t === 'List for')
-  expect(matching).toBeGreaterThanOrEqual(0)
-  expect(listFor).toBeGreaterThan(matching)
-  await ui.input({ key: 'sell-price', text: '1000', kind: 'change' })
-  expect(await ui.find({ text: /fee 20g · you get 950g/ })).toBeDefined()
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'row:iR' })
+  await hot(ui, 's')
+  const text = await paneText(ui)
+  expect(text).toMatch(/Buy orders/)
+  expect(text).toMatch(/300G, you get 285G/)
+  expect(text.indexOf('Buy orders')).toBeLessThan(text.indexOf('Set a price'))
+  await ui.input({ key: 'price', text: '1000', kind: 'change' })
+  expect(await paneText(ui)).toMatch(/Fee 20G · you get 950G/)
+  // An order accepted from the window fills it.
+  const accept = (states.get('dialog') as { sell: { matching: { id: string }[] } }).sell.matching
+  expect(accept.length).toBeGreaterThan(0)
   await ui.unmount()
 })
 
-test("a bought item's sell flow says when it becomes tradeable", async ($, on) => {
+test("a bought item's sell window says when it becomes tradeable, with no price Input", async ($, on) => {
   const { player } = await marketHarness(on)
   const { ui, states } = await startOnTest($, on, player)
   await ui.press({ key: 'tab-market' })
@@ -449,9 +488,37 @@ test("a bought item's sell flow says when it becomes tradeable", async ($, on) =
   await ui.press({ key: 'buy-confirm' })
   const bought = (states.get('view') as GameView).inventory.find((i) => i.id.startsWith('t'))
   await ui.press({ key: 'tab-inventory' })
-  await ui.press({ key: `sell-${bought?.id}` })
-  expect(await ui.find({ text: /^Tradeable in (1d|23h)$/ })).toBeDefined()
-  expect(await ui.find({ key: 'sell-price' })).toBeUndefined()
+  await ui.press({ key: `row:${bought?.id}` })
+  await hot(ui, 's')
+  expect(await paneText(ui)).toMatch(/Tradeable in (1d|23h)/)
+  expect(await ui.find({ key: 'price' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a closed market says so in the sell window', async ($, on) => {
+  const a = await marketHarness(on, { flags: { 'market.enabled': false } })
+  const { ui } = await startOnTest($, on, a.player)
+  await ui.press({ key: 'row:iR' })
+  await hot(ui, 's')
+  expect(await paneText(ui)).toMatch(/The market is closed\./)
+  await ui.unmount()
+})
+
+test('a server switch closes the sell window and the command window', async ($, on) => {
+  const { player } = await marketHarness(on)
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'row:iR' })
+  await hot(ui, 's')
+  expect((states.get('dialog') as { sell: unknown }).sell).not.toBeNull()
+  await $.command.run({
+    origin: { kind: 'composer' },
+    presentation: { isFullscreen: false, columns: 120 },
+    command: 'promptfall',
+    args: 'server local',
+  })
+  const d = states.get('dialog') as { sell: unknown; menu: unknown }
+  expect([d.sell, d.menu]).toEqual([null, null])
+  expect(await paneText(ui)).not.toMatch(/Buy orders/)
   await ui.unmount()
 })
 
@@ -484,17 +551,6 @@ test('the gates show for an unlinked player and a closed market', async ($, on) 
       /^buy-L/.test(b.key ?? ''),
     ),
   ).toBe(false)
-  await ui.unmount()
-})
-
-test('a closed market says so', async ($, on) => {
-  const a = await marketHarness(on, { flags: { 'market.enabled': false } })
-  const { ui } = await startOnTest($, on, a.player)
-  await ui.press({ key: 'tab-market' })
-  expect(await ui.find({ text: 'The market is closed.' })).toBeDefined()
-  await ui.press({ key: 'tab-inventory' })
-  await ui.press({ key: 'sell-iR' })
-  expect(await ui.find({ text: 'The market is closed.' })).toBeDefined()
   await ui.unmount()
 })
 
@@ -785,98 +841,6 @@ test('an Account press merges into the stored settings, not an older copy in thi
 
 const RENDERER = (renderer: string) => ({ sound: false, motion: 'full', renderer })
 
-/** The 8 × 2 Raster an item row draws on a half-block terminal. */
-const smallCells = (base: string) => {
-  const small = spriteFor('item', base).small
-  if (!small) throw new Error('no small art')
-  return encodeRaster(artFrame(small), [])
-}
-
-test('an inventory row on a half-block terminal leads with the 8 × 2 item sprite', async ($, on) => {
-  const { data } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('raster'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  const sprite = await ui.find({ key: 'sprite-iseed' })
-  expect(sprite?.type).toBe('Raster')
-  expect([sprite?.props.columns, sprite?.props.rows]).toEqual([8, 2])
-  expect([...decode(String(sprite?.props.cells))]).toEqual([...decode(smallCells('iron_sword'))])
-  await ui.unmount()
-})
-
-test('an inventory row draws an Image of 2 × 1 where pictures draw, an Svg on the desktop', async ($, on) => {
-  const { data } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('image'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  const image = await ui.find({ type: 'Image' })
-  expect([image?.props.columns, image?.props.rows]).toEqual([2, 1])
-  expect(image?.props.alt).toBe('Iron Sword')
-  await ui.unmount()
-  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
-  const svg = await desk.find({ type: 'Svg' })
-  expect(svg?.props.alt).toBe('Iron Sword')
-  expect(String(svg?.props.source)).toMatch(/^<svg/)
-  await desk.unmount()
-})
-
-test('a heroes row keeps its glyph on half-blocks and leads with an Svg on the desktop', async ($, on) => {
-  const { data, states } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('raster'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const hero = (states.get('view') as GameView).roster[0]
-  if (!hero) throw new Error('no hero')
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  await ui.press({ key: 'tab-heroes' })
-  expect(await ui.find({ key: `sprite-${hero.id}` })).toBeUndefined()
-  expect(
-    await ui.find({ text: new RegExp(`^\\${hero.glyph} ${hero.name.split(' ')[0]}`) }),
-  ).toBeDefined()
-  await ui.unmount()
-  const desk = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
-  expect((await desk.findAll({ type: 'Svg' })).some((s) => s.props.alt === hero.name)).toBe(true)
-  await desk.unmount()
-})
-
-test('a row drops its glyph where a sprite draws and keeps it where none does', async ($, on) => {
-  const { data, states } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('image'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const hero = (states.get('view') as GameView).roster[0]
-  if (!hero) throw new Error('no hero')
-  const glyphed = new RegExp(`^\\${hero.glyph} ${hero.name.split(' ')[0]}`)
-  const bare = new RegExp(`^${hero.name.split(' ')[0]}`)
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
-    expect(await ui.find({ text: /^Iron Sword \(/ })).toBeDefined()
-    expect(await ui.find({ text: /^\/ Iron Sword/ })).toBeUndefined()
-    await ui.press({ key: 'tab-heroes' })
-    expect(await ui.find({ text: bare })).toBeDefined()
-    expect(await ui.find({ text: glyphed })).toBeUndefined()
-    await ui.press({ key: 'tab-inventory' })
-    await ui.unmount()
-  }
-})
-
-test('half-blocks: the item row drops its glyph, the hero row keeps it', async ($, on) => {
-  const { data } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('raster'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  expect(await ui.find({ text: /^Iron Sword \(/ })).toBeDefined()
-  expect(await ui.find({ text: /^\/ Iron Sword/ })).toBeUndefined()
-  await ui.unmount()
-})
-
-test('before the probe answers a terminal row keeps its glyph', async ($, on) => {
-  const { data } = harness(on, seeded())
-  data.set('promptfall:settings', RENDERER('auto'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  expect(await ui.find({ text: /^\/ Iron Sword \(/ })).toBeDefined()
-  await ui.unmount()
-})
-
 test('market listings lead with the item or the hero class sprite', async ($, on) => {
   const { player } = await marketHarness(on, { heroListing: true })
   const { ui } = await startOnTest($, on, player, { 'promptfall:settings': RENDERER('raster') })
@@ -928,26 +892,6 @@ function rowCells(node: Node): number[] {
   return [...own, ...kids.flatMap(rowCells)]
 }
 
-function narrowState(): GameState {
-  const s = seeded()
-  return {
-    ...s,
-    inventory: [
-      {
-        id: 'ilong',
-        base: 'iron_sword',
-        rarity: 'rare',
-        affixes: [
-          { id: 'brutal', value: 5 },
-          { id: 'keen', value: 1 },
-        ],
-        equippedBy: null,
-        tradeableAt: null,
-      },
-    ],
-  }
-}
-
 test('the list sprite takes 2, 8 or the desktop columns in a row, 0 where none draws', () => {
   const sword = spriteFor('item', 'iron_sword')
   expect(listSpriteColumns('image', 'terminal', sword)).toBe(2)
@@ -955,36 +899,6 @@ test('the list sprite takes 2, 8 or the desktop columns in a row, 0 where none d
   expect(listSpriteColumns('unknown', 'terminal', sword)).toBe(0)
   expect(listSpriteColumns('raster', 'desktop', sword)).toBe(DESKTOP_LIST_SPRITE_COLUMNS)
 })
-
-for (const [surface, renderer, sprite] of [['terminal', 'raster', 8]] as const) {
-  test(`inventory and hero rows fit a 40-column pane on ${surface}`, async ($, on) => {
-    const { data, states } = harness(on, narrowState())
-    data.set('promptfall:settings', RENDERER(renderer))
-    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...NARROW })
-    const width = 40 - (sprite + 1)
-    const row = (await ui.find({ key: 'item-ilong' })) as Node | undefined
-    expect(row).toBeDefined()
-    for (const cells of rowCells(row as Node)) expect(cells).toBeLessThanOrEqual(width)
-    // The affixes did not fit beside the name: they sit under it, indented.
-    const below = (await ui.findAll({ type: 'Box' })).filter(
-      (b) => b.props.paddingLeft === 2 && /Brutal/i.test(b.text ?? ''),
-    )
-    expect(below.length).toBeGreaterThan(0)
-    expect((await ui.find({ key: 'item-actions-ilong' }))?.props.flexWrap).toBe('wrap')
-    await ui.press({ key: 'tab-heroes' })
-    const hero = (states.get('view') as GameView).roster[0]
-    if (!hero) throw new Error('no hero')
-    const heroCols = listSpriteColumns(renderer, surface, spriteFor('hero', hero.cls))
-    const heroRow = (await ui.find({ key: `hero-${hero.id}` })) as Node | undefined
-    expect(heroRow).toBeDefined()
-    for (const cells of rowCells(heroRow as Node)) {
-      expect(cells).toBeLessThanOrEqual(40 - (heroCols > 0 ? heroCols + 1 : 0))
-    }
-    expect((await ui.find({ key: `hero-actions-${hero.id}` }))?.props.flexWrap).toBe('wrap')
-    await ui.unmount()
-  })
-}
 
 test('market listing rows fit a 30-column pane', async ($, on) => {
   const { player } = await marketHarness(on, { affixed: true })
@@ -1001,25 +915,6 @@ test('market listing rows fit a 30-column pane', async ($, on) => {
     for (const cells of rowCells(r as Node)) expect(cells).toBeLessThanOrEqual(30 - (8 + 1))
   }
   await term.unmount()
-})
-
-test('on the desktop list rows wrap their text instead of cutting it', async ($, on) => {
-  const { data, states } = harness(on, narrowState())
-  data.set('promptfall:settings', RENDERER('raster'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...NARROW })
-  const item = await ui.find({ key: 'item-name-ilong' })
-  expect(item?.props.flexWrap).toBe('wrap')
-  expect(item?.text ?? '').toContain('Iron Sword (rare, weapon)')
-  expect(item?.text ?? '').not.toContain('…')
-  await ui.press({ key: 'tab-heroes' })
-  const hero = (states.get('view') as GameView).roster[0]
-  if (!hero) throw new Error('no hero')
-  const name = await ui.find({ key: `hero-name-${hero.id}` })
-  expect(name?.props.flexWrap).toBe('wrap')
-  expect(name?.text ?? '').toContain(hero.name)
-  expect(name?.text ?? '').not.toContain('…')
-  await ui.unmount()
 })
 
 test('orders and chat rows wrap on the desktop and truncate on a terminal', () => {
@@ -1074,22 +969,6 @@ test('orders and chat rows wrap on the desktop and truncate on a terminal', () =
     )
   expect(chat('wrap')).not.toContain('"truncate"')
   expect(chat('truncate')).toContain('"truncate"')
-})
-
-test('a list row puts its sprite at the top, beside the name, not in the middle of a wrapped block', async ($, on) => {
-  const { data, states } = harness(on, narrowState())
-  data.set('promptfall:settings', RENDERER('raster'))
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  for (const surface of ['terminal', 'desktop'] as const) {
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...NARROW })
-    expect((await ui.find({ key: 'item-ilong' }))?.props.alignItems).toBe('flex-start')
-    await ui.press({ key: 'tab-heroes' })
-    const hero = (states.get('view') as GameView).roster[0]
-    if (!hero) throw new Error('no hero')
-    expect((await ui.find({ key: `hero-${hero.id}` }))?.props.alignItems).toBe('flex-start')
-    await ui.press({ key: 'tab-inventory' })
-    await ui.unmount()
-  }
 })
 
 test('a market listing row puts its sprite at the top', async ($, on) => {

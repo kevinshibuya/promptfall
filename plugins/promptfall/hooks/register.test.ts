@@ -4,6 +4,7 @@ import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { effectToast } from './toasts'
+import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
 import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState, GAUGE_FULL, type GameState, hashState, step } from './vendor/sim.js'
@@ -637,8 +638,9 @@ test("past 120 s the dialog's read-only line is the outage notice", async ($, on
   await time.advance(16_000)
   await time.advance(120_000)
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  expect(await ui.find({ text: /Promptfall: server unreachable/ })).toBeDefined()
-  expect(await ui.find({ text: /not playing in this session/ })).toBeUndefined()
+  // The read-only line is the message window's first line (decoded Raster cells on a terminal).
+  expect(await paneText(ui)).toMatch(/Promptfall: server unreachable/)
+  expect(await paneText(ui)).not.toMatch(/not playing in this session/)
   await ui.unmount()
 })
 

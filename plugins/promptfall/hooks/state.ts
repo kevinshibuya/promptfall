@@ -16,7 +16,6 @@ import type {
 
 export const PREFS_DEFAULT: Prefs = { collapsed: false, bandTab: 'party' }
 export const DIALOG_DEFAULT: DialogState = {
-  itemPick: null,
   menu: null,
   partyPick: [],
   paneNotice: null,

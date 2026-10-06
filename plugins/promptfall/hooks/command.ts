@@ -13,6 +13,7 @@ import {
 import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
+import { PANE_ROWS } from './windows/tuning'
 
 export const PANE_ID = 'promptfall'
 
@@ -111,7 +112,7 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
       focus: true,
       closeOnEscape: true,
       holdToasts: true,
-      rows: 20,
+      rows: PANE_ROWS,
     })
     const running = game()
     const after = (ms: number, fn: () => void) => {

@@ -182,8 +182,7 @@ export type PaneMenu =
 /** The ▶ row of a list: the id it was on, and its index then (for when the id is gone). */
 export type PaneCursor = { id: string; index: number }
 export type DialogState = {
-  itemPick: string | null
-  /** The open sub-window; replaces itemPick (UI PR 2, Task 9). */
+  /** The open sub-window over the Inventory or Heroes list. */
   menu: PaneMenu | null
   partyPick: string[]
   paneNotice: string | null

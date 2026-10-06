@@ -673,7 +673,13 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link }))
         },
         clearDialog: async () => {
-          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link: null, sell: null }))
+          await update($, dialogAtom, (d) => ({
+            ...DIALOG_DEFAULT,
+            ...d,
+            link: null,
+            sell: null,
+            menu: null,
+          }))
         },
         readWorld: () => read($, worldAtom),
         readNotice: () => read($, noticeAtom),
@@ -742,7 +748,13 @@ export const register: Register = (on) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link }))
         },
         clearDialog: async () => {
-          await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, link: null, sell: null }))
+          await update($, dialogAtom, (d) => ({
+            ...DIALOG_DEFAULT,
+            ...d,
+            link: null,
+            sell: null,
+            menu: null,
+          }))
         },
         readWorld: () => read($, worldAtom),
         readNotice: () => read($, noticeAtom),

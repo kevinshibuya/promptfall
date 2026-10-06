@@ -27,16 +27,33 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
+import { validPrice } from '../vendor/ledger.js'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
+import { PANE_MAX_COLUMNS, PANE_ROWS, PRICE_INPUT_ROWS } from '../windows/tuning'
 import { chatBody, postChat } from './chat'
-import { CLASS_LABEL, formatGold, type TextFit } from './format'
+import type { TextFit } from './format'
 import { boardsBody, loadBoards } from './leaderboards'
 import { confirmBuy, loadMarket, marketBody } from './market'
 import { loadOrders, ordersBody, ordersTrade } from './orders'
-import { RARITY_COLOR } from './parts'
-import { openSell, sellBody, sellTrade } from './sell'
-import { fitRow, ListSprite, listSpriteColumns } from './sprites'
+import { heroesPane } from './pane/heroes'
+import type { PaneInput } from './pane/input'
+import { inventoryPane } from './pane/inventory'
+import {
+  type ActionContext,
+  forget,
+  type PaneDraw,
+  paneElement,
+  registerPaneHooks,
+  remember,
+  runAction,
+  stepCursor,
+  takeRefocus,
+  withCursor,
+} from './pane/mount'
+import type { PaneAction } from './pane/types'
+import { sellState } from './sell'
+import { ListSprite, listSpriteColumns } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
 
@@ -62,8 +79,6 @@ const RENDERER_NEXT: Record<Settings['renderer'], Settings['renderer']> = {
   raster: 'auto',
 }
 
-const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
-
 const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
   { tab: 'inventory', label: 'Inventory', hotkey: 'i' },
   { tab: 'heroes', label: 'Heroes', hotkey: 'h' },
@@ -87,6 +102,7 @@ function oddsLine(weights: Record<string, number>): string {
 }
 
 export function registerDialog(on: On, game: () => GameHandle | null): void {
+  registerPaneHooks(on)
   on('ui.render', { component: 'Pane', requestId: 'promptfall' }, async ($, e) => {
     const table = $.ui.resolve(e)
     const { Box, Text, Button, Link } = table
@@ -130,8 +146,6 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       running.apply(event, await $.clock.now())
       await running.settled()
     }
-    const setDialog = (patch: Partial<DialogState>) =>
-      update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), ...patch }))
     const market: MarketState = (await read($, marketAtom)) ?? MARKET_DEFAULT
     const orders: OrdersState = (await read($, ordersAtom)) ?? ORDERS_DEFAULT
     const updMarket: Updater<MarketState> = async (fn) => {
@@ -248,13 +262,90 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     }
 
-    const heroNameById = new Map(view.roster.map((h) => [h.id, h.name]))
+    if (tab === 'inventory' || tab === 'heroes') {
+      // Inventory and Heroes are drawn as windows (UI PR 2); the other tabs keep today's rows.
+      const terminal = e.surface === 'terminal'
+      const Input = 'Input' in table ? table.Input : undefined
+      const renderer = listRenderer ?? 'unknown'
+      const pricing =
+        dialog.sell !== null &&
+        Input !== undefined &&
+        sellState(view, world, dialog.sell, remainingMs).kind === 'price'
+      const rows = terminal
+        ? Math.min(PANE_ROWS, e.props.scroll.bodyRows - (pricing ? PRICE_INPUT_ROWS : 0))
+        : PANE_ROWS
+      const input: PaneInput = {
+        tab,
+        view,
+        dialog,
+        mode,
+        readOnly,
+        notice,
+        world,
+        running: game() !== null,
+        columns: Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns),
+        rows,
+        art: !terminal || renderer === 'image',
+        hasInput: Input !== undefined,
+        remainingMs,
+      }
+      const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
+      remember(e.requestId, tab, build)
+      const requestId = e.requestId
+      if (takeRefocus() && build.focus) {
+        const key = build.focus
+        // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
+        $.clock.after(0, () => void $.ui.focus({ requestId, key }))
+      }
+      const ctx: ActionContext = {
+        upd: updDialog,
+        game,
+        act,
+        openTab,
+        after,
+        remaining: (sell) => {
+          const goods =
+            sell.kind === 'item'
+              ? view.inventory.find((i) => i.id === sell.id)
+              : view.roster.find((h) => h.id === sell.id)
+          const at = goods?.tradeableAt ?? null
+          return at === null ? undefined : formatRemaining(remainingMs(at))
+        },
+        focusPrice: async () => {
+          await $.ui.focus({ requestId, key: 'price' })
+        },
+        dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
+      }
+      const run = (a: PaneAction) => void runAction(a, ctx)
+      return paneElement({
+        els: table as PaneDraw['els'],
+        surface: e.surface,
+        renderer,
+        bodyColumns: e.props.bodyColumns,
+        build,
+        run,
+        move: (by) => {
+          const stop = stepCursor(build, by)
+          if (stop) void updDialog((d) => withCursor(d, tab, stop))
+        },
+        price: dialog.sell
+          ? {
+              value: dialog.sell.price,
+              onInput: (text) => void updSell((s) => ({ ...s, price: text })),
+              onSubmit: (text) => {
+                if (/^\d+$/.test(text) && validPrice(Number(text)))
+                  run({ t: 'list', price: Number(text) })
+                else void updSell((s) => ({ ...s, price: text }))
+              },
+            }
+          : null,
+      })
+    }
+    forget(e.requestId)
+
     const paneWidth = Math.max(20, e.props.bodyColumns)
-    /** The columns left for a row's text beside its sprite. */
-    const rowWidth = (cols: number) => paneWidth - (cols > 0 ? cols + 1 : 0)
     // Terminals cut a row at its cells; the desktop's proportional text wraps instead.
     const fit: TextFit = e.surface === 'terminal' ? 'truncate' : 'wrap'
-    const fitWidth = (cols: number) => (fit === 'wrap' ? Number.POSITIVE_INFINITY : rowWidth(cols))
     const body = []
 
     const running = game()
@@ -279,40 +370,6 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       )
     } else if (tab === 'leaderboards' && running) {
       body.push(...boardsBody(els, view, world, boards))
-    } else if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
-      const sell = dialog.sell
-      const close = () => updDialog((d) => ({ ...d, sell: null }))
-      const goods =
-        sell.kind === 'item'
-          ? view.inventory.find((i) => i.id === sell.id)
-          : view.roster.find((h) => h.id === sell.id)
-      const tradeableAt = goods?.tradeableAt ?? null
-      const remaining = tradeableAt === null ? undefined : formatRemaining(remainingMs(tradeableAt))
-      body.push(
-        ...sellBody(els, view, world, sell, remainingMs, {
-          close,
-          setPrice: (text) => updSell((s) => ({ ...s, price: text })),
-          list: (price) =>
-            sellTrade(
-              running,
-              (client, auth) => client.list(auth, { kind: sell.kind, id: sell.id, price }),
-              updSell,
-              close,
-              after,
-              remaining,
-            ),
-          accept: (orderId) =>
-            sellTrade(
-              running,
-              (client, auth) => client.fillOrder(auth, orderId, sell.id),
-              updSell,
-              close,
-              after,
-              remaining,
-            ),
-          unequip: (heroId, slot) => act({ t: 'unequip', heroId, slot }),
-        }),
-      )
     } else if (tab === 'market' && running) {
       body.push(
         ...marketBody(
@@ -396,279 +453,6 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           },
           fit,
         ),
-      )
-    } else if (tab === 'inventory') {
-      body.push(
-        <Text key="inv-head" bold>
-          {`Inventory ${view.inventory.length}/${view.inventoryCap} · ${formatGold(view.gold)}`}
-        </Text>,
-      )
-      if (view.inventory.length === 0)
-        body.push(
-          <Text key="inv-empty" dimColor>
-            Nothing yet.
-          </Text>,
-        )
-      for (const item of view.inventory) {
-        const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
-        // A sprite replaces the glyph where pixels draw; the glyph stays as its fallback.
-        const itemArt = spriteFor('item', item.base)
-        const itemSprite = ListSprite(
-          table,
-          listRenderer,
-          e.surface,
-          itemArt,
-          item.name,
-          `sprite-${item.id}`,
-        )
-        const itemFit = fitRow(
-          `${itemSprite ? '' : `${item.glyph} `}${item.name} (${item.rarity}, ${item.slot})`,
-          item.affixes.join(', '),
-          fitWidth(itemSprite ? listSpriteColumns(listRenderer, e.surface, itemArt) : 0),
-        )
-        // Two rows per item, so a docked pane never truncates a button.
-        body.push(
-          <Box key={`item-${item.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
-            {itemSprite}
-            <Box key={`item-body-${item.id}`} flexDirection="column">
-              <Box
-                key={`item-name-${item.id}`}
-                flexDirection="row"
-                flexWrap={fit === 'wrap' ? 'wrap' : undefined}
-                gap={1}
-              >
-                <Text
-                  color={RARITY_COLOR[item.rarity]}
-                  dimColor={item.rarity === 'common'}
-                  wrap={fit}
-                >
-                  {itemFit.name}
-                </Text>
-                {itemFit.secondary && !itemFit.below ? (
-                  <Text dimColor wrap={fit}>
-                    {itemFit.secondary}
-                  </Text>
-                ) : null}
-              </Box>
-              {itemFit.below ? (
-                <Box key={`item-affixes-${item.id}`} paddingLeft={2}>
-                  <Text dimColor wrap={fit}>
-                    {itemFit.secondary}
-                  </Text>
-                </Box>
-              ) : null}
-              <Box
-                key={`item-actions-${item.id}`}
-                flexDirection="row"
-                flexWrap="wrap"
-                gap={1}
-                paddingLeft={2}
-              >
-                {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
-                {readOnly || item.equippedBy ? null : (
-                  <Button
-                    key={`equip-${item.id}`}
-                    label="equip"
-                    onPress={() =>
-                      setDialog({
-                        itemPick:
-                          dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
-                      })
-                    }
-                  />
-                )}
-                {readOnly || !item.equippedBy ? null : (
-                  <Button
-                    key={`unequip-${item.id}`}
-                    label="unequip"
-                    onPress={() => {
-                      const heroId = item.equippedBy
-                      const slot = item.slot
-                      if (
-                        heroId &&
-                        (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
-                      ) {
-                        return act({ t: 'unequip', heroId, slot })
-                      }
-                    }}
-                  />
-                )}
-                {readOnly || item.equippedBy ? null : (
-                  <Button
-                    key={`vendor-${item.id}`}
-                    label={`vendor ${item.vendorValue}g`}
-                    onPress={() => act({ t: 'vendor', itemId: item.id })}
-                  />
-                )}
-                {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
-                  <Button
-                    key={`sell-${item.id}`}
-                    label="sell"
-                    onPress={() => openSell(running, 'item', item.id, updDialog)}
-                  />
-                )}
-                {readOnly || item.affixes.length === 0 ? null : (
-                  <Button
-                    key={`reforge-${item.id}`}
-                    label={`reforge ${item.reforgeCost}g`}
-                    onPress={() =>
-                      setDialog({
-                        itemPick:
-                          dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
-                      })
-                    }
-                  />
-                )}
-              </Box>
-            </Box>
-          </Box>,
-        )
-        if (!readOnly && dialog.itemPick === `equip:${item.id}`) {
-          const options = view.roster
-            .filter((h) => item.classes.includes(h.cls))
-            .map((h) => ({ value: h.id, label: `${h.name} (${CLASS_LABEL[h.cls] ?? h.cls})` }))
-          body.push(
-            options.length > 0 ? (
-              pick(`equip-to-${item.id}`, 'Equip on', options, async (heroId) => {
-                await setDialog({ itemPick: null })
-                await act({ t: 'equip', heroId, itemId: item.id })
-              })
-            ) : (
-              <Text key={`equip-none-${item.id}`} dimColor>
-                No hero of a class that can wear it.
-              </Text>
-            ),
-          )
-        }
-        if (!readOnly && dialog.itemPick === `reforge:${item.id}`) {
-          body.push(
-            pick(
-              `reforge-pick-${item.id}`,
-              `Reforge which affix (${item.reforgeCost}g)`,
-              item.affixes.map((label, i) => ({ value: String(i), label })),
-              async (value) => {
-                await setDialog({ itemPick: null })
-                await act({ t: 'reforge', itemId: item.id, affixIndex: Number.parseInt(value, 10) })
-              },
-            ),
-          )
-        }
-      }
-    } else if (tab === 'heroes') {
-      body.push(
-        <Box key="heroes-head" flexDirection="row" gap={2}>
-          <Text
-            bold
-          >{`Roster ${view.roster.length}/${view.rosterCap} · ${formatGold(view.gold)}`}</Text>
-          {readOnly ? null : (
-            <Button
-              key="recruit"
-              label={`Recruit ${view.tavernPrice}g`}
-              onPress={() => act({ t: 'recruit' })}
-            />
-          )}
-        </Box>,
-      )
-      if (dialog.partyPick.length > 0) {
-        body.push(
-          <Text key="party-pick" dimColor>
-            {`New party: ${dialog.partyPick.map((id) => heroNameById.get(id) ?? id).join(', ')} (pick ${3 - dialog.partyPick.length} more)`}
-          </Text>,
-        )
-      }
-      for (const hero of view.roster) {
-        const picked = dialog.partyPick.includes(hero.id)
-        const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
-        const heroArt = spriteFor('hero', hero.cls)
-        const heroSprite = ListSprite(
-          table,
-          listRenderer,
-          e.surface,
-          heroArt,
-          hero.name,
-          `sprite-${hero.id}`,
-        )
-        const heroFit = fitRow(
-          `${heroSprite ? '' : `${hero.glyph} `}${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`,
-          hero.traits.join(', '),
-          fitWidth(heroSprite ? listSpriteColumns(listRenderer, e.surface, heroArt) : 0),
-        )
-        // Two rows per hero, like the items: the name, then its actions, which wrap in a narrow pane.
-        body.push(
-          <Box key={`hero-${hero.id}`} flexDirection="row" alignItems="flex-start" gap={1}>
-            {heroSprite}
-            <Box key={`hero-body-${hero.id}`} flexDirection="column">
-              <Box
-                key={`hero-name-${hero.id}`}
-                flexDirection="row"
-                flexWrap={fit === 'wrap' ? 'wrap' : undefined}
-                gap={1}
-              >
-                <Text color={RARITY_COLOR[hero.rarity]} wrap={fit}>
-                  {heroFit.name}
-                </Text>
-                {heroFit.secondary && !heroFit.below ? (
-                  <Text dimColor wrap={fit}>
-                    {heroFit.secondary}
-                  </Text>
-                ) : null}
-              </Box>
-              {heroFit.below ? (
-                <Box key={`hero-traits-${hero.id}`} paddingLeft={2}>
-                  <Text dimColor wrap={fit}>
-                    {heroFit.secondary}
-                  </Text>
-                </Box>
-              ) : null}
-              <Box
-                key={`hero-actions-${hero.id}`}
-                flexDirection="row"
-                flexWrap="wrap"
-                gap={1}
-                paddingLeft={2}
-              >
-                {marker ? <Text color="cyan">{marker}</Text> : null}
-                {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
-                  <Button
-                    key={`sell-${hero.id}`}
-                    label="sell"
-                    onPress={() => openSell(running, 'hero', hero.id, updDialog)}
-                  />
-                )}
-                {readOnly ? null : (
-                  <Button
-                    key={`party-${hero.id}`}
-                    label={picked ? 'picked' : 'party'}
-                    onPress={async () => {
-                      const next = picked
-                        ? dialog.partyPick.filter((id) => id !== hero.id)
-                        : [...dialog.partyPick, hero.id]
-                      const [a, b, c] = next
-                      if (next.length === 3 && a && b && c) {
-                        await setDialog({ partyPick: [] })
-                        await act({ t: 'set_party', heroIds: [a, b, c] })
-                      } else {
-                        await setDialog({ partyPick: next })
-                      }
-                    }}
-                  />
-                )}
-                {readOnly || hero.inParty || hero.inPendingParty ? null : (
-                  <Button
-                    key={`dismiss-${hero.id}`}
-                    label="dismiss"
-                    onPress={() => act({ t: 'dismiss', heroId: hero.id })}
-                  />
-                )}
-              </Box>
-            </Box>
-          </Box>,
-        )
-      }
-      body.push(
-        <Text key="heroes-help" dimColor>
-          A new party takes the field at the next zone change.
-        </Text>,
       )
     } else if (tab === 'account') {
       const leaseOwner = await read($, leaseOwnerAtom)
