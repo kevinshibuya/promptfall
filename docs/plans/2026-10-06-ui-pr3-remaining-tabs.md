@@ -1017,7 +1017,7 @@ Terminal.app with its result; the PR is open.
 **Boundaries:** No code change here except a fix the pass finds, committed separately with its
 own test.
 
-- [ ] Spec, ADR note, transcription grafts, glossary, plugin README
+- [x] Spec, ADR note, transcription grafts, glossary, plugin README
 - [ ] Driven pass
 - [ ] Ticks, PR
 

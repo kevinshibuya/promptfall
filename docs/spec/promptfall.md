@@ -471,36 +471,53 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Dialog via `/promptfall [tab]`: Inventory, Heroes, Account, Odds in phase 1;
   Market and Orders in phase 2; Chat and Leaderboards in phase 3. Opened with
   focus, closes on Escape, holds toasts.
-- Inventory and Heroes draw as Dragon Quest V windows (UI PR 2, ADR 0005): a tab
+- All eight tabs draw as Dragon Quest V windows (UI PR 2 and 3, ADR 0005): a tab
   window, a list window with a ▶ cursor, a detail window beside it from 96
-  columns (under it below that), command and pick windows, a Yes/No, and a
+  columns (under it below that), command, pick and form windows, a Yes/No, and a
   message window. The picture takes at most 24 rows and 120 columns, centred on
-  a wider pane; under 40 columns, or with too few rows, only the message window
-  shows, asking for more room. Keys: Tab or the arrows move the ▶, Enter opens
-  the row's command window or runs the item under the ▶, `q` backs out of a
-  sub-window, Escape closes the pane, and each item's letter (drawn gold) runs
-  it. Vendor and Dismiss ask Yes or No first. Long lists page with a
-  `16-30/40` footer and a ▼ while more follow. The desktop, VS Code and mobile
-  add a `▲ ▼ ok back` row under the picture: their focus ring moves without
-  telling the plugin. The other six tabs keep their text rows.
-- Chat tab (`c`): the messages the pane fits, newest at the bottom, a compose
-  input with Enter to post, the gate said in place (unlinked, chat off), a 5
-  second flash on a refusal naming the rule, read-only on mobile. Any session
-  may post. Leaderboards tab (`b`): the per-zone presence counts, then highest
-  zone and boss damage this week, 20 rows each, your row highlighted, fetched on
-  open; a closed state said in place.
-- Market tab: listings filtered by kind (items or heroes), base type or class
-  and minimum rarity, sorted by price or newest, 10 per page, Buy on a hotkey
-  with a confirm step. Orders tab: my listings, my buy orders, a form for a
-  new order, the count waiting in returns. Selling starts from the Inventory
-  and Heroes command windows: a sell window takes the detail window's place,
+  a wider pane. A short pane drops the tab window and keeps its hotkeys, so an
+  inline pane of 14 rows still draws every tab; under 40 columns, or with fewer
+  rows than that, only the message window shows, asking for more room. Keys: Tab
+  or the arrows move the ▶, Enter runs the row under it (or opens its command
+  window), `q` backs out of a sub-window, Escape closes the pane, and each
+  item's letter (drawn gold) runs it. Vendor, Dismiss, Buy, the two cancels and
+  Reset ask Yes or No first. Long lists page with a `16-30/40` footer and a ▼
+  while more follow. The typed fields (the sell price, the order price, the
+  chat line) and the GitHub link sit under the picture, one at a time. The
+  desktop, VS Code and mobile add a `▲ ▼ ok back` row under the picture: their
+  focus ring moves without telling the plugin.
+- Chat tab (`c`): one row per message, newest at the bottom, the ▶ message whole
+  in the detail window. The ▶ follows new messages until moved. Up pages back
+  through the 200 messages the client holds. Enter on a row puts the cursor in
+  the compose field, which is not focused when the tab opens; Enter there posts
+  and Tab leaves it. The gate is said in the message window (unlinked, chat
+  off), a refusal flashes for 5 seconds naming the rule, and mobile is
+  read-only. Any session may post. Leaderboards tab (`b`): highest zone and boss
+  damage this week under their headings, 20 rows each, your rows in gold,
+  fetched on open, with who is online by zone in the detail window; a closed
+  state is said in place.
+- Market tab: a `Filters` row (`f`) opens a filter window for kind (items or
+  heroes), sort (cheapest or newest), base type or class and minimum rarity;
+  the last two open pick windows. Ten listings a page with `Previous page` and
+  `Next page` rows; Enter on a listing asks Yes or No to buy it, and your own
+  listings read `yours`. Orders tab: the count waiting in returns, my listings
+  and my buy orders under their headings (Enter asks to cancel one, naming what
+  happens to the fee or the held gold), then `New buy order`, which opens a
+  form window in the detail window's place with base, rarity and affix picks,
+  the price field and `Place order`. Selling starts from the Inventory and
+  Heroes command windows: a sell window takes the detail window's place,
   matching buy orders first (each with the net), then Set a price, which
-  focuses a price field under the picture; the message window shows the fee
-  and net for a typed price. Mobile has no field and lists preset prices. Market and Orders are always listed; a
-  closed market or an unlinked account is said in place, with a hotkey to the
-  Account tab.
-- Account tab: link GitHub (the device flow: a code, a URL, a poll), the
-  current server, and a reset of this machine's data.
+  focuses the price field; the message window shows the fee and net for a
+  typed price. Mobile has no field and lists preset prices. Market and Orders
+  are always listed; a closed market or an unlinked account is said in the
+  message window, with a hotkey to the Account tab.
+- Account tab: the settings as rows (`s` sound, `n` motion, `x` renderer), the
+  band shown or collapsed, band off, link GitHub (the device flow: a code in
+  the detail window, the URL as a link under the picture, a poll), and a reset
+  of this machine's data, which asks Yes or No and opens on No. The detail
+  window holds the server, the client, the mode and the session. Before a game
+  view exists the pane says Promptfall has not started, and Account still
+  offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
   toggles the farm flag. `/promptfall server <url>|local` picks the server.
 - Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited,
@@ -511,8 +528,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   (Rare, Epic), legendary drop, level up, world boss appeared. Only the primary
   session plays them; `/promptfall off` hides the band, not the cues.
 - Item sprites (phase 4): 16 px icons in the Inventory and Heroes list
-  windows on Image and Svg, none on half-block terminals (the raster windows
-  leave the two cells blank); the Market keeps its icons as before.
+  windows and the Market's on Image and Svg, none on half-block terminals (the
+  raster windows leave the two cells blank).
 
 ## 11. Art (phase 4)
 
