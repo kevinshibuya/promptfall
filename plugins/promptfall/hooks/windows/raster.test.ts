@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { decode } from '../sprites/base64'
 import { CLEAR } from '../stage/raster'
+import { testArt } from './fixtures'
 import type { Scene, Win } from './kit'
 import { sceneCells } from './raster'
 import { BAR_BACK_RGB, BORDER_RGB, FIELD_RGB, HP_BAR_RGB } from './tuning'
@@ -69,4 +70,18 @@ test('two windows side by side keep their own frames', () => {
 test('an accented letter draws as its base letter, a symbol the font lacks as ?', () => {
   const g = cells(scene(win({ lines: [{ spans: [{ text: 'Zoé♞' }] }] })))
   expect(text(g[1]).slice(1, 5)).toBe('Zoe?')
+})
+
+test('a window at y = 3 lands at row 3', () => {
+  const g = cells({ columns: 10, rows: 6, windows: [win({ y: 3 })], alt: '' })
+  expect(text(g[2])).toBe('          ')
+  expect(text(g[3])).toBe('╭────────╮')
+  expect(text(g[5])).toBe('╰────────╯')
+})
+
+test('an art span draws two blank cells', () => {
+  const art = testArt(16, 16, [[0, 0]])
+  const line = { spans: [{ text: 'A' }, { art }, { text: 'B' }] }
+  const g = cells({ columns: 10, rows: 3, windows: [win({ lines: [line] })], alt: '' })
+  expect(text(g[1])).toBe('│A  B    │')
 })

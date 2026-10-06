@@ -18,7 +18,7 @@ const seconds = (ms: number) => `${Number((ms / 1000).toFixed(3))}s`
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
 /** One <path> per colour: the run-length `M x y h w v 1 h -w z` of its horizontal runs. */
-function artPaths(art: SpriteArt, raritySlot: number | null): string {
+export function artPaths(art: SpriteArt, raritySlot: number | null): string {
   const px = decodePixels(art)
   const runs = new Map<number, string[]>()
   for (let y = 0; y < art.height; y++) {

@@ -429,9 +429,9 @@ a 48 × 34 art is scaled by 3 to 16 × 11 and centred; raster draws spaces for i
 
 **Boundaries:** No change to what the strip draws. Nothing under `ui/`.
 
-- [ ] Kit types, `tilePositions`, constants; kit tests
-- [ ] Image, raster, Svg: `y` and `art`; their tests
-- [ ] Goldens unchanged; run the check, commit
+- [x] Kit types, `tilePositions`, constants; kit tests
+- [x] Image, raster, Svg: `y` and `art`; their tests
+- [x] Goldens unchanged; run the check, commit
 
 ### Task 3: Dialog state and pane types
 

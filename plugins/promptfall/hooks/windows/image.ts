@@ -1,9 +1,11 @@
 // The image encoder: one window as an RGBA picture at CELL_W × CELL_H pixels per cell, for the
 // terminals that draw pictures. `encodeImage(windowFrame(win), WINDOW_SCALE)` makes its source.
+import { decodePixels } from '../sprites/index'
 import type { Frame } from '../stage/compose'
 import {
   barPixels,
   chars,
+  fitArt,
   frameRole,
   glyphFor,
   OUT,
@@ -55,6 +57,15 @@ function drawPlaced(f: Frame, placed: readonly Placed[], x0: number, y0: number)
       for (const [i, ch] of chars(p.text).entries()) drawGlyph(f, ch, x + i * CELL_W, y0, p.rgb)
     } else if (p.kind === 'cursor') {
       drawGlyph(f, '▶', x, y0, BORDER_RGB)
+    } else if (p.kind === 'art') {
+      const { art, dx, dy } = fitArt(p.art)
+      const px = decodePixels(art)
+      for (let ay = 0; ay < art.height; ay++)
+        for (let ax = 0; ax < art.width; ax++) {
+          const v = px[ay * art.width + ax] ?? 0
+          // Index 0 is transparent: the field shows through.
+          if (v !== 0) put(f, x + dx + ax, y0 + dy + ay, art.palette[v] ?? 0)
+        }
     } else {
       const filled = barPixels(p.cells, p.fill)
       for (let bx = 0; bx < p.cells * CELL_W; bx++) {

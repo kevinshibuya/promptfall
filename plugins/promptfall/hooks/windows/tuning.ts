@@ -52,3 +52,29 @@ export const LOG_KEEP = 40
 export const GAUGE_FRAME_MS = 250
 /** The strip Svg's budget; SMIL frames past it are cut from the tail. */
 export const STRIP_SVG_MAX_CHARS = 65_536
+
+// The pane (docs/plans/2026-10-06-ui-pr2-pane-windows.md, "Pane constants").
+/** The most rows the pane's picture takes (grill 1.9); also the rows `$.ui.open` asks. */
+export const PANE_ROWS = 24
+/** The most columns (grill 1.9); a wider body centres the picture. */
+export const PANE_MAX_COLUMNS = 120
+/** Below this the pane draws the too-small window. */
+export const PANE_MIN_COLUMNS = 40
+/** From here the detail window sits beside the list; below, under it. */
+export const PANE_WIDE_COLUMNS = 96
+/** The wide layout's right column. */
+export const DETAIL_COLUMNS = 40
+/** The narrow layout's detail window: border, 4 lines, border. */
+export const NARROW_DETAIL_ROWS = 6
+/** The message window: border, 2 lines, border. */
+export const MESSAGE_ROWS = 4
+/** Border, pad, `▶Yes` or ` No`, pad, border. */
+export const YESNO_COLUMNS = 8
+/** A sprite span: 16 × 16 picture pixels. */
+export const ART_CELLS = 2
+/** The pane Svg's budget, under the engine's 131,072 characters. */
+export const PANE_SVG_MAX_CHARS = 120_000
+/** The rows an `Input` takes on a terminal (the PR 2 pane spike). */
+export const PRICE_INPUT_ROWS = 1
+/** The message window's move hint: the arrows move the ring on both terminals (the spike). */
+export const MOVE_HELP = 'Tab or arrows: move.'
