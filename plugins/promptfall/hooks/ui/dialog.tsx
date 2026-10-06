@@ -41,6 +41,7 @@ import type { PaneInput } from './pane/input'
 import { inventoryPane } from './pane/inventory'
 import {
   type ActionContext,
+  drawingStarted,
   forget,
   type PaneDraw,
   paneElement,
@@ -104,6 +105,8 @@ function oddsLine(weights: Record<string, number>): string {
 export function registerDialog(on: On, game: () => GameHandle | null): void {
   registerPaneHooks(on)
   on('ui.render', { component: 'Pane', requestId: 'promptfall' }, async ($, e) => {
+    // Before any await: a re-focus asked after this drawing began is not this drawing's.
+    const started = drawingStarted()
     const table = $.ui.resolve(e)
     const { Box, Text, Button, Link } = table
     const Select = 'Select' in table ? table.Select : undefined
@@ -292,7 +295,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
       remember(e.requestId, tab, build)
       const requestId = e.requestId
-      if (takeRefocus() && build.focus) {
+      if (takeRefocus(started) && build.focus) {
         const key = build.focus
         // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
         $.clock.after(0, () => void $.ui.focus({ requestId, key }))

@@ -9,6 +9,7 @@ import { inventoryPane } from './inventory'
 import {
   type ActionContext,
   closed,
+  drawingStarted,
   focusMove,
   type PaneDraw,
   paneElement,
@@ -215,12 +216,12 @@ test('actions: open, back, an event closing the menu, the third pick sending the
   const state = { d: DIALOG_DEFAULT, redraws: 0 }
   const events: PlayerEvent[] = []
   const ctx = context(state, events)
-  takeRefocus()
+  takeRefocus(drawingStarted())
   await runAction({ t: 'open', menu: { kind: 'actions', tab: 'inventory', id: 'i2', at: 0 } }, ctx)
   expect(state.d.menu?.kind).toBe('actions')
   // An action that changes the stops asks the next drawing to put the ring on its focus.
-  expect(takeRefocus()).toBe(true)
-  expect(takeRefocus()).toBe(false)
+  expect(takeRefocus(drawingStarted())).toBe(true)
+  expect(takeRefocus(drawingStarted())).toBe(false)
   // With a menu open the next drawing focuses its first item.
   expect(inventoryPane({ ...paneInput(), dialog: state.d }).focus).toBe('menu:0')
   await runAction({ t: 'back' }, ctx)
@@ -265,18 +266,26 @@ test('an action asks for the re-focus only after its last write, then a drawing'
     // A drawing during the action's writes must not take the re-focus.
     upd: async (fn) => {
       state.d = fn(state.d)
-      seen.push(takeRefocus())
+      seen.push(takeRefocus(drawingStarted()))
     },
     act: async () => {
-      seen.push(takeRefocus())
+      seen.push(takeRefocus(drawingStarted()))
     },
   }
-  takeRefocus()
+  takeRefocus(drawingStarted())
   state.d = { ...state.d, menu: { kind: 'equip', itemId: 'i', at: 0 } }
   await runAction({ t: 'event', event: { t: 'equip', heroId: 'h', itemId: 'i' } }, ctx)
   expect(seen).toEqual([false, false])
   expect(state.redraws).toBe(1)
-  expect(takeRefocus()).toBe(true)
+  expect(takeRefocus(drawingStarted())).toBe(true)
   await runAction({ t: 'none' }, ctx)
-  expect([state.redraws, takeRefocus()]).toEqual([1, false])
+  expect([state.redraws, takeRefocus(drawingStarted())]).toEqual([1, false])
+})
+
+test('a drawing that began before the action finished does not take its re-focus', async () => {
+  const state = { d: DIALOG_DEFAULT, redraws: 0 }
+  const early = drawingStarted()
+  await runAction({ t: 'tab', tab: 'heroes' }, context(state, []))
+  expect(takeRefocus(early)).toBe(false)
+  expect(takeRefocus(drawingStarted())).toBe(true)
 })

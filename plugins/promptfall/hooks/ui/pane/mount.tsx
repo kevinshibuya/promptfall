@@ -35,8 +35,14 @@ type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
 
 /** The build each pane instance drew last, for the focus hook: its ring order, cursors and tab. */
 const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
-/** Set by an action that changes which stops exist: the next drawing puts the ring on its focus. */
-let refocus = false
+/**
+ * Re-focus: an action that changes which stops exist bumps `generation` once its writes are done
+ * and asks for that generation. Only a drawing that started at or after it may take the ask: a
+ * drawing already under way when the action finished holds the stops of before (a tab switch
+ * drawn with the old tab's rows).
+ */
+let generation = 0
+let wanted: number | null = null
 
 export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
@@ -44,11 +50,15 @@ export function remember(requestId: string, tab: PaneTab, build: PaneBuild): voi
 export function forget(requestId: string): void {
   last.delete(requestId)
 }
-/** True once after an action asked for it. */
-export function takeRefocus(): boolean {
-  const was = refocus
-  refocus = false
-  return was
+/** Read at the very start of a drawing, before anything it awaits. */
+export function drawingStarted(): number {
+  return generation
+}
+/** True once, for a drawing that started after the action that asked. */
+export function takeRefocus(startedAt: number): boolean {
+  if (wanted === null || startedAt < wanted) return false
+  wanted = null
+  return true
 }
 
 // Image sources by window key and content, so a cursor move re-encodes only what changed.
@@ -333,7 +343,8 @@ const REFOCUS = new Set<PaneAction['t']>([
 export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
   await perform(a, ctx)
   if (REFOCUS.has(a.t)) {
-    refocus = true
+    generation += 1
+    wanted = generation
     ctx.redraw()
   }
 }
