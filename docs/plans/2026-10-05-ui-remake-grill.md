@@ -219,6 +219,58 @@ overturn either.
   shrunk to a single column: name header, then H, M, L rows (shot 011).
 - The PR 2 plan builds the pane from 1.12's anatomy plus these two.
 
+### 1.20 Planning gaps for UI PR 2 (2026-10-06, planner's calls)
+
+Made while planning UI PR 2 (`docs/plans/2026-10-06-ui-pr2-pane-windows.md`), inline on Opus 5.5
+because Fable is out; Kevin approves or overturns each before the review wave.
+
+- **The tab window goes on every tab now.** The eight tabs become one window at the pane's top,
+  `▶` on the current tab, the hotkeys hidden. The six PR 3 tabs keep their current bodies under it
+  until PR 3. Why: one switcher from day one, and PR 3 only swaps bodies.
+- **Hotkey letters are drawn gold inside their labels** (`Inventory`, `Orders`, `Account`; the
+  first occurrence, ignoring case). A graft: the engine's plain Button accents its hotkey the
+  same way. Why: the old Button row showed the keys; a window needs another way to.
+- **One Image per window, laid out by a tile tree; `IMAGE_MAX_BYTES` stays 1 MiB.** Why: a cursor
+  move then re-encodes and blits only the windows it changed, and the largest window
+  (80 × 17 cells) is about 700 KB. Raising the cap would buy one 1.5 MB blit per keypress.
+- **Two layouts and a floor.** From 96 columns the detail window sits beside the list (40
+  columns); from 40 to 95 it sits under it (6 rows); below 40 columns, or too few rows, the pane
+  says it needs more room. Why: a docked pane is often 50 to 80 columns.
+- **Item and hero sprites stay in the list rows**, against the transcription's absence list
+  ("icons beside list items"). Spec §10 and phase 4 put 16 px icons in these lists, and phase 4
+  PR 2's art feeds them. Raster terminals draw none, since a window row is one cell tall and the
+  old 8 × 2 icon needs two. The call most likely to be overturned: the alternative is no icons
+  in the list and the cursor item's sprite in the detail window.
+- **Gold sits in the list window's title** (`Inventory 12/20 · 1,240G`), not in a purse window.
+  Why: the band's purse needs a strip slot, while the pane's title has the room.
+- **Enter on a row opens a command window** (DQ's command window: a header, a divider, ▶
+  items). Equip and Reforge open a pick window; Unequip, Recruit and party picks act at once, as
+  today. **Vendor and Dismiss now ask Yes/No first.** Why: both can't be undone, and today one
+  stray Enter does either.
+- **Recruit is the roster list's last row** (`Recruit a hero  120G`), not a button. Why: it keeps
+  every action on the cursor.
+- **The hero detail is a party window of one** (1.19): header `Aldric L4`, divider, class, an H
+  row with a bar for party heroes only, traits, equipment, status. No new view fields: bench
+  heroes have no HP in the view.
+- **The cursor follows the focus ring.** It moves through hidden one-space Buttons, one per row
+  (spike PR 2 notes). Tab and Back Buttons on the ring are skipped by redirecting. Where the
+  spike finds hidden Buttons can't take focus, and on VS Code and mobile, a visible `▲ ▼ ok back`
+  row does the same.
+- **Escape backs out of a sub-window and `q` always does.** Escape refuses the pane's close while
+  a sub-window is open, if the spike finds the keyboard stays in the pane; else Escape closes
+  the pane and `q` is the only way back.
+- **A pane spike runs first** (Task 1). It answers three questions PR 1's spike left open: whether
+  hidden Buttons join the ring, whether the arrows move it, and whether a refused Escape keeps
+  the keyboard. It also checks that Images tile in nested Boxes. The cursor and the back-out
+  depend on the answers.
+- **Before the band's probe lands, the pane draws raster.** Why: raster always draws, and the
+  probe settles within a second of the band showing.
+- **The sell flow becomes a sell window** in the detail window's place: matching orders as ▶
+  items, then `Set a price`, which focuses the price `Input` under the picture (typed values stay
+  Inputs, 1.5). Mobile, with no Input, picks a preset price.
+- **Worn items show the wearer's first name** in a dim column, not DQ's `E` mark, which the
+  references in hand don't show.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
