@@ -1,5 +1,12 @@
 // Hand-built pane inputs for the pane tests and the pane goldens.
-import type { GameView, ItemView, ListingView, MarketState, RosterHeroView } from '../../../types'
+import type {
+  GameView,
+  ItemView,
+  ListingView,
+  MarketState,
+  OrdersState,
+  RosterHeroView,
+} from '../../../types'
 import { wave } from '../../stage/fixtures'
 import {
   BOARDS_DEFAULT,
@@ -172,6 +179,46 @@ export function marketPage(): MarketState {
       ],
       page: 0,
       total: 23,
+    },
+  }
+}
+
+/** Two of your listings, one buy order with an affix, and two returns waiting. */
+export function ordersMine(): OrdersState {
+  return {
+    ...ORDERS_DEFAULT,
+    mine: {
+      listings: [
+        listing('L4', {
+          name: 'Silk Robe',
+          detail: 'Ward +3',
+          sellerId: 'a1',
+          sellerName: 'kevin',
+          price: 900,
+          base: 'silk_robe',
+        }),
+        listing('L5', {
+          name: 'Jade Ring',
+          rarity: 'epic',
+          detail: 'Vital +4',
+          sellerId: 'a1',
+          sellerName: 'kevin',
+          price: 2400,
+          base: 'copper_ring',
+        }),
+      ],
+      orders: [
+        {
+          id: 'O1',
+          base: 'steel_longsword',
+          name: 'Steel Longsword',
+          minRarity: 'rare',
+          affix: 'Vicious',
+          maxPrice: 1200,
+          expiresAt: 6 * 86_400_000,
+        },
+      ],
+      returns: 2,
     },
   }
 }

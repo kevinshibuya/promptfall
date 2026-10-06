@@ -727,9 +727,9 @@ before: the module does not exist.
 
 **Boundaries:** No mounting. `ordersBody` behaves as before.
 
-- [ ] Rows, detail, Yes/No; tests
-- [ ] The form, its picks, presets; tests
-- [ ] Run the check, commit
+- [x] Rows, detail, Yes/No; tests
+- [x] The form, its picks, presets; tests
+- [x] Run the check, commit
 
 ### Task 6: The Account and Odds windows, and the no-view pane
 

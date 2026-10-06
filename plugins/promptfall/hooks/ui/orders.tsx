@@ -18,7 +18,8 @@ import {
 } from './trade'
 
 const NONE = 'none'
-const PRESETS = [2, 3, 5, 8]
+/** Preset max prices where the surface has no Input: multiples of the base's vendor value. */
+export const PRESETS = [2, 3, 5, 8]
 
 /** Syncs, then loads this account's listings, orders and returns. */
 export async function loadOrders(
@@ -67,7 +68,7 @@ export async function ordersTrade(
 }
 
 /** The rare vendor value of a base: what the presets multiply. */
-function baseValue(base: string, rarity: RarityName): number {
+export function baseValue(base: string, rarity: RarityName): number {
   const probe: Item = { id: 'p', base, rarity, affixes: [], equippedBy: null, tradeableAt: null }
   return vendorValue(probe)
 }

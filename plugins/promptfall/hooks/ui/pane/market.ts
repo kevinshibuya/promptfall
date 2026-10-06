@@ -148,7 +148,7 @@ const text = (t: string, rgb?: number): Line => ({
 })
 
 /** `Rare weapon` or `Rare Knight`. */
-function kindLine(l: ListingView): string {
+export function kindLine(l: ListingView): string {
   const what =
     l.kind === 'item'
       ? (content.itemBases[l.base ?? '']?.slot ?? 'item')
