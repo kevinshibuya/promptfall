@@ -2,6 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { Frame } from '../stage/compose'
 import { imageBytes } from '../stage/image'
 import { IMAGE_MAX_BYTES } from '../stage/tuning'
+import { testArt } from './fixtures'
 import { glyph } from './glyphs'
 import { windowFrame, windowKey } from './image'
 import type { Win } from './kit'
@@ -127,4 +128,16 @@ test('the widest strip window (80 columns) stays inside the byte cap and the 204
   const f = windowFrame(win({ columns: 80, rows: 5 }))
   expect(imageBytes(f, WINDOW_SCALE)).toBeLessThan(IMAGE_MAX_BYTES)
   expect(f.width * WINDOW_SCALE).toBeLessThan(2048)
+})
+
+test('an art span draws the fitted sprite at its cell, index 0 left as field', () => {
+  const art = testArt(16, 16, [
+    [0, 0],
+    [15, 15],
+  ])
+  const f = windowFrame(win({ columns: 6, rows: 3, lines: [{ spans: [{ gap: 1 }, { art }] }] }))
+  // Inner cell 1 starts at picture x 16; the inner row at y 16.
+  expect(at(f, 16, 16)).toBe(0xe83830)
+  expect(at(f, 31, 31)).toBe(0xe83830)
+  expect(at(f, 17, 16)).toBe(FIELD_RGB)
 })

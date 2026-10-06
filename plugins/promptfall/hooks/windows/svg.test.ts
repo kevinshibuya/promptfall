@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { testArt } from './fixtures'
 import type { Line, Scene, Track, Win } from './kit'
 import { sceneSvg } from './svg'
 import { GAUGE_FULL_RGB, GAUGE_RGB, STRIP_SVG_MAX_CHARS } from './tuning'
@@ -161,5 +162,28 @@ test('a typing frame can start part-way: its clip opens at the cells already sho
   )
   expect(svg).toContain(
     'width="24" height="16"><animate attributeName="width" values="24;32;40;48;56"',
+  )
+})
+
+test('a window at y = 3 moves down 48 px; a window at y 0 is not shifted', () => {
+  const svg = sceneSvg(
+    { columns: 10, rows: 6, windows: [win({ key: 'a', y: 3 }), win({ key: 'b' })], alt: '' },
+    [],
+    opts,
+  )
+  expect(svg).toContain('<g id="w-a" transform="translate(0 48)">')
+  expect(svg).toContain('<g id="w-b">')
+})
+
+test('an art span draws the fitted sprite at its cell', () => {
+  const art = testArt(48, 34, [[0, 0]])
+  const svg = sceneSvg(
+    { columns: 10, rows: 3, windows: [win({ lines: [{ spans: [{ art }] }] })], alt: '' },
+    [],
+    opts,
+  )
+  // Inner cell 0 at (8, 16), centred down by 2 for the 16 × 11 fit.
+  expect(svg).toContain(
+    '<g transform="translate(8 18)"><path fill="#e83830" d="M0 0h1v1h-1z"/></g>',
   )
 })

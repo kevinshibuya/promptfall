@@ -53,10 +53,11 @@ class (heroes) and minimum rarity, page with `prev` and `next`. `buy` asks `Buy 
 <price>g?`; `y` confirms, `n` cancels. The goods arrive with a 24-hour cooldown before they can
 be listed again, and a bought hero arrives at level 1.
 
-`sell` on a Rare+ item (Inventory) or hero (Heroes) opens the sell panel. An item shows the buy
-orders it matches first: `accept` sells it at once at the order's price. Then `List for` takes a
-price, with the listing fee (2%, at least 1 gold, kept on cancel) and what you get after the 5%
-sale fee. A hero must be out of the party and wear nothing; goods in cooldown say when they
+Sell (`s`) in a Rare+ item's or hero's command window opens the sell window. An item lists the
+buy orders it matches first, each with what you get: Enter on one sells at once at the order's
+price. Then Set a price moves you to a price field under the picture; the message window shows
+the listing fee (2%, at least 1 gold, kept on cancel) and what you get after the 5% sale fee,
+and Enter lists it. A hero must be out of the party and wear nothing; goods in cooldown say when they
 become tradeable. Listings and orders expire after 7 days.
 
 The Orders tab (`r`) lists your listings and buy orders, each with `cancel` and the time left,
@@ -136,9 +137,30 @@ would answer a survey.
 | `c` | Collapse to one row, or expand | |
 | `i` / `h` / `m` / `r` / `a` / `o` | | Inventory, Heroes, Market, Orders, Account, Odds tabs |
 | `c` / `b` | | Chat and Leaderboards tabs (outside the compose box) |
-| `y` / `n` | | Confirm or cancel a purchase |
+| `y` / `n` | | Confirm or cancel a purchase; Yes or No in Inventory and Heroes |
 
-Esc closes the dialog. The band collapses to one row by itself under 100 columns or when fewer
+### Inventory and Heroes
+
+These two tabs are windows: a list with a ▶, the ▶ row's details beside it (or under it below
+96 columns), and a message window at the foot saying what the keys do.
+
+| Key | Does |
+| --- | --- |
+| Tab, Shift+Tab, ↑ ↓ | Move the ▶; long lists page, with a `16-30/40` footer |
+| Enter | Open the ▶ row's command window, or run the item under the ▶ |
+| `e` `u` `s` `v` `f` | Equip, Unequip, Sell, Vendor, Reforge (an item's command window) |
+| `p` `s` `d` | Party (or Unpick), Sell, Dismiss (a hero's command window) |
+| `q` | Back out of a command window, a pick, a Yes/No or the sell window |
+
+Vendor and Dismiss ask Yes or No first. Party picks three heroes one at a time; the third sends
+the new party, which takes the field at the next zone change. The last row of Heroes recruits.
+On the desktop, VS Code and mobile a `▲ ▼ ok back` row under the picture does the moving.
+
+The windows need 16 rows. An inline pane in an ordinary terminal gets fewer (14 in a 105 × 50
+Terminal.app) and asks for more room; in fullscreen from 110 columns the pane docks beside the
+conversation at full height.
+
+Esc closes the dialog, from a sub-window too. The band collapses to one row by itself under 100 columns or when fewer
 than 4 rows are free, and hides while Claude asks you a question.
 
 ### Stage
@@ -250,6 +272,6 @@ fails when it is stale (`pnpm sprites:check`).
   world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
   slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
   counts them.
-- The Inventory, Heroes and Market lists lead each row with its sprite: an `Svg` on the desktop,
-  a 2-cell `Image` where pictures draw, and the 8 × 4 item sprite as half-blocks elsewhere (heroes
-  keep their glyph there).
+- The Inventory and Heroes list windows lead each row with its sprite, fitted into 16 × 16 px,
+  where pictures draw (an Image terminal, the desktop); the raster windows leave the two cells
+  blank. The Market list keeps its sprite as before.

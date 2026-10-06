@@ -2,9 +2,11 @@
 // drawn once as a <symbol> and <use>d per character; with `smil`, tracks animate the next tick:
 // bars through their keys, the message window's lines frame by frame (typing as a stepped clip),
 // the ▶ cursor over its intervals. Times are ms after the scene's now, which is the document's 0.
+import { artPaths } from '../stage/svg'
 import {
   barPixels,
   chars,
+  fitArt,
   glyphFor,
   type Line,
   placeLine,
@@ -123,6 +125,9 @@ function drawLine(
           ? g.use('▶', x, y0, BORDER_RGB, 'visibility="hidden"', cursorAnim(t))
           : g.use('▶', x, y0, BORDER_RGB),
       )
+    } else if (p.kind === 'art') {
+      const { art, dx, dy } = fitArt(p.art)
+      out.push(`<g transform="translate(${x + dx} ${y0 + dy})">${artPaths(art, null)}</g>`)
     } else {
       const full = p.cells * CELL_W
       out.push(
@@ -280,7 +285,10 @@ export function sceneSvg(
           )
         }
       }
-      body.push(`<g id="w-${win.key}">${parts.join('')}</g>`)
+      // A window below the top row moves down as one group; strip windows (y 0) draw as before.
+      const y = (win.y ?? 0) * CELL_H
+      const shift = y > 0 ? ` transform="translate(0 ${y})"` : ''
+      body.push(`<g id="w-${win.key}"${shift}>${parts.join('')}</g>`)
     }
     return `${head}<defs>${g.defs.join('')}${clips.join('')}</defs>${body.join('')}</svg>`
   }
