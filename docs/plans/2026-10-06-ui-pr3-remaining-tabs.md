@@ -692,9 +692,9 @@ does not exist.
 
 **Boundaries:** No mounting. `ui/market.tsx` stays as it is until Task 9.
 
-- [ ] List, rows, default ▶, detail; tests
-- [ ] Filter window, picks, Yes/No, gate, read-only, messages; tests
-- [ ] Run the check, commit
+- [x] List, rows, default ▶, detail; tests
+- [x] Filter window, picks, Yes/No, gate, read-only, messages; tests
+- [x] Run the check, commit
 
 ### Task 5: The Orders windows
 

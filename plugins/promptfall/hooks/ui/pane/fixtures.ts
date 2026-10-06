@@ -1,5 +1,5 @@
 // Hand-built pane inputs for the pane tests and the pane goldens.
-import type { GameView, ItemView, RosterHeroView } from '../../../types'
+import type { GameView, ItemView, ListingView, MarketState, RosterHeroView } from '../../../types'
 import { wave } from '../../stage/fixtures'
 import {
   BOARDS_DEFAULT,
@@ -123,5 +123,55 @@ export function paneInput(patch: Partial<PaneInput> = {}): PaneInput {
       collapsed: false,
     },
     ...patch,
+  }
+}
+
+export function listing(id: string, patch: Partial<ListingView> = {}): ListingView {
+  return {
+    id,
+    kind: 'item',
+    name: 'Steel Longsword',
+    rarity: 'rare',
+    detail: 'Keen +2, Swift +1',
+    sellerId: 'seller-1',
+    sellerName: 'mira',
+    price: 1200,
+    expiresAt: 6 * 86_400_000,
+    base: 'steel_longsword',
+    cls: null,
+    ...patch,
+  }
+}
+
+/** A loaded first page of 23: a rare sword by seller-1, an epic hero of yours (`a1`), a legendary ring. */
+export function marketPage(): MarketState {
+  return {
+    ...MARKET_DEFAULT,
+    page: {
+      listings: [
+        listing('L1'),
+        listing('L2', {
+          kind: 'hero',
+          name: 'Sela the Bold',
+          rarity: 'epic',
+          detail: 'archer · Brave',
+          sellerId: 'a1',
+          sellerName: 'kevin',
+          price: 4800,
+          base: null,
+          cls: 'archer',
+        }),
+        listing('L3', {
+          name: 'Phoenix Pendant',
+          rarity: 'legendary',
+          detail: 'Vital +4',
+          sellerName: 'tomas',
+          price: 25_000,
+          base: 'phoenix_pendant',
+        }),
+      ],
+      page: 0,
+      total: 23,
+    },
   }
 }

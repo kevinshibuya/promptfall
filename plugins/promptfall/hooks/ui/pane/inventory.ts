@@ -25,7 +25,7 @@ const VALUE_CELLS = 5
 export function rowSpans(
   inner: number,
   art: Span | null,
-  name: Span & { text: string },
+  name: (Span & { text: string }) | Span[],
   columns: { text: string; cells: number; rgb?: number }[],
 ): Span[] {
   // The ▶ cell and a gap come first (listWindow adds them).
@@ -43,13 +43,16 @@ export function rowSpans(
     rightCells += c.cells
   }
   const nameCells = Math.max(0, width - leftCells - rightCells - 1)
-  const shown = clip(name.text, nameCells)
-  return [
-    ...left,
-    { ...name, text: shown },
-    { gap: Math.max(1, nameCells - [...shown].length + 1) },
-    ...right,
-  ]
+  // A label with its hotkey letter is a span list: clipped across its spans, left to right.
+  const named: Span[] = []
+  let used = 0
+  for (const s of Array.isArray(name) ? name : [name]) {
+    if (!('text' in s)) continue
+    const shown = clip(s.text, nameCells - used)
+    named.push({ ...s, text: shown })
+    used += [...shown].length
+  }
+  return [...left, ...named, { gap: Math.max(1, nameCells - used + 1) }, ...right]
 }
 
 function itemDetail(input: PaneInput, item: ItemView, inner: number): Line[] {
