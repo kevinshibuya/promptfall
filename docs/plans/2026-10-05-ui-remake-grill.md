@@ -224,9 +224,9 @@ overturn either.
 Made while planning UI PR 2 (`docs/plans/2026-10-06-ui-pr2-pane-windows.md`), inline on Opus 5.5
 because Fable is out; Kevin approves or overturns each before the review wave.
 
-- **The tab window goes on every tab now.** The eight tabs become one window at the pane's top,
-  `▶` on the current tab, the hotkeys hidden. The six PR 3 tabs keep their current bodies under it
-  until PR 3. Why: one switcher from day one, and PR 3 only swaps bodies.
+- **The tab window heads the Inventory and Heroes tabs.** The eight tabs become one window at the
+  pane's top, `▶` on the current tab, the hotkeys hidden. Amended by the review rulings below: the
+  six PR 3 tabs keep today's visible tab row until PR 3 brings the window to them.
 - **Hotkey letters are drawn gold inside their labels** (`Inventory`, `Orders`, `Account`; the
   first occurrence, ignoring case). A graft: the engine's plain Button accents its hotkey the
   same way. Why: the old Button row showed the keys; a window needs another way to.
@@ -270,6 +270,17 @@ because Fable is out; Kevin approves or overturns each before the review wave.
   Inputs, 1.5). Mobile, with no Input, picks a preset price.
 - **Worn items show the wearer's first name** in a dim column, not DQ's `E` mark, which the
   references in hand don't show.
+
+Review rulings (2026-10-06, the plan's one review wave: `reviewer` on Opus, 21 findings, each
+hand-verified; made inline on Opus, Fable out; Kevin can overturn either):
+
+- **The six PR 3 tabs keep today's tab Button row, header and body until PR 3.** Their hidden tab
+  Buttons would join the focus ring with no rows to redirect to, so Tab and Enter would switch tabs
+  by accident; the header also carries their read-only line and refusals. The cost of the
+  original call was a focus rule per tab; PR 3 gets it for free once those tabs have rows.
+- **Lists and menus page; they don't scroll.** The ▶ row's page is a pure function of its index,
+  so the focus hook needs no scroll state it cannot compute outside the render. DQ's lists page
+  too. The roster reaches 48 and an equip pick can list most of it, so every sub-window pages.
 
 ## 2. Facts gathered
 
