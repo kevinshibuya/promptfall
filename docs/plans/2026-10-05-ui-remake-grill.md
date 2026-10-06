@@ -208,6 +208,17 @@ overturn either.
   and clips descenders. Accepted cost: lowercase reads letter-spaced (narrow glyphs on an 8 px
   advance).
 
+### 1.19 Menu references for UI PR 2 (2026-10-06, Kevin delegated the search)
+
+- No menu shots were added. A second search found the Dragons Den gallery
+  (https://www.woodus.com/den/games/dq5snes/screenshots.php, 32 Super Famicom shots, fan
+  translation; not committed). It shows battle, dialogue and field scenes only: no item list,
+  status, equipment or shop screen. The Japanese strategy sites cover the remakes.
+- Two things it adds to 1.12's anatomy, both consistent with it: the Yes/No window sits top
+  right with a ▶ on the chosen line (shots 016, 032), and a party of one keeps the same window,
+  shrunk to a single column: name header, then H, M, L rows (shot 011).
+- The PR 2 plan builds the pane from 1.12's anatomy plus these two.
+
 ## 2. Facts gathered
 
 - Band layouts are `full | compact | collapsed` (`hooks/stage/layout.ts:13-42`): full at 116+
