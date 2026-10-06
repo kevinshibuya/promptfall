@@ -111,11 +111,12 @@ gained a `shift` modifier for this).
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | cmux (docked, 148 columns; the body 66 columns) | yes: Tab walks `s0`…`s7`, then `back`, then `price` (the Input); Shift+Tab walks back; Enter on `s0` raised `ui.press s0` | yes: `focus s3 by plugin` on open, and again when `/spike-pane` re-took the keyboard | yes: the next Down went to `s2`. But the plugin's own `ui.focus` hook did not hear that move (no `focus s1 by plugin` line), though it did hear `autoFocus` | yes: Tab onto `s5` landed on `s6` (the next Tab went to `s7`). Both ends pass through one engine stop (`ui.focus` with no element): forward, last element → engine stop → `s0`; back, `s0` → engine stop → last element | move the ring: one `ui.focus` per press, origin `person`, in ring order, through `back` and `price` | the pane stays open but loses the keyboard: `q` and Down went to the prompt (`❯ q`); re-running the command took it back | yes: three 22 × 6 pictures across the top, then the middle column's gap pushes its second picture down 4 rows, as the tree says; nothing extra across or down (read from the picture's placeholder cells) | 1, focused or not (`price: 1200  ⏎ list`) |
 | Terminal.app (inline, 80 × 24; the body 7 rows) | yes, as on cmux | yes | yes, the same, the hook again silent | yes, as on cmux | move the ring, as on cmux | the same: the keyboard goes to the prompt | n/a: each Image draws its alt on one row (`w0w2      w4`), as in the PR 1 spike; the raster renderer draws the pane there | 1 |
-| Desktop app | | | | | | | | |
+| Desktop app (Claude.app 2.19675.1, side panel) | no: Tab moves focus among the hidden Buttons (Enter then pressed `s2`), but raises no `ui.focus` as it moves; the `ui.focus` for `s2` arrived with the press. Tab also passes the panel's own controls (engine stops) | no: the first move was an engine stop, not `s3` | yes, and here the hook heard it (`focus s1`, origin `person`) | not reached: the ring raises no moves to redirect | no `ui.focus` | not run (the terminal answer decides the back-out) | yes: one Svg, the gap where the tree puts it | n/a: the Input is its own field row |
 | Ghostty (standalone) | | | | | | | | |
 
-The desktop and standalone Ghostty rows are Kevin's: the session that ran this did not drive
-Claude.app while the Mac was in use.
+The standalone Ghostty row is Kevin's. The desktop row was driven on 2026-10-06 with real keys
+(System Events) while the Mac was free, `CLAUDE_CODE_PLUGIN_DIRS` pointing at the spike (unset
+afterwards).
 
 Other facts the run turned up:
 - The Input joins the ring after the hidden Buttons. While it has focus every printable key goes
@@ -127,8 +128,8 @@ Other facts the run turned up:
 ### Decisions
 
 - **Cursor rung: (a′) on cmux and Terminal.app**: hidden one-space Buttons in a zero-width Box,
-  questions 1 (a) to (d) hold on both. The desktop takes rung (c) until its row says (a′); VS Code
-  and mobile take (c).
+  questions 1 (a) to (d) hold on both. **The desktop takes rung (c)**: its ring moves without
+  raising `ui.focus`, so the ▶ could not follow it. VS Code and mobile take (c).
 - **`MOVE_HELP = 'Tab or arrows: move.'`**: the arrows move the ring on both terminals. No `j`/`k`
   Buttons.
 - **Back-out: Escape always closes the pane; `q` is the only back-out.** A refused close keeps the
