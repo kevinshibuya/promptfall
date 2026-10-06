@@ -175,7 +175,7 @@ test('the sell window replaces the detail window', () => {
   expect(win(b, 'sell')?.columns).toBe(40)
   expect(win(b, 'sell')?.rows).toBe(17)
   expect(b.focus).toBe('menu:0')
-  expect(b.priceInput).toBe(true)
+  expect(b.field?.key).toBe('price')
 })
 
 test('wide and narrow scenes, with each sub-window, pass tilePositions', () => {
@@ -206,12 +206,14 @@ test('40 items at 120 × 24 show 15 rows and the footer', () => {
   expect(b.stops.filter((s) => s.key.startsWith('row:')).length).toBe(40)
 })
 
-test('an empty inventory: one line and no row stops', () => {
+test('an empty inventory: one line, its row:empty stop doing nothing (grill 1.21)', () => {
   const view = paneView()
   view.inventory = []
   const b = inventoryPane(paneInput({ view }))
   expect(linesOf(win(b, 'list'))).toEqual(['  Nothing yet.'])
-  expect(b.stops.some((s) => s.cursor)).toBe(false)
-  expect(b.focus).toBeNull()
+  expect(b.stops.filter((s) => s.cursor)).toEqual([
+    { key: 'row:empty', action: { t: 'none' }, cursor: true, index: 0 },
+  ])
+  expect(b.focus).toBe('row:empty')
   expect(textOf(win(b, 'message')?.lines[0]?.spans ?? [])).toBe(' Items drop as the party fights.')
 })

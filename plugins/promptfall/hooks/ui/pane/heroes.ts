@@ -12,6 +12,7 @@ import { cursorRow, type MenuItem, paneLayout } from './frame'
 import type { PaneInput } from './input'
 import { gold, listInner, rowSpans } from './inventory'
 import { type ListRow, type ListSpec, listPane } from './list'
+import { sellWindow } from './sell'
 import type { PaneAction, PaneBuild } from './types'
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
@@ -135,7 +136,7 @@ export function heroesPane(input: PaneInput): PaneBuild {
       alt: `Recruit a hero, ${gold(view.tavernPrice)}`,
     })
   }
-  const ids = rows.map((r) => r.key.slice(4))
+  const ids = rows.map((r) => (r.key ?? '').slice(4))
   const cursor = cursorRow(dialog.cursor.heroes ?? null, ids)
   const current = roster.find((h) => h.id === ids[cursor])
 
@@ -153,6 +154,10 @@ export function heroesPane(input: PaneInput): PaneBuild {
     detail: current ? (w) => heroDetail(input, current, w) : null,
     menu: null,
     yesNo: null,
+    panel: !input.readOnly && dialog.sell ? (rect) => sellWindow(input, rect) : null,
+    error: dialog.sell?.error ?? null,
+    field: null,
+    link: null,
     state: [pickLine ?? `Enter: actions. ${MOVE_HELP}`, NEXT_ZONE],
   }
 

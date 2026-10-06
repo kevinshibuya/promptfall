@@ -10,8 +10,9 @@ import { CLASS_LABEL, clip, formatCount } from '../format'
 import type { Slot } from '../sell'
 import { formatRemaining } from '../time'
 import { cursorRow, type MenuItem, paneLayout, paneSlots } from './frame'
-import type { PaneInput } from './input'
+import type { FrameInput, PaneInput } from './input'
 import { type ListRow, type ListSpec, listPane } from './list'
+import { sellWindow } from './sell'
 import type { PaneAction, PaneBuild } from './types'
 
 const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
@@ -131,7 +132,7 @@ export function itemCommands(input: PaneInput, item: ItemView): Command[] {
 const header = (text: string): Span[] => [{ text }]
 
 /** The list window's inner width: the same whatever sub-window is open. */
-export function listInner(input: PaneInput): number {
+export function listInner(input: FrameInput): number {
   const layout = paneLayout(input.columns, input.rows)
   return layout.kind === 'small' ? 0 : paneSlots(layout, { kind: 'none' }).list.columns - 2
 }
@@ -186,6 +187,10 @@ export function inventoryPane(input: PaneInput): PaneBuild {
     detail: current ? (w) => itemDetail(input, current, w) : null,
     menu: null,
     yesNo: null,
+    panel: !input.readOnly && dialog.sell ? (rect) => sellWindow(input, rect) : null,
+    error: dialog.sell?.error ?? null,
+    field: null,
+    link: null,
     state:
       items.length === 0
         ? ['Items drop as the party fights.', '']

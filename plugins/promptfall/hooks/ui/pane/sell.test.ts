@@ -98,9 +98,9 @@ test('an item with two matching orders lists them with nets, then Set a price', 
   expect(b.stops.map((s) => [s.key, s.action])).toEqual([
     ['menu:0', { t: 'accept', orderId: 'o1', price: 1200 }],
     ['menu:1', { t: 'accept', orderId: 'o2', price: 900 }],
-    ['menu:2', { t: 'price' }],
+    ['menu:2', { t: 'field', key: 'price' }],
   ])
-  expect(b.priceInput).toBe(true)
+  expect(b.field?.key).toBe('price')
   expect(b.state).toEqual(['Pick an order or set a price.', 'q: back.'])
   expect(b.win.lines[0]?.rule).toBe(true)
 })
@@ -123,7 +123,7 @@ test('with no Input the presets replace Set a price, and list at their price', (
   const presets = ITEM_PRESETS.map((m) => m * 120)
   expect(b.stops.map((s) => s.action)).toEqual(presets.map((price) => ({ t: 'list', price })))
   expect(linesOf(b.win).slice(-4)).toEqual(['▶240G', ' 360G', ' 600G', ' 960G'])
-  expect(b.priceInput).toBe(false)
+  expect(b.field).toBeNull()
   const hero = sellWindow(withSell({ kind: 'hero', id: 'h5' }, { hasInput: false }), RECT)
   expect(hero.stops.map((s) => s.action)).toEqual(
     HERO_PRESETS.map((price) => ({ t: 'list', price })),

@@ -55,7 +55,8 @@ const BUILD: PaneBuild = {
   scene: SCENE,
   stops: [tab('inventory'), tab('market'), row('a', 0), row('b', 1), row('c', 2), BACK],
   focus: 'row:a',
-  priceInput: false,
+  field: null,
+  link: null,
 }
 const PROPS = {
   title: 'Promptfall',
@@ -80,7 +81,7 @@ function testPane(on: On, renderer: PaneDraw['renderer']) {
       build: BUILD,
       run: () => undefined,
       move: () => undefined,
-      price: null,
+      field: { onInput: () => undefined, onSubmit: () => undefined },
     }),
   )
 }
@@ -206,7 +207,7 @@ function context(state: { d: DialogState }, events: PlayerEvent[]): ActionContex
     openTab: async () => undefined,
     after: () => undefined,
     remaining: () => undefined,
-    focusPrice: async () => undefined,
+    focusField: async () => undefined,
     dialog: async () => state.d,
   }
 }

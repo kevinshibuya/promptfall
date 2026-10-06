@@ -1,6 +1,7 @@
 // The window kit's constants (docs/plans/2026-10-05-ui-pr1-window-band.md, "Window constants").
 // Colours and frame geometry come from the Dragon Quest V transcription
 // (docs/design/ui-remake/transcription.md); grafts say where they came from.
+import { LISTINGS_PER_PAGE, CHAT_KEEP as PROTOCOL_CHAT_KEEP } from '../vendor/protocol.js'
 
 /** Picture pixels per cell: DQ V's text grid, 8 px advance and 16 px line. */
 export const CELL_W = 8
@@ -74,7 +75,15 @@ export const YESNO_COLUMNS = 8
 export const ART_CELLS = 2
 /** The pane Svg's budget, under the engine's 131,072 characters. */
 export const PANE_SVG_MAX_CHARS = 120_000
-/** The rows an `Input` takes on a terminal (the PR 2 pane spike). */
-export const PRICE_INPUT_ROWS = 1
+/** The rows a field (an `Input`) takes on a terminal (the PR 2 pane spike). */
+export const FIELD_ROWS = 1
+/** The rows the device-flow `Link` takes on a terminal: raster terminals draw its label, then the URL (the PR 3 fields spike). */
+export const LINK_ROWS = 2
+/** How to leave a field: Escape closes the pane from a field too (the PR 3 fields spike). */
+export const FIELD_HELP = 'Tab: leave the field.'
+/** The server's market page size. */
+export const MARKET_PER_PAGE = LISTINGS_PER_PAGE
+/** The chat messages the client holds (`WorldState.messages`). */
+export const CHAT_KEEP = PROTOCOL_CHAT_KEEP
 /** The message window's move hint: the arrows move the ring on both terminals (the spike). */
 export const MOVE_HELP = 'Tab or arrows: move.'

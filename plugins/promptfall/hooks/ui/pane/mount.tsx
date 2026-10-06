@@ -22,13 +22,13 @@ import { sceneSvg } from '../../windows/svg'
 import { CELL_H, CELL_W, WINDOW_SCALE } from '../../windows/tuning'
 import { openSell, sellTrade } from '../sell'
 import type { After, Updater } from '../trade'
-import type { PaneAction, PaneBuild, Stop } from './types'
+import type { PaneAction, PaneBuild, PaneFieldKey, Stop } from './types'
 
 const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 
 export const PANE_ID = 'promptfall'
 
-type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
+type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button' | 'Link'> &
   Partial<Pick<Elements['terminal'], 'Input' | 'Image' | 'Raster'>> &
   Partial<Pick<Elements['desktop'], 'Svg'>>
 
@@ -40,7 +40,7 @@ const last = new Map<string, { build: PaneBuild; tab: DialogTab }>()
  * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
 const lastStops = new Map<string, string>()
-/** The instances whose ring sits on the price Input: a re-focus there would eat the typing. */
+/** The instances whose ring sits on a field: a re-focus there would eat the typing. */
 const onInput = new Set<string>()
 export function remember(requestId: string, tab: DialogTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
@@ -52,7 +52,7 @@ export function forget(requestId: string): void {
   onInput.delete(requestId)
 }
 
-/** The ring went onto the price Input (the person's Tab, or the `price` action's own focus). */
+/** The ring went onto a field (the person's Tab, or the `field` action's own focus). */
 export function ringOnInput(requestId: string, on: boolean): void {
   if (on) onInput.add(requestId)
   else onInput.delete(requestId)
@@ -66,13 +66,19 @@ export function stopsSignature(build: PaneBuild, window: string): string {
   return `${window}#${build.stops.map((s) => s.key).join('|')}`
 }
 
+/** The keys a field under the picture can have: the focus hook passes them. */
+const FIELD_KEYS: ReadonlySet<string> = new Set<PaneFieldKey>(['price', 'order-price', 'compose'])
+export function isFieldKey(element: string | undefined): boolean {
+  return element !== undefined && FIELD_KEYS.has(element)
+}
+
 /**
  * True when the ring should go back on the ▶: the signature differs from the last one the ring
- * was placed against, and the ring is not on the price Input. The first drawing of an instance
- * only records it (its autoFocus places the ring). `placed` records it once the focus took.
+ * was placed against, and the ring is not on a field. The first drawing of an instance only
+ * records it (its autoFocus places the ring). `placed` records it once the focus took.
  */
-export function needsRefocus(requestId: string, signature: string, priceInput: boolean): boolean {
-  if (!priceInput) onInput.delete(requestId)
+export function needsRefocus(requestId: string, signature: string, fieldShown: boolean): boolean {
+  if (!fieldShown) onInput.delete(requestId)
   const was = lastStops.get(requestId)
   if (was === undefined) {
     lastStops.set(requestId, signature)
@@ -101,10 +107,10 @@ function imageOf(win: Win) {
   return made
 }
 
-export type PriceInput = {
-  value: string
-  onInput: (text: string) => void
-  onSubmit: (text: string) => void
+/** What a field's typing and Enter do, by the field's key. */
+export type FieldCallbacks = {
+  onInput: (key: PaneFieldKey, text: string) => void
+  onSubmit: (key: PaneFieldKey, text: string) => void
 }
 
 export type PaneDraw = {
@@ -116,7 +122,7 @@ export type PaneDraw = {
   run: (action: PaneAction) => void
   /** Rung (c): moves the ▶ one cursor stop. */
   move: (by: 1 | -1) => void
-  price: PriceInput | null
+  field: FieldCallbacks
 }
 
 /** Rung (a′) on terminals, (c) elsewhere (the spike sheet). */
@@ -125,7 +131,7 @@ export function hiddenRing(surface: RenderSurface): boolean {
 }
 
 export function paneElement(d: PaneDraw): RenderElement {
-  const { Box, Button, Input } = d.els
+  const { Box, Button, Input, Link } = d.els
   const { scene } = d.build
   const terminal = d.surface === 'terminal'
   const stops = (
@@ -217,20 +223,26 @@ export function paneElement(d: PaneDraw): RenderElement {
       {stops}
     </Box>
   )
-  const price =
-    d.build.priceInput && d.price && Input ? (
-      <Box key="pane-price" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
+  const f = d.build.field
+  const field =
+    f && Input ? (
+      <Box key="pane-field" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
         <Input
-          key="price"
-          label="price"
-          placeholder="gold"
-          value={d.price.value}
-          submitLabel="list"
-          onInput={(text: string) => d.price?.onInput(text)}
-          onSubmit={(text: string) => d.price?.onSubmit(text)}
+          key={f.key}
+          label={f.label}
+          placeholder={f.placeholder}
+          value={f.value}
+          submitLabel={f.submitLabel}
+          onInput={(text: string) => d.field.onInput(f.key, text)}
+          onSubmit={(text: string) => d.field.onSubmit(f.key, text)}
         />
       </Box>
     ) : null
+  const link = d.build.link ? (
+    <Box key="pane-link" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
+      <Link key="link-url" href={d.build.link.url} label={d.build.link.url} />
+    </Box>
+  ) : null
   const rung = hiddenRing(d.surface) ? null : (
     <Box key="pane-rung" flexDirection="row" gap={1}>
       <Button key="rung-up" label="▲" hotkey="k" onPress={() => d.move(-1)} />
@@ -249,7 +261,8 @@ export function paneElement(d: PaneDraw): RenderElement {
   return (
     <Box key="pane" flexDirection="column">
       {row}
-      {price}
+      {field}
+      {link}
       {rung}
     </Box>
   )
@@ -316,7 +329,7 @@ export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
     const l = last.get(e.requestId)
     if (!l) return next(e)
-    ringOnInput(e.requestId, e.element === 'price')
+    ringOnInput(e.requestId, isFieldKey(e.element))
     const move = focusMove(l.build, e.element, l.build.focus)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}
@@ -340,8 +353,8 @@ export type ActionContext = {
   after: After
   /** How long until the goods in the sell flow trade, as a refusal says it; undefined when they do. */
   remaining: (sell: SellState) => string | undefined
-  /** Puts the ring on the price Input. */
-  focusPrice: () => Promise<void>
+  /** Puts the ring on a field. */
+  focusField: (key: PaneFieldKey) => Promise<void>
   /** The dialog state now, for the actions that read it (party, the sell flow). */
   dialog: () => Promise<DialogState>
 }
@@ -402,8 +415,8 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
       await sellTrade(running, call, updSell, close, ctx.after, ctx.remaining(sell))
       return
     }
-    case 'price':
-      await ctx.focusPrice()
+    case 'field':
+      await ctx.focusField(a.key)
       return
     case 'claim':
       ctx.game()?.claim()

@@ -12,6 +12,7 @@ import {
   messageWindow,
   type PaneLayout,
   page,
+  pageFromEnd,
   paneLayout,
   paneSlots,
   type Rect,
@@ -43,15 +44,32 @@ test('at 40 columns the tab labels take 3 lines', () => {
   expect(lines).toEqual(['InventoryHeroesMarket', 'OrdersAccountOddsChat', 'Leaderboards'])
 })
 
-test('under 40 columns, or a middle under the floors, is too small', () => {
+test('under 40 columns, or a middle under the floors even without the tab window, is too small', () => {
   expect(paneLayout(39, 24).kind).toBe('small')
-  // Wide needs a 9-row middle: 3 tab rows + 8 + 4 message rows is one short.
-  expect(paneLayout(120, 15).kind).toBe('small')
-  expect(paneLayout(120, 16).kind).toBe('wide')
+  // Wide needs a 9-row middle: 3 tab rows + 8 + 4 message rows is one short, so the tab window goes.
+  expect(paneLayout(120, 15)).toMatchObject({ kind: 'wide', tabRows: 0 })
+  expect(paneLayout(120, 16)).toMatchObject({ kind: 'wide', tabRows: 3 })
+  expect(paneLayout(120, 12).kind).toBe('small')
   // Narrow needs 10.
   const tabRows = paneLayout(60, 24).tabRows
-  expect(paneLayout(60, tabRows + 4 + 9).kind).toBe('small')
-  expect(paneLayout(60, tabRows + 4 + 10).kind).toBe('narrow')
+  expect(paneLayout(60, tabRows + 4 + 9)).toMatchObject({ kind: 'narrow', tabRows: 0 })
+  expect(paneLayout(60, tabRows + 4 + 10)).toMatchObject({ kind: 'narrow', tabRows })
+  expect(paneLayout(60, 13).kind).toBe('small')
+})
+
+test('short panes drop the tab window: 14 rows fit wide and narrow with a 10-row middle', () => {
+  expect(paneLayout(120, 14)).toEqual({
+    kind: 'wide',
+    columns: 120,
+    rows: 14,
+    tabRows: 0,
+    middle: { y: 0, rows: 10 },
+  })
+  expect(paneLayout(60, 14)).toMatchObject({
+    kind: 'narrow',
+    tabRows: 0,
+    middle: { y: 0, rows: 10 },
+  })
 })
 
 test('the hotkey letter is drawn gold at its first occurrence, ignoring case', () => {
@@ -83,6 +101,15 @@ test('the tab window puts ▶ on the current tab', () => {
 
 test('page: the first row of the page holding the index', () => {
   expect([page(0, 15), page(14, 15), page(15, 15), page(39, 15)]).toEqual([0, 0, 15, 30])
+})
+
+test('pageFromEnd: the newest page is always full', () => {
+  expect([pageFromEnd(30, 15, 31), pageFromEnd(16, 15, 31), pageFromEnd(15, 15, 31)]).toEqual([
+    16, 16, 1,
+  ])
+  expect([pageFromEnd(10, 15, 31), pageFromEnd(0, 15, 31), pageFromEnd(3, 15, 10)]).toEqual([
+    1, 0, 0,
+  ])
 })
 
 test('a list pages by its cursor, with the footer and ▼ while a later page exists', () => {
@@ -121,7 +148,7 @@ function scene(layout: PaneLayout, sub: Sub, wholeColumn = false) {
     ...(s.menu ? [blank('menu', s.menu)] : []),
   ]
   return assemble(layout, {
-    tab: tabWindow(layout.columns, 'inventory'),
+    ...(layout.tabRows > 0 ? { tab: tabWindow(layout.columns, 'inventory') } : {}),
     list: blank('list', s.list),
     right,
     ...(s.yesNo ? { yesNo: yesNoWindow(s.yesNo.x, s.yesNo.y, 0) } : {}),
@@ -136,7 +163,13 @@ test('assemble: the tile tree agrees with every window for wide and narrow, ever
     [{ kind: 'menu', items: 12 }, true],
     [{ kind: 'yesno' }, false],
   ]
-  for (const layout of [paneLayout(120, 24), paneLayout(60, 24), paneLayout(96, 20)]) {
+  for (const layout of [
+    paneLayout(120, 24),
+    paneLayout(60, 24),
+    paneLayout(96, 20),
+    paneLayout(120, 14),
+    paneLayout(60, 14),
+  ]) {
     for (const [sub, whole] of subs) {
       const sc = scene(layout, sub, whole)
       const at = tilePositions(sc)
@@ -174,4 +207,15 @@ test('messageLines: too small, read-only secondary, a refusal', () => {
   const refused = messageLines(paneInput({ dialog }), null, state)
   expect(refused[0]).toEqual([{ text: 'Refused: not_enough_gold', rgb: DOWN_RGB }])
   expect(textOf(refused[1])).toBe('second')
+})
+
+test("messageLines: the tab's error in red, under the read-only rule", () => {
+  const state: [string, string] = ['first', 'second']
+  const error = messageLines(paneInput(), 'Not enough gold', state)
+  expect(error[0]).toEqual([{ text: 'Not enough gold', rgb: DOWN_RGB }])
+  expect(textOf(error[1])).toBe('second')
+  const ro = messageLines(paneInput({ readOnly: true }), 'Not enough gold', state)
+  expect(ro[0][0]).toMatchObject({ rgb: WARN_RGB })
+  const spans = messageLines(paneInput(), null, [[{ text: 'gate', rgb: WARN_RGB }], ''])
+  expect(spans).toEqual([[{ text: 'gate', rgb: WARN_RGB }], []])
 })

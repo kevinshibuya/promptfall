@@ -652,10 +652,10 @@ action and its build has `field.key` `price`. Red before: `ListRow.key` is requi
 
 **Boundaries:** No new tab. Inventory and Heroes draw what they drew.
 
-- [ ] Types, constants; `ListRow` lines and paging; tests
-- [ ] The panel slot, the sell window through it, `wholeColumn`; tests
-- [ ] Short panes; `field` and `link` through the mount and the dialog; tests
-- [ ] Goldens unchanged; run the check, commit
+- [x] Types, constants; `ListRow` lines and paging; tests
+- [x] The panel slot, the sell window through it, `wholeColumn`; tests
+- [x] Short panes; `field` and `link` through the mount and the dialog; tests
+- [x] Goldens unchanged; run the check, commit
 
 ### Task 4: The Market windows
 

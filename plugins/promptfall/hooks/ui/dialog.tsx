@@ -30,7 +30,7 @@ import {
 import { validPrice } from '../vendor/ledger.js'
 import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
 import { CLIENT_VERSION } from '../version'
-import { PANE_MAX_COLUMNS, PANE_ROWS, PRICE_INPUT_ROWS } from '../windows/tuning'
+import { FIELD_ROWS, LINK_ROWS, PANE_MAX_COLUMNS, PANE_ROWS } from '../windows/tuning'
 import { chatBody, postChat } from './chat'
 import type { TextFit } from './format'
 import { boardsBody, loadBoards } from './leaderboards'
@@ -55,7 +55,6 @@ import {
   withCursor,
 } from './pane/mount'
 import type { PaneAction } from './pane/types'
-import { sellState } from './sell'
 import { ListSprite, listSpriteColumns } from './sprites'
 import { formatRemaining, remainingRealMs } from './time'
 import type { After, Els, Updater } from './trade'
@@ -271,18 +270,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const terminal = e.surface === 'terminal'
       const Input = 'Input' in table ? table.Input : undefined
       const renderer = listRenderer ?? 'unknown'
-      const pricing =
-        dialog.sell !== null &&
-        Input !== undefined &&
-        sellState(view, world, dialog.sell, remainingMs).kind === 'price'
-      const rows = terminal
-        ? Math.min(PANE_ROWS, e.props.scroll.bodyRows - (pricing ? PRICE_INPUT_ROWS : 0))
-        : PANE_ROWS
+      const bodyRows = terminal ? Math.min(PANE_ROWS, e.props.scroll.bodyRows) : PANE_ROWS
       // The atom keeps this render subscribed; the store is the truth (another session may write it).
       await read($, settingsAtom)
       const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
-      const input: PaneInput = {
+      const leaseOwner = (await read($, leaseOwnerAtom)) ?? null
+      const inputAt = (rows: number): PaneInput => ({
         tab,
         view,
         dialog,
@@ -300,15 +294,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         orders,
         chat,
         boards,
-        account: {
-          server,
-          leaseOwner: (await read($, leaseOwnerAtom)) ?? null,
-          settings,
-          renderer,
-          collapsed: prefs.collapsed,
-        },
-      }
-      const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
+        account: { server, leaseOwner, settings, renderer, collapsed: prefs.collapsed },
+      })
+      const builder = tab === 'inventory' ? inventoryPane : heroesPane
+      // On a terminal a field or the Link takes rows under the picture: build again without them.
+      let build = builder(inputAt(bodyRows))
+      if (terminal && build.field) build = builder(inputAt(bodyRows - FIELD_ROWS))
+      else if (terminal && build.link) build = builder(inputAt(bodyRows - LINK_ROWS))
       remember(e.requestId, tab, build)
       const requestId = e.requestId
       const menu = dialog.menu
@@ -322,7 +314,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
               : `${menu.kind}:${'itemId' in menu ? menu.itemId : menu.id}`
           : tab
       const signature = stopsSignature(build, window)
-      if (needsRefocus(requestId, signature, build.priceInput)) {
+      if (needsRefocus(requestId, signature, build.field !== null)) {
         const key = build.focus
         if (key === null) placed(requestId, signature)
         else {
@@ -349,8 +341,8 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           const at = goods?.tradeableAt ?? null
           return at === null ? undefined : formatRemaining(remainingMs(at))
         },
-        focusPrice: async () => {
-          const r = await $.ui.focus({ requestId, key: 'price' })
+        focusField: async (key) => {
+          const r = await $.ui.focus({ requestId, key })
           if (r.deny === undefined) ringOnInput(requestId, true)
         },
         dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
@@ -367,17 +359,17 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           const stop = stepCursor(build, by)
           if (stop) void updDialog((d) => withCursor(d, tab, stop))
         },
-        price: dialog.sell
-          ? {
-              value: dialog.sell.price,
-              onInput: (text) => void updSell((s) => ({ ...s, price: text })),
-              onSubmit: (text) => {
-                if (/^\d+$/.test(text) && validPrice(Number(text)))
-                  run({ t: 'list', price: Number(text) })
-                else void updSell((s) => ({ ...s, price: text }))
-              },
-            }
-          : null,
+        field: {
+          onInput: (key, text) => {
+            if (key === 'price') void updSell((s) => ({ ...s, price: text }))
+          },
+          onSubmit: (key, text) => {
+            if (key !== 'price') return
+            if (/^\d+$/.test(text) && validPrice(Number(text)))
+              run({ t: 'list', price: Number(text) })
+            else void updSell((s) => ({ ...s, price: text }))
+          },
+        },
       })
     }
     forget(e.requestId)
