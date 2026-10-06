@@ -76,8 +76,8 @@ approved call are recorded in grill 1.20 under "Review rulings".
 | `YESNO_COLUMNS` | 8 | border, pad, `▶Yes` or ` No`, pad, border |
 | `ART_CELLS` | 2 | a sprite span: 16 × 16 picture pixels |
 | `PANE_SVG_MAX_CHARS` | 120,000 | the pane Svg's budget |
-| `PRICE_INPUT_ROWS` | set by Task 1 | the rows an `Input` takes on a terminal |
-| `MOVE_HELP` | set by Task 1 | the message window's move hint: `'Tab or arrows: move.'` if the arrows move the ring, else `'Tab: move. j/k also move.'` |
+| `PRICE_INPUT_ROWS` | 1 | the rows an `Input` takes on a terminal (Task 1) |
+| `MOVE_HELP` | `'Tab or arrows: move.'` | the message window's move hint (Task 1: the arrows move the ring) |
 
 ### Window kit additions (`plugins/promptfall/hooks/windows/kit.ts`)
 
@@ -390,9 +390,9 @@ rung per surface, `MOVE_HELP`, the back-out, the wrap and `PRICE_INPUT_ROWS`. `p
 
 **Boundaries:** Nothing under `plugins/`. On ambiguity, stop and report `blocked: <ambiguity>`.
 
-- [ ] `/spike-pane`: the tile grid, the hidden stops, the Input, the logs, the hooks; the desktop variant
-- [ ] Drive cmux and Terminal.app (and the desktop if allowed); fill the table
-- [ ] Decisions; `pnpm lint`; commit `spike(ui): the PR 2 pane: hidden ring, arrows, Escape, tiles`
+- [x] `/spike-pane`: the tile grid, the hidden stops, the Input, the logs, the hooks; the desktop variant
+- [x] Drive cmux and Terminal.app (and the desktop if allowed); fill the table (desktop: Kevin's)
+- [x] Decisions; `pnpm lint`; commit `spike(ui): the PR 2 pane: hidden ring, arrows, Escape, tiles`
 
 ### Task 2: The window kit: rows, sprites, tiles
 
@@ -681,10 +681,8 @@ not exist.
   and sends `set_party` on the third; `sell` clears `menu` and runs `openSell`; `accept` and `list`
   run `sellTrade` as today (its close clears `sell`); `price` focuses the Input (key `price`);
   `claim` runs `game()?.claim()`; `none` does nothing.
-- Escape: per Task 1's back-out decision, the close hook for this pane with origin `person`
-  refuses the close while `menu` or `sell` is set and runs `back`; at the top level it passes. The
-  pane's close mark and ctrl+x x are origin `person` too, so they back out first; that is
-  intended (Task 11 says so in the README).
+- Escape: Task 1 found that a refused close hands the keyboard to the prompt, so Escape always
+  closes the pane: `paneClose` passes every close, and `q` is the only back-out.
 - The price Input: under the picture while `priceInput` holds, key `price`, `onInput` sets
   `sell.price`, `onSubmit` lists a valid price as today.
 
@@ -694,7 +692,7 @@ with distinct keys with renderer `image`; a press on a stop runs its action (a s
 event); a `ui.focus` onto a row stop writes `cursor` with its index; onto `tab-market` from the last
 row it redirects to the first row, and Shift+Tab from the first row onto `back` redirects to the
 last row; with no cursor stops the hook keeps the ring; after `open` the next render focuses
-`menu:0`; a refused close runs `back` while a menu is open and passes at the top level. Red before:
+`menu:0`; a close by the person passes while a menu is open. Red before:
 the module does not exist.
 
 **Boundaries:** No change to `ui/dialog.tsx` yet. No band change.
@@ -788,16 +786,16 @@ scenarios do not exist.
 - `docs/design/ui-remake/transcription.md` (modify): "Grafts, by name" gains the gold hotkey
   letters, the list sprites and the dim columns (grill 1.20).
 - `CONTEXT.md` (modify): Tab window, Command window, Ring stop, Sell window.
-- `plugins/promptfall/README.md` (modify): the Inventory and Heroes keys, Escape and `q` (and that
-  the close mark backs out of a sub-window first), the Yes/No on vendor and dismiss.
+- `plugins/promptfall/README.md` (modify): the Inventory and Heroes keys, Escape (closes the pane)
+  and `q` (backs out of a sub-window), the Yes/No on vendor and dismiss.
 - `docs/manual-pass/2026-10-06-ui-pr2.md` (create): the driven pass.
 - `docs/plans/2026-10-06-ui-pr2-pane-windows.md` (modify): tick the boxes.
 
 **Work:** Load `unslop` before writing. Back up Kevin's save first (as the UI PR 1 pass did) and
 restore it after. Drive cmux (image, colour) and Terminal.app (raster) through: `/promptfall`
 opens on Inventory at 24 rows, centred on a wide terminal; move the cursor down a long list and
-see the pages, the footer and `▼`; Enter on an item, Vendor, Yes; Equip on a hero; Reforge; Escape
-(or `q`) backs out; Heroes: pick three, the message line, the party changes at the next zone;
+see the pages, the footer and `▼`; Enter on an item, Vendor, Yes; Equip on a hero; Reforge; `q` backs
+out and Escape closes the pane; Heroes: pick three, the message line, the party changes at the next zone;
 Recruit without gold shows the refusal; Dismiss asks; Sell on a rare item with the price Input,
 an invalid price, then a valid one; a narrow docked pane (fullscreen, 110+ columns); a too-small
 pane; Market keeps today's tab row; a secondary session reads read-only and `p` plays here. The

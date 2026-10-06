@@ -69,3 +69,78 @@ The desktop and standalone Ghostty rows are Kevin's.
   - Clicks: a click on a picture raises nothing, but a plain Button positioned over it takes the
     click. Clicks inside pictures are possible at the cost of a terminal-text cut-out per
     Button; v1 stays keyboard only (grill 1.4).
+
+## PR 2 pane spike
+
+Task 1 of `docs/plans/2026-10-06-ui-pr2-pane-windows.md`. `/spike-pane` in the same throwaway
+plugin opens a pane (`closeOnEscape`, `rows: 24`, focused) that holds six plain window pictures
+laid out by nested row and column Boxes with one gap Box, a zero-width `overflow="hidden"` Box of
+eight one-space Buttons `s0`…`s7` (`s3` has `autoFocus`) and a Button on `q`, an `Input`, and a
+log line. The `ui.focus` hook logs each move and redirects the first move onto `s5` to `s6`; `q`
+re-renders and calls `$.ui.focus` onto `s1`; the `ui.close` hook refuses the first close by the
+person. The grid shrinks to the body it is given (a window is at most 40 × 6 cells, the gap 8
+cells by at most 4 rows), so it fits a small terminal.
+
+### Questions
+
+1. **Hidden ring.** (a) Do Tab, Shift+Tab and Enter walk and press the hidden Buttons? (b) Does
+   the ring start on the `autoFocus` Button? (c) Does `$.ui.focus` after a re-render land on a
+   hidden Button? (d) Does a redirect land? Where do the ends of the ring go?
+2. **Arrows.** Do Up and Down move the ring, or scroll?
+3. **Escape refused.** After a refused close, does the pane keep the keyboard?
+4. **Tiles.** Do the pictures and the gap land where the tile tree says?
+5. **Input height.** How many rows does the `Input` take?
+
+### How to run
+
+```sh
+claude --plugin-dir spikes/ui-remake
+```
+
+Then `/spike-pane`. The log line at the top names each `ui.focus` (element and origin), each
+press, the refused close and the result of `$.ui.focus(s1)`.
+
+### Findings
+
+Run on 2026-10-06 by the implementing session (Claude Code 2.1.291). cmux was driven with
+`cmux send`, `send-key` and `read-screen` in a background workspace; Terminal.app with `do script`
+for the command line and `bg.js keycode` (keys posted to Terminal's pid, no activation; `bg.js`
+gained a `shift` modifier for this).
+
+| Surface | 1a. Tab, Shift+Tab, Enter | 1b. `autoFocus` | 1c. `$.ui.focus` after `q` | 1d. Redirect; the ends | 2. Arrows | 3. After a refused Escape | 4. Tiles | 5. Input rows |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| cmux (docked, 148 columns; the body 66 columns) | yes: Tab walks `s0`…`s7`, then `back`, then `price` (the Input); Shift+Tab walks back; Enter on `s0` raised `ui.press s0` | yes: `focus s3 by plugin` on open, and again when `/spike-pane` re-took the keyboard | yes: the next Down went to `s2`. But the plugin's own `ui.focus` hook did not hear that move (no `focus s1 by plugin` line), though it did hear `autoFocus` | yes: Tab onto `s5` landed on `s6` (the next Tab went to `s7`). Both ends pass through one engine stop (`ui.focus` with no element): forward, last element → engine stop → `s0`; back, `s0` → engine stop → last element | move the ring: one `ui.focus` per press, origin `person`, in ring order, through `back` and `price` | the pane stays open but loses the keyboard: `q` and Down went to the prompt (`❯ q`); re-running the command took it back | yes: three 22 × 6 pictures across the top, then the middle column's gap pushes its second picture down 4 rows, as the tree says; nothing extra across or down (read from the picture's placeholder cells) | 1, focused or not (`price: 1200  ⏎ list`) |
+| Terminal.app (inline, 80 × 24; the body 7 rows) | yes, as on cmux | yes | yes, the same, the hook again silent | yes, as on cmux | move the ring, as on cmux | the same: the keyboard goes to the prompt | n/a: each Image draws its alt on one row (`w0w2      w4`), as in the PR 1 spike; the raster renderer draws the pane there | 1 |
+| Desktop app | | | | | | | | |
+| Ghostty (standalone) | | | | | | | | |
+
+The desktop and standalone Ghostty rows are Kevin's: the session that ran this did not drive
+Claude.app while the Mac was in use.
+
+Other facts the run turned up:
+- The Input joins the ring after the hidden Buttons. While it has focus every printable key goes
+  to it, so `q` types a `q` there instead of backing out.
+- `rows: 24` is a request. An inline pane on an 80 × 24 Terminal.app got 7 body rows, below the
+  plan's too-small floors, so a default-size Terminal.app draws the too-small window. cmux at
+  148 columns docked the pane beside the transcript.
+
+### Decisions
+
+- **Cursor rung: (a′) on cmux and Terminal.app**: hidden one-space Buttons in a zero-width Box,
+  questions 1 (a) to (d) hold on both. The desktop takes rung (c) until its row says (a′); VS Code
+  and mobile take (c).
+- **`MOVE_HELP = 'Tab or arrows: move.'`**: the arrows move the ring on both terminals. No `j`/`k`
+  Buttons.
+- **Back-out: Escape always closes the pane; `q` is the only back-out.** A refused close keeps the
+  pane open but hands the keyboard to the prompt, so refusing Escape would strand the person. So
+  Task 8's `paneClose` passes every close, and its test asserts the pass instead of a refusal;
+  Task 11's README says Escape closes the pane and `q` backs out, without the close-mark line.
+- **Wrap (for Task 8's redirect):** each end of the ring passes through one engine stop before it
+  wraps. The hook passes engine stops (`next(e)`), so Tab off the last stop goes to the engine
+  stop, then onto the first stop in the ring, which the redirect sends to the first cursor stop;
+  Shift+Tab mirrors it. The price Input, when shown, is the ring's last element.
+- **Re-focus does not lean on the hook:** `$.ui.focus` from a press moved the ring without raising
+  the plugin's own `ui.focus` hook. Task 8's re-focus targets `PaneBuild.focus`, which the dialog
+  state already names, so no cursor write is lost; nothing may assume the hook sees it.
+- **`PRICE_INPUT_ROWS = 1`.**
+- **Tiles: yes.** The image mount uses the tile tree.
