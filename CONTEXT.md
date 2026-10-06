@@ -164,8 +164,8 @@ _Avoid_: portrait (the hero template's field name, unused), icon, image
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
-line with cut corners, text in the game's pixel font. The band's strip and every tab of the
-pane are made of windows.
+line with cut corners, text in the game's pixel font. The band's strip and the pane's Inventory
+and Heroes tabs are made of windows; the other tabs follow in UI PR 3.
 _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
 **Strip**:
@@ -175,12 +175,33 @@ _Avoid_: HUD, status bar, party line (the text row it replaced)
 
 **Message window**:
 The strip's middle window: the command line on top, then the combat log, the latest drops or
-the World rows, by tab.
+the World rows, by tab. In the pane, the two-line window at the foot: what the keys do, the
+question a Yes/No asks, a refusal.
 _Avoid_: log panel, chat box
 
 **Command line**:
 The message window's first row, `▶Party Loot World ▾`: the band tabs, ▶ on the current one.
 _Avoid_: tab bar, menu
+
+**Tab window**:
+The pane's top window: the eight tab labels, ▶ on the current one, each hotkey letter gold.
+_Avoid_: tab bar, header
+
+**Command window**:
+The window that opens over the Inventory or Heroes list on Enter: the actions that apply to the
+▶ row (Equip, Sell, Vendor; Party, Dismiss), each with a gold hotkey letter. The equip and
+reforge picks are command windows too.
+_Avoid_: context menu, action menu, popup
+
+**Ring stop**:
+A hidden one-space Button the pane mounts per list row, command item, Yes and No, tab and back.
+The focus ring walks them; the ▶ follows the ring onto the cursor stops.
+_Avoid_: focus target, hidden button
+
+**Sell window**:
+The window that takes the detail window's place while selling: matching buy orders with their
+nets, then Set a price (or preset prices where there is no price field).
+_Avoid_: sell panel (the text form it replaced), sell dialog
 
 **Purse**:
 The strip's last window: the gold and the tactics (Push on, or Farm here; `f` toggles).

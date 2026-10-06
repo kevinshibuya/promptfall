@@ -808,9 +808,9 @@ Terminal.app with its result; the PR is open.
 **Boundaries:** No code change here except a fix the pass finds, committed separately with its
 own test.
 
-- [ ] Spec, ADR note if needed, transcription grafts, glossary, plugin README
-- [ ] Driven pass
-- [ ] Ticks, PR
+- [x] Spec, ADR note if needed, transcription grafts, glossary, plugin README
+- [x] Driven pass
+- [x] Ticks, PR
 
 ## Out of scope
 
