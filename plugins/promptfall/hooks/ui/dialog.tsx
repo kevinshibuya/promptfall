@@ -315,6 +315,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           await $.ui.focus({ requestId, key: 'price' })
         },
         dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
+        redraw: () => $.ui.invalidate('ui.render'),
       }
       const run = (a: PaneAction) => void runAction(a, ctx)
       return paneElement({

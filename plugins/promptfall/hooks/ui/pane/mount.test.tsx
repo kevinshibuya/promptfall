@@ -191,7 +191,7 @@ test('rung (c) steps the ▶ among the cursor stops, wrapping', () => {
   expect(stepCursor(BUILD, -1)?.key).toBe('row:c')
 })
 
-function context(state: { d: DialogState }, events: PlayerEvent[]): ActionContext {
+function context(state: { d: DialogState; redraws: number }, events: PlayerEvent[]): ActionContext {
   return {
     upd: async (fn) => {
       state.d = fn(state.d)
@@ -205,11 +205,14 @@ function context(state: { d: DialogState }, events: PlayerEvent[]): ActionContex
     remaining: () => undefined,
     focusPrice: async () => undefined,
     dialog: async () => state.d,
+    redraw: () => {
+      state.redraws += 1
+    },
   }
 }
 
 test('actions: open, back, an event closing the menu, the third pick sending the party', async () => {
-  const state = { d: DIALOG_DEFAULT }
+  const state = { d: DIALOG_DEFAULT, redraws: 0 }
   const events: PlayerEvent[] = []
   const ctx = context(state, events)
   takeRefocus()
@@ -252,4 +255,28 @@ test('a closed pane leaves no sub-window and no sell flow', () => {
     partyPick: ['h1'],
   })
   expect([d.menu, d.sell, d.partyPick]).toEqual([null, null, ['h1']])
+})
+
+test('an action asks for the re-focus only after its last write, then a drawing', async () => {
+  const state = { d: DIALOG_DEFAULT, redraws: 0 }
+  const seen: boolean[] = []
+  const ctx: ActionContext = {
+    ...context(state, []),
+    // A drawing during the action's writes must not take the re-focus.
+    upd: async (fn) => {
+      state.d = fn(state.d)
+      seen.push(takeRefocus())
+    },
+    act: async () => {
+      seen.push(takeRefocus())
+    },
+  }
+  takeRefocus()
+  state.d = { ...state.d, menu: { kind: 'equip', itemId: 'i', at: 0 } }
+  await runAction({ t: 'event', event: { t: 'equip', heroId: 'h', itemId: 'i' } }, ctx)
+  expect(seen).toEqual([false, false])
+  expect(state.redraws).toBe(1)
+  expect(takeRefocus()).toBe(true)
+  await runAction({ t: 'none' }, ctx)
+  expect([state.redraws, takeRefocus()]).toEqual([1, false])
 })

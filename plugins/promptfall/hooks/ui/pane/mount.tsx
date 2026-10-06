@@ -310,6 +310,8 @@ export type ActionContext = {
   focusPrice: () => Promise<void>
   /** The dialog state now, for the actions that read it (party, the sell flow). */
   dialog: () => Promise<DialogState>
+  /** Asks for a drawing (`$.ui.invalidate`), so the ring is placed after the action's last write. */
+  redraw: () => void
 }
 
 const REFOCUS = new Set<PaneAction['t']>([
@@ -323,8 +325,20 @@ const REFOCUS = new Set<PaneAction['t']>([
   'list',
 ])
 
+/**
+ * Runs an action. One that changes which stops exist asks for a re-focus only after its last
+ * state write, then a drawing: a drawing in between (the menu still open while `act` settles)
+ * would aim the ring at a stop about to vanish.
+ */
 export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
-  if (REFOCUS.has(a.t)) refocus = true
+  await perform(a, ctx)
+  if (REFOCUS.has(a.t)) {
+    refocus = true
+    ctx.redraw()
+  }
+}
+
+async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
   switch (a.t) {
     case 'tab':
       await ctx.upd((d) => ({ ...d, menu: null }))
