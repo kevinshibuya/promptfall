@@ -15,10 +15,22 @@ carries presence and the chat tail, chat with a word list and a rate limit, high
 boss-damage leaderboards, bots that play through the public HTTP API like a player, and a world
 boss every 3 hours that every online party fights together (sim version 3).
 Phase 4, PR 1 is the art engine: a pixel-art battle stage on the band's Party tab (an `Image` in
-Ghostty and kitty, half-block `Raster` cells in other terminals, an `Svg` with SMIL on the desktop, always the full stage scaled to the band),
-four sound cues, sprites in the dialog's lists, and the art pipeline that builds them, all on the
-concept sheets as placeholders. Phase 4, PR 2 (the real art) and phase 5 (the real server) each get
-their own plan when their turn comes.
+Ghostty and kitty, half-block `Raster` cells in other terminals, an `Svg` with SMIL on the desktop,
+always the full stage scaled to the band), four sound cues, sprites in the dialog's lists, and the
+art pipeline that builds them, all on the concept sheets as placeholders.
+
+The combat flow replaced "every unit acts once per tick" with action gauges, an action queue and a
+weighted picker: units act one at a time, in the order their gauges filled, and each hero class
+picks its action and target from its tactics (sim version 4).
+
+UI PR 1 is the first of three that redraw the interface as Dragon Quest V command windows. It
+ships the window kit (frames, the Misaki Gothic 2nd font, an image, raster and Svg encoder for
+every surface) and turns the band's text rows into a strip of windows under the stage: enemies, a
+message window with the combat log, the party with its action gauges, and the purse.
+
+Next, in order: UI PR 2 (the Inventory and Heroes tabs as windows), UI PR 3 (Market, Orders,
+Account, Odds, Chat and Leaderboards), phase 4 PR 2 (the real art) and phase 5 (the real server).
+Each gets its own plan when its turn comes.
 
 ## Play it
 
@@ -49,17 +61,20 @@ The plugin README covers commands, hotkeys, the market and the world: [plugins/p
 | `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot, a virtual clock, seeded bots that play over HTTP, and server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`) |
 | `plugins/promptfall` | The Claude Code mod, with the three packages bundled into `hooks/vendor/` |
 | `scripts/vendor.mjs` | Builds those bundles |
+| `art/` | The sprite manifest, palettes and concept sheets that `pnpm sprites` turns into the plugin's sprite module, and the window font's source |
+| `scripts/font.ts` | Bakes the window font into the plugin's glyph module (`pnpm font`) |
 | `docs/` | The spec, the phase plans and the manual-pass scripts |
 
 ## Checks
 
 ```sh
-pnpm lint && pnpm typecheck && pnpm test && pnpm vendor:check
+pnpm lint && pnpm typecheck && pnpm test && pnpm vendor:check && pnpm sprites:check && pnpm font:check
 claude plugin validate plugins/promptfall
 claude plugin test plugins/promptfall
 pnpm exec tsc -p plugins/promptfall
 ```
 
 CI runs the first line: lint, the type-check of the packages and the fake server, their tests
-(the contract suite runs over the in-process ledger and over HTTP), and the vendor check. The
-three plugin checks need a local Claude Code.
+(the contract suite runs over the in-process ledger and over HTTP), and the three generated-file
+checks: the vendor bundles, the sprite module and the window glyphs. The three plugin checks need a
+local Claude Code.
