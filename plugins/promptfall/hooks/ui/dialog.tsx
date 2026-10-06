@@ -41,7 +41,6 @@ import type { PaneInput } from './pane/input'
 import { inventoryPane } from './pane/inventory'
 import {
   type ActionContext,
-  drawingStarted,
   forget,
   type PaneDraw,
   paneElement,
@@ -49,7 +48,7 @@ import {
   remember,
   runAction,
   stepCursor,
-  takeRefocus,
+  stopsChanged,
   withCursor,
 } from './pane/mount'
 import type { PaneAction } from './pane/types'
@@ -105,8 +104,6 @@ function oddsLine(weights: Record<string, number>): string {
 export function registerDialog(on: On, game: () => GameHandle | null): void {
   registerPaneHooks(on)
   on('ui.render', { component: 'Pane', requestId: 'promptfall' }, async ($, e) => {
-    // Before any await: a re-focus asked after this drawing began is not this drawing's.
-    const started = drawingStarted()
     const table = $.ui.resolve(e)
     const { Box, Text, Button, Link } = table
     const Select = 'Select' in table ? table.Select : undefined
@@ -295,7 +292,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const build = tab === 'inventory' ? inventoryPane(input) : heroesPane(input)
       remember(e.requestId, tab, build)
       const requestId = e.requestId
-      if (takeRefocus(started) && build.focus) {
+      if (stopsChanged(e.requestId, build) && build.focus) {
         const key = build.focus
         // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
         $.clock.after(0, () => void $.ui.focus({ requestId, key }))
@@ -318,7 +315,6 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
           await $.ui.focus({ requestId, key: 'price' })
         },
         dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
-        redraw: () => $.ui.invalidate('ui.render'),
       }
       const run = (a: PaneAction) => void runAction(a, ctx)
       return paneElement({

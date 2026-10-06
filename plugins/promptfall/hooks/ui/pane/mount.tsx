@@ -36,29 +36,25 @@ type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
 /** The build each pane instance drew last, for the focus hook: its ring order, cursors and tab. */
 const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
 /**
- * Re-focus: an action that changes which stops exist bumps `generation` once its writes are done
- * and asks for that generation. Only a drawing that started at or after it may take the ask: a
- * drawing already under way when the action finished holds the stops of before (a tab switch
- * drawn with the old tab's rows).
+ * The stop keys each instance drew last. The engine keeps the ring by position, so when the
+ * stops change under it (a menu opens, a tab switches, a recruit or a drop inserts a row) the ring
+ * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
-let generation = 0
-let wanted: number | null = null
-
+const lastStops = new Map<string, string>()
 export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
 }
+/** The pane draws no stops now (another tab, or closed): its next stops count as changed. */
 export function forget(requestId: string): void {
   last.delete(requestId)
+  lastStops.set(requestId, '')
 }
-/** Read at the very start of a drawing, before anything it awaits. */
-export function drawingStarted(): number {
-  return generation
-}
-/** True once, for a drawing that started after the action that asked. */
-export function takeRefocus(startedAt: number): boolean {
-  if (wanted === null || startedAt < wanted) return false
-  wanted = null
-  return true
+/** True when this drawing's stops differ from the last one's: the ring goes back to the ▶. */
+export function stopsChanged(requestId: string, build: PaneBuild): boolean {
+  const keys = build.stops.map((s) => s.key).join('|')
+  const was = lastStops.get(requestId)
+  lastStops.set(requestId, keys)
+  return was !== undefined && was !== keys
 }
 
 // Image sources by window key and content, so a cursor move re-encodes only what changed.
@@ -320,33 +316,10 @@ export type ActionContext = {
   focusPrice: () => Promise<void>
   /** The dialog state now, for the actions that read it (party, the sell flow). */
   dialog: () => Promise<DialogState>
-  /** Asks for a drawing (`$.ui.invalidate`), so the ring is placed after the action's last write. */
-  redraw: () => void
 }
 
-const REFOCUS = new Set<PaneAction['t']>([
-  'tab',
-  'open',
-  'back',
-  'event',
-  'party',
-  'sell',
-  'accept',
-  'list',
-])
-
-/**
- * Runs an action. One that changes which stops exist asks for a re-focus only after its last
- * state write, then a drawing: a drawing in between (the menu still open while `act` settles)
- * would aim the ring at a stop about to vanish.
- */
 export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
   await perform(a, ctx)
-  if (REFOCUS.has(a.t)) {
-    generation += 1
-    wanted = generation
-    ctx.redraw()
-  }
 }
 
 async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {

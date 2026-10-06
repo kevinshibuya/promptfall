@@ -9,13 +9,12 @@ import { inventoryPane } from './inventory'
 import {
   type ActionContext,
   closed,
-  drawingStarted,
   focusMove,
   type PaneDraw,
   paneElement,
   runAction,
   stepCursor,
-  takeRefocus,
+  stopsChanged,
   withCursor,
 } from './mount'
 import type { PaneBuild, Stop } from './types'
@@ -192,7 +191,7 @@ test('rung (c) steps the ▶ among the cursor stops, wrapping', () => {
   expect(stepCursor(BUILD, -1)?.key).toBe('row:c')
 })
 
-function context(state: { d: DialogState; redraws: number }, events: PlayerEvent[]): ActionContext {
+function context(state: { d: DialogState }, events: PlayerEvent[]): ActionContext {
   return {
     upd: async (fn) => {
       state.d = fn(state.d)
@@ -206,22 +205,15 @@ function context(state: { d: DialogState; redraws: number }, events: PlayerEvent
     remaining: () => undefined,
     focusPrice: async () => undefined,
     dialog: async () => state.d,
-    redraw: () => {
-      state.redraws += 1
-    },
   }
 }
 
 test('actions: open, back, an event closing the menu, the third pick sending the party', async () => {
-  const state = { d: DIALOG_DEFAULT, redraws: 0 }
+  const state = { d: DIALOG_DEFAULT }
   const events: PlayerEvent[] = []
   const ctx = context(state, events)
-  takeRefocus(drawingStarted())
   await runAction({ t: 'open', menu: { kind: 'actions', tab: 'inventory', id: 'i2', at: 0 } }, ctx)
   expect(state.d.menu?.kind).toBe('actions')
-  // An action that changes the stops asks the next drawing to put the ring on its focus.
-  expect(takeRefocus(drawingStarted())).toBe(true)
-  expect(takeRefocus(drawingStarted())).toBe(false)
   // With a menu open the next drawing focuses its first item.
   expect(inventoryPane({ ...paneInput(), dialog: state.d }).focus).toBe('menu:0')
   await runAction({ t: 'back' }, ctx)
@@ -258,34 +250,24 @@ test('a closed pane leaves no sub-window and no sell flow', () => {
   expect([d.menu, d.sell, d.partyPick]).toEqual([null, null, ['h1']])
 })
 
-test('an action asks for the re-focus only after its last write, then a drawing', async () => {
-  const state = { d: DIALOG_DEFAULT, redraws: 0 }
-  const seen: boolean[] = []
-  const ctx: ActionContext = {
-    ...context(state, []),
-    // A drawing during the action's writes must not take the re-focus.
-    upd: async (fn) => {
-      state.d = fn(state.d)
-      seen.push(takeRefocus(drawingStarted()))
-    },
-    act: async () => {
-      seen.push(takeRefocus(drawingStarted()))
-    },
+test('a drawing whose stops differ from the last puts the ring back on the ▶', () => {
+  const rows = { ...BUILD }
+  const menu: PaneBuild = {
+    ...BUILD,
+    stops: [
+      tab('inventory'),
+      { key: 'menu:0', action: { t: 'none' }, cursor: true, index: 0 },
+      BACK,
+    ],
+    focus: 'menu:0',
   }
-  takeRefocus(drawingStarted())
-  state.d = { ...state.d, menu: { kind: 'equip', itemId: 'i', at: 0 } }
-  await runAction({ t: 'event', event: { t: 'equip', heroId: 'h', itemId: 'i' } }, ctx)
-  expect(seen).toEqual([false, false])
-  expect(state.redraws).toBe(1)
-  expect(takeRefocus(drawingStarted())).toBe(true)
-  await runAction({ t: 'none' }, ctx)
-  expect([state.redraws, takeRefocus(drawingStarted())]).toEqual([1, false])
-})
-
-test('a drawing that began before the action finished does not take its re-focus', async () => {
-  const state = { d: DIALOG_DEFAULT, redraws: 0 }
-  const early = drawingStarted()
-  await runAction({ t: 'tab', tab: 'heroes' }, context(state, []))
-  expect(takeRefocus(early)).toBe(false)
-  expect(takeRefocus(drawingStarted())).toBe(true)
+  // The first drawing of an instance: its autoFocus places the ring.
+  expect(stopsChanged('t', rows)).toBe(false)
+  // The same stops (a cursor move): the ring is already there.
+  expect(stopsChanged('t', { ...rows, focus: 'row:b' })).toBe(false)
+  // A menu opens, then closes: both change the stops.
+  expect(stopsChanged('t', menu)).toBe(true)
+  expect(stopsChanged('t', rows)).toBe(true)
+  // A row inserted above the ring (a recruit, a drop) changes them too.
+  expect(stopsChanged('t', { ...rows, stops: [row('new', 0), ...rows.stops] })).toBe(true)
 })
