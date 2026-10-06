@@ -502,9 +502,9 @@ every question answered and a desktop row answered or marked Kevin's; the decisi
 
 **Boundaries:** Nothing under `plugins/`. On ambiguity, stop and report `blocked: <ambiguity>`.
 
-- [ ] The Link and the log lines in `/spike-pane`
-- [ ] Drive cmux and Terminal.app; fill the table
-- [ ] Decisions; `pnpm lint`; commit `spike(ui): the PR 3 fields: Escape and Tab in an Input, a Link`
+- [x] The Link and the log lines in `/spike-pane`
+- [x] Drive cmux and Terminal.app; fill the table
+- [x] Decisions; `pnpm lint`; commit `spike(ui): the PR 3 fields: Escape and Tab in an Input, a Link`
 
 ### Task 2: Dialog state and the pane input
 
