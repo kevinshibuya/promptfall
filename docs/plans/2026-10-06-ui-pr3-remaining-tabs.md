@@ -1018,8 +1018,8 @@ Terminal.app with its result; the PR is open.
 own test.
 
 - [x] Spec, ADR note, transcription grafts, glossary, plugin README
-- [ ] Driven pass
-- [ ] Ticks, PR
+- [x] Driven pass
+- [x] Ticks, PR
 
 ## Out of scope
 
