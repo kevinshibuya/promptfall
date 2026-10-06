@@ -1,8 +1,14 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
+import { paneInput } from '../ui/pane/fixtures'
+import { heroesPane } from '../ui/pane/heroes'
+import type { PaneInput } from '../ui/pane/input'
+import { inventoryPane } from '../ui/pane/inventory'
+import type { PaneBuild } from '../ui/pane/types'
 import { type StripInput, stripScene, stripTracks } from '../ui/strip'
 import type { Effect } from '../vendor/sim.js'
 import { windowFrame } from '../windows/image'
+import type { Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
 import { CELL_H, CELL_W, WINDOW_SCALE } from '../windows/tuning'
@@ -298,6 +304,127 @@ export function stripGoldenOf(input: StripInput): StripGolden {
   return {
     imageHash: fnv1a64(image.rgba),
     cellsHash: fnv1a64(sceneCells(scene)),
+    svgHash: fnv1a64(svg),
+    svgChars: svg.length,
+  }
+}
+
+// The pane's scenarios (UI PR 2, Task 10): the Inventory and Heroes windows on the pane fixtures.
+export const PANE_SCENARIOS = [
+  'pane-inventory',
+  'pane-inventory-actions',
+  'pane-inventory-vendor',
+  'pane-inventory-narrow',
+  'pane-heroes',
+  'pane-heroes-picks',
+  'pane-sell',
+  'pane-small',
+] as const
+export type PaneScenario = (typeof PANE_SCENARIOS)[number]
+export type PaneGolden = StripGolden
+
+function withDialog(
+  patch: Partial<PaneInput['dialog']>,
+  input: Partial<PaneInput> = {},
+): PaneInput {
+  const base = paneInput(input)
+  return { ...base, dialog: { ...base.dialog, ...patch } }
+}
+
+export function pane(name: PaneScenario): PaneBuild {
+  switch (name) {
+    case 'pane-inventory':
+      return inventoryPane(
+        withDialog({ cursor: { inventory: { id: 'i2', index: 1 }, heroes: null } }),
+      )
+    case 'pane-inventory-actions':
+      return inventoryPane(
+        withDialog({
+          menu: { kind: 'actions', tab: 'inventory', id: 'i2', at: 1 },
+          cursor: { inventory: { id: 'i2', index: 1 }, heroes: null },
+        }),
+      )
+    case 'pane-inventory-vendor':
+      return inventoryPane(
+        withDialog({
+          menu: { kind: 'confirm', action: 'vendor', id: 'i2', at: 0 },
+          cursor: { inventory: { id: 'i2', index: 1 }, heroes: null },
+        }),
+      )
+    case 'pane-inventory-narrow':
+      return inventoryPane(paneInput({ columns: 60 }))
+    case 'pane-heroes':
+      return heroesPane(paneInput({ tab: 'heroes' }))
+    case 'pane-heroes-picks':
+      return heroesPane(
+        withDialog(
+          { partyPick: ['h4', 'h5'], cursor: { inventory: null, heroes: { id: 'h4', index: 3 } } },
+          { tab: 'heroes' },
+        ),
+      )
+    case 'pane-sell':
+      return inventoryPane(
+        withDialog({
+          sell: {
+            kind: 'item',
+            id: 'i2',
+            matching: [
+              {
+                id: 'o1',
+                base: 'silk_robe',
+                name: 'Silk Robe',
+                minRarity: 'rare',
+                affix: null,
+                maxPrice: 1200,
+                expiresAt: 0,
+              },
+              {
+                id: 'o2',
+                base: 'silk_robe',
+                name: 'Silk Robe',
+                minRarity: 'rare',
+                affix: null,
+                maxPrice: 900,
+                expiresAt: 0,
+              },
+            ],
+            price: '1500',
+            error: null,
+            at: 0,
+          },
+        }),
+      )
+    case 'pane-small':
+      return inventoryPane(paneInput({ columns: 36 }))
+  }
+}
+
+/** Every window's picture, composed onto one canvas at its cells (transparent between). */
+export function scenePicture(scene: Scene): Frame {
+  const width = scene.columns * CELL_W
+  const height = scene.rows * CELL_H
+  const rgba = new Uint8ClampedArray(width * height * 4)
+  for (const win of scene.windows) {
+    const f = windowFrame(win)
+    const top = (win.y ?? 0) * CELL_H
+    for (let y = 0; y < f.height; y++) {
+      const from = y * f.width * 4
+      rgba.set(f.rgba.subarray(from, from + f.width * 4), ((top + y) * width + win.x * CELL_W) * 4)
+    }
+  }
+  return { width, height, rgba }
+}
+
+export function paneSvgOf(build: PaneBuild): string {
+  return sceneSvg(build.scene, [], { smil: false, width: build.scene.columns * CELL_W })
+}
+
+export function paneGoldenOf(build: PaneBuild): PaneGolden {
+  const image = encodeImage(scenePicture(build.scene), WINDOW_SCALE)
+  const svg = paneSvgOf(build)
+  return {
+    imageHash: fnv1a64(image.rgba),
+    cellsHash: fnv1a64(sceneCells(build.scene)),
     svgHash: fnv1a64(svg),
     svgChars: svg.length,
   }

@@ -770,9 +770,9 @@ scenarios do not exist.
 
 **Boundaries:** No strip golden changes.
 
-- [ ] Scenarios and golden helpers
-- [ ] Generate, look at every PNG; budget test
-- [ ] Run the check, commit `test(pane): scenarios, goldens and PNGs, the Svg budget`
+- [x] Scenarios and golden helpers
+- [x] Generate, look at every PNG; budget test
+- [x] Run the check, commit `test(pane): scenarios, goldens and PNGs, the Svg budget`
 
 ### Task 11: Docs, the driven pass, the pull request
 
