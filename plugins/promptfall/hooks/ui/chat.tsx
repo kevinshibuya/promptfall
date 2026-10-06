@@ -58,6 +58,13 @@ export async function postChat(
   }
 }
 
+/** Why this player cannot post, or null: chat closed (or local, with no server), or not linked. */
+export function chatGate(view: GameView, world: WorldState | null): string | null {
+  if (!gates(world, view.account).chatOpen)
+    return view.account.server === IN_PROCESS ? GATE_CHAT_LOCAL : GATE_CHAT_CLOSED
+  return view.account.linked ? null : GATE_UNLINKED
+}
+
 /** The Chat tab: the last messages, newest at the bottom, then the compose box or why there is none. */
 export function chatBody(
   els: Els,
@@ -95,13 +102,7 @@ export function chatBody(
       </Box>,
     )
   }
-  const gate = !gates(world, view.account).chatOpen
-    ? view.account.server === IN_PROCESS
-      ? GATE_CHAT_LOCAL
-      : GATE_CHAT_CLOSED
-    : view.account.linked
-      ? null
-      : GATE_UNLINKED
+  const gate = chatGate(view, world)
   if (gate) {
     body.push(
       <Text key="chat-gate" color="yellow" wrap="wrap">

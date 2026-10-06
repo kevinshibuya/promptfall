@@ -798,9 +798,9 @@ modules do not exist.
 
 **Boundaries:** No mounting. `chatBody` and `boardsBody` behave as before.
 
-- [ ] Chat; tests
-- [ ] Leaderboards; tests
-- [ ] Run the check, commit
+- [x] Chat; tests
+- [x] Leaderboards; tests
+- [x] Run the check, commit
 
 ### Task 8: The mount: actions, back, the field and link, the probe
 

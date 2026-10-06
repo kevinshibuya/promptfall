@@ -20,9 +20,9 @@ export async function loadBoards(
   }
 }
 
-function onlineLine(view: GameView, world: WorldState): string {
+export function onlineLine(view: GameView, world: WorldState | null): string {
   if (!gates(world, view.account).presenceOpen) return 'presence is off'
-  const snapshot = world.snapshot
+  const snapshot = world?.snapshot
   if (!snapshot) return 'connecting to the world…'
   if (snapshot.zones.length === 0) return 'nobody online'
   return `Online by zone: ${snapshot.zones.map((z) => `z${z.zone} ${z.count}`).join(' · ')}`

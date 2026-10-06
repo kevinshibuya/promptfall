@@ -1,11 +1,14 @@
 // Hand-built pane inputs for the pane tests and the pane goldens.
 import type {
+  BoardsState,
+  ChatMessage,
   GameView,
   ItemView,
   ListingView,
   MarketState,
   OrdersState,
   RosterHeroView,
+  WorldState,
 } from '../../../types'
 import { wave } from '../../stage/fixtures'
 import {
@@ -15,6 +18,7 @@ import {
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   SETTINGS_DEFAULT,
+  WORLD_DEFAULT,
 } from '../../state'
 import type { PaneInput } from './input'
 
@@ -220,5 +224,37 @@ export function ordersMine(): OrdersState {
       ],
       returns: 2,
     },
+  }
+}
+
+/** `n` chat messages, ids 1 to n, oldest first. */
+export function chatWorld(n: number): WorldState {
+  const names = ['mira', 'tomas', 'kevin', 'lyra']
+  const messages: ChatMessage[] = Array.from({ length: n }, (_, i) => ({
+    id: i + 1,
+    name: names[i % names.length] ?? 'mira',
+    text: `message ${i + 1}`,
+    at: i * 1000,
+  }))
+  return { ...WORLD_DEFAULT, messages }
+}
+
+/** Both boards, 20 rows each; `a1` (you) third on highest zone and first on damage. */
+export function boardsLoaded(): BoardsState {
+  const row = (i: number, value: number) => ({
+    accountId: i === 2 ? 'a1' : `p${i}`,
+    name: i === 2 ? 'kevin' : `player${i}`,
+    value,
+  })
+  return {
+    boards: {
+      highestZone: Array.from({ length: 20 }, (_, i) => row(i, 12 - Math.floor(i / 3))),
+      damage: Array.from({ length: 20 }, (_, i) => ({
+        ...row(i === 0 ? 2 : i === 2 ? 0 : i, 90_000 - i * 1000),
+      })),
+      weekStart: 0,
+    },
+    busy: false,
+    error: null,
   }
 }

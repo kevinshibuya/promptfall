@@ -1,14 +1,7 @@
 // The Market tab as windows (docs/plans/2026-10-06-ui-pr3-remaining-tabs.md, "Market"): the
 // listings with their filter and page rows, the ▶ row's detail, the filter window and its picks,
 // and the buy Yes/No.
-import type {
-  HeroClassName,
-  ListingView,
-  MarketQuery,
-  PaneMenu,
-  PickField,
-  RarityName,
-} from '../../../types'
+import type { ListingView, MarketQuery, PaneMenu, PickField, RarityName } from '../../../types'
 import { spriteFor } from '../../sprites/index'
 import { RARITY_RGB } from '../../stage/tuning'
 import { content } from '../../vendor/sim.js'
