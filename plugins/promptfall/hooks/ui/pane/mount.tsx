@@ -1,0 +1,388 @@
+// The pane's mount (docs/plans/2026-10-06-ui-pr2-pane-windows.md, Task 8): draws a PaneBuild on
+// each surface, mounts its ring stops as hidden Buttons, runs their actions, and keeps the ▶
+// cursor on the focus ring through a `ui.focus` hook.
+//
+// Rungs (spike sheet, "PR 2 pane spike"): terminals hide one Button per stop in a zero-width Box
+// and let Tab and the arrows walk them (a′); the desktop, VS Code and mobile keep the stops
+// hidden for their hotkeys and draw a `▲ ▼ ok back` row under the picture (c), since their
+// ring moves without telling the plugin.
+import type { Elements, On, RenderElement, RenderSurface } from 'claude-code'
+import { atom, update } from 'claude-code'
+import type { DialogState, DialogTab, SellState } from '../../../types'
+import type { GameHandle } from '../../engine'
+import { fnv1a64 } from '../../stage/hash'
+import { encodeImage } from '../../stage/image'
+import { DESKTOP_COLUMN_PX, SVG_INTERACTIVE } from '../../stage/tuning'
+import { DIALOG_DEFAULT } from '../../state'
+import type { PlayerEvent } from '../../vendor/sim.js'
+import { windowFrame, windowKey } from '../../windows/image'
+import type { Tile, Win } from '../../windows/kit'
+import { sceneCells } from '../../windows/raster'
+import { sceneSvg } from '../../windows/svg'
+import { CELL_H, CELL_W, WINDOW_SCALE } from '../../windows/tuning'
+import { openSell, sellTrade } from '../sell'
+import type { After, Updater } from '../trade'
+import type { PaneAction, PaneBuild, Stop } from './types'
+
+const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
+
+export const PANE_ID = 'promptfall'
+
+type PaneTab = 'inventory' | 'heroes'
+type Els = Pick<Elements['terminal'], 'Box' | 'Text' | 'Button'> &
+  Partial<Pick<Elements['terminal'], 'Input' | 'Image' | 'Raster'>> &
+  Partial<Pick<Elements['desktop'], 'Svg'>>
+
+/** The build each pane instance drew last, for the focus hook: its ring order, cursors and tab. */
+const last = new Map<string, { build: PaneBuild; tab: PaneTab }>()
+/** Set by an action that changes which stops exist: the next drawing puts the ring on its focus. */
+let refocus = false
+
+export function remember(requestId: string, tab: PaneTab, build: PaneBuild): void {
+  last.set(requestId, { build, tab })
+}
+export function forget(requestId: string): void {
+  last.delete(requestId)
+}
+/** True once after an action asked for it. */
+export function takeRefocus(): boolean {
+  const was = refocus
+  refocus = false
+  return was
+}
+
+// Image sources by window key and content, so a cursor move re-encodes only what changed.
+const IMAGE_CACHE_MAX = 64
+const images = new Map<string, { rgba: string; width: number; height: number }>()
+function imageOf(win: Win) {
+  const key = `${windowKey(win)}:${fnv1a64(JSON.stringify(win))}`
+  const hit = images.get(key)
+  if (hit) {
+    images.delete(key)
+    images.set(key, hit)
+    return hit
+  }
+  const made = encodeImage(windowFrame(win), WINDOW_SCALE)
+  images.set(key, made)
+  if (images.size > IMAGE_CACHE_MAX) images.delete(images.keys().next().value as string)
+  return made
+}
+
+export type PriceInput = {
+  value: string
+  onInput: (text: string) => void
+  onSubmit: (text: string) => void
+}
+
+export type PaneDraw = {
+  els: Els
+  surface: RenderSurface
+  renderer: 'unknown' | 'image' | 'raster'
+  bodyColumns: number
+  build: PaneBuild
+  run: (action: PaneAction) => void
+  /** Rung (c): moves the ▶ one cursor stop. */
+  move: (by: 1 | -1) => void
+  price: PriceInput | null
+}
+
+/** Rung (a′) on terminals, (c) elsewhere (the spike sheet). */
+export function hiddenRing(surface: RenderSurface): boolean {
+  return surface === 'terminal'
+}
+
+export function paneElement(d: PaneDraw): RenderElement {
+  const { Box, Button, Input } = d.els
+  const { scene } = d.build
+  const terminal = d.surface === 'terminal'
+  const stops = (
+    <Box
+      key="stops"
+      width={0}
+      overflow="hidden"
+      {...(terminal ? {} : { position: 'absolute' as const, top: 0, left: 0 })}
+    >
+      {d.build.stops.map((s) => (
+        <Button
+          key={s.key}
+          label=" "
+          plain
+          {...(s.hotkey ? { hotkey: s.hotkey } : {})}
+          {...(s.key === d.build.focus ? { autoFocus: true as const } : {})}
+          onPress={() => d.run(s.action)}
+        />
+      ))}
+    </Box>
+  )
+
+  let picture: RenderElement | null = null
+  if (terminal && d.renderer === 'image' && d.els.Image) {
+    const { Image } = d.els
+    const byKey = new Map(scene.windows.map((w) => [w.key, w]))
+    let gaps = 0
+    const draw = (t: Tile): RenderElement | null => {
+      if ('win' in t) {
+        const w = byKey.get(t.win)
+        if (!w) return null
+        return (
+          <Image
+            key={windowKey(w)}
+            source={imageOf(w)}
+            columns={w.columns}
+            rows={w.rows}
+            alt={w.alt}
+          />
+        )
+      }
+      if ('gap' in t) {
+        gaps += 1
+        return <Box key={`gap-${gaps}`} width={t.gap.columns} height={t.gap.rows} />
+      }
+      const kids = 'row' in t ? t.row : t.column
+      gaps += 1
+      return (
+        <Box key={`tiles-${gaps}`} flexDirection={'row' in t ? 'row' : 'column'}>
+          {kids.map(draw)}
+        </Box>
+      )
+    }
+    picture = draw(scene.tiles)
+  } else if (terminal && d.els.Raster) {
+    const { Raster } = d.els
+    picture = (
+      <Raster
+        key="pane-cells"
+        columns={scene.columns}
+        rows={scene.rows}
+        cells={sceneCells(scene)}
+      />
+    )
+  } else if (!terminal && d.els.Svg) {
+    const { Svg } = d.els
+    const width = scene.columns * DESKTOP_COLUMN_PX
+    const height = Math.round((width * scene.rows * CELL_H) / (scene.columns * CELL_W))
+    picture = (
+      <Svg
+        key="pane-svg"
+        source={sceneSvg(scene, [], { smil: false, width })}
+        alt={scene.alt}
+        width={width}
+        height={height}
+        isInteractive={SVG_INTERACTIVE}
+      />
+    )
+  }
+
+  const pad = terminal ? Math.max(0, Math.floor((d.bodyColumns - scene.columns) / 2)) : 0
+  const row = (
+    <Box
+      key="pane-picture"
+      flexDirection={terminal ? 'row' : 'column'}
+      {...(terminal ? { paddingLeft: pad } : { alignItems: 'center' as const })}
+    >
+      {picture}
+      {stops}
+    </Box>
+  )
+  const price =
+    d.build.priceInput && d.price && Input ? (
+      <Box key="pane-price" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
+        <Input
+          key="price"
+          label="price"
+          placeholder="gold"
+          value={d.price.value}
+          submitLabel="list"
+          onInput={(text: string) => d.price?.onInput(text)}
+          onSubmit={(text: string) => d.price?.onSubmit(text)}
+        />
+      </Box>
+    ) : null
+  const rung = hiddenRing(d.surface) ? null : (
+    <Box key="pane-rung" flexDirection="row" gap={1}>
+      <Button key="rung-up" label="▲" hotkey="k" onPress={() => d.move(-1)} />
+      <Button key="rung-down" label="▼" hotkey="j" onPress={() => d.move(1)} />
+      <Button
+        key="rung-ok"
+        label="ok"
+        onPress={() => {
+          const stop = d.build.stops.find((s) => s.key === d.build.focus)
+          if (stop) d.run(stop.action)
+        }}
+      />
+      <Button key="rung-back" label="back" onPress={() => d.run({ t: 'back' })} />
+    </Box>
+  )
+  return (
+    <Box key="pane" flexDirection="column">
+      {row}
+      {price}
+      {rung}
+    </Box>
+  )
+}
+
+export type FocusMove = { t: 'pass' } | { t: 'keep' } | { t: 'land'; stop: Stop; redirect: boolean }
+
+/**
+ * Where a ring move onto `element` should land. A cursor stop lands; a tab, back or claim stop
+ * redirects to the next cursor stop in the direction of travel (forward when the target is at
+ * most half the ring ahead of `current`); an element the build does not hold (an engine stop,
+ * the price Input) passes; a build with no cursor stops keeps the ring where it is.
+ */
+export function focusMove(
+  build: PaneBuild,
+  element: string | undefined,
+  current: string | null,
+): FocusMove {
+  if (element === undefined) return { t: 'pass' }
+  const stops = build.stops
+  const target = stops.findIndex((s) => s.key === element)
+  if (target < 0) return { t: 'pass' }
+  if (!stops.some((s) => s.cursor)) return { t: 'keep' }
+  const stop = stops[target] as Stop
+  if (stop.cursor) return { t: 'land', stop, redirect: false }
+  const n = stops.length
+  const from = current === null ? -1 : stops.findIndex((s) => s.key === current)
+  const forward = from < 0 || (((target - from) % n) + n) % n <= n / 2
+  for (let k = 1; k <= n; k++) {
+    const i = (((forward ? target + k : target - k) % n) + n) % n
+    const s = stops[i] as Stop
+    if (s.cursor) return { t: 'land', stop: s, redirect: true }
+  }
+  return { t: 'keep' }
+}
+
+/** The dialog state with the ▶ on `stop`: a list row's cursor, else the open window's row. */
+export function withCursor(d: DialogState, tab: PaneTab, stop: Stop): DialogState {
+  const index = stop.index ?? 0
+  if (stop.key.startsWith('row:')) {
+    return { ...d, cursor: { ...d.cursor, [tab]: { id: stop.key.slice(4), index } } }
+  }
+  if (d.sell) return { ...d, sell: { ...d.sell, at: index } }
+  if (d.menu) return { ...d, menu: { ...d.menu, at: index } }
+  return d
+}
+
+/** Rung (c)'s ▲ and ▼: the cursor stop `by` away from the ▶, wrapping. */
+export function stepCursor(build: PaneBuild, by: 1 | -1): Stop | null {
+  const cursors = build.stops.filter((s) => s.cursor)
+  if (cursors.length === 0) return null
+  const at = cursors.findIndex((s) => s.key === build.focus)
+  const next = at < 0 ? 0 : (at + by + cursors.length) % cursors.length
+  return cursors[next] ?? null
+}
+
+/** The dialog state a closed pane leaves: no sub-window, no sell flow. */
+export function closed(d: DialogState): DialogState {
+  return { ...d, menu: null, sell: null }
+}
+
+/** The `ui.focus` hook: the ▶ follows the ring, and the ring skips the non-cursor stops. */
+export function registerPaneHooks(on: On): void {
+  on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
+    const l = last.get(e.requestId)
+    if (!l) return next(e)
+    const move = focusMove(l.build, e.element, l.build.focus)
+    if (move.t === 'pass') return next(e)
+    if (move.t === 'keep') return {}
+    await update($, dialogAtom, (d) => withCursor({ ...DIALOG_DEFAULT, ...d }, l.tab, move.stop))
+    return next(move.redirect ? { ...e, element: move.stop.key } : e)
+  })
+  // Escape always closes the pane (the spike: a refused close strands the keyboard). A closed
+  // pane opens again at the list, not inside a sub-window.
+  on('ui.close', { id: PANE_ID }, async ($, e, next) => {
+    await update($, dialogAtom, (d) => closed({ ...DIALOG_DEFAULT, ...d }))
+    forget(PANE_ID)
+    return next(e)
+  })
+}
+
+export type ActionContext = {
+  upd: Updater<DialogState>
+  game: () => GameHandle | null
+  act: (event: PlayerEvent) => Promise<void>
+  openTab: (tab: DialogTab) => Promise<void>
+  after: After
+  /** How long until the goods in the sell flow trade, as a refusal says it; undefined when they do. */
+  remaining: (sell: SellState) => string | undefined
+  /** Puts the ring on the price Input. */
+  focusPrice: () => Promise<void>
+  /** The dialog state now, for the actions that read it (party, the sell flow). */
+  dialog: () => Promise<DialogState>
+}
+
+const REFOCUS = new Set<PaneAction['t']>([
+  'tab',
+  'open',
+  'back',
+  'event',
+  'party',
+  'sell',
+  'accept',
+  'list',
+])
+
+export async function runAction(a: PaneAction, ctx: ActionContext): Promise<void> {
+  if (REFOCUS.has(a.t)) refocus = true
+  switch (a.t) {
+    case 'tab':
+      await ctx.upd((d) => ({ ...d, menu: null }))
+      await ctx.openTab(a.tab)
+      return
+    case 'open':
+      await ctx.upd((d) => ({ ...d, menu: a.menu }))
+      return
+    case 'back':
+      await ctx.upd((d) => (d.menu ? { ...d, menu: null } : d.sell ? { ...d, sell: null } : d))
+      return
+    case 'event':
+      await ctx.act(a.event)
+      if (!a.keep) await ctx.upd((d) => ({ ...d, menu: null }))
+      return
+    case 'party': {
+      const d = await ctx.dialog()
+      const next = d.partyPick.includes(a.heroId)
+        ? d.partyPick.filter((id) => id !== a.heroId)
+        : [...d.partyPick, a.heroId]
+      const [x, y, z] = next
+      if (next.length === 3 && x && y && z) {
+        await ctx.upd((s) => ({ ...s, partyPick: [], menu: null }))
+        await ctx.act({ t: 'set_party', heroIds: [x, y, z] })
+      } else {
+        await ctx.upd((s) => ({ ...s, partyPick: next, menu: null }))
+      }
+      return
+    }
+    case 'sell': {
+      const running = ctx.game()
+      if (!running) return
+      await ctx.upd((d) => ({ ...d, menu: null }))
+      await openSell(running, a.kind, a.id, ctx.upd)
+      return
+    }
+    case 'accept':
+    case 'list': {
+      const running = ctx.game()
+      const sell = (await ctx.dialog()).sell
+      if (!running || !sell) return
+      const close = () => ctx.upd((d) => ({ ...d, sell: null }))
+      const updSell: Updater<NonNullable<DialogState['sell']>> = (fn) =>
+        ctx.upd((d) => (d.sell ? { ...d, sell: fn(d.sell) } : d))
+      const call: Parameters<GameHandle['trade']>[0] =
+        a.t === 'accept'
+          ? (client, auth) => client.fillOrder(auth, a.orderId, sell.id)
+          : (client, auth) => client.list(auth, { kind: sell.kind, id: sell.id, price: a.price })
+      await sellTrade(running, call, updSell, close, ctx.after, ctx.remaining(sell))
+      return
+    }
+    case 'price':
+      await ctx.focusPrice()
+      return
+    case 'claim':
+      ctx.game()?.claim()
+      return
+    case 'none':
+      return
+  }
+}

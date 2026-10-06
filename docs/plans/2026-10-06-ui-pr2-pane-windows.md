@@ -697,10 +697,10 @@ the module does not exist.
 
 **Boundaries:** No change to `ui/dialog.tsx` yet. No band change.
 
-- [ ] Surfaces, tiles, cache, centring, sizing; tests
-- [ ] Stops, rung (c) row, the last build, the focus hook; tests
-- [ ] Actions, re-focus, Escape, the price Input; tests
-- [ ] Run the check, commit
+- [x] Surfaces, tiles, cache, centring, sizing; tests
+- [x] Stops, rung (c) row, the last build, the focus hook; tests
+- [x] Actions, re-focus, Escape, the price Input; tests
+- [x] Run the check, commit
 
 ### Task 9: The dialog wiring
 
