@@ -48,9 +48,12 @@ export function boardsPane(input: PaneInput): PaneBuild {
       rule: true,
       alt: 'Boss damage this week',
     })
+    // A stop like the board rows: Down must reach it, or a short pane never pages to it.
     if (damage.length === 0) {
       rows.push({
+        key: 'row:d-none',
         spans: [{ text: 'No boss damage yet this week.' }],
+        action: { t: 'none' },
         alt: 'No boss damage yet this week',
       })
     }

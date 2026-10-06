@@ -106,3 +106,17 @@ test('wide and narrow pass tilePositions', () => {
       expect([w.key, pos.get(w.key)]).toEqual([w.key, { x: w.x, y: w.y ?? 0 }])
   }
 })
+
+test('an empty boss board is a stop, so a short pane pages to it', () => {
+  const loaded = boardsLoaded().boards
+  const boards = {
+    boards: loaded ? { ...loaded, highestZone: loaded.highestZone.slice(0, 7), damage: [] } : null,
+  }
+  const b = boardsPane(input(boards, {}, { rows: 14 }))
+  expect(cursors(b).at(-1)?.key).toBe('row:d-none')
+  const last = boardsPane(
+    input(boards, { cursor: { leaderboards: { id: 'd-none', index: 7 } } }, { rows: 14 }),
+  )
+  expect(linesOf(win(last, 'list'))).toContain('  Boss damage this week')
+  expect(linesOf(win(last, 'list'))).toContain('▶ No boss damage yet this week.')
+})
