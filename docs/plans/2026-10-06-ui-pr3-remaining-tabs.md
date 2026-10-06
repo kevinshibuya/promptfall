@@ -764,10 +764,10 @@ read-only rows `none`; the detail lines. Red before: the modules do not exist.
 
 **Boundaries:** No mounting. `dialog.tsx` unchanged.
 
-- [ ] Account, detail, link, reset; tests
-- [ ] The no-view pane; tests
-- [ ] Odds; tests
-- [ ] Run the check, commit
+- [x] Account, detail, link, reset; tests
+- [x] The no-view pane; tests
+- [x] Odds; tests
+- [x] Run the check, commit
 
 ### Task 7: The Chat and Leaderboards windows
 
