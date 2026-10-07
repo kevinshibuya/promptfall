@@ -479,3 +479,47 @@ not read get hand cleanup with `pnpm grid`.
 The SNES master was derived from all 26 real bosses and world bosses (the plan had 6: zone 1's
 and the world bosses), since every boss but zone 12's was drawn by then. It is derived once more
 after zone 12 lands, then locked.
+
+## The canonical cut
+
+2026-10-07: the magenta key was too wide (red and blue above 120, green low), so it keyed out the
+bright purples of zone 11 and the purple bosses. The key is now the near-pure magenta of the ground
+and its pink fringe (red and blue 180 or more, green at least 100 below them). Every shipped sprite
+was re-cut with this script; it supersedes the cut commands above. The hero sprites, and
+`enemy:hollow_knight`, `enemy:throne_guard`, `enemy:court_mage` and `enemy:ink_horror`, are hand-drawn
+at 16 × 16 over their cuts (`art/sheets/grids/`), so after a re-cut, write them back with
+`pnpm grid --png art/sheets/grids/<kind>-<name>.txt art/sprites/<kind>/<name>.png`.
+
+```sh
+# Re-cuts every shipped sprite from its sheet. Run from the repository root.
+set -e
+N="--native art/sheets/native"
+D="--grid 8x4 --colours 4 --size 16 $N"
+B="--grid 2x2 --colours 16 --fit 48x34 $N"
+s() { pnpm -s slice "$@" | grep -v ' 16x16 native\| native .* block' || true; }
+cut() { pnpm -s slice "$@" >/dev/null; }
+# The dense sheet: the heroes' natives only (their 16 px art is hand-drawn), then monsters and items.
+cut art/sheets/dense-heroes-zone1-items.png /tmp/promptfall-hero-cuts ${=D} --row 0 --names hero/knight,hero/black_mage,hero/white_mage,hero/archer,hero_attack/knight,hero_attack/black_mage,hero_attack/white_mage,hero_attack/archer
+cut art/sheets/dense-heroes-zone1-items.png art/sprites ${=D} --row 1 --names enemy/road_slime,enemy/field_rat,enemy/goblin_scout,enemy/hedge_sprite,item/iron_sword,item/oak_staff,item/chainmail,item/copper_ring
+cut art/sheets/dense-heroes-zone1-items.png art/sprites ${=D} --row 2 --names item/bronze_axe,item/steel_longsword,item/ember_rod,item/healers_mace,item/short_bow,item/bronze_plate,item/silk_robe,item/leather_vest
+cut art/sheets/dense-heroes-zone1-items.png art/sprites ${=D} --row 3 --names item/bone_charm,item/silver_amulet,item/gold_bangle,item/phoenix_pendant,item/mithril_blade,item/rune_staff,item/elven_bow,item/dragon_plate
+cut art/sheets/zone1-bosses.png art/sprites ${=B} --row 1 --names enemy/bandit_captain,enemy/wild_boar
+# Monster sheet A ships only its two wisps; the rest come from redos-1. x/ names go to a scratch kind.
+cut art/sheets/monsters-a.png art/sprites ${=D} --row 0 --names x/a,x/b,x/c,enemy/whisper_wisp,x/d,x/e,x/f,enemy/will_o_wisp
+cut art/sheets/redos-1.png art/sprites ${=D} --row 0 --names enemy/bramble_wolf,enemy/moss_golem,enemy/wood_goblin,enemy/bog_lurker,enemy/marsh_leech,enemy/mire_toad,enemy/barrow_wight,enemy/grave_hound
+cut art/sheets/redos-1.png art/sprites ${=D} --row 1 --names enemy/bone_soldier,enemy/cairn_crawler,enemy/salt_crab,enemy/gull_harpy,enemy/drowned_sailor,enemy/tide_witch,enemy/ember_imp,enemy/magma_beetle
+cut art/sheets/redos-1.png art/sprites ${=D} --row 2 --names enemy/cinder_orc,enemy/flame_adept,enemy/frost_wolf,enemy/ice_troll,enemy/rime_golem,enemy/snow_shaman,enemy/drowned_monk,enemy/abbey_gargoyle
+cut art/sheets/redos-1.png art/sprites ${=D} --row 3 --names enemy/bell_wraith,enemy/eel_serpent,enemy/ash_ghoul,enemy/dust_stalker,enemy/cinder_colossus,enemy/ash_oracle,x/g,x/h
+cut art/sheets/sheet-b.png art/sprites ${=D} --row 0 --names enemy/star_sentinel,enemy/comet_hound,enemy/spire_warden,enemy/astral_seer,enemy/hollow_knight,enemy/court_jester,enemy/throne_guard,enemy/court_mage
+cut art/sheets/sheet-b.png art/sprites ${=D} --row 1 --names enemy/ink_horror,enemy/blank_page,enemy/quill_golem,enemy/erased_scribe,item/dragonfang,item/storm_rod,item/void_scepter,item/willow_staff
+cut art/sheets/sheet-b.png art/sprites ${=D} --row 2 --names item/silver_crook,item/sacred_mace,item/seraph_staff,item/oak_bow,item/longbow,item/starshot_bow,item/steel_plate,item/mithril_mail
+cut art/sheets/sheet-b.png art/sprites ${=D} --row 3 --names item/cloth_robe,item/mystic_robe,item/sage_robe,item/astral_robe,item/hide_coat,item/ranger_garb,item/shadow_leather,item/wind_cloak
+cut art/sheets/world-bosses-r2.png art/sprites ${=B} --row 0 --names world_boss/the_promptwyrm,world_boss/hallucinox
+cut art/sheets/world-bosses-r2.png art/sprites ${=B} --row 1 --names world_boss/the_context_leviathan,world_boss/tokenmaw
+for z in z2z3:elder_treant,owlbear_cub:sigh_hag,giant_heron z4z5:barrow_king,crypt_ogre:glass_leviathan,reef_troll z6z7:emberfall_wyrm,slag_giant:frostvein_yeti,avalanche_drake z8z9:sunken_abbot,choir_of_bones:waste_tyrant,sand_basilisk z10z11:fallen_star,void_manta:hollow_king,royal_chimera; do
+  parts=(${(s/:/)z})
+  cut art/sheets/bosses-${parts[1]}.png art/sprites ${=B} --row 0 --names enemy/${parts[2]/,/,enemy/}
+  cut art/sheets/bosses-${parts[1]}.png art/sprites ${=B} --row 1 --names enemy/${parts[3]/,/,enemy/}
+done
+rm -rf art/sprites/x art/sheets/native/x /tmp/promptfall-hero-cuts
+```

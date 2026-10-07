@@ -25,9 +25,12 @@ export type SliceResult =
   | { art: Rgba; native: Rgba; block: number; fromMedian: boolean }
   | { error: string }
 
-/** Magenta with a fringe: the key and the anti-aliased band around it. */
+/**
+ * The near-pure magenta ground and its anti-aliased pink fringe. Sprite purples stay art: they sit
+ * at red 160 or below (the sheets' ground is 230 to 253 in red and blue, under 25 in green).
+ */
 export function isKey(r: number, g: number, b: number): boolean {
-  return r > 120 && b > 120 && g < 120 && Math.abs(r - b) < 90 && Math.min(r, b) - g > 60
+  return r >= 180 && b >= 180 && Math.abs(r - b) < 60 && Math.min(r, b) - g >= 100
 }
 
 /** Transparent, in the sampled colour space. */

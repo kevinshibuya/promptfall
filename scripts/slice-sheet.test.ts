@@ -210,6 +210,17 @@ describe('sliceSheet', () => {
     }
   })
 
+  it('keeps a purple sprite whole: only the near-pure magenta of the ground is key', () => {
+    const sheet = magenta(200, 200)
+    const art = blob(16, 16).map((row) =>
+      row.map((v) => (v === TOP ? 0x8000c0 : v === BOTTOM ? 0x9000d0 : v)),
+    )
+    draw(sheet, art, 40, 40, 7)
+    // An anti-aliased pink fringe between the sprite and the ground is still key.
+    fill(sheet, 40, 33, 112, 2, 0xf880f8)
+    expect(toArt(ok(sliceSheet(sheet, opts({ cols: 1, rows: 1 }))[0]).native)).toEqual(art)
+  })
+
   it('keeps one row with --row', () => {
     const sheet = magenta(400, 260)
     draw(sheet, blob(16, 16), 20, 10, 6)
