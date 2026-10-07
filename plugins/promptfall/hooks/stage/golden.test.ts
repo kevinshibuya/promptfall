@@ -23,7 +23,7 @@ import {
   strip,
   stripGoldenOf,
 } from './scenarios'
-import { renderSvg } from './svg'
+import { renderSvg, svgWithFallback } from './svg'
 import type { Motion } from './timeline'
 import {
   IMAGE_MAX_BYTES,
@@ -57,6 +57,10 @@ for (const name of SCENARIOS) {
     expect(goldenOf(s)).toEqual(GOLDENS[name])
     withinBudgets(s.model, s.motions, s.now)
     withinBudgets(s.hires, s.motions, s.now)
+    for (const smil of [true, false]) {
+      const opts = { smil, now: s.now, width: 960, motion: 'full' as const }
+      expect(svgWithFallback(s.hires, s.model, s.motions, opts).length).toBeLessThan(SVG_MAX_CHARS)
+    }
   })
 }
 
@@ -278,4 +282,66 @@ test('the fullest Market pane fits the Svg budget', () => {
   expect(build.scene.windows.find((w) => w.key === 'menu')).toBeDefined()
   const svg = sceneSvg(build.scene, [], { smil: false, width: build.scene.columns * CELL_W })
   expect(svg.length).toBeLessThan(PANE_SVG_MAX_CHARS)
+})
+
+/** The adversarial scene at `scale`: a checker boss, three checker heroes with distinct palettes, a checker drop. */
+function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): StageModel {
+  const k = (v: number) => Math.round(v * scale)
+  const boss = checker(k(48), k(34), 0x102030, 0xf0e0d0)
+  const heroes = [0, 1, 2].map((i) =>
+    checker(
+      k(heroSize.width),
+      k(heroSize.height),
+      0x400000 + i * 0x101010,
+      0x00c000 + i * 0x000a0a,
+    ),
+  )
+  return {
+    box: { columns: 160, rows: 17 },
+    ground: ZONE_GROUND[0] ?? 0,
+    actors: [
+      actor('e1', 'adversarial:boss', boss, k(4), 0, false),
+      ...heroes.map((art, i) =>
+        actor(`h${i + 1}`, `adversarial:h${i}`, art, k(140) - i * k(18), k(34) - art.height, true),
+      ),
+    ],
+    numbers: [{ text: '-999', x: k(10), y: k(2), rgb: 0xff5050 }],
+    drops: [
+      {
+        spriteId: 'adversarial:drop',
+        art: checker(k(16), k(16), 0x808080, 0x0000ff),
+        x: k(20),
+        y: k(6),
+        alpha: 0.5,
+      },
+    ],
+    alt: 'adversarial',
+    scale,
+  }
+}
+
+test('adversarial legal art at 1.5 (a 72 × 51 checker boss, 24 × 24 heroes) keeps the 1.5x Svg under the cap', () => {
+  const hi = adversarial(1.5)
+  const lo = adversarial(1)
+  const motions = busyMotions('e1').filter((m) => m.kind !== 'drop')
+  for (const smil of [true, false]) {
+    const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
+    const svg = svgWithFallback(hi, lo, motions, opts)
+    expect(svg).toBe(renderSvg(hi, motions, opts))
+    expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+  }
+})
+
+test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
+  // Past legal art: every hero a 72 × 51 checker, so the 1.5x markup passes the cap.
+  const hi = adversarial(1.5, { width: 48, height: 34 })
+  const lo = adversarial(1)
+  const motions = busyMotions('e1').filter((m) => m.kind !== 'drop')
+  for (const smil of [true, false]) {
+    const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
+    expect(renderSvg(hi, motions, opts).length).toBeGreaterThanOrEqual(SVG_MAX_CHARS)
+    const svg = svgWithFallback(hi, lo, motions, opts)
+    expect(svg).toBe(renderSvg(lo, motions, opts))
+    expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+  }
 })

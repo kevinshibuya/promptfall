@@ -1,16 +1,21 @@
+import type { GameView } from '../../types'
 import { SPRITES } from '../sprites/generated'
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
-import { GLYPH_HEIGHT, textWidth } from './font'
-import { lungeOffset, type StageActor, type StageModel } from './model'
-import { bobbingAt, type Motion } from './timeline'
+import { frameSize } from './compose'
+import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
+import type { Box } from './layout'
+import { lungeOffset, type StageActor, type StageModel, stageAt } from './model'
+import { bobbingAt, type Motion, type StageTimeline } from './timeline'
 import {
   COMPACT_STAGE_ROWS,
   DROP_RISE_PX,
+  HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LUNGE_PX,
   NUMBER_RISE_PX,
+  SVG_MAX_CHARS,
 } from './tuning'
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
@@ -56,27 +61,31 @@ export function renderSvg(
   motions: readonly Motion[],
   opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
 ): string {
-  const W = model.box.columns
-  const H = model.box.rows * 2
+  const { width: W, height: H } = frameSize(model)
+  const scale = model.scale
+  const px = (v: number) => Math.round(v * scale)
+  const block = glyphBlock(scale)
   const compact = model.box.rows <= COMPACT_STAGE_ROWS
   const live = motions.filter((m) => m.until > opts.now)
   const ids = new Map<SpriteArt, string>()
   const defs: string[] = []
-  const define = (art: SpriteArt, spriteId: string): string => {
+  const define = (art: SpriteArt, raritySlot: number | null): string => {
     let id = ids.get(art)
     if (id === undefined) {
       id = `a${ids.size}`
       ids.set(art, id)
-      defs.push(`<g id="${id}">${artPaths(art, SPRITES[spriteId]?.raritySlot ?? null)}</g>`)
+      defs.push(`<g id="${id}">${artPaths(art, raritySlot)}</g>`)
     }
     return id
   }
   const begin = (m: Motion) => seconds(m.from - opts.now)
   const dur = (m: Motion) => seconds(m.until - m.from)
-  const bob = opts.motion === 'full' ? bobbingAt(opts.now) * IDLE_BOB_PX : 0
+  const bobPx = px(IDLE_BOB_PX)
+  const bob = opts.motion === 'full' ? bobbingAt(opts.now) * bobPx : 0
+  const ground = px(2)
 
   const body: string[] = [
-    `<rect x="0" y="${H - 2}" width="${W}" height="2" fill="${hex(model.ground)}"/>`,
+    `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${hex(model.ground)}"/>`,
   ]
   const base = new Map<string, { x: number; y: number; actor: StageActor }>()
 
@@ -88,8 +97,8 @@ export function renderSvg(
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
-    const id = define(actor.art, actor.spriteId)
-    const slot = SPRITES[actor.spriteId]?.raritySlot ?? null
+    const slot = actor.raritySlot
+    const id = define(actor.art, slot)
     // The accent before any flash: the flash is an overlay here, never baked into the base.
     const color = slot === null ? '' : ` color="${hex(actor.accent ?? actor.palette[slot] ?? 0)}"`
     const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
@@ -107,13 +116,13 @@ export function renderSvg(
 
     // Back out the offsets the model baked in at `now`; the animations reapply them.
     const lunge = mine.find((m) => m.kind === 'lunge' && m.from <= opts.now)
-    const x = actor.x - lungeOffset(lunge, opts.now)
+    const x = actor.x - lungeOffset(lunge, opts.now, scale)
     const y = actor.y + (actor.fallen ? 0 : bob)
     base.set(actor.key, { x, y, actor })
     const anim: string[] = []
     for (const m of mine) {
       if (m.kind === 'lunge') {
-        const dx = m.dir * LUNGE_PX
+        const dx = m.dir * px(LUNGE_PX)
         anim.push(
           `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`,
         )
@@ -131,7 +140,7 @@ export function renderSvg(
       // Discrete, so it matches the pixel surfaces' bob: up for the second half of each second.
       const phase = opts.now % (IDLE_FRAME_MS * 2)
       anim.push(
-        `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -${IDLE_BOB_PX}" calcMode="discrete" begin="${seconds(-phase)}" dur="${seconds(IDLE_FRAME_MS * 2)}" repeatCount="indefinite"/>`,
+        `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -${bobPx}" calcMode="discrete" begin="${seconds(-phase)}" dur="${seconds(IDLE_FRAME_MS * 2)}" repeatCount="indefinite"/>`,
       )
     }
     const flashes = mine
@@ -148,33 +157,32 @@ export function renderSvg(
   if (!opts.smil) {
     for (const d of model.drops) {
       const op = d.alpha < 1 ? ` opacity="${Number(d.alpha.toFixed(2))}"` : ''
-      body.push(
-        `<use href="#${define(d.art, d.spriteId)}" transform="translate(${d.x} ${d.y})"${op}/>`,
-      )
+      body.push(`<use href="#${define(d.art, null)}" transform="translate(${d.x} ${d.y})"${op}/>`)
     }
-    for (const n of model.numbers) body.push(text(n.text, n.x, n.y, n.rgb, ''))
+    for (const n of model.numbers) body.push(text(n.text, n.x, n.y, n.rgb, block, ''))
   } else {
     for (const m of live) {
       const at = base.get(m.actor)
       if (!at) continue
       if (m.kind === 'number') {
-        const w = textWidth(m.text)
+        const w = textWidth(m.text, block)
         const x = clamp(Math.round(at.x + (at.actor.art.width - w) / 2), 0, Math.max(0, W - w))
-        const top = clamp(at.y + 2, 0, H - GLYPH_HEIGHT)
-        const rise = clamp(at.y + 2 - NUMBER_RISE_PX, 0, H - GLYPH_HEIGHT) - top
+        const glyphH = GLYPH_HEIGHT * block
+        const top = clamp(at.y + px(2), 0, H - glyphH)
+        const rise = clamp(at.y + px(2) - px(NUMBER_RISE_PX), 0, H - glyphH) - top
         const anim = `<animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/>`
-        body.push(text(m.text, x, top, m.rgb, anim, ' opacity="0"'))
+        body.push(text(m.text, x, top, m.rgb, block, anim, ' opacity="0"'))
       } else if (m.kind === 'drop') {
         const sprite = SPRITES[m.item]
         if (!sprite) continue
-        const art = compact ? sprite.compact : sprite.full
+        const art = compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
         const cx = at.x + at.actor.art.width / 2
         const cy = at.y + at.actor.art.height / 2
         const x = clamp(Math.round(cx - art.width / 2), 0, Math.max(0, W - art.width))
         const y = clamp(Math.round(cy - art.height / 2), 0, Math.max(0, H - art.height))
-        const rise = clamp(y - DROP_RISE_PX, 0, H) - y
+        const rise = clamp(y - px(DROP_RISE_PX), 0, H) - y
         body.push(
-          `<use href="#${define(art, m.item)}" transform="translate(${x} ${y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.667;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
+          `<use href="#${define(art, null)}" transform="translate(${x} ${y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.667;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
         )
       }
     }
@@ -186,12 +194,48 @@ export function renderSvg(
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"><defs>${flashFilter}${defs.join('')}</defs>${body.join('')}</svg>`
 }
 
+/**
+ * The 1.5x Svg when its markup fits the engine's cap, else the 1x Svg (grill Q12): the rendered
+ * size is the same either way; only the viewBox differs.
+ */
+export function svgWithFallback(
+  hi: StageModel,
+  lo: StageModel,
+  motions: readonly Motion[],
+  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
+): string {
+  const svg = renderSvg(hi, motions, opts)
+  return svg.length < SVG_MAX_CHARS ? svg : renderSvg(lo, motions, opts)
+}
+
+/** The desktop's full stage: the 1.5x model, falling back to the 1x one over the cap. */
+export function stageSvg(
+  view: GameView,
+  timeline: StageTimeline,
+  now: number,
+  box: Box,
+  opts: { smil: boolean; width: number; motion: 'full' | 'still' },
+): string {
+  const at = { compact: false, motion: opts.motion }
+  const hi = stageAt(view, timeline, now, box, { ...at, scale: HIRES_SCALE })
+  const lo = stageAt(view, timeline, now, box, at)
+  return svgWithFallback(hi, lo, timeline.active(now), { ...opts, now })
+}
+
 /** One art alone at its own size, in its own colours: the dialog's list sprites. */
 export function artSvg(art: SpriteArt): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${art.width} ${art.height}" width="${art.width}" height="${art.height}" shape-rendering="crispEdges">${artPaths(art, null)}</svg>`
 }
 
-/** A number as SVG text: top-left at (x, y), the baseline under the 5 px glyph. */
-function text(s: string, x: number, y: number, rgb: number, anim: string, extra = ''): string {
-  return `<text x="${x}" y="${y + GLYPH_HEIGHT}" fill="${hex(rgb)}" font-family="monospace" font-size="6" font-weight="bold"${extra}>${anim}${s}</text>`
+/** A number as SVG text: top-left at (x, y), the baseline under the glyph, `block` its pixel size. */
+function text(
+  s: string,
+  x: number,
+  y: number,
+  rgb: number,
+  block: number,
+  anim: string,
+  extra = '',
+): string {
+  return `<text x="${x}" y="${y + GLYPH_HEIGHT * block}" fill="${hex(rgb)}" font-family="monospace" font-size="${6 * block}" font-weight="bold"${extra}>${anim}${s}</text>`
 }

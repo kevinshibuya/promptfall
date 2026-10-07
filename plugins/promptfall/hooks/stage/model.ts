@@ -229,7 +229,7 @@ export function stageAt(
   }
 }
 
-function altText(view: GameView): string {
+export function altText(view: GameView): string {
   const enemies = view.enemies.map((e) => `${e.name} ${e.hp}/${e.maxHp}`).join(', ')
   const heroes = view.heroes.map((h) => `${h.name} L${h.level}`).join(', ')
   return `Zone ${view.zone}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`

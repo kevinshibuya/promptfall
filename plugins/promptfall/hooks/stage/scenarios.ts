@@ -34,7 +34,7 @@ import type { Box } from './layout'
 import { MessageLog } from './log'
 import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
-import { renderSvg } from './svg'
+import { svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
 
@@ -50,7 +50,7 @@ export type Golden = {
   /** The Image frame of the scale-1.5 model. */
   imageHashHires: string
 }
-/** `model` at scale 1 (Raster, and the Svg until H5); `hires` at HIRES_SCALE (Image). */
+/** `model` at scale 1 (Raster); `hires` at HIRES_SCALE (Image, and the Svg under its cap). */
 export type Staged = {
   model: StageModel
   hires: StageModel
@@ -151,7 +151,7 @@ export function stage(name: Scenario): Staged {
 export function goldenOf(s: Staged): Golden {
   const cells = encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers)
   const image = encodeImage(composeFrame(s.model, { numbers: true }), 1)
-  const svg = renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  const svg = svgOf(s)
   const hires = encodeImage(composeFrame(s.hires, { numbers: true }), 1)
   return {
     rasterHash: fnv1a64(cells),
@@ -163,8 +163,10 @@ export function goldenOf(s: Staged): Golden {
   }
 }
 
+/** The desktop's Svg of the scenario: 1.5x, or 1x over the cap. */
 export function svgOf(s: Staged): string {
-  return renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
+  return svgWithFallback(s.hires, s.model, s.motions, opts)
 }
 
 // The window strip's scenarios (UI PR 1, Task 8): the same fixtures, the band's strip under them.

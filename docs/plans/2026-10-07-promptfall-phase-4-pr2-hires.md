@@ -209,7 +209,10 @@ under the cap. Regenerate the goldens. Full check line.
 
 **Boundaries:** No change to the Image or Raster paths.
 
-- [ ] tests, red; implement; band call site; goldens; full check line; commit
+- [x] tests, red; implement; band call site; goldens; full check line; commit. Drift: the legal
+  adversarial case at 1.5 measures 75,866 characters (SMIL) and 81,653 (flat), under the cap, so it
+  keeps the 1.5× Svg; a second case past legal art (72 × 51 checker heroes) pins the fall-back.
+  The band tests' viewBox expectations moved to 1.5 (174 × 24, 174 × 51).
 
 ### Task H6: contact and review on the 1.5× art
 
