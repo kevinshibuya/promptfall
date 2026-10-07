@@ -3,33 +3,33 @@
   "sprites": [
     {
       "id": "hero:knight",
-      "alias": "concept/nes-knight",
+      "file": "sprites/hero/knight.png",
       "style": "nes",
-      "rarityColor": "#022774"
+      "rarityColor": "#df0301"
     },
     {
       "id": "hero_attack:knight",
-      "alias": "concept/nes-knight",
+      "file": "sprites/hero_attack/knight.png",
       "style": "nes",
-      "rarityColor": "#022774"
+      "rarityColor": "#de0602"
     },
     {
       "id": "hero:black_mage",
-      "alias": "concept/nes-black_mage",
+      "file": "sprites/hero/black_mage.png",
       "style": "nes",
-      "rarityColor": "#0145cf"
+      "rarityColor": "#6d0faf"
     },
     {
       "id": "hero_attack:black_mage",
-      "alias": "concept/nes-black_mage",
+      "file": "sprites/hero_attack/black_mage.png",
       "style": "nes",
-      "rarityColor": "#0145cf"
+      "rarityColor": "#640dac"
     },
     {
       "id": "hero:white_mage",
-      "alias": "concept/nes-white_mage",
+      "file": "sprites/hero/white_mage.png",
       "style": "nes",
-      "rarityColor": "#ed4624"
+      "rarityColor": "#86eff5"
     },
     {
       "id": "hero_attack:white_mage",
@@ -39,24 +39,24 @@
     },
     {
       "id": "hero:archer",
-      "alias": "concept/nes-archer",
+      "file": "sprites/hero/archer.png",
       "style": "nes",
-      "rarityColor": "#9b7426"
+      "rarityColor": "#bb860a"
     },
     {
       "id": "hero_attack:archer",
-      "alias": "concept/nes-archer",
+      "file": "sprites/hero_attack/archer.png",
       "style": "nes",
-      "rarityColor": "#9b7426"
+      "rarityColor": "#fbe703"
     },
-    { "id": "enemy:road_slime", "alias": "concept/nes-tank", "style": "nes" },
-    { "id": "enemy:field_rat", "alias": "concept/nes-swift", "style": "nes" },
-    { "id": "enemy:goblin_scout", "alias": "concept/nes-brute", "style": "nes" },
-    { "id": "enemy:hedge_sprite", "alias": "concept/nes-caster", "style": "nes" },
-    { "id": "enemy:bandit_captain", "alias": "concept/snes-boss-0", "style": "snes" },
+    { "id": "enemy:road_slime", "file": "sprites/enemy/road_slime.png", "style": "nes" },
+    { "id": "enemy:field_rat", "file": "sprites/enemy/field_rat.png", "style": "nes" },
+    { "id": "enemy:goblin_scout", "file": "sprites/enemy/goblin_scout.png", "style": "nes" },
+    { "id": "enemy:hedge_sprite", "file": "sprites/enemy/hedge_sprite.png", "style": "nes" },
+    { "id": "enemy:bandit_captain", "file": "sprites/enemy/bandit_captain.png", "style": "snes" },
     {
       "id": "enemy:wild_boar",
-      "alias": "concept/snes-boss-0",
+      "file": "sprites/enemy/wild_boar.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -185,46 +185,46 @@
     { "id": "world_boss:hallucinox", "alias": "concept/snes-boss-1", "style": "snes" },
     { "id": "world_boss:the_context_leviathan", "alias": "concept/snes-boss-2", "style": "snes" },
     { "id": "world_boss:tokenmaw", "alias": "concept/snes-boss-3", "style": "snes" },
-    { "id": "item:iron_sword", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:bronze_axe", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:steel_longsword", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:mithril_blade", "alias": "concept/item-weapon", "style": "nes" },
+    { "id": "item:iron_sword", "file": "sprites/item/iron_sword.png", "style": "nes" },
+    { "id": "item:bronze_axe", "file": "sprites/item/bronze_axe.png", "style": "nes" },
+    { "id": "item:steel_longsword", "file": "sprites/item/steel_longsword.png", "style": "nes" },
+    { "id": "item:mithril_blade", "file": "sprites/item/mithril_blade.png", "style": "nes" },
     { "id": "item:dragonfang", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:oak_staff", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:ember_rod", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:rune_staff", "alias": "concept/item-weapon", "style": "nes" },
+    { "id": "item:oak_staff", "file": "sprites/item/oak_staff.png", "style": "nes" },
+    { "id": "item:ember_rod", "file": "sprites/item/ember_rod.png", "style": "nes" },
+    { "id": "item:rune_staff", "file": "sprites/item/rune_staff.png", "style": "nes" },
     { "id": "item:storm_rod", "alias": "concept/item-weapon", "style": "nes" },
     { "id": "item:void_scepter", "alias": "concept/item-weapon", "style": "nes" },
     { "id": "item:willow_staff", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:healers_mace", "alias": "concept/item-weapon", "style": "nes" },
+    { "id": "item:healers_mace", "file": "sprites/item/healers_mace.png", "style": "nes" },
     { "id": "item:silver_crook", "alias": "concept/item-weapon", "style": "nes" },
     { "id": "item:sacred_mace", "alias": "concept/item-weapon", "style": "nes" },
     { "id": "item:seraph_staff", "alias": "concept/item-weapon", "style": "nes" },
     { "id": "item:oak_bow", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:short_bow", "alias": "concept/item-weapon", "style": "nes" },
+    { "id": "item:short_bow", "file": "sprites/item/short_bow.png", "style": "nes" },
     { "id": "item:longbow", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:elven_bow", "alias": "concept/item-weapon", "style": "nes" },
+    { "id": "item:elven_bow", "file": "sprites/item/elven_bow.png", "style": "nes" },
     { "id": "item:starshot_bow", "alias": "concept/item-weapon", "style": "nes" },
-    { "id": "item:chainmail", "alias": "concept/item-armour", "style": "nes" },
-    { "id": "item:bronze_plate", "alias": "concept/item-armour", "style": "nes" },
+    { "id": "item:chainmail", "file": "sprites/item/chainmail.png", "style": "nes" },
+    { "id": "item:bronze_plate", "file": "sprites/item/bronze_plate.png", "style": "nes" },
     { "id": "item:steel_plate", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:mithril_mail", "alias": "concept/item-armour", "style": "nes" },
-    { "id": "item:dragon_plate", "alias": "concept/item-armour", "style": "nes" },
+    { "id": "item:dragon_plate", "file": "sprites/item/dragon_plate.png", "style": "nes" },
     { "id": "item:cloth_robe", "alias": "concept/item-armour", "style": "nes" },
-    { "id": "item:silk_robe", "alias": "concept/item-armour", "style": "nes" },
+    { "id": "item:silk_robe", "file": "sprites/item/silk_robe.png", "style": "nes" },
     { "id": "item:mystic_robe", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:sage_robe", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:astral_robe", "alias": "concept/item-armour", "style": "nes" },
-    { "id": "item:leather_vest", "alias": "concept/item-armour", "style": "nes" },
+    { "id": "item:leather_vest", "file": "sprites/item/leather_vest.png", "style": "nes" },
     { "id": "item:hide_coat", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:ranger_garb", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:shadow_leather", "alias": "concept/item-armour", "style": "nes" },
     { "id": "item:wind_cloak", "alias": "concept/item-armour", "style": "nes" },
-    { "id": "item:copper_ring", "alias": "concept/item-accessory", "style": "nes" },
-    { "id": "item:bone_charm", "alias": "concept/item-accessory", "style": "nes" },
-    { "id": "item:silver_amulet", "alias": "concept/item-accessory", "style": "nes" },
-    { "id": "item:gold_bangle", "alias": "concept/item-accessory", "style": "nes" },
-    { "id": "item:phoenix_pendant", "alias": "concept/item-accessory", "style": "nes" },
+    { "id": "item:copper_ring", "file": "sprites/item/copper_ring.png", "style": "nes" },
+    { "id": "item:bone_charm", "file": "sprites/item/bone_charm.png", "style": "nes" },
+    { "id": "item:silver_amulet", "file": "sprites/item/silver_amulet.png", "style": "nes" },
+    { "id": "item:gold_bangle", "file": "sprites/item/gold_bangle.png", "style": "nes" },
+    { "id": "item:phoenix_pendant", "file": "sprites/item/phoenix_pendant.png", "style": "nes" },
     { "id": "fallback", "file": "fallback.png", "style": "nes" }
   ]
 }

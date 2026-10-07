@@ -424,8 +424,8 @@ unchanged. Any later task that changes zone 1, the heroes or the SNES master doe
 cut at all fails the build (`raritySlotOf`), so that pose keeps its concept `alias` until Task 6
 fixes it; say so in the commit.
 
-- [ ] slice into `art/sprites/`; manifest; `art/sheets.md`
-- [ ] `pnpm sprites`; contact folders; goldens if needed; full check line; commit
+- [x] slice into `art/sprites/`; manifest; `art/sheets.md`
+- [x] `pnpm sprites`; contact folders; goldens if needed; full check line; commit
 
 ### Task 6: hero cleanup
 

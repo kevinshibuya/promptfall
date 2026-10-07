@@ -9,11 +9,11 @@ import type {
 } from '../scenarios'
 
 export const GOLDENS: Record<Scenario, Golden> = {
-  rest: {rasterHash: "303fdf0091006563", imageHash: "32d3c00ad3ad8d91", svgHash: "d5a6b30a42b232be", svgChars: 8675, rasterPairs: 61},
-  boss: {rasterHash: "a20aee3c7ef884a2", imageHash: "2d3080bf8408c20f", svgHash: "6ff8c3b6e020c7c6", svgChars: 16259, rasterPairs: 58},
-  compact: {rasterHash: "2b3d2444a9dff9a0", imageHash: "3dd18245d4e35bc1", svgHash: "f86fc064e6f7470a", svgChars: 3943, rasterPairs: 40},
-  dissolve: {rasterHash: "126dec09e1b4dfa4", imageHash: "ebb27032a65c968b", svgHash: "690df3ab89cf3680", svgChars: 9633, rasterPairs: 56},
-  drop: {rasterHash: "5ca1969a298b99e8", imageHash: "87c3bb92b89655ed", svgHash: "a15b851611eaa880", svgChars: 10782, rasterPairs: 63},
+  rest: {rasterHash: "b21e391e20980777", imageHash: "2a29ea87bfeea920", svgHash: "6a37b0c0c76a234f", svgChars: 6952, rasterPairs: 46},
+  boss: {rasterHash: "1ddc1c011dd96570", imageHash: "1b17f7eda9de85be", svgHash: "82e298a7552141c0", svgChars: 10271, rasterPairs: 44},
+  compact: {rasterHash: "ced4f19c585de246", imageHash: "2658275acf9d627d", svgHash: "ee90649ff3f66e53", svgChars: 3508, rasterPairs: 26},
+  dissolve: {rasterHash: "56dc0a0dd6cacdea", imageHash: "bf972a5529813396", svgHash: "3dab3883ae5aaaf1", svgChars: 7910, rasterPairs: 42},
+  drop: {rasterHash: "23185692410f6eb4", imageHash: "d394700c834e35bc", svgHash: "6d6c646e8a59d40f", svgChars: 9033, rasterPairs: 50},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
@@ -28,18 +28,18 @@ export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
 }
 
 export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
-  'pane-inventory': {imageHash: "a0e3f587dc5901a5", cellsHash: "226eb3765dd15232", svgHash: "ef6c29223b69ddbe", svgChars: 23872},
-  'pane-inventory-actions': {imageHash: "a35deb0a2bc8e1c2", cellsHash: "8c99a7dd64bed9ff", svgHash: "c9776a95cf82d9fe", svgChars: 26092},
-  'pane-inventory-vendor': {imageHash: "7171aa526d9ebbe0", cellsHash: "9a1336840bb4e1bf", svgHash: "4b8b7f114bb93346", svgChars: 24358},
-  'pane-inventory-narrow': {imageHash: "9297fdf574c14187", cellsHash: "274c6ced8faff99d", svgHash: "739d40cebbed6aa7", svgChars: 20242},
-  'pane-heroes': {imageHash: "685744c9037931e1", cellsHash: "df7eb83fb05bf64e", svgHash: "a0fe03b234991609", svgChars: 31303},
-  'pane-heroes-picks': {imageHash: "583374fcc9994a7b", cellsHash: "24529abb035f0154", svgHash: "386882b9ac1aedc3", svgChars: 30624},
-  'pane-sell': {imageHash: "2d8598ad7421a4e2", cellsHash: "6865f7c4a632a269", svgHash: "d9204cee424e72b2", svgChars: 21746},
+  'pane-inventory': {imageHash: "c0d1d10dc5a05225", cellsHash: "226eb3765dd15232", svgHash: "d2dc4e26361ee846", svgChars: 24122},
+  'pane-inventory-actions': {imageHash: "c34bc69015103242", cellsHash: "8c99a7dd64bed9ff", svgHash: "bc73e4aac5f92ab6", svgChars: 26342},
+  'pane-inventory-vendor': {imageHash: "915f85d856e60c60", cellsHash: "9a1336840bb4e1bf", svgHash: "5fa0d85d616959ea", svgChars: 24608},
+  'pane-inventory-narrow': {imageHash: "03407e5b780292db", cellsHash: "274c6ced8faff99d", svgHash: "d256624c54a17a57", svgChars: 20492},
+  'pane-heroes': {imageHash: "d49bb42eb49265af", cellsHash: "df7eb83fb05bf64e", svgHash: "ece015660ce3bccb", svgChars: 30163},
+  'pane-heroes-picks': {imageHash: "cf6d8aa7e491bfc9", cellsHash: "24529abb035f0154", svgHash: "97c975c8d0d1245d", svgChars: 29484},
+  'pane-sell': {imageHash: "cf593f11c814f512", cellsHash: "6865f7c4a632a269", svgHash: "a89cea38ce9e6a56", svgChars: 21996},
   'pane-small': {imageHash: "72a7acb8cc0f6c5b", cellsHash: "7ffa75fc076dd8e3", svgHash: "a7c0fd8fb5e54fb6", svgChars: 5225},
-  'pane-market': {imageHash: "5f712651e515f260", cellsHash: "0f73d008464fc26d", svgHash: "a90f0dbd0e584ca3", svgChars: 26436},
-  'pane-market-filter': {imageHash: "5dbfcdb29c1a6801", cellsHash: "b96e4d7c462d83bc", svgHash: "e2e51a709799f864", svgChars: 27954},
-  'pane-market-buy': {imageHash: "c6b6189b6e19e901", cellsHash: "eb189c59b7ac6d5a", svgHash: "552fad7e13c18b28", svgChars: 26122},
-  'pane-market-narrow': {imageHash: "f51c5a5849274896", cellsHash: "2702accda573917f", svgHash: "a8ce4aa788284c75", svgChars: 24677},
+  'pane-market': {imageHash: "15caf217435d73b3", cellsHash: "0f73d008464fc26d", svgHash: "95eaf5773f538333", svgChars: 26665},
+  'pane-market-filter': {imageHash: "82564eaeb8e6383a", cellsHash: "b96e4d7c462d83bc", svgHash: "a0e42f8ca8d936e6", svgChars: 28183},
+  'pane-market-buy': {imageHash: "7dc387a336a07f72", cellsHash: "eb189c59b7ac6d5a", svgHash: "697adde00c991518", svgChars: 26351},
+  'pane-market-narrow': {imageHash: "86039c92e5ec7891", cellsHash: "2702accda573917f", svgHash: "42b827e918cf1b5b", svgChars: 24906},
   'pane-orders': {imageHash: "ea48f9a935c9e2bb", cellsHash: "8f3cfd0a782a3d7b", svgHash: "a7614ea65da3f491", svgChars: 22789},
   'pane-orders-form': {imageHash: "d817a7b8f776aca6", cellsHash: "9ef8e99379b78d88", svgHash: "9b7cedbe4299bf3e", svgChars: 23410},
   'pane-account': {imageHash: "ea6076d71ced9160", cellsHash: "8420f22c0ab272e2", svgHash: "865c59fcbe0e2cff", svgChars: 22766},
@@ -47,6 +47,6 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-odds': {imageHash: "7f00ce1c8c553df7", cellsHash: "747e9b50cfe20f1f", svgHash: "abcc0f7c7612f7f7", svgChars: 24187},
   'pane-chat': {imageHash: "2e74efb23715606a", cellsHash: "8f4715240f05171f", svgHash: "be9c497a9a79fd15", svgChars: 24790},
   'pane-leaderboards': {imageHash: "49556278714a8f11", cellsHash: "f6197fcff9d0a4b3", svgHash: "8101a329ec5407c9", svgChars: 26422},
-  'pane-short': {imageHash: "7fe70ca006e499e5", cellsHash: "b84e798c19e1f5ec", svgHash: "3ca054d588285970", svgChars: 22569},
+  'pane-short': {imageHash: "164c3f11654d1aaa", cellsHash: "b84e798c19e1f5ec", svgHash: "a8d77dab633f2ad8", svgChars: 22798},
   'pane-no-view': {imageHash: "947a3343c99f5fc5", cellsHash: "e5bbd450fc7a7ed4", svgHash: "118222aaba1a7fac", svgChars: 14494},
 }
