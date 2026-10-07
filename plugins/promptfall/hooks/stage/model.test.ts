@@ -130,7 +130,8 @@ test('minions joining a boss stand clear of the boss and the party, and the boss
   const v = boss()
   const w = wave()
   v.enemies = [...v.enemies, ...w.enemies.slice(0, 2)]
-  const m = at(v, [], NOW, { columns: 116, rows: 17 })
+  // Room for the widest legal boss: edge 4, boss 48, gap 2, minion 16, gap 2, party 52, edge 4.
+  const m = at(v, [], NOW, { columns: 128, rows: 17 })
   const b = actor(m.actors, 'e9')
   const first = actor(m.actors, 'e1')
   const minions = [first, actor(m.actors, 'e2')]
