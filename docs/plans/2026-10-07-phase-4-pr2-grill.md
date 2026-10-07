@@ -96,7 +96,7 @@ Review page: https://claude.ai/artifact/FgkfcBP9UwjDWRXc3Ubi2S. Nine image runs 
 - **Q14, keepers.** The approved samples are final unless rejected at review: the 8 hero sprites,
   zone 1's 4 monsters and 20 items from the dense sheet, and the Bandit Captain and Wild Boar from
   zone 1 run 3. The dense sheet (small sprites) and zone 1 run 3 (bosses) are the style
-  reference attached to every later run. 83 sprites left.
+  reference attached to every later run. 34 sprites are kept (corrected from 42 in chat); 90 are left.
 - **Q15, grouping.** Monsters: dense sheet A takes zones 2 to 9 (two zones a row), sheet B zones
   10 to 12 plus pending redos. Items: one dense sheet for the remaining 20 plus redos. Zone and
   turn bosses: six sheets of four, two zones each. World bosses: one rerun. About 10 runs plus
