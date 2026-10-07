@@ -537,8 +537,8 @@ leave its entry aliased. Manifest, `pnpm sprites`, `pnpm contact --zone 2` … `
 
 **Boundaries:** One image run. Bosses are Task 10.
 
-- [ ] prompt into `art/sheets.md`; image run in the background
-- [ ] slice; manifest; build; contact; review batch 2; full check line; commit
+- [x] prompt into `art/sheets.md`; image run in the background
+- [x] slice; manifest; build; contact; review batch 2; full check line; commit (2 shipped, 30 redos: see `art/sheets.md`)
 
 ### Task 9: sheet B, zones 10 to 12 and the last 20 items
 
@@ -566,7 +566,7 @@ Contact `--zone 10` to `--zone 12` and `--items <the 20 names>`; publish **revie
 
 **Boundaries:** One image run.
 
-- [ ] prompt; image run; slice; manifest; build; contact; review batch 3; full check line; commit
+- [x] prompt; image run; slice; manifest; build; contact; review batch 3; full check line; commit (14 shipped, 18 redos)
 
 ### Task 10: boss sheets, zones 2 to 11
 

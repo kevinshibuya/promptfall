@@ -189,6 +189,20 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/sheet-b.png.
 ```
 
+Cut (rows 0 to 3):
+
+```sh
+M=art/sheets/sheet-b.png
+O="--grid 8x4 --colours 4 --size 16 --native art/sheets/native"
+pnpm slice $M art/sprites $=O --row 0 --names enemy/star_sentinel,enemy/comet_hound,enemy/spire_warden,enemy/astral_seer,enemy/hollow_knight,enemy/court_jester,enemy/throne_guard,enemy/court_mage
+pnpm slice $M art/sprites $=O --row 1 --names enemy/ink_horror,enemy/blank_page,enemy/quill_golem,enemy/erased_scribe,item/dragonfang,item/storm_rod,item/void_scepter,item/willow_staff
+pnpm slice $M art/sprites $=O --row 2 --names item/silver_crook,item/sacred_mace,item/seraph_staff,item/oak_bow,item/longbow,item/starshot_bow,item/steel_plate,item/mithril_mail
+pnpm slice $M art/sprites $=O --row 3 --names item/cloth_robe,item/mystic_robe,item/sage_robe,item/astral_robe,item/hide_coat,item/ranger_garb,item/shadow_leather,item/wind_cloak
+```
+
+Result: the size sentence brought the pixel back to the dense sheet's (block about 6.9) and most
+sprites to 17 to 22 as drawn. 14 pass the 21 px limit and ship; 18 go to Redos.
+
 ## bosses-z2z3.png
 
 2026-10-07, run `pf2-bosses-z2z3`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
@@ -211,6 +225,68 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 - No text, no letters, no numbers, no labels, no grid lines, no watermark.
 
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z2z3.png.
+```
+
+Cut:
+
+```sh
+O="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native"
+pnpm slice art/sheets/bosses-z2z3.png art/sprites $=O --row 0 --names enemy/elder_treant,enemy/owlbear_cub
+pnpm slice art/sheets/bosses-z2z3.png art/sprites $=O --row 1 --names enemy/sigh_hag,enemy/giant_heron
+```
+
+Result: a transparent background with a soft glow instead of magenta; the cut keys alpha below 128
+and the glow drops out. The model used block 8 against the zone 1 bosses' 10: the owl bear cub
+(46 × 36) ships, the treant (66 × 56), the hag (63 × 52) and the heron (66 × 50) are past
+64 × 46 and go to Redos. From z4z5 on, the boss body adds a sentence holding the zone 1 bosses'
+pixel blocks and capping how much of its cell each boss fills.
+
+## bosses-z4z5.png
+
+2026-10-07, run `pf2-bosses-z4z5`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height. Build every boss from the same large pixel blocks as the bosses in the attached zone 1 boss sheet, never finer pixels: each zone boss fills at most about three-quarters of its cell's width and two-thirds of its cell's height, the smaller boss less.
+Top left, the zone boss of Old Barrow Hills (grave mounds under moonlight: grey stone, bone, cold blue): BARROW KING: an undead king in tarnished plate and a tall crown, a great sword, a tattered cloak. Top right, the smaller boss of Old Barrow Hills, about two-thirds the size: CRYPT OGRE: a hulking grey-skinned ogre swinging a tombstone as a club. Bottom left, the zone boss of Saltglass Coast (a bright shore of glassy sand: sea blue, white salt, coral): GLASS LEVIATHAN: a huge sea serpent of translucent sea glass, cyan and white, crystal fins. Bottom right, the smaller boss of Saltglass Coast: REEF TROLL: a barnacle-crusted troll with coral growths and a driftwood club.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z4z5.png.
+```
+
+## bosses-z6z7.png
+
+2026-10-07, run `pf2-bosses-z6z7`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height. Build every boss from the same large pixel blocks as the bosses in the attached zone 1 boss sheet, never finer pixels: each zone boss fills at most about three-quarters of its cell's width and two-thirds of its cell's height, the smaller boss less.
+Top left, the zone boss of Emberfall Caves (lava caves: black rock, orange glow, soot): EMBERFALL WYRM: a fire dragon with molten cracks along black scales, wings spread, smoke from its jaws. Top right, the smaller boss of Emberfall Caves, about two-thirds the size: SLAG GIANT: a giant of cooling slag and rock, lava dripping from its fists. Bottom left, the zone boss of Frostvein Pass (a snowy mountain pass: ice blue, white, grey stone): FROSTVEIN YETI: a huge white-furred yeti with blue ice veins along its arms, roaring. Bottom right, the smaller boss of Frostvein Pass: AVALANCHE DRAKE: a stocky white drake with a snow-crusted crest and icy wings.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z6z7.png.
 ```
 
 ## Redos
@@ -247,3 +323,24 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:dust_stalker` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:cinder_colossus` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:ash_oracle` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:star_sentinel` | sheet-b | 24 × 24 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:spire_warden` | sheet-b | 21 × 26 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:hollow_knight` | sheet-b | 22 × 21 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:throne_guard` | sheet-b | 22 × 21 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:court_mage` | sheet-b | 21 × 23 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:ink_horror` | sheet-b | 23 × 25 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:quill_golem` | sheet-b | 20 × 22 as drawn: draw smaller, at the dense sheet's chunkier pixel |
+| `item:storm_rod` | sheet-b | 16 × 22 as drawn: draw smaller |
+| `item:void_scepter` | sheet-b | 18 × 26 as drawn: draw smaller |
+| `item:willow_staff` | sheet-b | 21 × 27 as drawn: draw smaller |
+| `item:silver_crook` | sheet-b | 13 × 22 as drawn: draw smaller |
+| `item:sacred_mace` | sheet-b | 17 × 25 as drawn: draw smaller |
+| `item:seraph_staff` | sheet-b | 17 × 23 as drawn: draw smaller |
+| `item:longbow` | sheet-b | 14 × 24 as drawn: draw smaller |
+| `item:starshot_bow` | sheet-b | 16 × 24 as drawn: draw smaller |
+| `item:mystic_robe` | sheet-b | 19 × 22 as drawn: draw smaller |
+| `item:hide_coat` | sheet-b | 22 × 22 as drawn: draw smaller |
+| `item:ranger_garb` | sheet-b | 18 × 22 as drawn: draw smaller |
+| `enemy:elder_treant` | bosses-z2z3 | 66 × 56 as drawn: the zone 1 bosses' coarser pixel |
+| `enemy:sigh_hag` | bosses-z2z3 | 63 × 52 as drawn: the zone 1 bosses' coarser pixel |
+| `enemy:giant_heron` | bosses-z2z3 | 66 × 50 as drawn: the zone 1 bosses' coarser pixel |
