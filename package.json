@@ -20,6 +20,7 @@
     "font:check": "pnpm font && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/windows/glyphs.ts)\"",
     "slice": "tsx scripts/slice-sheet.ts",
     "grid": "tsx scripts/sprite-grid.ts",
+    "contact": "tsx scripts/contact.ts",
     "test:scripts": "vitest run scripts",
     "stage:goldens": "tsx scripts/stage-goldens.ts",
     "cues:placeholders": "tsx scripts/placeholder-cues.ts"

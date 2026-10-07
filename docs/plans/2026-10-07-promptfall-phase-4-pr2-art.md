@@ -353,7 +353,7 @@ check line.
 
 **Boundaries:** No change to plugin source. `.promptfall/` is already gitignored.
 
-- [ ] test, red; implement; full check line; commit
+- [x] test, red; implement; full check line; commit
 
 ### Task 4: the CC0 cues
 
