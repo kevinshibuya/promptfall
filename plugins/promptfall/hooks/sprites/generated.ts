@@ -123,176 +123,188 @@ const a19: Variants = {
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAAAAAAEBAgIBAAABAgICAgEAAAECAgICAQAAAQEBAQEBAA==' },
   small: null,
 }
-// sprites/enemy/wild_boar@h24
+// sprites/enemy/whisper_wisp
 const a20: Variants = {
+  full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAAAAAAAAgIAAAAAAAAAAAAAAAAAAAICAAIAAAAAAAAAAAAAAAAAAgICAAAAAAAAAAAAAAAAAAACAgAAAAAAAAAAAAIAAAACAwICAAAAAAAAAAACAgACAgMDAgICAAAAAAAAAgICAgICAwMDAgAAAAAAAAICAgICAwMDAwICAAAAAAICAgIDAwMDAwMDAwAAAAACAgICAwMDAwMBAwEAAAAAAgICAwMDAwMDAQMBAAAAAAACAgIDAwMDAwMDAwAAAAAAAgICAwMDAwMDAwMAAAAAAAACAgIDAwMDAwMCAAAAAAAAAAICAwMDAwMCAgAAAAAAAAAAAgIDAwMCAgAAAA==' },
+  compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAAAAgIAAAAAAAACAgAAAAACAgIDAgIAAAICAgMDAgAAAgIDAwMDAAACAgMDAwMAAAICAwMDAwAAAAICAwMCAA==' },
+  small: null,
+}
+// sprites/enemy/wild_boar@h24
+const a21: Variants = {
   full: { width: 38, height: 24, palette: [0x000000, 0x080513, 0x42352d, 0x6e481c, 0x895f28, 0x9d6c29, 0xa7742a, 0xc29646, 0xdc2b18, 0xeea75f, 0xefd9d7, 0xfbe592], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAQEAAQEAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAECAQEBAgEAAQEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEBAQEBAgECAgEBAgEAAQAAAAAAAAAAAAAAAAAAAAAAAAAAAQEBAgICAgICAgICAgICAgEBAAAAAAAAAAAAAAAAAAAAAAAAAAABAgICAwICAgICAgICAgICAgEAAAAAAAAAAAAAAAAAAAAAAAABAQECAgICAgICAgIBAQEBAgICAQAAAAAAAAAAAAAAAAAAAQEBAQUFBQMCBQICAgICAgEGBAEBAQIBAQQBAAAAAAAAAQEAAAABBgUFBQUFBQUFBgUFAgICAQYGAwYGBQEFAQAAAAAAAAECAQAAAQMFBQYFBQUGBgUGBQICAgICAQYGBgUFAQMBAAAAAAAAAQIBAAEEAQUGBgUGBgYGBgUGBQICAgIBAQUGBQUGAQAAAAAAAAECAgEBAQEGBgYGBgYGBgYGBgYCAgIDAQUFBgUBAQYFAQABAQEAAQIDAwEBAwYGBgYDBgYGBgYGBQUGAgIGBQUFBgEIAQUBAQEKAQAAAgIBAAEDBQYGBgMBBgYGAwYFBgUCAQQGBgYFBQEBBQUBAQoBAAAAAQAAAQMGBgYGBgEFBgYDBQUFAgIBBgUGBQYGBQUFBgQBCgEAAAAAAAEBAQYFBgYGAQMDBQUFBQUFAgIDAwUFBQEBAQUFAQoBCQEAAAABBgYGBgQGAwEBAwMBBgUFBQYGAQYCAwUGBgEBAQoKCgkJAQAAAAEFBgYGAQEBAQEBAwMDBgUGBQUCAgICAwQBAQoBCgoBCQEBAAAAAQYGBAEAAQEBAQEBAQEDBQYGBgECAgICAgEBAQELCwEBBwEAAAEFBQMBAAABAQMDAQAAAQEBAwUFAQEBAQEBAQEBAQEBAQEBAQABAgYFAQAAAAABAwMDAQAAAAABAgYBAQEAAQMDAwEAAAAAAAAAAAEFBQUBAAAAAAABAwMBAAAAAAABAwUBAAABAwMDAQAAAAAAAAAAAQYBAQEAAAAAAAEDAwMBAAAAAAEBAQEBAAABAwMBAAAAAAAAAAABAQEBAQEBAAAAAAMBAQEBAAAAAAABAQEBAQABAQEBAQAAAAAA' },
   compact: { width: 13, height: 8, palette: [0x000000, 0x080513, 0x42352d, 0x6e481c, 0x895f28, 0x9d6c29, 0xa7742a, 0xc29646, 0xdc2b18, 0xeea75f, 0xefd9d7, 0xfbe592], pixels: 'AAAAAAAAAQEBAQAAAAAAAAABAQICAgIBAAAAAQEBBQICAgEBAQEAAQEBBgYGBgIBBQEBAQIBAQYGBgUCBgUFAQEAAQYBAQMFAgIFAQoBAQUBAQMBAQEBAQEBAQEBAQADAQABAQEBAQA=' },
   small: null,
 }
+// sprites/enemy/will_o_wisp
+const a22: Variants = {
+  full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAAAAAAAAgAAAAAAAAAAAAAAAAAAAAICAAAAAAAAAAAAAAAAAAAAAgIAAAAAAAAAAAAAAAAAAAICAgAAAAAAAAAAAAAAAAACAgIAAAAAAAAAAAAAAgACAgICAAAAAAAAAAAAAAICAgICAgIAAAAAAAAAAAACAgICAwICAgAAAAAAAAACAgIDAwMDAgIAAAAAAAACAgIDAwMDAwMCAgAAAAAAAgIDAwMDAwMDAwIAAAAAAAICAwMDAQMBAwMCAAAAAAACAgMDAwEDAQMDAgAAAAAAAgIDAwMDAwMDAgIAAAAAAAACAgMDAwMDAgIAAAAAAAAAAAICAwMDAgIAAAAAAA==' },
+  compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAAAAgAAAAAAAAACAgAAAAAAAgICAAAAAAACAgICAAAAAgIDAwICAAACAwMDAwIAAAIDAwMDAgAAAgIDAwIAAA==' },
+  small: null,
+}
 // sprites/hero/archer
-const a21: Variants = {
+const a23: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c, 0xfcbcb0], pixels: 'AAAAAAAAAQEBAQAAAAAAAAAAAAAAAQICAgIBAAEAAAAAAAAAAQICAgICAgEBAgEAAAAAAAECAgIEBAQBAQACAQAAAAABAgICBAEEAQEAAgEAAAAAAQICAgIEBAEBAAIBAAAAAQMBAQEBAgIBAQACAQAAAQMDAgICAQEBAQEAAgEAAQMDAwICAgICAgQBAAIBAAEDAwMCAgIBAQEBAQACAQABAwMDAQEBAQEBAQECAQAAAQMDAwICAgICAgEBAAAAAAABAQECAgECAgEAAAAAAAAAAAABAgIBAgIBAAAAAAAAAAAAAQICAQICAQAAAAAAAAAAAAEBAQEBAQEAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c, 0xfcbcb0], pixels: 'AAABAQEBAQAAAAECAgEBAQAAAQIEAQEBAAEDAQEBAQEBAwICAQEBAQEDAwEBAQEBAAEBAQIBAAAAAAEBAQEAAA==' },
   small: null,
 }
 // sprites/hero/black_mage
-const a22: Variants = {
+const a24: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x24188c, 0x44009c, 0xfce4a0], pixels: 'AAABAQAAAAAAAAAAAAAAAAABAgIBAAAAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAAAAQICAgIBAAAAAAAAAAAAAAECAgICAgEAAAAAAAAAAAECAgICAgICAQAAAAAAAQICAgICAgICAgICAgEAAAAAAQEBAQEBAQEBAQEBAAAAAAAAAQEBAQQBBAEAAAAAAAAAAAEBAQEBAQEBAAAAAAAAAAEEBAQEBAQEAQAAAAAAAAABAwMDAwMDAwEAAAAAAAABAwMDAwMBAwQBAAAAAAABAwMDAwMDAwMDAQAAAAAAAQMDAwMDAwMDAwMBAAAAAAEBAQEBAQEBAQEBAQAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x24188c, 0x44009c, 0xfce4a0], pixels: 'AQEBAAAAAAAAAQICAQAAAAABAgICAQAAAQEBAQEBAQAAAAEBAQEAAAABAwMDAQAAAQMDAwMBAAABAQEBAQEBAA==' },
   small: null,
 }
 // sprites/hero/knight
-const a23: Variants = {
+const a25: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xd82800, 0xfcbcb0, 0xfcfcfc], pixels: 'AAAAAAAAAQEBAAAAAAAAAAAAAAAAAQICAgEAAAAAAAAAAAAAAQICAQEBAQAAAAAAAAAAAAECBAQEBAQBAAAAAAAAAAABBAQEAwMDAQAAAAAAAAAAAQQEBAMBAwEAAAAAAAAAAAEEBAQEAwMBAAAAAAAAAAEBAQEBAQEBAQAAAAAAAAECBAQEBAQBAQEBAQAAAAECAgQEBAQEAQQCBAEAAAECAgIEBAQEBAECAgIBAAABAgICBAQEBAQBBAIEAQAAAQICAgEBAQEBAQQCBAEAAAECAQEEBAEEBAEBBAEAAAABAQEBBAQBBAQBAAEAAAAAAAAAAQEBAQEBAQAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xd82800, 0xfcbcb0, 0xfcfcfc], pixels: 'AAABAQEAAAAAAAEEAQEAAAAAAQQDAQAAAAEBAQEBAAABAgQEAQEBAAECBAQBAgEAAQEBAQEEAQABAQEBAQEAAA==' },
   small: null,
 }
 // sprites/hero/white_mage
-const a24: Variants = {
+const a26: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x9cfcf0, 0xfcbcb0, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAAAAQEBAAAAAAAAAQEBAQAAAQICAgEAAAAAAQQEBAQBAAECAQIBAAAAAQQEBAQEBAEBAgICAQAAAAEEBAQBAQEBAAEBAQAAAAABBAQEAwMDAQAAAQAAAAAAAQQEBAMBAwEAAAEAAAAAAAEEBAQEAwMBAAABAAAAAAEEBAQEBAQEAQAAAQAAAAABBAQEAgIEBAEAAAEAAAAAAQQEBAICBAQEAQMBAAAAAAEEBAQCAgEBAQEAAQAAAAEEBAQEAgIEBAQBAAEAAAABBAQEBAICBAQEAQABAAAAAQQEBAQEBAQEBAEAAQAAAAEBAQEBAQEBAQEBAAEAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x9cfcf0, 0xfcbcb0, 0xfcfcfc], pixels: 'AAABAQEBAQEAAQQEBAECAQABBAQBAQEBAAEEBAMBAQAAAQQCBAEBAAABBAIBAQEAAQQEAgQBAQABAQEBAQEBAA==' },
   small: null,
 }
 // sprites/hero_attack/archer
-const a25: Variants = {
+const a27: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c, 0xfcbcb0], pixels: 'AAAAAAAAAQEBAQAAAAAAAAAAAAAAAQICAgIBAAAAAQAAAAAAAQICAgICAgEAAQIBAAAAAAECAgIEBAQBAAECAQAAAAABAgICBAEEAQEAAgEAAAAAAQICAgIEBAEBAAIBAAAAAQMBAQEBAgIBAQACAQAAAQMDAgICAQEBAQAAAgEAAQMDAwICAgICAgQCAgIEAAEDAwMCAgIBAQEBAAACAQABAwMDAQEBAQEBAQEAAgEAAQMDAwICAgICAgEBAAIBAAABAQECAgECAgEAAAECAQAAAAABAgIBAgIBAAAAAQAAAAAAAQICAQICAQAAAAAAAAAAAAEBAQEBAQEAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c, 0xfcbcb0], pixels: 'AAABAQEBAAEAAAECAgEBAQAAAQIEAQEBAAEDAQEBAQEBAwICAQECAgEDAwEBAQEBAAEBAQIBAQEAAAEBAQEAAA==' },
   small: null,
 }
 // sprites/hero_attack/black_mage
-const a26: Variants = {
+const a28: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x24188c, 0x44009c, 0xfce4a0], pixels: 'AAABAQAAAAAAAAAAAAAAAAABAgIBAAAAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAAAAQICAgIBAAAAAAAAAAAAAAECAgICAgEAAAAAAAAAAAECAgICAgICAQAAAAAAAQICAgICAgICAgICAgEAAAAAAQEBAQEBAQEBAQEBAAAAAAAAAQEBAQQBBAEAAAAAAAAAAAEBAQEBAQEBAAABAAAAAAEEBAQEBAQEAQABBAEAAAABAwMDAwMDAwQBBAQEAAABAwMDAwMDAwEBAAEEAQABAwMDAwMDAwMDAQAAAQAAAQMDAwMDAwMDAwMBAAAAAAEBAQEBAQEBAQEBAQAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x24188c, 0x44009c, 0xfce4a0], pixels: 'AQEBAAAAAAAAAQICAQAAAAABAgICAQAAAQEBAQEBAQAAAAEBAQEAAQABAwMDBAEEAQMDAwMBAQEBAQEBAQEBAA==' },
   small: null,
 }
 // sprites/hero_attack/knight
-const a27: Variants = {
+const a29: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xd82800, 0xfcbcb0, 0xfcfcfc], pixels: 'AAAAAAAAAQEBAAAAAAAAAAAAAAAAAQICAgEAAAAAAAAAAAAAAQICAQEBAQAAAAAAAAAAAAECBAQEBAQBAAAAAAAAAAABBAQEAwMDAQAAAAAAAAAAAQQEBAMBAwEAAAAAAAAAAAEEBAQEAwMBAAAAAAAAAAEBAQEBAQEBAQAAAAAAAAECBAQEBAQBAQEBAQEBAAECAgQEAgQEAwEEBAQEBAECAgIEAgICBAEBAQEBAQEBAgICBAQCBAQBAAAAAAAAAQICAgEBAQEBAQAAAAAAAAECAQEEBAEBBAQBAAAAAAABAQEBBAQBAQQEAQAAAAAAAAAAAQEBAQEBAQEAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xd82800, 0xfcbcb0, 0xfcfcfc], pixels: 'AAABAQEAAAAAAAEEAQEAAAAAAQQDAQAAAAEBAQEBAAABAgQEBAEBAQECBAIBAQEBAQEBAQEBAAABAQEBAQEAAA==' },
   small: null,
 }
 // sprites/hero_attack/white_mage
-const a28: Variants = {
+const a30: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x9cfcf0, 0xfcbcb0, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAQAAQEBAAAAAAAAAQEBAQAAAQICAgEAAAAAAQQEBAQBAAECAQIBAAAAAQQEBAQEBAEBAgICAQAAAAEEBAQBAQEBAAEBAQQAAAABBAQEAwMDAQAAAQAAAAAAAQQEBAMBAwEAAwEAAAAAAAEEBAQEAwMBBAEBAAAAAAEEBAQEBAQEBAQBAQAAAAABBAQEAgIEBAEBAQEAAAAAAQQEBAICBAQBAAABAAAAAAEEBAQCAgQEAQAAAQAAAAEEBAQEAgIEBAQBAAEAAAABBAQEBAICBAQEAQAAAAAAAQQEBAQEBAQEBAEAAAAAAAEBAQEBAQEBAQEBAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x9cfcf0, 0xfcbcb0, 0xfcfcfc], pixels: 'AAABAQEBAQEAAQQEBAECAQABBAQBAQEBAAEEBAMBAQAAAQQCBAEBAAABBAIEAQEAAQQEAgQBAQABAQEBAQEAAA==' },
   small: null,
 }
 // sprites/item/bone_charm
-const a29: Variants = {
+const a31: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xd82800, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAEDAwEAAAAAAAAAAAAAAAABAwMBAQAAAAAAAAAAAAAAAQMDAwEAAAAAAAAAAAAAAAEDAwMBAAAAAAAAAAAAAAEDAwMBAQAAAAAAAAAAAAEBAwMBAAAAAAAAAAAAAAECAgEBAAAAAAAAAAAAAAABAQICAQAAAAAAAAAAAAEDAwECAQEAAAAAAAAAAQEBAwMDAQECAQAAAAAAAQMDAwMDAQABAgEAAAAAAAEDAwMDAQAAAgICAQAAAAAAAAEDAwEAAAECAgEAAAAAAAAAAQEBAAABAgIBAAAAAAAAAAAAAAAAAAIBAQAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xd82800, 0xfcfcfc], pixels: 'AAAAAAEBAQAAAAAAAQMBAAAAAAABAwEAAAAAAQEBAAAAAAEBAgEAAAEBAwMBAQAAAQMDAQECAQAAAAEBAQIBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xd82800, 0xfcfcfc], pixels: 'AAAAAAEDAQAAAAABAQMBAAEBAwEBAQAAAQMDAQECAQA=' },
 }
 // sprites/item/bronze_axe
-const a30: Variants = {
+const a32: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc84c0c, 0xfc9838, 0xfce4a0], pixels: 'AAAAAAAAAAABAQAAAAAAAAAAAAAAAAABBAEAAAAAAAAAAAAAAAAAAQMBAAABAQAAAAAAAAAAAQEDAwEBAgIAAAAAAAAAAAEEAwMDAQEBAAAAAAAAAAEEAwMDAgMBAQAAAAAAAAABBAEDAwMDAwEBAAAAAAAAAQEBAwMDAwICAwAAAAAAAAABAgECAwMDAwEAAAAAAAABAgEAAQMCAwQBAAAAAAABAgIBAAABAwQEAQAAAAABAgIBAAAAAQQEAQAAAAABAgIBAAAAAAEBAQAAAAABAgIBAAAAAAAAAAAAAAABAQIBAAAAAAAAAAAAAAAAAQEBAAAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xfc9838, 0xfce4a0], pixels: 'AAAAAQEAAAAAAAABAwEBAAAAAQQDAwEAAAABAQMDAgEAAAEBAQMDAQABAgEAAQQBAQIBAAABAQABAQAAAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xc84c0c, 0xfc9838, 0xfce4a0], pixels: 'AAAAAQEBAQAAAAEBAwMBAQABAgEBAwQBAQIBAAABAQA=' },
 }
 // sprites/item/bronze_plate
-const a31: Variants = {
+const a33: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x887000, 0xf0bc3c, 0xfc9838], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAQEBAQAAAQAAAAAAAAAAAAQBAQEBAQQBAAAAAAABAQEEAQEBAQEEAQEBAAABAwMBAwQBAQEBBAEDAwEBAwMDBAEBAwMEBAEBAwQBAQMDAwQBAwEBAQEEAQQEAQEEBAQEAQMDAwQDBAEEAwEAAQEBAQEDAwMCBAQBAgIBAAEBAgEBBAQDAgQBAQIBAQEDBAEAAQECAgIBAQABAwEBBAMBAAECAQEBAQEAAQMBAQMEAQABAwMDAwMBAAEDAQABAQAAAQEDAwMCAQEAAQEAAAAAAQQEAQEBBAIBAAAAAAAAAAEBAQEAAQEBAQAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x887000, 0xf0bc3c, 0xfc9838], pixels: 'AAABAQEBAAAAAQQBAQEBAQEDAQEBAQEBAQMBAwEEAQEBAQEDAgQBAQEBAQEBAQEBAQEBAwMBAQEAAAEBAQEBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x887000, 0xf0bc3c, 0xfc9838], pixels: 'AAEBAQEBAQEBAwEDAQQBAQEBAQECAQEBAQEBAQMBAQE=' },
 }
 // sprites/item/chainmail
-const a32: Variants = {
+const a34: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x747474, 0x787878, 0xc4c4c4], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAQEBAQEAAAAAAAAAAQEBAwEBAQEDAQEAAAAAAQQDAQMBAQECAwEEAQAAAAECBAIBAwMDAwECBAEAAAACBAIEAgEBAQECBAIEAQAAAwIEAgQEAwQDAgEDBAEBBAMEAQQCBAQEAgQBAQQBAAABAQEEAgQCBAIEAQEBAQAAAAABAgQCBAIEAgEAAAAAAAAAAQQCBAIEAgQBAAAAAAAAAAECBAIEAgQCAQAAAAAAAAABBAMDBAQCBAEAAAAAAAAABAIDBAICBAIEAQAAAAAAAAEBAQEBAQEBAQEAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x747474, 0x787878, 0xc4c4c4], pixels: 'AAAAAAAAAAAAAQEBAQEBAAABAQEBAwQBAAICBAECAQEBAQECBAIBAQAAAQICAgEAAAABAwQCAQAAAAEBAQEBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x747474, 0x787878, 0xc4c4c4], pixels: 'AAEBAQEBAQAAAgIBAQIEAQEBAQIEAgEBAAABAwICAQA=' },
 }
 // sprites/item/copper_ring
-const a33: Variants = {
+const a35: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQEAAAAAAAAAAAAAAQEDAwMDAQAAAAAAAAAAAQMDAwMDAwMCAQAAAAAAAQMDAwMBAQECAgEAAAAAAQMDAwMBAAABAgIBAAAAAAEDAwMBAAAAAQICAQAAAAEDAwMBAAAAAQICAgEAAAABAwMDAAAAAAECAgIAAAAAAQMDAQAAAAICAgIBAAAAAAEDAwEBAQICAgIBAAAAAAAAAQMCAgICAgIBAAAAAAAAAAABAwMDAgEBAAAAAAAAAAAAAAEBAQEAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAABAQEAAAAAAQMDAwEAAAEDAwEBAQABAwMBAQIBAAEDAQACAgEAAQMBAgIBAAAAAQEBAQAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xc84c0c, 0xf0bc3c], pixels: 'AAAAAQEBAAAAAQMDAwEBAAEDAwEBAgEAAQMBAgIBAAA=' },
 }
 // sprites/item/dragon_plate
-const a34: Variants = {
+const a36: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc84c0c, 0xd82800, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAEBAAAAAAAAAAEBAAAAAAABAAAAAQEBAQABBAEAAAAAAQEAAQMDAwMBAQQBAAAABAQBAQQBAQEBAQEEBAEAAQEDAwEEAQEBBAEDAwMBAQMDAwQBAwEEBAQBBAMDAQEDAwMBAQMBAQEDAwEEAwEBBAEBAQEDAwQEAwMBAQEBAAECAQEBAwMEAwMBAQECAQABAwMBAQEDAwMBAQIEAwEAAQEBAQEEAQEBAQEBAwEBAQQEAQEBAQQDAwEBAQEEAQEBAwEBAwMBAQEEAwEBAwEAAQEBBAMDAQEBBAMDAQEBAAAAAAEBAQEAAAEBAQAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc84c0c, 0xd82800, 0xf0bc3c], pixels: 'AAEBAAAAAQAAAQEBAQEBAQEEAQEBAQMBAQMBAQEDBAEBAQEDBAMBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQ==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xc84c0c, 0xd82800, 0xf0bc3c], pixels: 'AAEBAQEBAQEBAwEBAQEDAQEBAQMDAQEBAQEBAQEBAQE=' },
 }
 // sprites/item/elven_bow
-const a35: Variants = {
+const a37: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x00a800, 0x80d010, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAABAQEAAAAAAAAAAAAAAAAAAQMBAAAAAAAAAAAAAAAAAQMCAQAAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAAAAAQMBAAAAAAAAAAAAAQAAAAABAQAAAAAAAAAAAAAAAAAAAQEAAAAAAAAAAAAAAAAAAAEBAAAAAAAAAAEAAAAAAAEEAQAAAAAAAAAAAAAAAAABBAEAAAAAAAEAAAAAAAABAQEAAAAAAAEDAQEAAAABAQQBAAAAAAEDAgEDAQEBBAEBAAAAAAABAwIBAQQEBAEAAAAAAAAAAQMBAAABAQEBAAAAAAAAAAEBAAAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x00a800, 0x80d010, 0xf0bc3c], pixels: 'AAAAAAABAQAAAAAAAAEBAAAAAAEAAQEAAAAAAAAAAQAAAAEAAAEBAAABAQABAQEAAQIBAQEBAAABAQABAQAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x00a800, 0x80d010, 0xf0bc3c], pixels: 'AAAAAAABAQAAAAABAAEBAAABAQABAQEAAQMBAQEBAAA=' },
 }
 // sprites/item/ember_rod
-const a36: Variants = {
+const a38: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xd82800, 0xf0bc3c], pixels: 'AAAAAAAAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAACAgAAAAAAAAAAAAAAAAACAwIAAAAAAAAAAAAAAAACAwMCAAAAAAAAAAAAAAACAwMDAwAAAAAAAAAAAAABAgMDAwIAAAAAAAAAAAABAQICAwICAAAAAAAAAAAAAQMDAQEAAAAAAAAAAAAAAAEBAwMBAAAAAAAAAAAAAAEDAgEBAAAAAAAAAAAAAAECAQEAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAECAgEAAAAAAAAAAAAAAAEBAQEAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xd82800, 0xf0bc3c], pixels: 'AAAAAAAAAgIAAAAAAAIDAgAAAAABAgMCAAAAAAECAQIAAAABAQEBAAAAAQIBAAAAAAECAQAAAAABAQEAAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xd82800, 0xf0bc3c], pixels: 'AAAAAAACAwIAAAAAAQIDAgAAAQIBAQEAAQECAQAAAAA=' },
 }
 // sprites/item/gold_bangle
-const a37: Variants = {
+const a39: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfce4a0], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEBAQEAAAAAAAAAAAAAAQECAgICAQAAAAAAAAABAQICAgICAgIBAAAAAAABAwMCAgIBAQECAgEAAAABAwICAgEBAAABAgIBAAAAAQMCAgIAAAAAAQICAQAAAQICAgEAAAAAAQICAgEAAAECAgEAAAAAAQICAgIBAAABAgIBAAABAQMDAgIBAAAAAQICAQEBAgMCAwMBAAAAAAACAgICAgICAgIBAAAAAAAAAQICAgICAgMBAAAAAAAAAAAAAgECAgEAAAAAAAAAAAAAAAEBAQEBAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfce4a0], pixels: 'AAAAAAAAAAAAAAABAQEBAAABAQICAQIBAAECAgEBAgEBAgEAAQICAQECAQEDAwEAAAICAgIBAAAAAAEBAQAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfce4a0], pixels: 'AAAAAQEBAQAAAQICAgECAQECAQEBAgIBAAICAgIBAAA=' },
 }
 // sprites/item/healers_mace
-const a38: Variants = {
+const a40: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xa8e4fc, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAAEDAwEAAAAAAAAAAAAAAAEBAwMBAQAAAAAAAAAAAAEBAwMDAwEAAAAAAAAAAAABAwMDAgIBAQAAAAAAAAAAAQMDAwICAQEAAAAAAAAAAAEDAwMDAwEAAAAAAAAAAAABAwEDAwEBAAAAAAAAAAABAQMBAwMBAAAAAAAAAAABAwEBAAEBAAAAAAAAAAABAwEAAAAAAAAAAAAAAAEDAwEAAAAAAAAAAAAAAAADAwEAAAAAAAAAAAAAAAEBAQEAAAAAAAAAAAAAAAABAwMBAAAAAAAAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xa8e4fc, 0xfcfcfc], pixels: 'AAAAAAEBAQAAAAABAQMBAAAAAAEDAgEBAAAAAQMDAQAAAAEBAQEBAAABAQEAAAAAAQEBAAAAAAABAQAAAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xa8e4fc, 0xfcfcfc], pixels: 'AAAAAQEDAQAAAAABAwMBAQABAQEBAQEAAQEBAAAAAAA=' },
 }
 // sprites/item/iron_sword
-const a39: Variants = {
+const a41: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xc4c4c4, 0xfc9838, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAAIEAQAAAAAAAAAAAAAAAAQEBAEAAAAAAAAAAAAAAAQEAgIBAAAAAAAAAAAAAAQEAgICAQAAAAAAAAAAAAQEAgICAQAAAAAAAAAAAAEEAgIEAQAAAAAAAAAAAAQEAgICAQAAAAAAAAEBAQQEAgICAQAAAAAAAAABAwEEBAICAQAAAAAAAAAAAQEDAQICAQAAAAAAAAAAAAABAQMBAQAAAAAAAAAAAAABAwEDAwMBAAAAAAAAAAABAQMDAQMDAQAAAAAAAAABBAMBAQABAQEAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xc4c4c4, 0xfc9838, 0xfcfcfc], pixels: 'AAAAAAAAAQEAAAAAAAQCAQAAAAAEAgIBAAAABAICAQAAAQECAgEAAAABAQEBAAAAAQEBAwEAAAABAQEBAQAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xc4c4c4, 0xfc9838, 0xfcfcfc], pixels: 'AAAAAAAEAgEAAAAEBAICAQABAQICAQAAAQEBAwEAAAA=' },
 }
 // sprites/item/leather_vest
-const a40: Variants = {
+const a42: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xf0bc3c], pixels: 'AAAAAAEBAQAAAAEBAQAAAAAAAAEEAwEBAQEBAwMBAAAAAAEBAwMBAQICAQMDAQAAAAABAgEDAwECAQEDAwEAAAAAAQIBAwMDAQEDAwEBAAAAAAABAQMDAwQEAwMBAQAAAAAAAAEDAwMBAQMDAQAAAAAAAAABAwMDBAQDAwEAAAAAAAAAAQMDAwEBAwMBAAAAAAAAAAEBAwMBAQECAQAAAAAAAAABAgIBBAQBAgEAAAAAAAAAAQEBAQQEAQEBAAAAAAAAAAICAwIBAQEDAwEAAAAAAQICAwMDAQEDAwIBAAAAAAEDAwMDAQEBAQMBAQAAAAAAAQEBAQEAAAEBAQEAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xf0bc3c], pixels: 'AAEBAQEBAQAAAQMBAgEBAAABAQMBAwEAAAABAwEDAQAAAAEDAQMBAAAAAQEEAQEAAAECAwEDAQAAAQEBAQEBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xf0bc3c], pixels: 'AAEDAQEBAQAAAQEDAQMBAAAAAQMBAQEAAAECAwEBAQA=' },
 }
 // sprites/item/mithril_blade
-const a41: Variants = {
+const a43: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x00e8d8, 0x58f898, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAAEEBAQAAAAAAAAAAAAAAAEEBAICAAAAAAAAAAAAAAEEBAICAgAAAAAAAAAAAAEEBAICAgAAAAAAAAAAAAEEBAICAQAAAAAAAAAAAAAEBAICAgAAAAAAAAAAAAABBAICAQAAAAAAAAAAAAABBAICAQAAAAAAAAAAAQEBBAICAQAAAAAAAAAAAAEEBAECAQAAAAAAAAAAAAAAAQQEAQAAAAAAAAAAAAAAAQMBBAEAAAAAAAAAAAABAQMBAQEBAAAAAAAAAAABBAMBAQAAAQAAAAAAAAAAAQEBAQAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x00e8d8, 0x58f898, 0xfcfcfc], pixels: 'AAAAAAAAAQEAAAAAAAEEAgAAAAABBAICAAAAAQQCAgAAAQEEAgEAAAABBAEBAAAAAQEBAQAAAAABAQEBAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x00e8d8, 0x58f898, 0xfcfcfc], pixels: 'AAAAAAABBAIAAAABBAICAgABAQECAQAAAQEBAQAAAAA=' },
 }
 // sprites/item/oak_staff
-const a42: Variants = {
+const a44: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xfc9838], pixels: 'AAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAABAQEAAAAAAAAAAAAAAAAAQQEBAEAAAAAAAAAAAAAAQQCAQMBAAAAAAAAAAAAAAEEAQQEAQAAAAAAAAAAAAABBAEEBAEAAAAAAAAAAAAAAQQBAQEAAAAAAAAAAAAAAQQBAQAAAAAAAAAAAAAAAQMBAAAAAAAAAAAAAAAAAAEBAAAAAAAAAAAAAAAAAQEBAAAAAAAAAAAAAAAAAgEDAwAAAAAAAAAAAAAAAAEDAgAAAAAAAAAAAAAAAAIDAQAAAAAAAAAAAAAAAAEDAwAAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xfc9838], pixels: 'AAAAAAAEBAAAAAAAAQQEAQAAAAABAQQBAAAAAAEBAQAAAAABAQAAAAAAAQEAAAAAAAIBAgAAAAABAQMAAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x887000, 0xc84c0c, 0xfc9838], pixels: 'AAAAAAEEBAEAAAAAAQEEAQAAAQEBAAAAAQEDAgAAAAA=' },
 }
 // sprites/item/phoenix_pendant
-const a43: Variants = {
+const a45: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfc9838, 0xfce4a0], pixels: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAQEAAAAAAgMAAAAAAAAAAQIBAAAAAAMDAAAAAAAAAQICAQABAQABAQEAAAAAAQIBAQABAQIBAQEBAQEBAQEBAQEBAQECAgIBAQIEBAQBAAECAgEBAgICAgEBAQQCAQECAgIBAAECAgICAQQDBAECAgIBAQABAQICAQQDAwMBAgICAQEAAQECAgEEAwQDAQICAgEAAAAAAQEBBAMDAwEBAQEAAAAAAAAAAQQDAwMBAAAAAAAAAAAAAAEBBAMEAQAAAAAAAAAAAAAAAAEBAQAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfc9838, 0xfce4a0], pixels: 'AAAAAAAAAAAAAQMAAAABAQEBAQAAAQEBAQEBAQEBAQEBAgIBBAECAQEBAQMDAQIBAAEBAwMBAQAAAAEBAQEAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0xf0bc3c, 0xfc9838, 0xfce4a0], pixels: 'AAEDAAAAAQEBAQEBAQEBAQECAgEDAQIBAAEBBAMBAQA=' },
 }
 // sprites/item/rune_staff
-const a44: Variants = {
+const a46: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x3cbcfc, 0x5c94fc, 0x887000], pixels: 'AAAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAAABAgIBAAAAAAAAAAAAAAABAgICAQAAAAAAAAAAAAABAQICAgEAAAAAAAAAAAAAAQECAgIBAAAAAAAAAAAAAAEBBAEBAQAAAAAAAAAAAAEDAgEBAwEAAAAAAAAAAAABAwMBAQEAAAAAAAAAAAAAAQEDAQAAAAAAAAAAAAAAAQQEAQAAAAAAAAAAAAAAAQQBAQAAAAAAAAAAAAAAAQEBAAAAAAAAAAAAAAAAAQQBAAAAAAAAAAAAAAAAAQEEAQAAAAAAAAAAAAAAAQMDBAEAAAAAAAAAAAAAAAEBAQEAAAAAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x3cbcfc, 0x5c94fc, 0x887000], pixels: 'AAAAAAABAQAAAAAAAQIBAAAAAAABAgEAAAAAAQMBAQAAAAABAQEAAAAAAQEBAAAAAAEBAAAAAAABAQEAAAAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x3cbcfc, 0x5c94fc, 0x887000], pixels: 'AAAAAAECAQAAAAABAQEBAAAAAQEBAQAAAQEBAAAAAAA=' },
 }
 // sprites/item/short_bow
-const a45: Variants = {
+const a47: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x887000, 0xfc9838], pixels: 'AAAAAAAAAAAAAAAAAAEBAQAAAAAAAAAAAAAAAAEBAwEAAAAAAAAAAAAAAAEBAwEAAAAAAAAAAAAAAAEAAQEBAAAAAAAAAAAAAAEAAAEDAQAAAAAAAAAAAAEAAAAAAQMBAAAAAAAAAAEAAAAAAAEDAQAAAAAAAAEAAAAAAAABAwEAAAAAAAEBAAAAAAAAAQMBAAAAAAEAAAAAAAAAAAEDAQAAAAEAAAAAAAAAAAEDAgEAAAEAAAAAAAAAAAABAQEAAAEBAQEAAAAAAAABAwIAAAEBAwMDAgEBAQEBAQEBAAABAwEBAQIDAwMDAwEBAAAAAQEAAAABAQEBAQEAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x887000, 0xfc9838], pixels: 'AAAAAAAAAQEAAAAAAAEBAQAAAAABAAEBAAAAAQAAAQEAAAEBAAABAQABAAAAAAEBAQEBAQEBAQABAQEBAQEBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x887000, 0xfc9838], pixels: 'AAAAAAABAQEAAAABAQABAQABAQEAAAEBAQEBAQEBAQA=' },
 }
 // sprites/item/silk_robe
-const a46: Variants = {
+const a48: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAAAAAAAAQEBAQEAAAAAAAAAAAAAAQIBAgECAAAAAAAAAAAAAQMCAQIBAgEBAAAAAAAAAQMDAwIBAgMDAwEAAAAAAQMDAwMDAgIDAwMBAQAAAAEDAwMDAwICAwMDAwEAAAABAwMDAwMCAwMDAwMBAAABAwMDAQEDAgMDAQMDAwEBAwMDAwEBAQEBAQEDAwMBAQICAwMBAQECAgEBAwMDAQECAgICAQMDAgMDAQICAgEAAQEBAQEDAwIDAwMBAQEAAAAAAAEDAwMCAwMDAQAAAAAAAAADAwMDAgMDAwMAAAAAAAABAwMDAwIDAwMDAQAAAAAAAQEBAQEBAQEBAQEAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAABAQEBAAAAAQMCAQMBAAABAwMCAwMBAQMDAwIDAwEBAwEBAQEDAQEBAQMCAwEBAAADAwIDAQAAAQEBAQEBAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x3cbcfc, 0xfcfcfc], pixels: 'AAEDAQEBAQABAwMDAgMDAQECAQECAQMBAAEDAwIDAQA=' },
 }
 // sprites/item/silver_amulet
-const a47: Variants = {
+const a49: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x00e8d8, 0xfcfcfc], pixels: 'AAAAAAABAQEBAQEAAAAAAAAAAAEBAQMDAwMDAQEAAAAAAAEDAwEBAQEBAQMDAQAAAAEDAQEAAAAAAAABAQEAAAABAwEAAAAAAAAAAAEBAAAAAQMBAAAAAAAAAAABAQAAAAABAwEAAAAAAAABAwEAAAAAAAEDAQABAQABAwEAAAAAAAAAAQMBAwMBAwEAAAAAAAAAAAABAQMDAQEAAAAAAAAAAAAAAAMCAgMBAAAAAAAAAAAAAQMCAwICAwEAAAAAAAAAAAEDAgICAgMBAAAAAAAAAAABAwICAgIDAQAAAAAAAAAAAAEDAgIDAQAAAAAAAAAAAAAAAQEBAQAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x00e8d8, 0xfcfcfc], pixels: 'AAEBAQEBAQABAQEBAQEBAAEBAAAAAAEAAAEBAQEBAQAAAAEBAQEAAAAAAQICAQAAAAABAgIBAAAAAAEBAQEAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x00e8d8, 0xfcfcfc], pixels: 'AQEBAQEBAQABAQEBAQEBAAAAAQMCAQAAAAABAgIBAAA=' },
 }
 // sprites/item/steel_longsword
-const a48: Variants = {
+const a50: Variants = {
   full: { width: 16, height: 16, palette: [0x000000, 0x000000, 0x787878, 0xc4c4c4, 0xfcfcfc], pixels: 'AAAAAAAAAAAAAAAAAAABAQAAAAAAAAAAAAAAAAABBAEAAAAAAAAAAAAAAAABBAQDAAAAAAAAAAAAAAABBAQDAQAAAAAAAAAAAAABBAQDAgEAAAAAAAAAAAABBAQDAwEAAAAAAAAAAAABBAQDAwEAAAAAAAAAAAABBAQDAwEAAAAAAAAAAAABBAMDAwEAAAAAAAABAQEBAgQDAwEAAAAAAAAAAQQDAQQDAwEAAAAAAAAAAAEBBAQCAwEAAAAAAAAAAAAAAQEDBAEAAAAAAAAAAAAAAQECAQQDAQAAAAAAAAAAAgICAQEBAQEAAAAAAAAAAQEBAQAAAAEAAAAAAAAAAA==' },
   compact: { width: 8, height: 8, palette: [0x000000, 0x000000, 0x787878, 0xc4c4c4, 0xfcfcfc], pixels: 'AAAAAAAAAQEAAAAAAAEEAwAAAAABBAMBAAAAAQQDAQAAAQEEAwEAAAABBAMBAAAAAAEBBAEAAAABAQEBAQAAAA==' },
   small: { width: 8, height: 4, palette: [0x000000, 0x000000, 0x787878, 0xc4c4c4, 0xfcfcfc], pixels: 'AAAAAAABBAEAAAABBAQDAQABAQQDAQAAAQEBAQEAAAA=' },
@@ -319,35 +331,37 @@ export const ART: Readonly<Record<string, Variants>> = {
   'sprites/enemy/goblin_scout': a17,
   'sprites/enemy/hedge_sprite': a18,
   'sprites/enemy/road_slime': a19,
-  'sprites/enemy/wild_boar@h24': a20,
-  'sprites/hero/archer': a21,
-  'sprites/hero/black_mage': a22,
-  'sprites/hero/knight': a23,
-  'sprites/hero/white_mage': a24,
-  'sprites/hero_attack/archer': a25,
-  'sprites/hero_attack/black_mage': a26,
-  'sprites/hero_attack/knight': a27,
-  'sprites/hero_attack/white_mage': a28,
-  'sprites/item/bone_charm': a29,
-  'sprites/item/bronze_axe': a30,
-  'sprites/item/bronze_plate': a31,
-  'sprites/item/chainmail': a32,
-  'sprites/item/copper_ring': a33,
-  'sprites/item/dragon_plate': a34,
-  'sprites/item/elven_bow': a35,
-  'sprites/item/ember_rod': a36,
-  'sprites/item/gold_bangle': a37,
-  'sprites/item/healers_mace': a38,
-  'sprites/item/iron_sword': a39,
-  'sprites/item/leather_vest': a40,
-  'sprites/item/mithril_blade': a41,
-  'sprites/item/oak_staff': a42,
-  'sprites/item/phoenix_pendant': a43,
-  'sprites/item/rune_staff': a44,
-  'sprites/item/short_bow': a45,
-  'sprites/item/silk_robe': a46,
-  'sprites/item/silver_amulet': a47,
-  'sprites/item/steel_longsword': a48,
+  'sprites/enemy/whisper_wisp': a20,
+  'sprites/enemy/wild_boar@h24': a21,
+  'sprites/enemy/will_o_wisp': a22,
+  'sprites/hero/archer': a23,
+  'sprites/hero/black_mage': a24,
+  'sprites/hero/knight': a25,
+  'sprites/hero/white_mage': a26,
+  'sprites/hero_attack/archer': a27,
+  'sprites/hero_attack/black_mage': a28,
+  'sprites/hero_attack/knight': a29,
+  'sprites/hero_attack/white_mage': a30,
+  'sprites/item/bone_charm': a31,
+  'sprites/item/bronze_axe': a32,
+  'sprites/item/bronze_plate': a33,
+  'sprites/item/chainmail': a34,
+  'sprites/item/copper_ring': a35,
+  'sprites/item/dragon_plate': a36,
+  'sprites/item/elven_bow': a37,
+  'sprites/item/ember_rod': a38,
+  'sprites/item/gold_bangle': a39,
+  'sprites/item/healers_mace': a40,
+  'sprites/item/iron_sword': a41,
+  'sprites/item/leather_vest': a42,
+  'sprites/item/mithril_blade': a43,
+  'sprites/item/oak_staff': a44,
+  'sprites/item/phoenix_pendant': a45,
+  'sprites/item/rune_staff': a46,
+  'sprites/item/short_bow': a47,
+  'sprites/item/silk_robe': a48,
+  'sprites/item/silver_amulet': a49,
+  'sprites/item/steel_longsword': a50,
 }
 
 export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'; style: 'nes' | 'snes'; raritySlot: number | null; isPlaceholder: boolean } & Variants>> = {
@@ -419,54 +433,54 @@ export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero
   'enemy:unwritten_one': { id: 'enemy:unwritten_one', kind: 'enemy', style: 'snes', raritySlot: null, isPlaceholder: true, full: a12.full, compact: a12.compact, small: null },
   'enemy:void_manta': { id: 'enemy:void_manta', kind: 'enemy', style: 'snes', raritySlot: null, isPlaceholder: true, full: a9.full, compact: a9.compact, small: null },
   'enemy:waste_tyrant': { id: 'enemy:waste_tyrant', kind: 'enemy', style: 'snes', raritySlot: null, isPlaceholder: true, full: a6.full, compact: a6.compact, small: null },
-  'enemy:whisper_wisp': { id: 'enemy:whisper_wisp', kind: 'enemy', style: 'nes', raritySlot: null, isPlaceholder: true, full: a3.full, compact: a3.compact, small: null },
-  'enemy:wild_boar': { id: 'enemy:wild_boar', kind: 'enemy', style: 'snes', raritySlot: null, isPlaceholder: false, full: a20.full, compact: a20.compact, small: null },
-  'enemy:will_o_wisp': { id: 'enemy:will_o_wisp', kind: 'enemy', style: 'nes', raritySlot: null, isPlaceholder: true, full: a3.full, compact: a3.compact, small: null },
+  'enemy:whisper_wisp': { id: 'enemy:whisper_wisp', kind: 'enemy', style: 'nes', raritySlot: null, isPlaceholder: false, full: a20.full, compact: a20.compact, small: null },
+  'enemy:wild_boar': { id: 'enemy:wild_boar', kind: 'enemy', style: 'snes', raritySlot: null, isPlaceholder: false, full: a21.full, compact: a21.compact, small: null },
+  'enemy:will_o_wisp': { id: 'enemy:will_o_wisp', kind: 'enemy', style: 'nes', raritySlot: null, isPlaceholder: false, full: a22.full, compact: a22.compact, small: null },
   'enemy:wood_goblin': { id: 'enemy:wood_goblin', kind: 'enemy', style: 'nes', raritySlot: null, isPlaceholder: true, full: a2.full, compact: a2.compact, small: null },
   'fallback': { id: 'fallback', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a14.full, compact: a14.compact, small: a14.small },
-  'hero:archer': { id: 'hero:archer', kind: 'hero', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a21.full, compact: a21.compact, small: null },
-  'hero:black_mage': { id: 'hero:black_mage', kind: 'hero', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a22.full, compact: a22.compact, small: null },
-  'hero:knight': { id: 'hero:knight', kind: 'hero', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a23.full, compact: a23.compact, small: null },
-  'hero:white_mage': { id: 'hero:white_mage', kind: 'hero', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a24.full, compact: a24.compact, small: null },
-  'hero_attack:archer': { id: 'hero_attack:archer', kind: 'hero_attack', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a25.full, compact: a25.compact, small: null },
-  'hero_attack:black_mage': { id: 'hero_attack:black_mage', kind: 'hero_attack', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a26.full, compact: a26.compact, small: null },
-  'hero_attack:knight': { id: 'hero_attack:knight', kind: 'hero_attack', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a27.full, compact: a27.compact, small: null },
-  'hero_attack:white_mage': { id: 'hero_attack:white_mage', kind: 'hero_attack', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a28.full, compact: a28.compact, small: null },
+  'hero:archer': { id: 'hero:archer', kind: 'hero', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a23.full, compact: a23.compact, small: null },
+  'hero:black_mage': { id: 'hero:black_mage', kind: 'hero', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a24.full, compact: a24.compact, small: null },
+  'hero:knight': { id: 'hero:knight', kind: 'hero', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a25.full, compact: a25.compact, small: null },
+  'hero:white_mage': { id: 'hero:white_mage', kind: 'hero', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a26.full, compact: a26.compact, small: null },
+  'hero_attack:archer': { id: 'hero_attack:archer', kind: 'hero_attack', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a27.full, compact: a27.compact, small: null },
+  'hero_attack:black_mage': { id: 'hero_attack:black_mage', kind: 'hero_attack', style: 'nes', raritySlot: 3, isPlaceholder: false, full: a28.full, compact: a28.compact, small: null },
+  'hero_attack:knight': { id: 'hero_attack:knight', kind: 'hero_attack', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a29.full, compact: a29.compact, small: null },
+  'hero_attack:white_mage': { id: 'hero_attack:white_mage', kind: 'hero_attack', style: 'nes', raritySlot: 2, isPlaceholder: false, full: a30.full, compact: a30.compact, small: null },
   'item:astral_robe': { id: 'item:astral_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
-  'item:bone_charm': { id: 'item:bone_charm', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a29.full, compact: a29.compact, small: a29.small },
-  'item:bronze_axe': { id: 'item:bronze_axe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a30.full, compact: a30.compact, small: a30.small },
-  'item:bronze_plate': { id: 'item:bronze_plate', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a31.full, compact: a31.compact, small: a31.small },
-  'item:chainmail': { id: 'item:chainmail', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a32.full, compact: a32.compact, small: a32.small },
+  'item:bone_charm': { id: 'item:bone_charm', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a31.full, compact: a31.compact, small: a31.small },
+  'item:bronze_axe': { id: 'item:bronze_axe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a32.full, compact: a32.compact, small: a32.small },
+  'item:bronze_plate': { id: 'item:bronze_plate', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a33.full, compact: a33.compact, small: a33.small },
+  'item:chainmail': { id: 'item:chainmail', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a34.full, compact: a34.compact, small: a34.small },
   'item:cloth_robe': { id: 'item:cloth_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
-  'item:copper_ring': { id: 'item:copper_ring', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a33.full, compact: a33.compact, small: a33.small },
-  'item:dragon_plate': { id: 'item:dragon_plate', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a34.full, compact: a34.compact, small: a34.small },
+  'item:copper_ring': { id: 'item:copper_ring', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a35.full, compact: a35.compact, small: a35.small },
+  'item:dragon_plate': { id: 'item:dragon_plate', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a36.full, compact: a36.compact, small: a36.small },
   'item:dragonfang': { id: 'item:dragonfang', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
-  'item:elven_bow': { id: 'item:elven_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a35.full, compact: a35.compact, small: a35.small },
-  'item:ember_rod': { id: 'item:ember_rod', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a36.full, compact: a36.compact, small: a36.small },
-  'item:gold_bangle': { id: 'item:gold_bangle', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a37.full, compact: a37.compact, small: a37.small },
-  'item:healers_mace': { id: 'item:healers_mace', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a38.full, compact: a38.compact, small: a38.small },
+  'item:elven_bow': { id: 'item:elven_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a37.full, compact: a37.compact, small: a37.small },
+  'item:ember_rod': { id: 'item:ember_rod', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a38.full, compact: a38.compact, small: a38.small },
+  'item:gold_bangle': { id: 'item:gold_bangle', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a39.full, compact: a39.compact, small: a39.small },
+  'item:healers_mace': { id: 'item:healers_mace', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a40.full, compact: a40.compact, small: a40.small },
   'item:hide_coat': { id: 'item:hide_coat', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
-  'item:iron_sword': { id: 'item:iron_sword', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a39.full, compact: a39.compact, small: a39.small },
-  'item:leather_vest': { id: 'item:leather_vest', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a40.full, compact: a40.compact, small: a40.small },
+  'item:iron_sword': { id: 'item:iron_sword', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a41.full, compact: a41.compact, small: a41.small },
+  'item:leather_vest': { id: 'item:leather_vest', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a42.full, compact: a42.compact, small: a42.small },
   'item:longbow': { id: 'item:longbow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
-  'item:mithril_blade': { id: 'item:mithril_blade', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a41.full, compact: a41.compact, small: a41.small },
+  'item:mithril_blade': { id: 'item:mithril_blade', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a43.full, compact: a43.compact, small: a43.small },
   'item:mithril_mail': { id: 'item:mithril_mail', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
   'item:mystic_robe': { id: 'item:mystic_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
   'item:oak_bow': { id: 'item:oak_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
-  'item:oak_staff': { id: 'item:oak_staff', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a42.full, compact: a42.compact, small: a42.small },
-  'item:phoenix_pendant': { id: 'item:phoenix_pendant', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a43.full, compact: a43.compact, small: a43.small },
+  'item:oak_staff': { id: 'item:oak_staff', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a44.full, compact: a44.compact, small: a44.small },
+  'item:phoenix_pendant': { id: 'item:phoenix_pendant', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a45.full, compact: a45.compact, small: a45.small },
   'item:ranger_garb': { id: 'item:ranger_garb', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
-  'item:rune_staff': { id: 'item:rune_staff', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a44.full, compact: a44.compact, small: a44.small },
+  'item:rune_staff': { id: 'item:rune_staff', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a46.full, compact: a46.compact, small: a46.small },
   'item:sacred_mace': { id: 'item:sacred_mace', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
   'item:sage_robe': { id: 'item:sage_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
   'item:seraph_staff': { id: 'item:seraph_staff', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
   'item:shadow_leather': { id: 'item:shadow_leather', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
-  'item:short_bow': { id: 'item:short_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a45.full, compact: a45.compact, small: a45.small },
-  'item:silk_robe': { id: 'item:silk_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a46.full, compact: a46.compact, small: a46.small },
-  'item:silver_amulet': { id: 'item:silver_amulet', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a47.full, compact: a47.compact, small: a47.small },
+  'item:short_bow': { id: 'item:short_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a47.full, compact: a47.compact, small: a47.small },
+  'item:silk_robe': { id: 'item:silk_robe', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a48.full, compact: a48.compact, small: a48.small },
+  'item:silver_amulet': { id: 'item:silver_amulet', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a49.full, compact: a49.compact, small: a49.small },
   'item:silver_crook': { id: 'item:silver_crook', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
   'item:starshot_bow': { id: 'item:starshot_bow', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
-  'item:steel_longsword': { id: 'item:steel_longsword', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a48.full, compact: a48.compact, small: a48.small },
+  'item:steel_longsword': { id: 'item:steel_longsword', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: false, full: a50.full, compact: a50.compact, small: a50.small },
   'item:steel_plate': { id: 'item:steel_plate', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a0.full, compact: a0.compact, small: a0.small },
   'item:storm_rod': { id: 'item:storm_rod', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
   'item:void_scepter': { id: 'item:void_scepter', kind: 'item', style: 'nes', raritySlot: null, isPlaceholder: true, full: a1.full, compact: a1.compact, small: a1.small },
@@ -479,4 +493,4 @@ export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero
 }
 
 export const SPRITE_COUNT = 125
-export const PLACEHOLDER_COUNT = 90
+export const PLACEHOLDER_COUNT = 88

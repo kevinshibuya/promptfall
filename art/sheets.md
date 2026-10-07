@@ -149,6 +149,101 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/monsters-a.png.
 ```
 
+Cut (rows 0 to 3, names in roster order):
+
+```sh
+M=art/sheets/monsters-a.png
+O="--grid 8x4 --colours 4 --size 16 --native art/sheets/native"
+pnpm slice $M art/sprites $=O --row 0 --names enemy/bramble_wolf,enemy/moss_golem,enemy/wood_goblin,enemy/whisper_wisp,enemy/bog_lurker,enemy/marsh_leech,enemy/mire_toad,enemy/will_o_wisp
+pnpm slice $M art/sprites $=O --row 1 --names enemy/barrow_wight,enemy/grave_hound,enemy/bone_soldier,enemy/cairn_crawler,enemy/salt_crab,enemy/gull_harpy,enemy/drowned_sailor,enemy/tide_witch
+pnpm slice $M art/sprites $=O --row 2 --names enemy/ember_imp,enemy/magma_beetle,enemy/cinder_orc,enemy/flame_adept,enemy/frost_wolf,enemy/ice_troll,enemy/rime_golem,enemy/snow_shaman
+pnpm slice $M art/sprites $=O --row 3 --names enemy/drowned_monk,enemy/abbey_gargoyle,enemy/bell_wraith,enemy/eel_serpent,enemy/ash_ghoul,enemy/dust_stalker,enemy/cinder_colossus,enemy/ash_oracle
+```
+
+Result: the model drew finer pixels (block about 6, the dense sheet's is about 7) and filled more
+of each cell, so 30 of 32 came out 24 to 34 pixels as drawn, past the redo limit of 21. Only
+`whisper_wisp` (13 × 18) and `will_o_wisp` (12 × 18) ship from this sheet; the rest are redos.
+From sheet B on, the dense opening adds one sentence sizing each sprite against its cell.
+
+## sheet-b.png
+
+2026-10-07, run `pf2-sheet-b`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a DENSE strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). Every sprite is a tiny 16x16-art-pixel 8-bit sprite with at most 3 colours plus the black outline, small in its cell, with magenta all around it, in exactly the style and pixel size of the attached dense sheet. Keep every sprite SMALL and CHUNKY: it covers only about half of its cell's width and half of its cell's height, built from the same large pixel blocks as the attached dense sheet; never use finer pixels to add detail.
+Row 1, cells 1-4, Starfall Spire (a tower among the stars: deep navy, silver, starlight): 1. STAR SENTINEL: a silver construct guardian with a star-shaped head and a tower shield. 2. COMET HOUND: a blue hound with a glowing comet tail. 3. SPIRE WARDEN: a warden in silver plate with a starry halberd. 4. ASTRAL SEER: a seer in a starfield cloak holding a glowing orb; cells 5-8, Hollow King's Court (a dead royal court: purple, tarnished gold, black): 1. HOLLOW KNIGHT: an empty suit of tarnished plate, only darkness inside the visor, a broad sword. 2. COURT JESTER: a grinning undead jester in purple and gold motley with two daggers. 3. THRONE GUARD: a heavy royal guard in gold-trimmed armour with a tower shield. 4. COURT MAGE: a pale court magician in a tall collar and purple robes, casting. Row 2, cells 1-4, The Unwritten Reach (a world of blank paper and ink: white, black ink, blue ink): 1. INK HORROR: a dripping black ink monster with many grasping arms. 2. BLANK PAGE: a living sheet of blank paper folding like a bird, one inky eye. 3. QUILL GOLEM: a golem of stacked closed books with quill feathers as spines. 4. ERASED SCRIBE: a faded scribe half rubbed out, holding a quill; cells 5-8, item icons: 1. DRAGONFANG: a curved sword made from a dragon's tooth. 2. STORM ROD: a short wand crackling with blue lightning. 3. VOID SCEPTER: a dark purple sceptre topped with a black orb. 4. WILLOW STAFF: a pale willow staff with a few leaves. Row 3, item icons: 1. SILVER CROOK: a silver shepherd's crook. 2. SACRED MACE: a golden mace with a sunburst head. 3. SERAPH STAFF: a white staff with small wings at the top. 4. OAK BOW: a plain wooden bow. 5. LONGBOW: a tall yew longbow. 6. STARSHOT BOW: a blue bow with star-shaped tips. 7. STEEL PLATE: a steel breastplate. 8. MITHRIL MAIL: a shining silver-blue chainmail shirt. Row 4, item icons: 1. CLOTH ROBE: a simple brown cloth robe. 2. MYSTIC ROBE: a blue robe with a star pattern. 3. SAGE ROBE: a green robe with gold trim. 4. ASTRAL ROBE: a navy robe scattered with stars. 5. HIDE COAT: a shaggy fur hide coat. 6. RANGER GARB: a green-brown hooded tunic. 7. SHADOW LEATHER: black leather armour. 8. WIND CLOAK: a pale flowing cloak. Item icons are shown alone, weapons angled diagonally, no letters or symbols that read as text.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/sheet-b.png.
+```
+
+## bosses-z2z3.png
+
+2026-10-07, run `pf2-bosses-z2z3`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height.
+Top left, the zone boss of Whisperwood (an old whispering forest: moss, dim greens, pale spirit light): ELDER TREANT: an ancient walking tree, a gnarled face in its trunk, root legs, a mossy canopy. Top right, the smaller boss of Whisperwood, about two-thirds the size: OWLBEAR CUB: a hulking young owlbear: feathered owl head, brown bear body, big claws. Bottom left, the zone boss of Marsh of Sighs (a foggy swamp: murky teal, mud brown, reeds): SIGH HAG: a stooped swamp witch in a tattered moss shawl, long grey hair, a crooked staff with a hanging lantern. Bottom right, the smaller boss of Marsh of Sighs: GIANT HERON: a tall grey heron with a spear-like beak, wings half spread, standing in reeds.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z2z3.png.
+```
+
 ## Redos
 
-None yet.
+| Id | From | Note |
+| --- | --- | --- |
+| `enemy:bramble_wolf` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:moss_golem` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:wood_goblin` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:bog_lurker` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:marsh_leech` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:mire_toad` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:barrow_wight` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:grave_hound` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:bone_soldier` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:cairn_crawler` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:salt_crab` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:gull_harpy` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:drowned_sailor` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:tide_witch` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:ember_imp` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:magma_beetle` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:cinder_orc` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:flame_adept` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:frost_wolf` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:ice_troll` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:rime_golem` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:snow_shaman` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:drowned_monk` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:abbey_gargoyle` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:bell_wraith` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:eel_serpent` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:ash_ghoul` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:dust_stalker` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:cinder_colossus` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:ash_oracle` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |

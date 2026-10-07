@@ -63,7 +63,7 @@
     { "id": "enemy:bramble_wolf", "alias": "concept/nes-swift", "style": "nes" },
     { "id": "enemy:moss_golem", "alias": "concept/nes-tank", "style": "nes" },
     { "id": "enemy:wood_goblin", "alias": "concept/nes-brute", "style": "nes" },
-    { "id": "enemy:whisper_wisp", "alias": "concept/nes-caster", "style": "nes" },
+    { "id": "enemy:whisper_wisp", "file": "sprites/enemy/whisper_wisp.png", "style": "nes" },
     { "id": "enemy:elder_treant", "alias": "concept/snes-boss-1", "style": "snes" },
     {
       "id": "enemy:owlbear_cub",
@@ -74,7 +74,7 @@
     { "id": "enemy:bog_lurker", "alias": "concept/nes-brute", "style": "nes" },
     { "id": "enemy:marsh_leech", "alias": "concept/nes-swift", "style": "nes" },
     { "id": "enemy:mire_toad", "alias": "concept/nes-tank", "style": "nes" },
-    { "id": "enemy:will_o_wisp", "alias": "concept/nes-caster", "style": "nes" },
+    { "id": "enemy:will_o_wisp", "file": "sprites/enemy/will_o_wisp.png", "style": "nes" },
     { "id": "enemy:sigh_hag", "alias": "concept/snes-boss-2", "style": "snes" },
     {
       "id": "enemy:giant_heron",
