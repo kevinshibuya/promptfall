@@ -232,7 +232,9 @@ the two differ byte for byte. The artifact is republished. Full check line.
 
 **Boundaries:** No plugin code.
 
-- [ ] tests, red; implement; contact folders; publish; full check line; commit
+- [x] tests, red; implement; contact folders; publish; full check line; commit. The review artifact
+  is at version 10; its rarity rows show the 1.5× art only (the 1× rows would pass the artifact's
+  511-file cap).
 
 ### Task H7: documentation, and the art plan's Task 12
 

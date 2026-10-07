@@ -1,5 +1,6 @@
-// Contact sheets for art review: each built sprite at ship size, its native cut beside it, and a
-// zone's monsters and bosses on the real stage. One PNG per picture so the review page can caption
+// Contact sheets for art review: each built sprite at ship size (its 1x art at 6x, its 1.5x art at
+// 4x as `-hires`), its native cut beside it, and a zone's monsters and bosses on the real stage at
+// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). One PNG per picture so the review page can caption
 // each with its id.
 //
 // tsx scripts/contact.ts --zone <n> | --heroes | --items <name,name,…> | --world-bosses
@@ -13,7 +14,7 @@ import { artFrame, composeFrame, type Frame } from '../plugins/promptfall/hooks/
 import { boss, turnBoss, wave } from '../plugins/promptfall/hooks/stage/fixtures'
 import { stageAt } from '../plugins/promptfall/hooks/stage/model'
 import { StageTimeline } from '../plugins/promptfall/hooks/stage/timeline'
-import { RARITY_RGB } from '../plugins/promptfall/hooks/stage/tuning'
+import { HIRES_SCALE, RARITY_RGB } from '../plugins/promptfall/hooks/stage/tuning'
 import type { GameView } from '../plugins/promptfall/types'
 import { type Rgba, readPng, writePng } from './png'
 
@@ -74,13 +75,13 @@ function inZone(view: GameView, zone: number, defs: readonly string[]): GameView
   }
 }
 
-/** The view at rest on the full stage, grown for a boss. */
-function staged(view: GameView): Frame {
+/** The view at rest on the full stage at `scale`, grown for a boss. */
+function staged(view: GameView, scale: 1 | 1.5): Frame {
   const t = new StageTimeline()
   t.observe(view, NOW - SETTLED)
   t.observe(view, NOW)
   const box = { columns: 120, rows: t.rowsAt(view, NOW) }
-  return composeFrame(stageAt(view, t, NOW, box, { compact: false, motion: 'full' }), {
+  return composeFrame(stageAt(view, t, NOW, box, { compact: false, motion: 'full', scale }), {
     numbers: false,
   })
 }
@@ -96,10 +97,22 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
     writePng(path, img)
     written.push(path)
   }
-  const shipped = (id: string, palette?: readonly number[], suffix = '') => {
+  const shipped = (
+    id: string,
+    palettes?: { full: readonly number[]; hires: readonly number[] },
+    suffix = '',
+  ) => {
     const s = sprite(id)
     const [kind, name] = id.split(':') as [string, string]
-    put(`${kind}-${name}${suffix}`, scaled(rgbaOf(artFrame(s.full, palette ?? s.full.palette)), 6))
+    const full = palettes?.full ?? s.full.palette
+    const hires = palettes?.hires ?? s.hires.palette
+    put(`${kind}-${name}${suffix}`, scaled(rgbaOf(artFrame(s.full, full)), 6))
+    put(`${kind}-${name}${suffix}-hires`, scaled(rgbaOf(artFrame(s.hires, hires)), 4))
+  }
+  // The same picture at both scales: 1.5x at 4x, 1x at 6x, the same size on screen.
+  const views = (name: string, view: GameView) => {
+    put(name, scaled(rgbaOf(staged(view, HIRES_SCALE)), 4))
+    put(`${name}-1x`, scaled(rgbaOf(staged(view, 1)), 6))
   }
   const nativeOf = (id: string) => {
     const [kind, name] = id.split(':') as [string, string]
@@ -116,12 +129,9 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
       const zone = content.zones[target.zone - 1]
       if (!zone) throw new Error(`no zone ${target.zone}`)
       for (const def of [...zone.enemies, zone.boss, zone.turnBoss]) both(`enemy:${def}`)
-      put(
-        'stage-rest',
-        scaled(rgbaOf(staged(inZone(wave(), target.zone, zone.enemies.slice(0, 3)))), 6),
-      )
-      put('stage-boss', scaled(rgbaOf(staged(inZone(boss(), target.zone, [zone.boss]))), 6))
-      put('stage-turn', scaled(rgbaOf(staged(inZone(turnBoss(), target.zone, [zone.turnBoss]))), 6))
+      views('stage-rest', inZone(wave(), target.zone, zone.enemies.slice(0, 3)))
+      views('stage-boss', inZone(boss(), target.zone, [zone.boss]))
+      views('stage-turn', inZone(turnBoss(), target.zone, [zone.turnBoss]))
       break
     }
     case 'heroes': {
@@ -132,9 +142,11 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
           both(id)
           const s = sprite(id)
           for (const [rarity, rgb] of Object.entries(RARITY_RGB)) {
-            const palette = [...s.full.palette]
-            if (s.raritySlot !== null) palette[s.raritySlot] = rgb
-            shipped(id, palette, `-${rarity}`)
+            const full = [...s.full.palette]
+            if (s.raritySlot !== null) full[s.raritySlot] = rgb
+            const hires = [...s.hires.palette]
+            if (s.raritySlotHires !== null) hires[s.raritySlotHires] = rgb
+            shipped(id, { full, hires }, `-${rarity}`)
           }
         }
       }
