@@ -59,7 +59,8 @@ export function chatPane(input: PaneInput): PaneBuild {
 
   let state: [MessageLine, MessageLine]
   if (gate) state = [[{ text: gate, rgb: WARN_RGB }], '']
-  else if (!input.hasInput) state = [CHAT_READ_ONLY, '']
+  else if (!input.hasInput)
+    state = [input.shortPane ? 'Posting needs a taller pane.' : CHAT_READ_ONLY, '']
   else state = [`Enter: write. ${MOVE_HELP}`, FIELD_HELP]
 
   const spec: ListSpec = {
