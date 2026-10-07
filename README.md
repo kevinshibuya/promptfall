@@ -23,14 +23,18 @@ The combat flow replaced "every unit acts once per tick" with action gauges, an 
 weighted picker: units act one at a time, in the order their gauges filled, and each hero class
 picks its action and target from its tactics (sim version 4).
 
-UI PR 1 is the first of three that redraw the interface as Dragon Quest V command windows. It
-ships the window kit (frames, the Misaki Gothic 2nd font, an image, raster and Svg encoder for
-every surface) and turns the band's text rows into a strip of windows under the stage: enemies, a
-message window with the combat log, the party with its action gauges, and the purse.
+The UI remake redrew the interface as Dragon Quest V command windows in three PRs. UI PR 1 ships
+the window kit (frames, the Misaki Gothic 2nd font, an image, raster and Svg encoder for every
+surface) and turns the band's text rows into a strip of windows under the stage: enemies, a message
+window with the combat log, the party with its action gauges, and the purse. UI PR 2 draws the
+dialog's Inventory and Heroes tabs as windows: a list with a ▶ cursor that follows the focus ring,
+a detail window, command, pick and Yes/No windows, and the sell window. UI PR 3 does the same for
+Market, Orders, Account, Odds, Chat and Leaderboards. Typed fields (prices, the chat line) and the
+GitHub link sit under the picture, and a short pane drops its tab window, so an inline pane in an
+ordinary terminal draws every tab.
 
-Next, in order: UI PR 2 (the Inventory and Heroes tabs as windows), UI PR 3 (Market, Orders,
-Account, Odds, Chat and Leaderboards), phase 4 PR 2 (the real art) and phase 5 (the real server).
-Each gets its own plan when its turn comes.
+Next, in order: phase 4 PR 2 (the real art) and phase 5 (the real server). Each gets its own plan
+when its turn comes.
 
 ## Play it
 
