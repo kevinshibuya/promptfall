@@ -71,8 +71,8 @@
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:bog_lurker", "alias": "concept/nes-brute", "style": "nes" },
-    { "id": "enemy:marsh_leech", "alias": "concept/nes-swift", "style": "nes" },
+    { "id": "enemy:bog_lurker", "file": "sprites/enemy/bog_lurker.png", "style": "nes" },
+    { "id": "enemy:marsh_leech", "file": "sprites/enemy/marsh_leech.png", "style": "nes" },
     { "id": "enemy:mire_toad", "alias": "concept/nes-tank", "style": "nes" },
     { "id": "enemy:will_o_wisp", "file": "sprites/enemy/will_o_wisp.png", "style": "nes" },
     { "id": "enemy:sigh_hag", "alias": "concept/snes-boss-2", "style": "snes" },

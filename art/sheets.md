@@ -405,6 +405,13 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/redos-1.png.
 ```
 
+Cut: as monster sheet A, names `enemy/<id>` in the order above, into a scratch folder; the two
+that pass were copied into `art/sprites/enemy/`.
+
+Result: the size sentence that fixed sheet B did not hold for a sheet of creatures: block about 6
+again, 19 to 34 as drawn. `bog_lurker` (19 × 20) and `marsh_leech` (20 × 19) ship; the other 30
+stay redos. Their cuts read better than sheet A's, so the review page offers them as "ship as cut".
+
 ## Redos
 
 | Id | From | Note |
@@ -412,8 +419,8 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:bramble_wolf` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:moss_golem` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:wood_goblin` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
-| `enemy:bog_lurker` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
-| `enemy:marsh_leech` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:bog_lurker` (shipped from redos-1) | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
+| `enemy:marsh_leech` (shipped from redos-1) | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:mire_toad` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:barrow_wight` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
 | `enemy:grave_hound` | monsters-a | too big as drawn (over 21 px): draw smaller, at the dense sheet's chunkier pixel |
