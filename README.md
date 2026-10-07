@@ -82,3 +82,8 @@ CI runs the first line: lint, the type-check of the packages and the fake server
 (the contract suite runs over the in-process ledger and over HTTP), and the three generated-file
 checks: the vendor bundles, the sprite module and the window glyphs. The three plugin checks need a
 local Claude Code.
+
+## Credits
+
+The four sound cues come from Juhani Junkala's "512 Sound Effects (8-bit style)", released under
+CC0: https://opengameart.org/content/512-sound-effects-8-bit-style

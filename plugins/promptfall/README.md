@@ -209,7 +209,8 @@ it drops loot.
   cues: a Rare or Epic drop, a Legendary drop, a level up, and a world boss appearing. Each plays
   beside its toast, at a fixed volume, only in the session that is playing (the primary); a
   secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
-  sound on macOS only. The cues in `cues/` are placeholders from `pnpm cues:placeholders`.
+  sound on macOS only. The cues in `cues/` come from Juhani Junkala's CC0 pack "512 Sound Effects
+  (8-bit style)".
 - **Motion**: `/promptfall motion still` (or `n`) stops the idle bob; hits, dissolves and drops
   still play. `/promptfall motion full` brings the bob back.
 - **Renderer**: `/promptfall renderer auto|image|raster` (or `x` to cycle), see Stage.

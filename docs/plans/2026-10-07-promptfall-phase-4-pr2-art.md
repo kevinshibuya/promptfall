@@ -380,7 +380,7 @@ a test pins a cue's byte size, report it rather than editing the test silently.
 
 **Boundaries:** No hook changes.
 
-- [ ] copy, delete, docs; full check line; commit
+- [x] copy, delete, docs; full check line; commit
 
 ### Task 5: land the approved samples
 
