@@ -179,7 +179,7 @@ goldens (only `imageHashHires` is new) and say so in the commit. Full check line
 **Boundaries:** No Svg changes (Task H5). The two band call sites of `stageAt` keep compiling
 unchanged (the scale is optional).
 
-- [ ] tests, red; implement; goldens; full check line; commit
+- [x] tests, red; implement; goldens; full check line; commit
 
 ### Task H5: the desktop Svg at 1.5, with the fall-back
 

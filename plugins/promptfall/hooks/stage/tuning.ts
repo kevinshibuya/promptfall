@@ -10,7 +10,9 @@ export const FULL_MIN_COLUMNS = 116
 export const MIN_COLUMNS = 100
 export const STAGE_MAX_COLUMNS = 160
 
-// Geometry in stage pixels.
+// Geometry in stage pixels at scale 1; the full stage on Image and Svg multiplies every
+// stage-pixel quantity by HIRES_SCALE and rounds (ADR 0006).
+export const HIRES_SCALE = 1.5
 export const SPRITE_PX = 16
 export const ACTOR_PITCH = 18
 export const ACTOR_EDGE = 4

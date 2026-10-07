@@ -36,7 +36,7 @@ import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
 import { renderSvg } from './svg'
 import { type Motion, StageTimeline } from './timeline'
-import { DISSOLVE_MS, DROP_MS, FLASH_MS, LUNGE_MS, SPAWN_MS } from './tuning'
+import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
 
 export const GOLDEN_NOW = 1_000_000
 export const SCENARIOS = ['rest', 'boss', 'compact', 'dissolve', 'drop'] as const
@@ -47,8 +47,16 @@ export type Golden = {
   svgHash: string
   svgChars: number
   rasterPairs: number
+  /** The Image frame of the scale-1.5 model. */
+  imageHashHires: string
 }
-export type Staged = { model: StageModel; motions: readonly Motion[]; now: number }
+/** `model` at scale 1 (Raster, and the Svg until H5); `hires` at HIRES_SCALE (Image). */
+export type Staged = {
+  model: StageModel
+  hires: StageModel
+  motions: readonly Motion[]
+  now: number
+}
 
 const NOW = GOLDEN_NOW
 const FULL: Box = { columns: 120, rows: 8 }
@@ -66,6 +74,17 @@ const withoutFront = (): GameView => {
   return v
 }
 
+/** The scenario's models at scale 1 and at HIRES_SCALE, with its motions at NOW. */
+function staged(view: GameView, t: StageTimeline, box: Box, compact = false): Staged {
+  const opts = { compact, motion: 'full' as const }
+  return {
+    model: stageAt(view, t, NOW, box, opts),
+    hires: stageAt(view, t, NOW, box, { ...opts, scale: HIRES_SCALE }),
+    motions: t.active(NOW),
+    now: NOW,
+  }
+}
+
 /** A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill observed right after. */
 function killed(t1: number, effects: Effect[], box: Box): Staged {
   const t = new StageTimeline()
@@ -74,11 +93,7 @@ function killed(t1: number, effects: Effect[], box: Box): Staged {
   const after = withoutFront()
   t.observe(after, t1 + 10)
   t.observe(after, NOW)
-  return {
-    model: stageAt(after, t, NOW, box, { compact: false, motion: 'full' }),
-    motions: t.active(NOW),
-    now: NOW,
-  }
+  return staged(after, t, box)
 }
 
 export function stage(name: Scenario): Staged {
@@ -86,11 +101,7 @@ export function stage(name: Scenario): Staged {
   switch (name) {
     case 'rest': {
       t.observe(wave(), NOW)
-      return {
-        model: stageAt(wave(), t, NOW, FULL, { compact: false, motion: 'full' }),
-        motions: t.active(NOW),
-        now: NOW,
-      }
+      return staged(wave(), t, FULL)
     }
     case 'boss': {
       // The boss spawned half a spawn ago.
@@ -98,20 +109,12 @@ export function stage(name: Scenario): Staged {
       t.observe(boss(), NOW - SPAWN_MS / 2)
       t.observe(boss(), NOW)
       const box = { columns: 120, rows: t.rowsAt(boss(), NOW) }
-      return {
-        model: stageAt(boss(), t, NOW, box, { compact: false, motion: 'full' }),
-        motions: t.active(NOW),
-        now: NOW,
-      }
+      return staged(boss(), t, box)
     }
     case 'compact': {
       t.observe(wave(), NOW)
       const box = { columns: 52, rows: 4 }
-      return {
-        model: stageAt(wave(), t, NOW, box, { compact: true, motion: 'full' }),
-        motions: t.active(NOW),
-        now: NOW,
-      }
+      return staged(wave(), t, box, true)
     }
     case 'dissolve': {
       // The dissolve starts when the kill's flash ends; at NOW it is half done.
@@ -149,12 +152,14 @@ export function goldenOf(s: Staged): Golden {
   const cells = encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers)
   const image = encodeImage(composeFrame(s.model, { numbers: true }), 1)
   const svg = renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  const hires = encodeImage(composeFrame(s.hires, { numbers: true }), 1)
   return {
     rasterHash: fnv1a64(cells),
     imageHash: fnv1a64(image.rgba),
     svgHash: fnv1a64(svg),
     svgChars: svg.length,
     rasterPairs: rasterPairs(cells),
+    imageHashHires: fnv1a64(hires.rgba),
   }
 }
 

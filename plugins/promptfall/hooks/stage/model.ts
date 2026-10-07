@@ -2,7 +2,7 @@ import type { GameView } from '../../types'
 import { SPRITES } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
-import { GLYPH_HEIGHT, textWidth } from './font'
+import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
 import type { Motion, StageTimeline } from './timeline'
 import {
@@ -38,6 +38,8 @@ export type StageActor = {
   flashing: boolean
   /** The rarity slot's colour before the flash (the fallen dim applied); null without a slot. */
   accent?: number | null
+  /** The palette index of `art` that takes the hero's rarity colour; null for enemies. */
+  raritySlot: number | null
 }
 /** The text's top-left in stage pixels, already clamped inside the frame. */
 export type StageNumber = { text: string; x: number; y: number; rgb: number }
@@ -49,6 +51,8 @@ export type StageModel = {
   numbers: StageNumber[]
   drops: StageDrop[]
   alt: string
+  /** Stage pixels per half-block cell: 1, or HIRES_SCALE for the full stage on Image and Svg. */
+  scale: 1 | 1.5
 }
 
 const FALLBACK = spriteFor('item', '')
@@ -56,18 +60,23 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 const progress = (m: Motion, now: number) => clamp((now - m.from) / (m.until - m.from), 0, 1)
 
 /** The lunge's offset: out over the first half, back over the second. */
-export function lungeOffset(m: Motion | undefined, now: number): number {
+export function lungeOffset(m: Motion | undefined, now: number, scale = 1): number {
   if (m?.kind !== 'lunge') return 0
   const p = progress(m, now)
-  return m.dir * Math.round(LUNGE_PX * (p < 0.5 ? p * 2 : (1 - p) * 2))
+  return m.dir * Math.round(Math.round(LUNGE_PX * scale) * (p < 0.5 ? p * 2 : (1 - p) * 2))
 }
 
 function halve(rgb: number): number {
   return ((rgb >> 1) & 0x7f0000) | ((rgb >> 1) & 0x007f00) | ((rgb >> 1) & 0x00007f)
 }
 
-function variant(sprite: Sprite, compact: boolean): SpriteArt {
-  return compact ? sprite.compact : sprite.full
+/** The art an actor carries and its rarity slot: compact, 1x full or 1.5x. */
+function variant(sprite: Sprite, compact: boolean, scale: number): SpriteArt {
+  return compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
+}
+
+function slotOf(sprite: Sprite, compact: boolean, scale: number): number | null {
+  return compact || scale === 1 ? sprite.raritySlot : sprite.raritySlotHires
 }
 
 /**
@@ -79,15 +88,18 @@ export function stageAt(
   timeline: StageTimeline,
   now: number,
   box: Box,
-  opts: { compact: boolean; motion: 'full' | 'still' },
+  opts: { compact: boolean; motion: 'full' | 'still'; scale?: 1 | 1.5 },
 ): StageModel {
-  const width = box.columns
-  const height = box.rows * 2
-  const pitch = opts.compact ? COMPACT_PITCH : ACTOR_PITCH
-  const edge = opts.compact ? 0 : ACTOR_EDGE
+  // The compact stage is always 1x.
+  const scale = opts.compact ? 1 : (opts.scale ?? 1)
+  const px = (v: number) => Math.round(v * scale)
+  const width = Math.ceil(box.columns * scale)
+  const height = Math.ceil(box.rows * 2 * scale)
+  const pitch = opts.compact ? COMPACT_PITCH : px(ACTOR_PITCH)
+  const edge = opts.compact ? 0 : px(ACTOR_EDGE)
   const started = timeline.active(now).filter((m) => m.from <= now)
   const all = timeline.active(now)
-  const bob = opts.motion === 'full' ? timeline.bobbing(now) * IDLE_BOB_PX : 0
+  const bob = opts.motion === 'full' ? timeline.bobbing(now) * px(IDLE_BOB_PX) : 0
   const motionOf = (actor: string, kind: Motion['kind']) =>
     started.find((m) => m.actor === actor && m.kind === kind)
 
@@ -99,17 +111,17 @@ export function stageAt(
   const heroLeft = lastHero
     ? width -
       edge -
-      variant(spriteFor('hero', lastHero.cls), opts.compact).width -
+      variant(spriteFor('hero', lastHero.cls), opts.compact, scale).width -
       (Math.min(view.heroes.length, 3) - 1) * pitch
     : width
   // Enemies stand in slot order, each clear of the one before when there is room: a boss is
   // wider than the pitch, and minions can join its encounter.
   let nextFree = edge
-  const gap = opts.compact ? 0 : ACTOR_PITCH - SPRITE_PX
+  const gap = opts.compact ? 0 : px(ACTOR_PITCH) - px(SPRITE_PX)
 
   for (const known of timeline.known()) {
     const sprite = SPRITES[known.spriteId] ?? FALLBACK
-    const art = variant(sprite, opts.compact)
+    const art = variant(sprite, opts.compact, scale)
     const slotX = edge + known.slot * pitch
     const roomLeft = heroLeft - gap - art.width
     const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
@@ -130,13 +142,14 @@ export function stageAt(
       spriteId: sprite.id,
       art,
       palette: flashing ? art.palette.map((c, i) => (i === 0 ? c : FLASH_RGB)) : art.palette,
-      x: baseX + lungeOffset(lunge, now),
+      x: baseX + lungeOffset(lunge, now, scale),
       y: height - art.height - bob,
       flipX: false,
       alpha,
       fallen: false,
       flashing,
       accent: null,
+      raritySlot: null,
     })
   }
 
@@ -147,44 +160,47 @@ export function stageAt(
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
     const sprite = spriteFor(lunge ? 'hero_attack' : 'hero', hero.cls)
-    const art = variant(sprite, opts.compact)
+    const art = variant(sprite, opts.compact, scale)
+    const raritySlot = slotOf(sprite, opts.compact, scale)
     const flashing = !fallen && motionOf(hero.id, 'flash') !== undefined
     let palette = [...art.palette]
-    if (sprite.raritySlot !== null) {
-      palette[sprite.raritySlot] = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
+    if (raritySlot !== null) {
+      palette[raritySlot] = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
     }
     if (fallen) palette = palette.map((c, i) => (i === 0 ? c : halve(c)))
-    const accent = sprite.raritySlot === null ? null : (palette[sprite.raritySlot] ?? null)
+    const accent = raritySlot === null ? null : (palette[raritySlot] ?? null)
     if (flashing) palette = palette.map((c, i) => (i === 0 ? c : FLASH_RGB))
     actors.push({
       key: hero.id,
       spriteId: sprite.id,
       art,
       palette,
-      x: width - edge - art.width - index * pitch + lungeOffset(lunge, now),
+      x: width - edge - art.width - index * pitch + lungeOffset(lunge, now, scale),
       y: height - art.height - (fallen ? 0 : bob),
       flipX: true,
       alpha: 1,
       fallen,
       flashing,
       accent,
+      raritySlot,
     })
   })
 
   const at = new Map(actors.map((a) => [a.key, a]))
   const numbers: StageNumber[] = []
   const drops: StageDrop[] = []
+  const block = glyphBlock(scale)
   for (const m of started) {
     const actor = at.get(m.actor)
     if (!actor) continue
     if (m.kind === 'number') {
-      const w = textWidth(m.text)
+      const w = textWidth(m.text, block)
       const x = clamp(Math.round(actor.x + (actor.art.width - w) / 2), 0, Math.max(0, width - w))
-      const rise = progress(m, now) * NUMBER_RISE_PX
-      const y = clamp(Math.round(actor.y + 2 - rise), 0, height - GLYPH_HEIGHT)
+      const rise = progress(m, now) * px(NUMBER_RISE_PX)
+      const y = clamp(Math.round(actor.y + px(2) - rise), 0, height - GLYPH_HEIGHT * block)
       numbers.push({ text: m.text, x, y, rgb: m.rgb })
     } else if (m.kind === 'drop') {
-      const item = variant(SPRITES[m.item] ?? FALLBACK, opts.compact)
+      const item = variant(SPRITES[m.item] ?? FALLBACK, opts.compact, scale)
       const p = progress(m, now)
       const cx = actor.x + actor.art.width / 2
       const cy = actor.y + actor.art.height / 2
@@ -193,7 +209,7 @@ export function stageAt(
         art: item,
         x: clamp(Math.round(cx - item.width / 2), 0, Math.max(0, width - item.width)),
         y: clamp(
-          Math.round(cy - item.height / 2 - p * DROP_RISE_PX),
+          Math.round(cy - item.height / 2 - p * px(DROP_RISE_PX)),
           0,
           Math.max(0, height - item.height),
         ),
@@ -209,6 +225,7 @@ export function stageAt(
     numbers,
     drops,
     alt: altText(view),
+    scale,
   }
 }
 

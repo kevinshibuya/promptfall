@@ -34,6 +34,12 @@ import {
 } from './tuning'
 
 function withinBudgets(model: StageModel, motions: readonly Motion[], now: number): void {
+  if (model.scale !== 1) {
+    // The hires model draws on Image only (and on Svg from H5).
+    const frame = composeFrame(model, { numbers: true })
+    expect(imageBytes(frame, IMAGE_SCALE / model.scale)).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
+    return
+  }
   const svg = renderSvg(model, motions, { smil: true, now, width: 960, motion: 'full' })
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
   const flat = renderSvg(model, motions, { smil: false, now, width: 960, motion: 'full' })
@@ -50,6 +56,7 @@ for (const name of SCENARIOS) {
     const s = stage(name)
     expect(goldenOf(s)).toEqual(GOLDENS[name])
     withinBudgets(s.model, s.motions, s.now)
+    withinBudgets(s.hires, s.motions, s.now)
   })
 }
 
@@ -74,6 +81,7 @@ function actor(
     alpha: 1,
     fallen: false,
     flashing: false,
+    raritySlot: null,
   }
 }
 
@@ -121,7 +129,43 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
     drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
     alt: 'worst',
+    scale: 1,
   }
+  withinBudgets(model, busyMotions('e1'), NOW)
+})
+
+test('at scale 1.5 the rest frame is 180 × 24 and the boss frame 180 × 51', () => {
+  const rest = composeFrame(stage('rest').hires, { numbers: true })
+  expect([rest.width, rest.height]).toEqual([180, 24])
+  const boss = composeFrame(stage('boss').hires, { numbers: true })
+  expect([boss.width, boss.height]).toEqual([180, 51])
+  expect(stage('compact').hires.scale).toBe(1)
+})
+
+test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes stays in the Image budget', () => {
+  const boss = spriteFor('enemy', 'bandit_captain').hires
+  const heroes = ['knight', 'black_mage', 'white_mage'].map((c) => spriteFor('hero', c).hires)
+  const model: StageModel = {
+    box: { columns: 160, rows: 17 },
+    ground: ZONE_GROUND[0] ?? 0,
+    actors: [
+      actor('e1', 'enemy:bandit_captain', boss, 6, 0, false),
+      ...heroes.map((art, i) => actor(`h${i + 1}`, `hero:${i}`, art, 210 - i * 27, 27, true)),
+    ],
+    numbers: [0, 1, 2].map((i) => ({ text: '999', x: 15 + i * 30, y: 3, rgb: 0xffffff })),
+    drops: [
+      {
+        spriteId: 'item:iron_sword',
+        art: spriteFor('item', 'iron_sword').hires,
+        x: 30,
+        y: 9,
+        alpha: 1,
+      },
+    ],
+    alt: 'worst',
+    scale: 1.5,
+  }
+  expect(composeFrame(model, { numbers: true }).width).toBe(240)
   withinBudgets(model, busyMotions('e1'), NOW)
 })
 
@@ -151,6 +195,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
     numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
     drops: [{ spriteId: 'adversarial:drop', art: drop, x: 20, y: 6, alpha: 0.5 }],
     alt: 'adversarial',
+    scale: 1,
   }
   withinBudgets(
     model,
