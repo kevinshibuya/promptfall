@@ -314,7 +314,7 @@ Full check line.
 
 **Boundaries:** No other script changes.
 
-- [ ] test, red; implement; full check line; commit
+- [x] test, red; implement; full check line; commit
 
 ### Task 3: `pnpm contact`
 
