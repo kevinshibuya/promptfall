@@ -46,6 +46,7 @@ import { boardsPane } from './pane/leaderboards'
 import { marketPane } from './pane/market'
 import {
   type ActionContext,
+  hiddenRing,
   type PaneDraw,
   paneElement,
   paneWindow,
@@ -181,7 +182,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       columns: Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns),
       rows,
     })
-    const buildAt = (rows: number, input = hasInput): PaneBuild =>
+    const buildAt = (rows: number, input = hasInput, shortPane = false): PaneBuild =>
       view
         ? BUILDERS[tab]({
             ...frame(rows),
@@ -190,6 +191,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             running: running !== null,
             art: !terminal || renderer === 'image',
             hasInput: input,
+            ...(shortPane ? { shortPane: true as const } : {}),
             remainingMs,
             market,
             orders,
@@ -208,13 +210,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       const room =
         paneLayout(Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns), pictureRows(FIELD_ROWS))
           .kind !== 'small'
-      build = room ? buildAt(pictureRows(FIELD_ROWS)) : buildAt(pictureRows(0), false)
+      build = room ? buildAt(pictureRows(FIELD_ROWS)) : buildAt(pictureRows(0), false, true)
     } else if (terminal && build.link) build = buildAt(pictureRows(LINK_ROWS))
     remember(e.requestId, tab, build)
 
     const requestId = e.requestId
     const signature = stopsSignature(build, paneWindow(dialog, tab, orders.form !== null))
-    const key = refocusKey(requestId, signature, build)
+    const key = refocusKey(requestId, signature, build, hiddenRing(e.surface))
     if (key !== false) {
       if (key === null) placed(requestId, signature)
       else {

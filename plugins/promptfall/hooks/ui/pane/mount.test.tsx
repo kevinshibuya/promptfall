@@ -20,6 +20,7 @@ import {
   paneElement,
   placed,
   refocusKey,
+  ringMoved,
   ringOnInput,
   runAction,
   stepCursor,
@@ -609,4 +610,45 @@ test('on a terminal with a field, the hidden stops follow the field in the ring'
   // The field first: a row inserted among the stops (a message arriving) leaves its place alone.
   expect(order).toEqual(['compose', 'row:a'])
   await ui.unmount()
+})
+
+test('Shift+Tab off a field: past the engine stop the ring is off it, and lands leaving it', () => {
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: '',
+    submitLabel: 'send',
+  }
+  const a: PaneBuild = { ...BUILD, field }
+  const b: PaneBuild = { ...a, stops: [row('o1', 0), ...a.stops] }
+  refocusKey('s', stopsSignature(a, 'chat'), a)
+  ringOnInput('s', true)
+  // Shift+Tab: the engine stop first. A message arriving now goes back on the ▶, not the field.
+  expect(ringMoved('s', undefined)).toBe(false)
+  expect(refocusKey('s', stopsSignature(b, 'chat'), b)).toBe('row:a')
+  placed('s', stopsSignature(b, 'chat'))
+  // The next landing (the last tab) still counts as leaving the field: the ▶, not a wrap.
+  expect(ringMoved('s', 'tab-market')).toBe(true)
+  expect(ringMoved('s', 'row:b')).toBe(false)
+})
+
+test('Tab off a field onto the first tab lands on the ▶', () => {
+  const left = focusFrom({ ...BUILD, focus: 'row:b' }, 'tab-inventory', true)
+  expect(left.t === 'land' ? left.stop.key : null).toBe('row:b')
+})
+
+test('off a terminal a field the ring is on is left alone when the stops change', () => {
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: '',
+    submitLabel: 'send',
+  }
+  const a: PaneBuild = { ...BUILD, field }
+  const b: PaneBuild = { ...a, stops: [row('o1', 0), ...a.stops] }
+  refocusKey('d', stopsSignature(a, 'chat'), a, false)
+  ringOnInput('d', true)
+  expect(refocusKey('d', stopsSignature(b, 'chat'), b, false)).toBe(false)
 })

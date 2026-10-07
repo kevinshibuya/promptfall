@@ -51,8 +51,13 @@ const last = new Map<string, { build: PaneBuild; tab: DialogTab }>()
  * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
 const lastStops = new Map<string, string>()
-/** The instances whose ring sits on a field: a re-focus there would eat the typing. */
+/** The instances whose ring sits on a field now. */
 const onInput = new Set<string>()
+/**
+ * The instances whose ring last landed on a field: it outlives the engine stop the ring passes on
+ * its way off (Shift+Tab), so the next landing knows it is leaving the field.
+ */
+const fromField = new Set<string>()
 export function remember(requestId: string, tab: DialogTab, build: PaneBuild): void {
   last.set(requestId, { build, tab })
 }
@@ -61,12 +66,29 @@ export function forget(requestId: string): void {
   last.delete(requestId)
   lastStops.set(requestId, '')
   onInput.delete(requestId)
+  fromField.delete(requestId)
 }
 
 /** The ring went onto a field (the person's Tab, or the `field` action's own focus). */
 export function ringOnInput(requestId: string, on: boolean): void {
-  if (on) onInput.add(requestId)
-  else onInput.delete(requestId)
+  if (on) {
+    onInput.add(requestId)
+    fromField.add(requestId)
+  } else {
+    onInput.delete(requestId)
+    fromField.delete(requestId)
+  }
+}
+
+/**
+ * The ring moved onto `element` (undefined: an engine stop). Says whether it is leaving a field.
+ * On an engine stop the ring is off the field, but the mark stays for its next landing.
+ */
+export function ringMoved(requestId: string, element: string | undefined): boolean {
+  const leaving = fromField.has(requestId) && element !== undefined && !isFieldKey(element)
+  if (element === undefined) onInput.delete(requestId)
+  else ringOnInput(requestId, isFieldKey(element))
+  return leaving
 }
 /**
  * What the ring is placed against: the open window (`window`, e.g. `actions:i2`, `reforge:i2`,
@@ -94,15 +116,18 @@ export function refocusKey(
   requestId: string,
   signature: string,
   build: PaneBuild,
+  /** Terminals: their ring slides by position. Elsewhere a field the ring is on is left alone. */
+  fieldRefocus = true,
 ): string | null | false {
-  if (!build.field) onInput.delete(requestId)
+  if (!build.field) ringOnInput(requestId, false)
   const was = lastStops.get(requestId)
   if (was === undefined) {
     lastStops.set(requestId, signature)
     return false
   }
   if (was === signature) return false
-  return onInput.has(requestId) && build.field ? build.field.key : build.focus
+  if (onInput.has(requestId) && build.field) return fieldRefocus ? build.field.key : false
+  return build.focus
 }
 export function placed(requestId: string, signature: string): void {
   lastStops.set(requestId, signature)
@@ -398,9 +423,8 @@ export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
     const l = last.get(e.requestId)
     if (!l) return next(e)
-    // Leaving a field puts the ring back on the ▶: the engine stop between keeps the field's mark.
-    const leaving = onInput.has(e.requestId) && e.element !== undefined && !isFieldKey(e.element)
-    if (e.element !== undefined) ringOnInput(e.requestId, isFieldKey(e.element))
+    // Leaving a field puts the ring back on the ▶, past an engine stop too (Shift+Tab).
+    const leaving = ringMoved(e.requestId, e.element)
     const move = focusFrom(l.build, e.element, leaving)
     if (move.t === 'pass') return next(e)
     if (move.t === 'keep') return {}

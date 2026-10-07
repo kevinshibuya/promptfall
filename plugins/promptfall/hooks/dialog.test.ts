@@ -914,6 +914,9 @@ test('at 13 rows the sell window lists presets rather than lose the pane to its 
   const text = await paneText(pane)
   expect(text).not.toMatch(/needs more room/)
   expect(text).toMatch(/Sell Steel Longsword/)
+  // Presets in place of Set a price, and the message says so.
+  expect(text).not.toMatch(/Set a price/)
+  expect(text).toMatch(/Pick an order or a price\./)
   expect(await pane.find({ key: 'price' })).toBeUndefined()
   expect((await pane.find({ type: 'Raster' }))?.props.rows).toBe(13)
   await pane.unmount()
