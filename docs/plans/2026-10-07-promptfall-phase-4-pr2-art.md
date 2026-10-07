@@ -634,7 +634,7 @@ bosses. Full check line.
 **Boundaries:** Only ids that are new or named as redos. A design change Kevin asks for that goes
 beyond a redo (a new hero design, a different canvas): stop and report `blocked: <the request>`.
 
-- [ ] zone 12 run; slice; build; contact; batch
+- [x] zone 12 run; slice; build; contact; batch (0 placeholders; the placeholder test was added with the zone 12 landing, shown red against the previous build)
 - [ ] redo rounds until every group is GREEN; record; full check line; commit
 
 ### Task 12: finish

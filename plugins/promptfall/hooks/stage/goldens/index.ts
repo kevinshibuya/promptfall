@@ -10,7 +10,7 @@ import type {
 
 export const GOLDENS: Record<Scenario, Golden> = {
   rest: {rasterHash: "7dbfc1da03f7611b", imageHash: "e8558d2c96a1d76f", svgHash: "e6b3f4456d5ce4da", svgChars: 7081, rasterPairs: 52},
-  boss: {rasterHash: "4fbca8d95894de76", imageHash: "9a0bd9f1dee1f2e7", svgHash: "59b16a19e398cfb0", svgChars: 10277, rasterPairs: 44},
+  boss: {rasterHash: "22a897aba0961e82", imageHash: "d55388e83f36b0b5", svgHash: "015a894326cc96e3", svgChars: 9897, rasterPairs: 43},
   compact: {rasterHash: "670cfcb8135e427b", imageHash: "d82956de31bf6c7d", svgHash: "29f37516b453c74a", svgChars: 3679, rasterPairs: 32},
   dissolve: {rasterHash: "0231ec1915a8c73f", imageHash: "33e5c7b5e56b06fb", svgHash: "1212c4acaa04c064", svgChars: 8039, rasterPairs: 47},
   drop: {rasterHash: "63cf5ea52d94ad0b", imageHash: "ad96b934b63151a9", svgHash: "b6993465040b14a9", svgChars: 9174, rasterPairs: 55},

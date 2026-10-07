@@ -174,10 +174,10 @@
     { "id": "enemy:blank_page", "file": "sprites/enemy/blank_page.png", "style": "nes" },
     { "id": "enemy:quill_golem", "file": "sprites/enemy/quill_golem.png", "style": "nes" },
     { "id": "enemy:erased_scribe", "file": "sprites/enemy/erased_scribe.png", "style": "nes" },
-    { "id": "enemy:unwritten_one", "alias": "concept/snes-boss-3", "style": "snes" },
+    { "id": "enemy:unwritten_one", "file": "sprites/enemy/unwritten_one.png", "style": "snes" },
     {
       "id": "enemy:margin_beast",
-      "alias": "concept/snes-boss-3",
+      "file": "sprites/enemy/margin_beast.png",
       "style": "snes",
       "fit": { "height": 24 }
     },

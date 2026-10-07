@@ -412,6 +412,35 @@ Result: the size sentence that fixed sheet B did not hold for a sheet of creatur
 again, 19 to 34 as drawn. `bog_lurker` (19 × 20) and `marsh_leech` (20 × 19) ship; the other 30
 stay redos. Their cuts read better than sheet A's, so the review page offers them as "ship as cut".
 
+## bosses-z12.png
+
+2026-10-07, run `pf2-bosses-z12`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+The bottom row is a second take of the same two (Narrowing 2: no boss redo was pending).
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height. Build every boss from the same large pixel blocks as the bosses in the attached zone 1 boss sheet, never finer pixels: each zone boss fills at most about three-quarters of its cell's width and two-thirds of its cell's height, the smaller boss less.
+Top left, the zone boss of The Unwritten Reach (a world of blank paper and ink: white, black ink, blue ink): UNWRITTEN ONE: a towering faceless figure of white paper and swirling ink, an empty outlined face. Top right, the smaller boss of The Unwritten Reach, about two-thirds the size: MARGIN BEAST: a beast made of scribbled ink doodles from a page margin. Bottom left and bottom right: a second take of the same two bosses, the zone boss then the smaller boss, same designs and pixel size, a slightly different pose.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z12.png.
+```
+
+Result: the top row ships (unwritten_one 61 × 54, margin_beast 67 × 43 as drawn); the bottom
+take was close and slightly larger. The SNES master was derived again from all 28 bosses and is
+now locked.
+
 ## Redos
 
 | Id | From | Note |
@@ -516,6 +545,7 @@ cut art/sheets/sheet-b.png art/sprites ${=D} --row 2 --names item/silver_crook,i
 cut art/sheets/sheet-b.png art/sprites ${=D} --row 3 --names item/cloth_robe,item/mystic_robe,item/sage_robe,item/astral_robe,item/hide_coat,item/ranger_garb,item/shadow_leather,item/wind_cloak
 cut art/sheets/world-bosses-r2.png art/sprites ${=B} --row 0 --names world_boss/the_promptwyrm,world_boss/hallucinox
 cut art/sheets/world-bosses-r2.png art/sprites ${=B} --row 1 --names world_boss/the_context_leviathan,world_boss/tokenmaw
+cut art/sheets/bosses-z12.png art/sprites ${=B} --row 0 --names enemy/unwritten_one,enemy/margin_beast
 for z in z2z3:elder_treant,owlbear_cub:sigh_hag,giant_heron z4z5:barrow_king,crypt_ogre:glass_leviathan,reef_troll z6z7:emberfall_wyrm,slag_giant:frostvein_yeti,avalanche_drake z8z9:sunken_abbot,choir_of_bones:waste_tyrant,sand_basilisk z10z11:fallen_star,void_manta:hollow_king,royal_chimera; do
   parts=(${(s/:/)z})
   cut art/sheets/bosses-${parts[1]}.png art/sprites ${=B} --row 0 --names enemy/${parts[2]/,/,enemy/}
