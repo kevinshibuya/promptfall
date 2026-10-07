@@ -317,6 +317,14 @@ export function deriveSnesMaster(images: readonly Rgba[]): number[] {
   return medianCut(counts, 64)
 }
 
+/** The distinct `file` paths of the snes sprites: the master comes from real art, never a concept alias. */
+export function snesMasterPaths(manifest: Manifest): string[] {
+  const paths = manifest.sprites.flatMap((s) =>
+    s.style === 'snes' && s.file !== undefined ? [s.file] : [],
+  )
+  return [...new Set(paths)]
+}
+
 const ROOT = join(import.meta.dirname, '..')
 const ART_DIR = join(ROOT, 'art')
 const OUT = join(ROOT, 'plugins/promptfall/hooks/sprites/generated.ts')
@@ -349,10 +357,9 @@ function loadArt(path: string): Rgba | null {
 async function main(): Promise<void> {
   const manifest = readJson<Manifest>(join(ART_DIR, 'manifest.json'))
   if (process.argv.includes('--derive-snes-master')) {
-    const paths = manifest.sprites
-      .filter((s) => s.style === 'snes')
-      .map((s) => (s.alias !== undefined ? `${s.alias}.png` : (s.file ?? '')))
-    const images = [...new Set(paths)].map(loadArt).filter((i): i is Rgba => i !== null)
+    const images = snesMasterPaths(manifest)
+      .map(loadArt)
+      .filter((i): i is Rgba => i !== null)
     const master = deriveSnesMaster(images)
     writeFileSync(
       join(ART_DIR, manifest.palettes.snes),

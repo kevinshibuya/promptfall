@@ -9,6 +9,7 @@ import {
   emitModule,
   type Indexed,
   type ManifestEntry,
+  snesMasterPaths,
 } from './sprites'
 
 const FIXTURES = join(import.meta.dirname, 'fixtures')
@@ -156,5 +157,19 @@ describe('sprites build', () => {
     expect(a).toContain('export const SPRITE_COUNT = 3')
     expect(a).toContain('export const PLACEHOLDER_COUNT = 1')
     expect(a).not.toMatch(/^import /m)
+  })
+
+  it('derives the snes master from snes files only, each path once', () => {
+    const sprites: ManifestEntry[] = [
+      { id: 'enemy:captain', file: 'sprites/enemy/captain.png', style: 'snes' },
+      { id: 'enemy:boar', alias: 'concept/snes-boss-0', style: 'snes' },
+      { id: 'enemy:rat', file: 'sprites/enemy/rat.png', style: 'nes' },
+      { id: 'world_boss:wyrm', file: 'sprites/enemy/captain.png', style: 'snes' },
+      { id: 'world_boss:maw', file: 'sprites/world_boss/maw.png', style: 'snes' },
+    ]
+    expect(snesMasterPaths({ palettes: { nes: '', snes: '' }, sprites })).toEqual([
+      'sprites/enemy/captain.png',
+      'sprites/world_boss/maw.png',
+    ])
   })
 })

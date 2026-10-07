@@ -6,6 +6,8 @@ Every sheet behind a sprite in `art/sprites/`: the prompt that drew it, the refe
 `~/.claude/bin/codex-run.sh <label> exec -m gpt-6-astra … -i=<ref> …` (gpt-image-2 through codex's
 image_gen tool); `<repo>` is the repository root.
 
+Review: https://claude.ai/artifact/W5SVGYNdDG8ojecpbx9RNt (batch 1 published 2026-10-07).
+
 ## dense-heroes-zone1-items.png
 
 2026-10-07, the grill's sample run. References: `art/sheets/heroes-take-a.png`,
@@ -89,6 +91,62 @@ Cut:
 
 ```sh
 pnpm slice art/sheets/zone1-bosses.png art/sprites --grid 2x2 --row 1 --colours 16 --fit 48x34 --native art/sheets/native --names enemy/bandit_captain,enemy/wild_boar
+```
+
+## world-bosses-r2.png
+
+2026-10-07, run `pf2-world-bosses-r2`. References: `art/sheets/world-bosses-r1.png` (the designs), `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet for a fantasy idle RPG: the four WORLD BOSSES on a strict 2 x 2 grid of equal cells, one boss per cell, keeping the exact designs, colours and poses of the FIRST attached image, only redrawn with CHUNKY pixels: the same coarse pixel size as the bosses in the attached zone 1 boss sheet. Richer 16-bit style: up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right.
+Top left THE PROMPTWYRM, top right HALLUCINOX, bottom left THE CONTEXT LEVIATHAN, bottom right TOKENMAW.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/world-bosses-r2.png.
+```
+
+Result: failed the size check. As drawn: The Promptwyrm 47 × 53, Hallucinox 45 × 55, The Context
+Leviathan 73 × 69, Tokenmaw 83 × 80 (block 8.9, 8.7, 7.0, 6.0); the cut to 48 × 34 shrinks them to
+0.64 or less. The bosses came out tall in landscape cells, and the bottom pair at a finer pixel.
+Nothing ships from this sheet; the rerun waits on Kevin.
+
+## monsters-a.png
+
+2026-10-07, run `pf2-monsters-a`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a DENSE strict grid of 8 columns x 4 rows, 32 small monsters, one per cell, every cell the same size (192 x 256 screen pixels). Every sprite is a tiny 16x16-art-pixel 8-bit sprite with at most 3 colours plus the black outline, small in its cell, with magenta all around it, in exactly the style and pixel size of the attached dense sheet. Each row holds two zones of a fantasy idle RPG, four monsters each, left to right.
+Row 1, cells 1-4, Whisperwood (an old whispering forest: moss, dim greens, pale spirit light): 1. BRAMBLE WOLF: a lean grey-green wolf with thorny bramble vines twined through its fur. 2. MOSS GOLEM: a squat boulder golem under thick moss, two green eye slits. 3. WOOD GOBLIN: a bark-skinned forest goblin with a heavy branch club and a leaf loincloth. 4. WHISPER WISP: a pale floating spirit flame with a faint sad face, trailing wisps; cells 5-8, Marsh of Sighs (a foggy swamp: murky teal, mud brown, reeds): 1. BOG LURKER: a hunched mud brute draped in pond weed, long dangling arms. 2. MARSH LEECH: a fat striped leech rearing up, a round toothed sucker mouth. 3. MIRE TOAD: a huge warty toad with a bloated throat sac, mud brown and olive. 4. WILL O WISP: a small blue-white ghost light with a bright core and two tiny eyes.
+Row 2, cells 1-4, Old Barrow Hills (grave mounds under moonlight: grey stone, bone, cold blue): 1. BARROW WIGHT: a gaunt ghostly corpse in rotting burial robes and a rusted circlet, cold blue eyes, casting. 2. GRAVE HOUND: a skeletal hound with glowing eyes and bare ribs. 3. BONE SOLDIER: a skeleton warrior with a dented round shield and a notched sword. 4. CAIRN CRAWLER: a beetle-like crawler whose shell is a pile of cairn stones; cells 5-8, Saltglass Coast (a bright shore of glassy sand: sea blue, white salt, coral): 1. SALT CRAB: a big crab with a crust of white salt crystals and one giant claw. 2. GULL HARPY: a harpy with gull wings and talons, white and grey feathers. 3. DROWNED SAILOR: a waterlogged zombie sailor in a striped shirt, seaweed, a boat hook. 4. TIDE WITCH: a sea witch with kelp hair, a shell crown and a coral staff.
+Row 3, cells 1-4, Emberfall Caves (lava caves: black rock, orange glow, soot): 1. EMBER IMP: a small red imp with bat wings and a flaming tail. 2. MAGMA BEETLE: a heavy beetle with a cracked black shell glowing orange in the seams. 3. CINDER ORC: a soot-black orc with burning eyes and a jagged iron axe. 4. FLAME ADEPT: a hooded fire cultist in red robes conjuring a fireball; cells 5-8, Frostvein Pass (a snowy mountain pass: ice blue, white, grey stone): 1. FROST WOLF: a white wolf with an icy blue mane and frosted breath. 2. ICE TROLL: a blue-skinned troll with icicle tusks and a frozen club. 3. RIME GOLEM: a blocky golem of packed ice and snow with a glowing blue core. 4. SNOW SHAMAN: a fur-cloaked shaman with an antler headdress and a frost staff.
+Row 4, cells 1-4, Sunken Abbey (a flooded stone abbey: teal water, wet stone, candle gold): 1. DROWNED MONK: a bloated drowned monk in a soaked brown habit swinging a censer. 2. ABBEY GARGOYLE: a crouching stone gargoyle with folded wings, grey and mossy. 3. BELL WRAITH: a hooded spectre holding a cracked bronze bell. 4. EEL SERPENT: a long dark eel with glowing yellow spots, jaws open; cells 5-8, Ashen Waste (a grey ash desert under a red sky: ash grey, rust, bone): 1. ASH GHOUL: a hunched grey ghoul caked in ash, long claws. 2. DUST STALKER: a lean sand-coloured lizard stalker in a cloth wrap, mid-run. 3. CINDER COLOSSUS: a squat colossus of charred stone with ember cracks. 4. ASH ORACLE: a veiled oracle in grey robes holding a smoking bowl.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/monsters-a.png.
 ```
 
 ## Redos
