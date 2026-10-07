@@ -80,9 +80,64 @@ Review page: https://claude.ai/artifact/FgkfcBP9UwjDWRXc3Ubi2S. Nine image runs 
   with a purple hat, a void face and yellow eyes; run 2 (take B) has a black hat with a pale scarf;
   the dense sheet mixed take A's colours with the scarf. Items are clean at either layout.
 
+### Round 3
+
+- **Q10, direction: GREEN.**
+- **Q11, heroes: the dense sheet's mix.** Take A's colours and silhouettes with the black mage's
+  pale scarf over the lower face.
+- **Q12, recipe: dense sheets.** 8 × 4 cells for every 16-pixel sprite (heroes, monsters, items);
+  zone and turn bosses two to a row, four to a sheet. Replaces record §1.8's one sheet per zone.
+  Every sheet attaches the approved sheets as its style reference.
+- **Q13, cues.** `drop` = `sfx_coin_double3`, `legendary` = `sfx_coin_cluster8`, `level_up` =
+  `sfx_sounds_powerup3`, `boss` = `sfx_alarm_loop3`, from Juhani Junkala's CC0 pack.
+
+### Round 4
+
+- **Q14, keepers.** The approved samples are final unless rejected at review: the 8 hero sprites,
+  zone 1's 4 monsters and 20 items from the dense sheet, and the Bandit Captain and Wild Boar from
+  zone 1 run 3. The dense sheet (small sprites) and zone 1 run 3 (bosses) are the style
+  reference attached to every later run. 83 sprites left.
+- **Q15, grouping.** Monsters: dense sheet A takes zones 2 to 9 (two zones a row), sheet B zones
+  10 to 12 plus pending redos. Items: one dense sheet for the remaining 20 plus redos. Zone and
+  turn bosses: six sheets of four, two zones each. World bosses: one rerun. About 10 runs plus
+  redos, zones in order.
+- **Q16, world bosses.** One rerun in a 2 × 2 grid with the current world boss sheet attached as
+  the design to keep; Claude's hand cleanup at 48 × 34 after.
+- **Q17, briefs.** Claude writes one line per remaining enemy id into the plan (name, zone theme,
+  role); Kevin skims it at plan approval.
+- **Q18, slicer.** The prototype (native grid from the outline's run length, outline-aware
+  majority shrink) replaces point sampling inside `pnpm slice`, same CLI, test-first against
+  fixture sheets with a known grid. No flag for the old behaviour.
+- **Q19, contact page.** `pnpm contact <zone>` (also items and heroes) writes one PNG: the
+  sprites native and at ship size, plus the stage at rest and with the boss through the real
+  composer. Batches are published to one review artifact, updated in place; Kevin answers per zone
+  with GREEN or the ids to redo.
+- **Q20, files.** Approved PNGs are committed under `art/sprites/<kind>/<name>.png` and the
+  manifest switches from `alias` to `file`. Raw sheets stay in a gitignored `art/sheets/` with
+  copies on the review artifact. Each sheet's prompt and slice command are committed in
+  `art/sheets.md`.
+- **Q21, SNES master.** Re-derived once with `--derive-snes-master` from zone 1's two bosses and
+  the four world bosses after the rerun, then locked.
+- **Q22, cues.** The four picks overwrite `plugins/promptfall/cues/*.wav` under the same names;
+  `scripts/placeholder-cues.ts` and `cues:placeholders` are deleted; the README credits the pack.
+- **Quota discipline (Kevin).** No Opus spent idling on codex: image runs go to the background and
+  the session waits for their notification, never polling. If the codex limit hits, everything
+  stops at once and the reset time is reported; no retry, no workaround.
+
+### Round 5
+
+- **Q23, defaults, as recommended.** Review never blocks the work: code tasks run while sheets
+  generate, redos ride the spare cells of the next sheet, and the PR opens once every zone is
+  GREEN. Verification: a test asserting `PLACEHOLDER_COUNT === 0`, regenerated stage goldens
+  (said in the commit), the adversarial Svg budget test green, `sprites:check`, the full check
+  line, a Ghostty manual pass; the `codex-computer-use` check is skipped and said so in the PR if
+  the codex quota is gone. One PR into `ai-staging`; the review wave is `reviewer` on Opus alone.
+- **Saved inputs.** The approved raw sheets, the prompt parts and the four picked cue clips are in
+  the gitignored `art/sheets/` (dense sheet: `dense-heroes-zone1-items.png`; zone 1 bosses:
+  `zone1-bosses.png`; world bosses to keep as designs: `world-bosses-r1.png`). The cue pack is
+  https://opengameart.org/content/512-sound-effects-8-bit-style. The slicer prototype is committed
+  at `docs/plans/phase-4-pr2/slice-prototype.ts`.
+
 ## 3. Open
 
-- Kevin's verdict on the page: direction GREEN or RED, hero take, the dense-sheet recipe, the four
-  cue clips.
-- Downstream of the gate: sheet grouping (dense sheets across zones instead of one sheet per
-  zone), the world boss rerun layout, the slicer rewrite, the contact page script, the run order.
+Nothing. The frontier closed after five rounds.
