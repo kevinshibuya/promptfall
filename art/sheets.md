@@ -469,3 +469,13 @@ stay redos. Their cuts read better than sheet A's, so the review page offers the
 | `enemy:giant_heron` | bosses-z2z3 | 66 × 50 as drawn: the zone 1 bosses' coarser pixel |
 | `enemy:emberfall_wyrm` | bosses-z6z7 | 77 × 43 as drawn: the zone 1 bosses' coarser pixel |
 | `enemy:frostvein_yeti` | bosses-z6z7 | 71 × 42 as drawn: the zone 1 bosses' coarser pixel |
+
+Kevin, 2026-10-07: every redo ships from its best existing cut (no more rerolls for size), and the
+world bosses ship from world-bosses-r2 as cut. The redo cuts come from: redos-1 for the 28
+creature redos of monster sheet A, sheet-b for its own 18 (the star sentinel and spire warden
+included, smaller there than in redos-1), and their own sheets for the five bosses. Ids that do
+not read get hand cleanup with `pnpm grid`.
+
+The SNES master was derived from all 26 real bosses and world bosses (the plan had 6: zone 1's
+and the world bosses), since every boss but zone 12's was drawn by then. It is derived once more
+after zone 12 lands, then locked.
