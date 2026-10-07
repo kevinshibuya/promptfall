@@ -197,12 +197,12 @@ Items, places and paper show no letters or numbers.
 4. **The contact script writes a folder of PNGs, not one image**, so the review artifact can caption
    each sprite with its id in HTML; text rendered into a PNG would need a font path the stage
    doesn't have.
+5. **`art/concept/` is deleted in Task 12** once no manifest entry aliases it; the `alias` support
+   in `scripts/sprites.ts` stays for later content.
 6. **`--grid` counts sprites instead of cutting equal cells** (grill Q18 said "same CLI"; the flags
    are the same, their meaning shifts). The plan review found that equal cells clipped approved
    sprites: the dense sheet's heroes reach row 270 past the 256 boundary, and the bandit captain
    starts at row 473 above 512.
-5. **`art/concept/` is deleted in Task 12** once no manifest entry aliases it; the `alias` support
-   in `scripts/sprites.ts` stays for later content.
 
 ## Tasks
 
