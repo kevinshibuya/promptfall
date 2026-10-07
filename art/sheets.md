@@ -333,6 +333,16 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z8z9.png.
 ```
 
+Cut:
+
+```sh
+O="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native"
+pnpm slice art/sheets/bosses-z8z9.png art/sprites $=O --row 0 --names enemy/sunken_abbot,enemy/choir_of_bones
+pnpm slice art/sheets/bosses-z8z9.png art/sprites $=O --row 1 --names enemy/waste_tyrant,enemy/sand_basilisk
+```
+
+Result: block about 9; all four ship (36 × 38, 23 × 35, 56 × 42, 45 × 34).
+
 ## bosses-z10z11.png
 
 2026-10-07, run `pf2-bosses-z10z11`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
@@ -355,6 +365,44 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 - No text, no letters, no numbers, no labels, no grid lines, no watermark.
 
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z10z11.png.
+```
+
+Cut:
+
+```sh
+O="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native"
+pnpm slice art/sheets/bosses-z10z11.png art/sprites $=O --row 0 --names enemy/fallen_star,enemy/void_manta
+pnpm slice art/sheets/bosses-z10z11.png art/sprites $=O --row 1 --names enemy/hollow_king,enemy/royal_chimera
+```
+
+Result: block about 9 to 10; all four ship (47 × 27, 46 × 28, 56 × 43, 54 × 38).
+
+## redos-1.png
+
+2026-10-07, run `pf2-redos-1`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+The 30 monster sheet A redos and the first two sheet B monster redos.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a DENSE strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). Every sprite is a tiny 16x16-art-pixel 8-bit sprite with at most 3 colours plus the black outline, small in its cell, with magenta all around it, in exactly the style and pixel size of the attached dense sheet. Keep every sprite SMALL and CHUNKY: it covers only about half of its cell's width and half of its cell's height, built from the same large pixel blocks as the attached dense sheet; never use finer pixels to add detail. Each cell is one sprite of a fantasy idle RPG.
+Row 1: 1. BRAMBLE WOLF (Whisperwood): a lean grey-green wolf with thorny bramble vines twined through its fur. 2. MOSS GOLEM (Whisperwood): a squat boulder golem under thick moss, two green eye slits. 3. WOOD GOBLIN (Whisperwood): a bark-skinned forest goblin with a heavy branch club and a leaf loincloth. 4. BOG LURKER (Marsh of Sighs): a hunched mud brute draped in pond weed, long dangling arms. 5. MARSH LEECH (Marsh of Sighs): a fat striped leech rearing up, a round toothed sucker mouth. 6. MIRE TOAD (Marsh of Sighs): a huge warty toad with a bloated throat sac, mud brown and olive. 7. BARROW WIGHT (Old Barrow Hills): a gaunt ghostly corpse in rotting burial robes and a rusted circlet, cold blue eyes, casting. 8. GRAVE HOUND (Old Barrow Hills): a skeletal hound with glowing eyes and bare ribs.
+Row 2: 1. BONE SOLDIER (Old Barrow Hills): a skeleton warrior with a dented round shield and a notched sword. 2. CAIRN CRAWLER (Old Barrow Hills): a beetle-like crawler whose shell is a pile of cairn stones. 3. SALT CRAB (Saltglass Coast): a big crab with a crust of white salt crystals and one giant claw. 4. GULL HARPY (Saltglass Coast): a harpy with gull wings and talons, white and grey feathers. 5. DROWNED SAILOR (Saltglass Coast): a waterlogged zombie sailor in a striped shirt, seaweed, a boat hook. 6. TIDE WITCH (Saltglass Coast): a sea witch with kelp hair, a shell crown and a coral staff. 7. EMBER IMP (Emberfall Caves): a small red imp with bat wings and a flaming tail. 8. MAGMA BEETLE (Emberfall Caves): a heavy beetle with a cracked black shell glowing orange in the seams.
+Row 3: 1. CINDER ORC (Emberfall Caves): a soot-black orc with burning eyes and a jagged iron axe. 2. FLAME ADEPT (Emberfall Caves): a hooded fire cultist in red robes conjuring a fireball. 3. FROST WOLF (Frostvein Pass): a white wolf with an icy blue mane and frosted breath. 4. ICE TROLL (Frostvein Pass): a blue-skinned troll with icicle tusks and a frozen club. 5. RIME GOLEM (Frostvein Pass): a blocky golem of packed ice and snow with a glowing blue core. 6. SNOW SHAMAN (Frostvein Pass): a fur-cloaked shaman with an antler headdress and a frost staff. 7. DROWNED MONK (Sunken Abbey): a bloated drowned monk in a soaked brown habit swinging a censer. 8. ABBEY GARGOYLE (Sunken Abbey): a crouching stone gargoyle with folded wings, grey and mossy.
+Row 4: 1. BELL WRAITH (Sunken Abbey): a hooded spectre holding a cracked bronze bell. 2. EEL SERPENT (Sunken Abbey): a long dark eel with glowing yellow spots, jaws open. 3. ASH GHOUL (Ashen Waste): a hunched grey ghoul caked in ash, long claws. 4. DUST STALKER (Ashen Waste): a lean sand-coloured lizard stalker in a cloth wrap, mid-run. 5. CINDER COLOSSUS (Ashen Waste): a squat colossus of charred stone with ember cracks. 6. ASH ORACLE (Ashen Waste): a veiled oracle in grey robes holding a smoking bowl. 7. STAR SENTINEL (Starfall Spire): a silver construct guardian with a star-shaped head and a tower shield. 8. SPIRE WARDEN (Starfall Spire): a warden in silver plate with a starry halberd.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/redos-1.png.
 ```
 
 ## Redos

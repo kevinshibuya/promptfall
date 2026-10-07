@@ -130,10 +130,10 @@
     { "id": "enemy:abbey_gargoyle", "alias": "concept/nes-tank", "style": "nes" },
     { "id": "enemy:bell_wraith", "alias": "concept/nes-caster", "style": "nes" },
     { "id": "enemy:eel_serpent", "alias": "concept/nes-swift", "style": "nes" },
-    { "id": "enemy:sunken_abbot", "alias": "concept/snes-boss-3", "style": "snes" },
+    { "id": "enemy:sunken_abbot", "file": "sprites/enemy/sunken_abbot.png", "style": "snes" },
     {
       "id": "enemy:choir_of_bones",
-      "alias": "concept/snes-boss-3",
+      "file": "sprites/enemy/choir_of_bones.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -141,10 +141,10 @@
     { "id": "enemy:dust_stalker", "alias": "concept/nes-swift", "style": "nes" },
     { "id": "enemy:cinder_colossus", "alias": "concept/nes-tank", "style": "nes" },
     { "id": "enemy:ash_oracle", "alias": "concept/nes-caster", "style": "nes" },
-    { "id": "enemy:waste_tyrant", "alias": "concept/snes-boss-0", "style": "snes" },
+    { "id": "enemy:waste_tyrant", "file": "sprites/enemy/waste_tyrant.png", "style": "snes" },
     {
       "id": "enemy:sand_basilisk",
-      "alias": "concept/snes-boss-0",
+      "file": "sprites/enemy/sand_basilisk.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -152,10 +152,10 @@
     { "id": "enemy:comet_hound", "file": "sprites/enemy/comet_hound.png", "style": "nes" },
     { "id": "enemy:spire_warden", "alias": "concept/nes-brute", "style": "nes" },
     { "id": "enemy:astral_seer", "file": "sprites/enemy/astral_seer.png", "style": "nes" },
-    { "id": "enemy:fallen_star", "alias": "concept/snes-boss-1", "style": "snes" },
+    { "id": "enemy:fallen_star", "file": "sprites/enemy/fallen_star.png", "style": "snes" },
     {
       "id": "enemy:void_manta",
-      "alias": "concept/snes-boss-1",
+      "file": "sprites/enemy/void_manta.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -163,10 +163,10 @@
     { "id": "enemy:court_jester", "file": "sprites/enemy/court_jester.png", "style": "nes" },
     { "id": "enemy:throne_guard", "alias": "concept/nes-tank", "style": "nes" },
     { "id": "enemy:court_mage", "alias": "concept/nes-caster", "style": "nes" },
-    { "id": "enemy:hollow_king", "alias": "concept/snes-boss-2", "style": "snes" },
+    { "id": "enemy:hollow_king", "file": "sprites/enemy/hollow_king.png", "style": "snes" },
     {
       "id": "enemy:royal_chimera",
-      "alias": "concept/snes-boss-2",
+      "file": "sprites/enemy/royal_chimera.png",
       "style": "snes",
       "fit": { "height": 24 }
     },

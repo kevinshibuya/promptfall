@@ -599,8 +599,8 @@ check line.
 **Boundaries:** Five image runs.
 
 - [x] runs z2z3 and z4z5; slice; build; contact; batch 4; commit (z2z3 in batch 3)
-- [ ] runs z6z7 and z8z9; slice; build; contact; batch 5; commit (z6z7 landed and published in batch 4)
-- [ ] run z10z11; slice; build; contact; batch 6; full check line; commit
+- [x] runs z6z7 and z8z9; slice; build; contact; batch 5; commit (z6z7 in batch 4)
+- [x] run z10z11; slice; build; contact; batch 6; full check line; commit (z8z9 and z10z11 in batch 5)
 
 ### Task 11: zone 12's bosses and the redos
 
