@@ -1,6 +1,6 @@
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
-import { drawText } from './font'
+import { drawText, glyphBlock } from './font'
 import type { StageModel } from './model'
 
 /** RGBA, alpha 0 or 255 only. */
@@ -64,18 +64,34 @@ function blit(
 }
 
 /**
- * The stage as pixels: the ground strip on the bottom two rows, the actors in slot order, the
+ * The stage as pixels: the ground strip on the bottom two rows (three at scale 1.5), the actors in slot order, the
  * drops, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
-  const frame = blankFrame(model.box.columns, model.box.rows * 2)
-  for (let y = Math.max(0, frame.height - 2); y < frame.height; y++) {
+  const { width, height } = frameSize(model)
+  const frame = blankFrame(width, height)
+  const ground = Math.round(2 * model.scale)
+  for (let y = Math.max(0, frame.height - ground); y < frame.height; y++) {
     for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
   }
   for (const a of model.actors) blit(frame, a.art, a.palette, a.x, a.y, a.flipX, a.alpha)
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)
-  if (opts.numbers) for (const n of model.numbers) drawText(frame, n.text, n.x, n.y, n.rgb)
+  const block = glyphBlock(model.scale)
+  if (opts.numbers) {
+    for (const n of model.numbers) drawText(frame, n.text, n.x, n.y, n.rgb, block)
+  }
   return frame
+}
+
+/** The frame's size in stage pixels: the box's columns and half-block rows, times the scale. */
+export function frameSize(model: { box: { columns: number; rows: number }; scale: number }): {
+  width: number
+  height: number
+} {
+  return {
+    width: Math.ceil(model.box.columns * model.scale),
+    height: Math.ceil(model.box.rows * 2 * model.scale),
+  }
 }
 
 /** One sprite alone, for the list sprites. */

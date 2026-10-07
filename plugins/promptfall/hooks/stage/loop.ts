@@ -16,7 +16,13 @@ import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
-import { EVENT_FRAME_MS, IDLE_FRAME_MS, IMAGE_SCALE, SVG_FALLBACK_FRAME_MS } from './tuning'
+import {
+  EVENT_FRAME_MS,
+  HIRES_SCALE,
+  IDLE_FRAME_MS,
+  IMAGE_SCALE,
+  SVG_FALLBACK_FRAME_MS,
+} from './tuning'
 
 export type StageSite = {
   requestId: string
@@ -94,14 +100,18 @@ export function stageFrame(
   motion: Settings['motion'],
 ): { cells: string } | { source: { rgba: string; width: number; height: number } } {
   if (!layout.box) throw new Error('no stage in a collapsed layout')
+  // The full stage draws the 1.5x art on Image; Raster and the compact stage stay at 1.
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
+    scale: renderer === 'image' ? HIRES_SCALE : 1,
   })
   if (renderer === 'raster') {
     return { cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers) }
   }
-  return { source: encodeImage(composeFrame(model, { numbers: true }), IMAGE_SCALE) }
+  return {
+    source: encodeImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
+  }
 }
 
 export class StageLoop {

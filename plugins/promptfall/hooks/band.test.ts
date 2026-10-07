@@ -702,13 +702,13 @@ for (const [columns, art] of [
   [60, 116],
   [130, 130],
 ] as const) {
-  test(`the desktop at ${columns} columns draws the full stage ${art} pixels wide`, async ($, on) => {
+  test(`the desktop at ${columns} columns draws the full stage ${art} columns wide at 1.5 pixels a column`, async ($, on) => {
     harness(on)
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(columns, 20) })
     const { stage } = await svgs(ui)
     const source = String(stage?.props.source)
-    expect(source).toContain(`viewBox="0 0 ${art} 16"`)
+    expect(source).toContain(`viewBox="0 0 ${art * 1.5} 24"`)
     expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
     // No width prop: the markup is wider than the band and the desktop scales it down to fit.
     expect(stage?.props.width).toBeUndefined()
@@ -723,7 +723,7 @@ test('the desktop grows the stage for a zone boss whatever maxRows says', async 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
   const { stage, strip } = await svgs(ui)
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 116 34"')
+  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
   expect(await ui.find({ key: 'compact-stage' })).toBeUndefined()
   expect(String(strip?.props.alt)).toContain('Boss')
   await ui.unmount()

@@ -181,10 +181,17 @@ it drops loot.
 
 - **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
   Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
-  numbers as text. The desktop app draws it as an `Svg`, always the full stage: the art 116 to
-  160 pixels wide, scaled to the band's width (ADR 0004). The desktop scrolls a band taller than
+  numbers as text. The desktop app draws it as an `Svg`, always the full stage: 116 to 160
+  columns, so 174 to 240 pixels of 1.5× art, scaled to the band's width (ADR 0004, ADR 0006). The desktop scrolls a band taller than
   its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
   band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
+- **Two art densities.** The full stage on an `Image` terminal and on the desktop draws the 1.5×
+  art: `stageAt(…, { scale: 1.5 })` multiplies every stage-pixel distance by 1.5, so a 120 × 8
+  stage is 180 × 24 pixels, and the `Image` is upscaled 4 times instead of 6 (the same size on
+  screen). Damage numbers draw their 3 × 5 glyphs in 2 × 2 blocks. The `Raster`, the compact
+  stage and the list windows keep the 1× art, since a half-block cell shows one pixel per column.
+  The desktop `Svg` falls back to the 1× art for a frame whose 1.5× markup would pass the
+  engine's 131,072-character cap; legal art stays under it (ADR 0006).
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
@@ -209,7 +216,8 @@ it drops loot.
   cues: a Rare or Epic drop, a Legendary drop, a level up, and a world boss appearing. Each plays
   beside its toast, at a fixed volume, only in the session that is playing (the primary); a
   secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
-  sound on macOS only. The cues in `cues/` are placeholders from `pnpm cues:placeholders`.
+  sound on macOS only. The cues in `cues/` come from Juhani Junkala's CC0 pack "512 Sound Effects
+  (8-bit style)".
 - **Motion**: `/promptfall motion still` (or `n`) stops the idle bob; hits, dissolves and drops
   still play. `/promptfall motion full` brings the bob back.
 - **Renderer**: `/promptfall renderer auto|image|raster` (or `x` to cycle), see Stage.
@@ -263,25 +271,46 @@ fails when it is stale (`pnpm sprites:check`).
 
 - `art/manifest.json` has one entry per sprite id: `hero:<class>`, `hero_attack:<class>`,
   `enemy:<content id>`, `world_boss:<name key>`, `item:<item base>`, and `fallback`. An entry
-  names its PNG with `file` (true size, under `art/`) or `alias` (a stem under `art/concept/`,
-  which marks it a placeholder), a `style` (`nes` or `snes`), a `rarityColor` for heroes (the
-  exact source colour that takes the hero's rarity colour), and an optional `fit: { height }`.
-  The build fails on a missing or extra content id.
+  names its PNG with `file` (true size, under `art/`), a `style` (`nes` or `snes`), a
+  `rarityColor` for heroes (the exact source colour that takes the hero's rarity colour), and an
+  optional `fit: { height }`. An entry may instead name an `alias`, a stem that marks the sprite a
+  placeholder; `PLACEHOLDER_COUNT` in the generated module counts them, and a plugin test holds it
+  at 0. The build fails on a missing or extra content id.
+- The real art lives in `art/sprites/<kind>/<name>.png`, cut from gpt-image-2 sprite sheets.
+  `art/sheets.md` records each sheet: its prompt, its reference images, the commands that cut it,
+  and a Redos table. The raw sheets stay in the gitignored `art/sheets/`.
 - `art/palettes/nes.json` is the 64-entry NES master palette (the FCEUX table, duplicates kept so
   the indices match). `art/palettes/snes.json` is the shared 64-colour SNES master, written by
-  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` stem.
+  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` entry's `file`
+  (aliases are skipped): all 28 bosses and world bosses. It is locked since zone 12's bosses landed;
+  re-deriving it changes every boss's art.
 - Every opaque pixel snaps to its style's master palette. An `nes` sprite may then hold at most 4
   colours and fit 16 × 16 (smaller art is padded, bottom-centred). An `snes` sprite may hold at
   most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.
 - The build also writes a `compact` variant (8 px tall) of every sprite and an 8 × 4 `small`
   variant of every item, for the compact stage and the half-block lists.
-- `pnpm slice <sheet.png> <out-dir> --grid 4x3 [--row r] --colours n (--size 16 | --fit 48x34)
-  [--names a,b,c]` cuts a magenta-keyed sheet into one PNG per cell. The phase 4 concept sheets in
-  `docs/plans/phase-4-concepts/` were cut this way into `art/concept/`.
-- In PR 1 every sprite is an alias: enemies use the concept monster of their archetype, zone and
-  world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
-  slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
-  counts them.
+- Each sprite has a second drawing, its 1.5× art, for the full stage on `Image` terminals and the
+  desktop. An entry names it with `fileHires` (a PNG in `art/sprites-hires/<kind>/<name>.png`)
+  and, for a hero, `rarityColorHires`. The 1.5× art snaps to `art/palettes/hires.json`, a
+  128-colour master that `pnpm sprites --derive-hires-master` writes from every `fileHires` PNG.
+  It may hold 16 colours and fit 24 × 24 (`nes`, padded) or 72 × 51 (`snes`); a turn boss fits
+  36 rows. A larger PNG is shrunk to fit, never grown. A hero's `rarityColorHires` slot must be
+  one 8-connected region after the snap, or the build fails. An entry without `fileHires` gets
+  its 1× art upscaled 1.5 times.
+- `pnpm slice <sheet.png> <out-dir> --grid <cols>x<rows> [--row r] --colours n (--size 16 | --fit
+  48x34) [--names kind/a,kind/b] [--native <dir>] [--hires <dir>]` cuts a magenta-keyed sheet. It finds each
+  sprite by the magenta gutters around it (`--grid` counts sprites per row and rows), reads the
+  sprite's art-pixel size from its black outline, samples one value per art pixel, then shrinks
+  to the canvas by a majority vote that keeps the outline black. `--native` also writes each
+  sprite at its own pixel grid, and `--hires` its 1.5× cut: the native fitted to 1.5 times the
+  canvas, in 16 colours. A sprite it cannot read is reported and skipped.
+- `pnpm grid <in.png>` prints a sprite as text, a legend (`0` is black, `.` transparent) and one
+  character per pixel; `pnpm grid --png <in.txt> <out.png>` writes it back. The hero sprites were
+  cleaned up this way.
+- `pnpm contact --zone <n> | --heroes | --items <a,b> | --world-bosses` renders each built sprite
+  at 6× and its 1.5× art at 4× (`-hires`), its native cut at 4× and, for a zone, the stage at
+  rest, with its zone boss and with its turn boss, at 1.5× (`stage-*.png`) and at 1×
+  (`stage-*-1x.png`), into `.promptfall/contact/<label>/`, for review.
 - The Inventory and Heroes list windows lead each row with its sprite, fitted into 16 × 16 px,
   where pictures draw (an Image terminal, the desktop); the raster windows leave the two cells
   blank. The Market list keeps its sprite as before.

@@ -6,8 +6,8 @@ import { encodeImage } from '../stage/image'
 import { layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
-import { stageAt } from '../stage/model'
-import { renderSvg } from '../stage/svg'
+import { altText, stageAt } from '../stage/model'
+import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
   DESKTOP_COLUMN_PX,
@@ -274,10 +274,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // is never blank; the loop blits every frame after it.
     const box = layout.box
     if (box && !terminal && 'Svg' in els) {
-      const model = stageAt(view, timeline, now, box, { compact: false, motion: settings.motion })
-      const source = renderSvg(model, timeline.active(now), {
+      // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
+      const source = stageSvg(view, timeline, now, box, {
         smil: SVG_SMIL,
-        now,
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
         motion: settings.motion,
@@ -296,7 +295,13 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
           : {}
       stage = (
-        <Svg key="stage" source={source} alt={model.alt} isInteractive={SVG_INTERACTIVE} {...fit} />
+        <Svg
+          key="stage"
+          source={source}
+          alt={altText(view)}
+          isInteractive={SVG_INTERACTIVE}
+          {...fit}
+        />
       )
     } else if (box && terminal && 'Raster' in els) {
       const { Raster, Image } = els

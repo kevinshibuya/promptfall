@@ -7,7 +7,7 @@ import { boss, wave } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { layoutFor } from './layout'
 import { MessageLog } from './log'
-import { type LoopIo, StageLoop, type StageSite } from './loop'
+import { type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
 import { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
@@ -405,4 +405,21 @@ test('a bare site (World) blits the strip and no stage; a boss arriving is not a
   h.state.view = boss()
   await clock.advance(IDLE_FRAME_MS * 3)
   expect(h.invalidations).toHaveLength(0)
+})
+
+test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled 6 times', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), 0)
+  const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
+  const image = stageFrame(wave(), t, 0, full, 'image', 'full')
+  if (!('source' in image)) throw new Error('expected an Image source')
+  expect([image.source.width, image.source.height]).toEqual([720, 96])
+  const narrow = layoutFor(t.rowsAt(wave(), 0), { bodyColumns: 105, maxRows: 30 }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+  })
+  expect(narrow.kind).toBe('compact')
+  const compact = stageFrame(wave(), t, 0, narrow, 'image', 'full')
+  if (!('source' in compact)) throw new Error('expected an Image source')
+  expect([compact.source.width, compact.source.height]).toEqual([312, 48])
 })

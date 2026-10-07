@@ -5,3 +5,4 @@ dist
 *.tsbuildinfo
 .promptfall/
 spikes/*/.claude-plugin/types/
+art/sheets/
