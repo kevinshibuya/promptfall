@@ -231,4 +231,79 @@ describe('sliceSheet', () => {
     expect(out).toHaveLength(2)
     for (const r of out) expect(toArt(ok(r).native)).toEqual(blob(12, 10))
   })
+
+  describe('the 1.5× cut', () => {
+    it('shrinks a large native to 24 on its long side on the 24 × 24 canvas', () => {
+      const sheet = magenta(360, 360)
+      draw(sheet, blob(30, 30), 30, 30, 10)
+      const r = ok(sliceSheet(sheet, opts({ cols: 1, rows: 1 }))[0])
+      expect(r.hires.width).toBe(24)
+      expect(r.hires.height).toBe(24)
+      const art = toArt(r.hires)
+      expect(art[0]?.some((v) => v !== null)).toBe(true)
+      expect(art.map((row) => row[0]).some((v) => v !== null)).toBe(true)
+      expect(r.art.width).toBe(16)
+    })
+
+    it('pads a small native bottom-centred on the 24 × 24 canvas without upscaling it', () => {
+      const sheet = magenta(200, 200)
+      const art = blob(12, 10)
+      draw(sheet, art, 40, 50, 8)
+      const r = ok(sliceSheet(sheet, opts({ cols: 1, rows: 1 }))[0])
+      expect(toArt(r.hires)).toEqual(padded(art, 24))
+    })
+
+    it('fits --fit sprites in the 1.5× box, unpadded', () => {
+      const sheet = magenta(500, 340)
+      draw(sheet, blob(60, 40), 30, 30, 6)
+      const r = ok(
+        sliceSheet(
+          sheet,
+          opts({ cols: 1, rows: 1, size: null, fit: { width: 48, height: 34 } }),
+        )[0],
+      )
+      expect(r.hires.width).toBe(60)
+      expect(r.hires.height).toBe(40)
+      expect(r.art.width).toBeLessThanOrEqual(48)
+    })
+
+    it('shrinks a --fit native larger than the 1.5× box into it', () => {
+      const sheet = magenta(620, 440)
+      draw(sheet, blob(100, 70), 10, 10, 6)
+      const r = ok(
+        sliceSheet(
+          sheet,
+          opts({ cols: 1, rows: 1, size: null, fit: { width: 48, height: 34 } }),
+        )[0],
+      )
+      expect(r.hires.width).toBeLessThanOrEqual(72)
+      expect(r.hires.height).toBeLessThanOrEqual(51)
+      expect(Math.max(r.hires.width / 72, r.hires.height / 51)).toBeCloseTo(1, 1)
+    })
+
+    it('holds at most 16 colours whatever --colours says', () => {
+      const sheet = magenta(260, 260)
+      const art = blob(20, 20).map((row, y) =>
+        row.map((v, x) =>
+          v === null || v === 0 ? v : (((x * 12) % 256) << 16) | ((y * 12) << 8) | 0x40,
+        ),
+      )
+      draw(sheet, art, 30, 30, 10)
+      const r = ok(sliceSheet(sheet, opts({ cols: 1, rows: 1, colours: 4 }))[0])
+      const colours = new Set(
+        toArt(r.hires)
+          .flat()
+          .filter((v) => v !== null),
+      )
+      expect(
+        new Set(
+          toArt(r.native)
+            .flat()
+            .filter((v) => v !== null),
+        ).size,
+      ).toBeGreaterThan(30)
+      expect(colours.size).toBeLessThanOrEqual(16)
+      expect(colours.size).toBeGreaterThan(4)
+    })
+  })
 })

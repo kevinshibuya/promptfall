@@ -60,7 +60,8 @@ before: `hires` does not exist. Full check line.
 
 **Boundaries:** No change to the 1× cut or the key.
 
-- [ ] tests, red; implement; full check line; commit
+- [x] tests, red; implement; full check line; commit (the shrink check uses a 30 × 30 native:
+  a 20 × 20 one cannot shrink to 24, the fit never grows)
 
 ### Task H2: the build's `hires` variant and the 1.5× master
 

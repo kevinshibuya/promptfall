@@ -5,7 +5,10 @@
 // Task 1.
 //
 // tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>]
-//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>]
+//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]
+//
+// Each sprite also gets its 1.5× cut: the same native fitted to 1.5 times the target and
+// quantised to 16 colours (docs/plans/2026-10-07-promptfall-phase-4-pr2-hires.md, Task H1).
 import { mkdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { blank, medianCut, nearest, type Rgba, readPng, writePng } from './png'
@@ -22,7 +25,7 @@ export type SliceOptions = {
 }
 
 export type SliceResult =
-  | { art: Rgba; native: Rgba; block: number; fromMedian: boolean }
+  | { art: Rgba; hires: Rgba; native: Rgba; block: number; fromMedian: boolean }
   | { error: string }
 
 /**
@@ -269,26 +272,49 @@ function toRgba(grid: { w: number; h: number; px: number[] }): Rgba {
   return img
 }
 
-/** One measured sprite: native grid, shrink, quantise, pad. */
-function cut(sheet: Rgba, box: Box, b: number, options: SliceOptions) {
-  const nat = nativeGrid(sheet, box, b)
-  if (nat.w === 0) throw new Error('no sprite on the grid')
-  const target = options.fit ?? { width: options.size ?? 16, height: options.size ?? 16 }
+/** The 1.5× cut's scale and colour count. */
+const HIRES_SCALE = 1.5
+const HIRES_COLOURS = 16
+
+/** Shrink to the target, quantise to `colours` (black plus a median cut), pad a square canvas. */
+function fitted(
+  nat: { w: number; h: number; px: number[] },
+  target: { width: number; height: number },
+  colours: number,
+  square: number | null,
+): Rgba {
   const small = shrink(nat, target.width, target.height)
   const counts = new Map<number, number>()
   for (const v of small.px) if (v !== T && v !== 0) counts.set(v, (counts.get(v) ?? 0) + 1)
-  const palette = [0, ...medianCut(counts, options.colours - 1)]
+  const palette = [0, ...medianCut(counts, colours - 1)]
   const art = toRgba({ ...small, px: small.px.map((v) => (v === T ? T : nearest(v, palette))) })
-  if (options.size === null) return { art, native: toRgba(nat) }
+  if (square === null) return art
   // Pad to the square canvas, bottom-centred.
-  const n = options.size
+  const n = square
   const out = blank(n, n)
   const ox = Math.floor((n - small.w) / 2)
   const oy = n - small.h
   for (let y = 0; y < small.h; y++) {
     out.data.set(art.data.subarray(y * small.w * 4, (y + 1) * small.w * 4), ((oy + y) * n + ox) * 4)
   }
-  return { art: out, native: toRgba(nat) }
+  return out
+}
+
+/** One measured sprite: native grid, then the 1× and 1.5× cuts. */
+function cut(sheet: Rgba, box: Box, b: number, options: SliceOptions) {
+  const nat = nativeGrid(sheet, box, b)
+  if (nat.w === 0) throw new Error('no sprite on the grid')
+  const target = options.fit ?? { width: options.size ?? 16, height: options.size ?? 16 }
+  const hiresTarget = {
+    width: Math.round(target.width * HIRES_SCALE),
+    height: Math.round(target.height * HIRES_SCALE),
+  }
+  const hiresSquare = options.size === null ? null : Math.round(options.size * HIRES_SCALE)
+  return {
+    art: fitted(nat, target, options.colours, options.size),
+    hires: fitted(nat, hiresTarget, HIRES_COLOURS, hiresSquare),
+    native: toRgba(nat),
+  }
 }
 
 function median(values: readonly number[]): number {
@@ -355,6 +381,7 @@ function parseArgs(argv: string[]): {
   sheet: string
   out: string
   native: string | null
+  hires: string | null
   options: SliceOptions
   names: string[]
 } {
@@ -373,7 +400,7 @@ function parseArgs(argv: string[]): {
   const colours = Number(flag('colours'))
   if (!sheet || !out || !grid || !colours || (size === undefined) === (fit === null)) {
     throw new Error(
-      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>]',
+      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]',
     )
   }
   const names = flag('names')?.split(',') ?? []
@@ -384,6 +411,7 @@ function parseArgs(argv: string[]): {
     sheet,
     out,
     native: flag('native') ?? null,
+    hires: flag('hires') ?? null,
     names,
     options: {
       cols: grid.a,
@@ -402,7 +430,7 @@ function write(path: string, img: Rgba): void {
 }
 
 function main(): void {
-  const { sheet, out, native, options, names } = parseArgs(process.argv.slice(2))
+  const { sheet, out, native, hires, options, names } = parseArgs(process.argv.slice(2))
   const results = sliceSheet(readPng(sheet), options)
   let failed = false
   results.forEach((r, i) => {
@@ -415,9 +443,10 @@ function main(): void {
     const path = join(out, `${name}.png`)
     write(path, r.art)
     if (native !== null) write(join(native, `${name}.png`), r.native)
+    if (hires !== null) write(join(hires, `${name}.png`), r.hires)
     const block = `block ${r.block.toFixed(2)}${r.fromMedian ? ' (median)' : ''}`
     console.log(
-      `${path} ${r.art.width}x${r.art.height} native ${r.native.width}x${r.native.height} ${block}`,
+      `${path} ${r.art.width}x${r.art.height} hires ${r.hires.width}x${r.hires.height} native ${r.native.width}x${r.native.height} ${block}`,
     )
   })
   if (failed) process.exitCode = 1
