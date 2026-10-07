@@ -16,6 +16,7 @@ function model(overrides: Partial<StageModel> = {}): StageModel {
     numbers: [],
     drops: [],
     alt: '',
+    scale: 1,
     ...overrides,
   }
 }
@@ -31,6 +32,7 @@ const actorAt = (alpha: number) => ({
   alpha,
   fallen: false,
   flashing: false,
+  raritySlot: null,
 })
 
 const opaqueIn = (f: { width: number; rgba: Uint8ClampedArray }, w: number, h: number) => {
@@ -84,4 +86,36 @@ test('artFrame is the art size; the font has 11 glyphs of 3 × 5; fnv1a64 of not
   }
   expect(fnv1a64('')).toBe('cbf29ce484222325')
   expect(fnv1a64('a')).toBe('af63dc4c8601ec8c')
+})
+
+test('at scale 1.5 the frame is 1.5 times the box, the ground 3 rows, a glyph pixel a 2 × 2 block', () => {
+  const f = composeFrame(
+    model({ scale: 1.5, numbers: [{ text: '1', x: 4, y: 2, rgb: 0xffffff }] }),
+    { numbers: true },
+  )
+  expect([f.width, f.height]).toEqual([60, 30])
+  const g = ZONE_GROUND[0] ?? 0
+  const rgbAt = (x: number, y: number) => {
+    const i = (y * f.width + x) * 4
+    return f.rgba[i + 3]
+      ? ((f.rgba[i] ?? 0) << 16) | ((f.rgba[i + 1] ?? 0) << 8) | (f.rgba[i + 2] ?? 0)
+      : null
+  }
+  for (const y of [27, 28, 29]) expect(rgbAt(0, y)).toBe(g)
+  expect(rgbAt(0, 26)).toBe(null)
+  // '1' row 0 is '.#.': glyph pixel (1, 0) covers frame pixels (6..7, 2..3).
+  const glyph = DIGITS['1'] ?? []
+  for (let gy = 0; gy < 5; gy++) {
+    for (let gx = 0; gx < 3; gx++) {
+      const on = glyph[gy]?.[gx] === '#'
+      for (const [dx, dy] of [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1],
+      ] as const) {
+        expect(rgbAt(4 + gx * 2 + dx, 2 + gy * 2 + dy) === 0xffffff).toBe(on)
+      }
+    }
+  }
 })

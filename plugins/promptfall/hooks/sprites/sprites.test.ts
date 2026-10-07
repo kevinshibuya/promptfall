@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import { WORLD_BOSSES } from '../vendor/ledger.js'
 import { content } from '../vendor/sim.js'
 import { decode, encode } from './base64'
-import { SPRITE_COUNT, SPRITES } from './generated'
+import { PLACEHOLDER_COUNT, SPRITE_COUNT, SPRITES } from './generated'
 import { decodePixels, spriteFor, worldBossKey } from './index'
 import type { SpriteArt } from './types'
 
@@ -64,4 +64,13 @@ test('one sprite per content id, plus the fallback', () => {
       Object.keys(content.itemBases).length +
       1,
   )
+})
+
+test('every sprite is real art: no placeholders left', () => {
+  expect(PLACEHOLDER_COUNT).toBe(0)
+  expect(
+    Object.values(SPRITES)
+      .filter((s) => s.isPlaceholder)
+      .map((s) => s.id),
+  ).toEqual([])
 })

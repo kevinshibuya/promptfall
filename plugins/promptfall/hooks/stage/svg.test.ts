@@ -3,7 +3,8 @@ import { spriteFor } from '../sprites/index'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
 import { stageAt } from './model'
-import { renderSvg } from './svg'
+import { stage } from './scenarios'
+import { renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
 import { DROP_MS, LUNGE_MS, RARITY_RGB } from './tuning'
 
@@ -144,4 +145,15 @@ test('a hero flashing at a redraw keeps its rarity colour under the flash', () =
   const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
   const rare = `#${(RARITY_RGB.rare ?? 0).toString(16).padStart(6, '0')}`
   expect(s).toContain(`color="${rare}"`)
+})
+
+test('the rest scenario at 1.5: viewBox 0 0 180 24 at the same rendered width', () => {
+  const s = stage('rest')
+  const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
+  const hi = svgWithFallback(s.hires, s.model, s.motions, opts)
+  const lo = renderSvg(s.model, s.motions, opts)
+  expect(hi).toContain('viewBox="0 0 180 24" width="960" height="128"')
+  expect(lo).toContain('viewBox="0 0 120 16" width="960" height="128"')
+  // The hero art carries its 1.5x rarity slot as currentColor.
+  expect(hi).toContain('fill="currentColor"')
 })

@@ -16,8 +16,12 @@ export type Sprite = {
   style: 'nes' | 'snes'
   /** The palette index that takes the hero's rarity colour; heroes and hero attacks only, else null. */
   raritySlot: number | null
+  /** As `raritySlot`, for `hires`. */
+  raritySlotHires: number | null
   /** 16 × 16 for every nes sprite (padded), up to 48 × 34 for snes: the full stage and the 16 px list sprite */
   full: SpriteArt
+  /** The 1.5x art: 24 × 24 for nes (padded), up to 72 × 51 for snes: the full stage on Image and Svg */
+  hires: SpriteArt
   /** At most 8 px tall, width scaled to keep the aspect: the compact stage */
   compact: SpriteArt
   /** Exactly 8 × 4, items only: half-block lists */
