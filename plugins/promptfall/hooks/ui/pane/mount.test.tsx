@@ -16,10 +16,10 @@ import {
   closed,
   focusFrom,
   focusMove,
-  needsRefocus,
   type PaneDraw,
   paneElement,
   placed,
+  refocusKey,
   ringOnInput,
   runAction,
   stepCursor,
@@ -288,40 +288,44 @@ test('the ring goes back on the ▶ when the stops or the open window change', (
     focus: 'menu:0',
   }
   const sig = (b: PaneBuild, w: string) => stopsSignature(b, w)
-  const place = (s: string) => {
-    if (needsRefocus('t', s, false)) placed('t', s)
+  const place = (b: PaneBuild, s: string) => {
+    if (refocusKey('t', s, b) !== false) placed('t', s)
   }
   // The first drawing of an instance: its autoFocus places the ring.
-  expect(needsRefocus('t', sig(BUILD, 'inventory'), false)).toBe(false)
+  expect(refocusKey('t', sig(BUILD, 'inventory'), BUILD)).toBe(false)
   // The same stops (a cursor move): the ring is already there.
-  expect(needsRefocus('t', sig({ ...BUILD, focus: 'row:b' }, 'inventory'), false)).toBe(false)
+  const moved = { ...BUILD, focus: 'row:b' }
+  expect(refocusKey('t', sig(moved, 'inventory'), moved)).toBe(false)
   // A menu opens: changed, and stays changed until a focus took.
-  expect(needsRefocus('t', sig(menu, 'actions:a'), false)).toBe(true)
-  expect(needsRefocus('t', sig(menu, 'actions:a'), false)).toBe(true)
+  expect(refocusKey('t', sig(menu, 'actions:a'), menu)).toBe('menu:0')
+  expect(refocusKey('t', sig(menu, 'actions:a'), menu)).toBe('menu:0')
   placed('t', sig(menu, 'actions:a'))
   // A reforge pick with as many items: the same keys, another window.
-  expect(needsRefocus('t', sig(menu, 'reforge:a'), false)).toBe(true)
-  place(sig(menu, 'reforge:a'))
+  expect(refocusKey('t', sig(menu, 'reforge:a'), menu)).toBe('menu:0')
+  place(menu, sig(menu, 'reforge:a'))
   // A row inserted above the ring (a recruit, a drop).
-  place(sig(BUILD, 'inventory'))
-  expect(
-    needsRefocus(
-      't',
-      sig({ ...BUILD, stops: [row('new', 0), ...BUILD.stops] }, 'inventory'),
-      false,
-    ),
-  ).toBe(true)
+  place(BUILD, sig(BUILD, 'inventory'))
+  const inserted = { ...BUILD, stops: [row('new', 0), ...BUILD.stops] }
+  expect(refocusKey('t', sig(inserted, 'inventory'), inserted)).toBe('row:a')
 })
 
-test('no re-focus while the ring is on the price Input; leaving the price form ends that', () => {
-  const a = stopsSignature(BUILD, 'sell:i')
-  const b = stopsSignature({ ...BUILD, stops: [row('o1', 0), ...BUILD.stops] }, 'sell:i')
-  needsRefocus('p', a, true)
+test('a row inserted while the ring is on a field puts the ring back on the field', () => {
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: 'two',
+    submitLabel: 'send',
+  }
+  const a: PaneBuild = { ...BUILD, field }
+  const b: PaneBuild = { ...a, stops: [row('o1', 0), ...a.stops] }
+  refocusKey('p', stopsSignature(a, 'chat'), a)
   ringOnInput('p', true)
-  // Buy orders arrive while the person types a price.
-  expect(needsRefocus('p', b, true)).toBe(false)
-  // The price form is gone (listed): the ring goes back on the ▶.
-  expect(needsRefocus('p', stopsSignature(BUILD, 'inventory'), false)).toBe(true)
+  // A chat message arrives while the person types: the ring goes back to the field, not the ▶.
+  expect(refocusKey('p', stopsSignature(b, 'chat'), b)).toBe('compose')
+  placed('p', stopsSignature(b, 'chat'))
+  // The field is gone (the tab changed): the ring goes back on the ▶.
+  expect(refocusKey('p', stopsSignature(BUILD, 'inventory'), BUILD)).toBe('row:a')
 })
 
 /** A game handle stub: the market reads and trades the PR 3 actions reach, recorded. */
@@ -587,4 +591,22 @@ test('placeOrder sends nothing for a price out of range', async () => {
     () => undefined,
   )
   expect(calls).toEqual([])
+})
+
+test('on a terminal with a field, the hidden stops follow the field in the ring', async ($, on) => {
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: '',
+    submitLabel: 'send',
+  }
+  underPane(on, withUnder(field, null))
+  const ui = await mountPane($, 'terminal')
+  const order = (await ui.findAll({}))
+    .map((e) => e.key)
+    .filter((k) => k === 'compose' || k === 'row:a')
+  // The field first: a row inserted among the stops (a message arriving) leaves its place alone.
+  expect(order).toEqual(['compose', 'row:a'])
+  await ui.unmount()
 })

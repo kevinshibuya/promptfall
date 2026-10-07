@@ -46,11 +46,11 @@ import { boardsPane } from './pane/leaderboards'
 import { marketPane } from './pane/market'
 import {
   type ActionContext,
-  needsRefocus,
   type PaneDraw,
   paneElement,
   paneWindow,
   placed,
+  refocusKey,
   registerPaneHooks,
   remember,
   ringOnInput,
@@ -214,8 +214,8 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
 
     const requestId = e.requestId
     const signature = stopsSignature(build, paneWindow(dialog, tab, orders.form !== null))
-    if (needsRefocus(requestId, signature, build.field !== null)) {
-      const key = build.focus
+    const key = refocusKey(requestId, signature, build)
+    if (key !== false) {
       if (key === null) placed(requestId, signature)
       else {
         // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.

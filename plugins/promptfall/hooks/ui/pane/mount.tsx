@@ -84,18 +84,25 @@ export function isFieldKey(element: string | undefined): boolean {
 }
 
 /**
- * True when the ring should go back on the ▶: the signature differs from the last one the ring
- * was placed against, and the ring is not on a field. The first drawing of an instance only
- * records it (its autoFocus places the ring). `placed` records it once the focus took.
+ * Where the ring goes back to once the stops changed under it (the engine keeps the ring by
+ * position, so a row inserted before a field slides the ring off it): the field it was on, else
+ * the ▶; null when there is no ▶ (record it as placed); false when the stops did not change. The
+ * first drawing of an instance only records them (its autoFocus places the ring). `placed`
+ * records them once the focus took.
  */
-export function needsRefocus(requestId: string, signature: string, fieldShown: boolean): boolean {
-  if (!fieldShown) onInput.delete(requestId)
+export function refocusKey(
+  requestId: string,
+  signature: string,
+  build: PaneBuild,
+): string | null | false {
+  if (!build.field) onInput.delete(requestId)
   const was = lastStops.get(requestId)
   if (was === undefined) {
     lastStops.set(requestId, signature)
     return false
   }
-  return was !== signature && !onInput.has(requestId)
+  if (was === signature) return false
+  return onInput.has(requestId) && build.field ? build.field.key : build.focus
 }
 export function placed(requestId: string, signature: string): void {
   lastStops.set(requestId, signature)
@@ -227,6 +234,11 @@ export function paneElement(d: PaneDraw): RenderElement {
   }
 
   const pad = terminal ? Math.max(0, Math.floor((d.bodyColumns - scene.columns) / 2)) : 0
+  const f = d.build.field
+  // On a terminal the ring walks the tree in order. With a field, the hidden stops follow it, so a
+  // row inserted among them (a chat message arriving) leaves the field's place in the ring alone;
+  // before it, the engine's ring would slide off the field onto a Button.
+  const stopsAfterField = terminal && f !== null && Input !== undefined
   const row = (
     <Box
       key="pane-picture"
@@ -234,10 +246,9 @@ export function paneElement(d: PaneDraw): RenderElement {
       {...(terminal ? { paddingLeft: pad } : { alignItems: 'center' as const })}
     >
       {picture}
-      {stops}
+      {stopsAfterField ? null : stops}
     </Box>
   )
-  const f = d.build.field
   const field =
     f && Input ? (
       <Box key="pane-field" flexDirection="row" {...(terminal ? { paddingLeft: pad } : {})}>
@@ -250,6 +261,7 @@ export function paneElement(d: PaneDraw): RenderElement {
           onInput={(text: string) => d.field.onInput(f.key, text)}
           onSubmit={(text: string) => d.field.onSubmit(f.key, text)}
         />
+        {stopsAfterField ? stops : null}
       </Box>
     ) : null
   const link = d.build.link ? (
