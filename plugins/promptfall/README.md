@@ -264,25 +264,35 @@ fails when it is stale (`pnpm sprites:check`).
 
 - `art/manifest.json` has one entry per sprite id: `hero:<class>`, `hero_attack:<class>`,
   `enemy:<content id>`, `world_boss:<name key>`, `item:<item base>`, and `fallback`. An entry
-  names its PNG with `file` (true size, under `art/`) or `alias` (a stem under `art/concept/`,
-  which marks it a placeholder), a `style` (`nes` or `snes`), a `rarityColor` for heroes (the
-  exact source colour that takes the hero's rarity colour), and an optional `fit: { height }`.
-  The build fails on a missing or extra content id.
+  names its PNG with `file` (true size, under `art/`), a `style` (`nes` or `snes`), a
+  `rarityColor` for heroes (the exact source colour that takes the hero's rarity colour), and an
+  optional `fit: { height }`. An entry may instead name an `alias`, a stem that marks the sprite a
+  placeholder; `PLACEHOLDER_COUNT` in the generated module counts them, and a plugin test holds it
+  at 0. The build fails on a missing or extra content id.
+- The real art lives in `art/sprites/<kind>/<name>.png`, cut from gpt-image-2 sprite sheets.
+  `art/sheets.md` records each sheet: its prompt, its reference images, the commands that cut it,
+  and a Redos table. The raw sheets stay in the gitignored `art/sheets/`.
 - `art/palettes/nes.json` is the 64-entry NES master palette (the FCEUX table, duplicates kept so
   the indices match). `art/palettes/snes.json` is the shared 64-colour SNES master, written by
-  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` stem.
+  `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` entry's `file`
+  (aliases are skipped). It is derived once, from the zone 1 and world bosses, and then locked.
 - Every opaque pixel snaps to its style's master palette. An `nes` sprite may then hold at most 4
   colours and fit 16 × 16 (smaller art is padded, bottom-centred). An `snes` sprite may hold at
   most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.
 - The build also writes a `compact` variant (8 px tall) of every sprite and an 8 × 4 `small`
   variant of every item, for the compact stage and the half-block lists.
-- `pnpm slice <sheet.png> <out-dir> --grid 4x3 [--row r] --colours n (--size 16 | --fit 48x34)
-  [--names a,b,c]` cuts a magenta-keyed sheet into one PNG per cell. The phase 4 concept sheets in
-  `docs/plans/phase-4-concepts/` were cut this way into `art/concept/`.
-- In PR 1 every sprite is an alias: enemies use the concept monster of their archetype, zone and
-  world bosses a concept boss, turn bosses the same boss fit to 24 px, items a placeholder per
-  slot, and the attack pose of each hero its idle art. `PLACEHOLDER_COUNT` in the generated module
-  counts them.
+- `pnpm slice <sheet.png> <out-dir> --grid <cols>x<rows> [--row r] --colours n (--size 16 | --fit
+  48x34) [--names kind/a,kind/b] [--native <dir>]` cuts a magenta-keyed sheet. It finds each
+  sprite by the magenta gutters around it (`--grid` counts sprites per row and rows), reads the
+  sprite's art-pixel size from its black outline, samples one value per art pixel, then shrinks
+  to the canvas by a majority vote that keeps the outline black. `--native` also writes each
+  sprite at its own pixel grid. A sprite it cannot read is reported and skipped.
+- `pnpm grid <in.png>` prints a sprite as text, a legend (`0` is black, `.` transparent) and one
+  character per pixel; `pnpm grid --png <in.txt> <out.png>` writes it back. The hero sprites were
+  cleaned up this way.
+- `pnpm contact --zone <n> | --heroes | --items <a,b> | --world-bosses` renders each built sprite
+  at 6×, its native cut at 4× and, for a zone, the stage at rest, with its zone boss and with its
+  turn boss, into `.promptfall/contact/<label>/`, for review.
 - The Inventory and Heroes list windows lead each row with its sprite, fitted into 16 × 16 px,
   where pictures draw (an Image terminal, the desktop); the raster windows leave the two cells
   blank. The Market list keeps its sprite as before.

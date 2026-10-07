@@ -98,3 +98,52 @@ CLAUDE_CODE_PLUGIN_DIRS` and quit and reopen it again.
 - n/a: the renderer probe, the Account tab's `Renderer: auto (…)` and
   `/promptfall renderer image|raster` are terminal-only (the desktop has one renderer, the Svg).
 - n/a: compact and one-row widths: the desktop never uses the cell thresholds (ADR 0004).
+
+## Part B: the real art and the cues (PR 2)
+
+Part B checks what PR 2 changes: every sprite is real art, and the four cues are 8-bit clips. Run
+it after Part A's setup (sound off, motion full, renderer auto). Every sprite on the stage, in the
+lists and on the Market should be pixel art drawn for its id. A grey crate, or a concept sprite
+from `docs/plans/phase-4-concepts/`, is a red.
+
+### Ghostty
+
+1. **Start.** `claude --plugin-dir plugins/promptfall` in a window at least 130 columns wide. The
+   Party tab's stage shows the zone 1 ground and the party on the right, facing left: the knight
+   (white plate, red plume, a shield with a cross), the black mage (a blue-violet pointed hat, a
+   shadowed face with pale eyes, a pale scarf), the white mage (a white hood, a teal stole, a staff
+   with a ring). Each hero's rarity shows on one area: the knight's cape, the black mage's robe,
+   the white mage's stole, the archer's cape. Grey is Common, green Uncommon, blue Rare, purple
+   Epic, gold Legendary.
+2. **Zone 1 monsters.** Play a few waves. Road slimes, field rats, goblin scouts and hedge sprites
+   appear at the left, each with a black outline, none of them a generic concept monster.
+3. **Zone boss.** Keep playing to wave 11. The stage grows to 17 rows and the Bandit Captain
+   stands on it (a bandana, a long coat, a cutlass), taller than the heroes. It dissolves when it
+   dies and the stage shrinks back.
+4. **Turn boss.** A turn of 10 or more tool calls brings the Wild Boar: the stage grows to 12
+   rows and the boar is 24 pixels tall.
+5. **Cues.** `/promptfall sound on`. A Rare or Epic drop plays a short double coin chime, a
+   Legendary drop a longer rising coin shower, a level up a short rising climb. Common and
+   Uncommon drops stay silent. `/promptfall sound off`.
+6. **Lists.** `/promptfall`. Each Inventory row leads with its item's 16-pixel sprite (a sword, a
+   staff, a robe, a ring), and each Heroes row with its class sprite in its rarity colour.
+7. **Compact.** Narrow the window to between 100 and 115 columns. The compact stage shows the same
+   art shrunk to 8 pixels tall: still recognisable shapes, outlines intact.
+8. **Later zones.** If you have a save past zone 1, or play long enough, the ground changes colour
+   with the zone and each zone has its own monsters and bosses. The review page lists them all.
+
+### Desktop app
+
+Load the plugin and start the HTTP fake as in Part A's desktop steps (15), with `--boss-in 300`.
+
+9. **The stage.** The SVG stage shows the same heroes, monsters and ground as Ghostty step 1, sharp
+   at any band width.
+10. **World boss.** Turn sound on and start the `afplay` watcher (Part A step 21). About 300 s after
+    the fake started, the world boss toast shows, the cue is a falling alarm (`boss.wav` in the
+    log), and the stage grows with The Promptwyrm: a red coiled serpent-dragon, not a concept boss.
+11. **Cues.** As drops and level ups come in, the watcher logs `drop.wav`, `legendary.wav` and
+    `level_up.wav`, and each one sounds like Ghostty step 5.
+12. **Lists.** The Inventory, Heroes and Market panes lead each row with the same sprites as
+    Ghostty step 6.
+13. **Finish.** `/promptfall sound off`, `/promptfall server local`, then unset
+    `CLAUDE_CODE_PLUGIN_DIRS` as in Part A.
