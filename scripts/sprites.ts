@@ -4,6 +4,7 @@
 //
 // tsx scripts/sprites.ts                       build, exit 1 listing every failure
 // tsx scripts/sprites.ts --derive-snes-master  write art/palettes/snes.json from the snes stems
+// tsx scripts/sprites.ts --derive-hires-master write art/palettes/hires.json from the 1.5x art
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { worldBossKey } from '../plugins/promptfall/hooks/sprites/keys'
@@ -21,24 +22,33 @@ export type ManifestEntry = {
   style: string
   /** The exact source colour whose palette index takes the hero's rarity colour. */
   rarityColor?: string
+  /** A PNG under art/ holding the sprite's 1.5x art; without it the 1.5x art is `full` upscaled. */
+  fileHires?: string
+  /** As `rarityColor`, for `fileHires`. */
+  rarityColorHires?: string
   fit?: { height: number }
 }
-export type Manifest = { palettes: { nes: string; snes: string }; sprites: ManifestEntry[] }
+export type Manifest = {
+  palettes: { nes: string; snes: string; hires?: string }
+  sprites: ManifestEntry[]
+}
 
 /** Palette indices: index 0 is transparent, `palette[0]` is 0 and never drawn. */
 export type Indexed = { width: number; height: number; palette: number[]; idx: Uint8Array }
-export type Variants = { full: Indexed; compact: Indexed; small: Indexed }
+export type Variants = { full: Indexed; hires: Indexed; compact: Indexed; small: Indexed }
 export type BuiltSprite = {
   id: string
   kind: Kind
   style: Style
   stem: string
   raritySlot: number | null
+  raritySlotHires: number | null
   isPlaceholder: boolean
 }
 export type BuildInput = {
   manifest: Manifest
-  palettes: { nes: readonly number[]; snes: readonly number[] }
+  /** `hires` is empty when the manifest names no 1.5x master. */
+  palettes: { nes: readonly number[]; snes: readonly number[]; hires: readonly number[] }
   /** Reads a PNG by its path under art/; null when it does not exist. */
   load: (path: string) => Rgba | null
   /** Every sprite id the content needs. */
@@ -58,6 +68,10 @@ const COMPACT_HEIGHT = 8
 const SMALL = { width: 8, height: 4 }
 const KINDS: readonly Kind[] = ['hero', 'hero_attack', 'enemy', 'world_boss', 'item']
 const ALPHA_MIN = 128
+/** The 1.5x art: its scale over the 1x canvases and its colour limit. */
+const HIRES_SCALE = 1.5
+const HIRES_COLOURS = 16
+const HIRES_MASTER_SIZE = 128
 
 /**
  * Downsamples to `W × H`: output pixel (i, j) takes the most frequent opaque index of its source
@@ -137,6 +151,8 @@ export function buildSprites(input: BuildInput): BuildResult {
   const art = new Map<string, Variants>()
   const sources = new Map<string, Rgba>()
   const styles = new Map<string, Style>()
+  /** The fileHires each stem's 1.5x art came from. */
+  const hiresPaths = new Map<string, string>()
   const seen = new Set<string>()
   const expected = new Set(input.expected)
 
@@ -155,6 +171,10 @@ export function buildSprites(input: BuildInput): BuildResult {
       continue
     }
     const style: Style = entry.style
+    if (entry.fileHires !== undefined && input.palettes.hires.length === 0) {
+      errors.push(`${id}: fileHires needs palettes.hires`)
+      continue
+    }
     if ((entry.alias === undefined) === (entry.file === undefined)) {
       errors.push(`${id}: exactly one of alias and file`)
       continue
@@ -182,12 +202,49 @@ export function buildSprites(input: BuildInput): BuildResult {
     const variants = art.get(stem)
     if (!variants) continue
 
+    let hiresSource: Rgba | null = null
+    if (entry.fileHires !== undefined) {
+      if (hiresPaths.has(stem) && hiresPaths.get(stem) !== entry.fileHires) {
+        errors.push(`${id}: ${stem} has two fileHires`)
+        continue
+      }
+      hiresSource = sources.get(entry.fileHires) ?? input.load(entry.fileHires)
+      if (hiresSource === null) {
+        errors.push(`${id}: missing file art/${entry.fileHires}`)
+        continue
+      }
+      sources.set(entry.fileHires, hiresSource)
+      if (!hiresPaths.has(stem)) {
+        const hires = buildHires(id, hiresSource, style, input.palettes.hires, entry.fit, errors)
+        if (hires === null) continue
+        variants.hires = hires
+        hiresPaths.set(stem, entry.fileHires)
+      }
+    } else if (hiresPaths.has(stem)) {
+      errors.push(`${id}: ${stem} has two fileHires`)
+      continue
+    }
+
     let raritySlot: number | null = null
+    let raritySlotHires: number | null = null
     if (kind === 'hero' || kind === 'hero_attack') {
       raritySlot = raritySlotOf(id, entry, source, variants.full, input.palettes[style], errors)
       if (raritySlot === null) continue
+      raritySlotHires =
+        hiresSource === null
+          ? raritySlot
+          : raritySlotHiresOf(id, entry, hiresSource, variants.hires, input.palettes.hires, errors)
+      if (raritySlotHires === null) continue
     }
-    sprites.push({ id, kind, style, stem, raritySlot, isPlaceholder: entry.alias !== undefined })
+    sprites.push({
+      id,
+      kind,
+      style,
+      stem,
+      raritySlot,
+      raritySlotHires,
+      isPlaceholder: entry.alias !== undefined,
+    })
   }
   for (const id of input.expected) {
     if (!seen.has(id)) errors.push(`${id}: no manifest entry`)
@@ -225,7 +282,108 @@ function buildArt(
     Math.max(1, Math.round((full.width * COMPACT_HEIGHT) / full.height)),
     COMPACT_HEIGHT,
   )
-  return { full, compact, small: downsample(full, SMALL.width, SMALL.height) }
+  return {
+    full,
+    hires: downsample(
+      full,
+      Math.round(full.width * HIRES_SCALE),
+      Math.round(full.height * HIRES_SCALE),
+    ),
+    compact,
+    small: downsample(full, SMALL.width, SMALL.height),
+  }
+}
+
+/** The 1.5x art from its own PNG: snapped, shrunk (never grown) to the 1.5x canvas, nes padded. */
+function buildHires(
+  id: string,
+  source: Rgba,
+  style: Style,
+  master: readonly number[],
+  fit: { height: number } | undefined,
+  errors: string[],
+): Indexed | null {
+  const snapped = snap(source, master, HIRES_COLOURS)
+  if ('count' in snapped) {
+    errors.push(`${id}: hires ${snapped.count} colours, the 1.5x art allows ${HIRES_COLOURS}`)
+    return null
+  }
+  const limit = LIMITS[style]
+  const canvas = {
+    width: Math.round(limit.width * HIRES_SCALE),
+    height: Math.round(limit.height * HIRES_SCALE),
+  }
+  const maxHeight = fit ? Math.round(fit.height * HIRES_SCALE) : canvas.height
+  let art = snapped.art
+  const s = Math.min(1, canvas.width / art.width, maxHeight / art.height)
+  if (s < 1) {
+    art = downsample(
+      art,
+      Math.max(1, Math.round(art.width * s)),
+      Math.max(1, Math.round(art.height * s)),
+    )
+  }
+  return style === 'nes' ? pad(art, canvas.width, canvas.height) : art
+}
+
+/** The 1.5x rarity slot: after the snap, and its pixels one 8-connected region. */
+function raritySlotHiresOf(
+  id: string,
+  entry: ManifestEntry,
+  source: Rgba,
+  hires: Indexed,
+  master: readonly number[],
+  errors: string[],
+): number | null {
+  if (entry.rarityColorHires === undefined) {
+    errors.push(`${id}: a hero with fileHires needs a rarityColorHires`)
+    return null
+  }
+  const colour = parseHex(entry.rarityColorHires)
+  let found = false
+  for (let i = 0; i < source.data.length && !found; i += 4) {
+    found = (source.data[i + 3] ?? 0) >= ALPHA_MIN && rgbOf(source.data, i) === colour
+  }
+  const slot = hires.palette.indexOf(nearest(colour, master), 1)
+  if (!found || slot <= 0) {
+    errors.push(`${id}: rarityColorHires ${entry.rarityColorHires} is not in its PNG`)
+    return null
+  }
+  if (!oneRegion(hires, slot)) {
+    errors.push(`${id}: rarityColorHires is not one region`)
+    return null
+  }
+  return slot
+}
+
+/** Whether the pixels at `slot` form one 8-connected region. */
+function oneRegion(art: Indexed, slot: number): boolean {
+  const { width: w, height: h } = art
+  const total = art.idx.reduce((n, v) => n + (v === slot ? 1 : 0), 0)
+  const start = art.idx.indexOf(slot)
+  if (start < 0) return false
+  const seen = new Uint8Array(w * h)
+  const stack = [start]
+  seen[start] = 1
+  let reached = 0
+  while (stack.length > 0) {
+    const p = stack.pop() ?? 0
+    reached++
+    const x = p % w
+    const y = Math.floor(p / w)
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx
+        const ny = y + dy
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+        const q = ny * w + nx
+        if (seen[q] || art.idx[q] !== slot) continue
+        seen[q] = 1
+        stack.push(q)
+      }
+    }
+  }
+  return reached === total
 }
 
 function raritySlotOf(
@@ -269,7 +427,7 @@ export function emitModule(result: BuildResult): string {
     '// Generated by scripts/sprites.ts from art/manifest.json. Do not edit: run `pnpm sprites`.',
     '',
     'type Art = { width: number; height: number; palette: readonly number[]; pixels: string }',
-    'type Variants = { full: Art; compact: Art; small: Art | null }',
+    'type Variants = { full: Art; hires: Art; compact: Art; small: Art | null }',
     '',
   ]
   for (const stem of stems) {
@@ -278,7 +436,7 @@ export function emitModule(result: BuildResult): string {
     const small = items.has(stem) ? artLiteral(v.small) : 'null'
     lines.push(`// ${stem}`)
     lines.push(
-      `const ${name.get(stem)}: Variants = {\n  full: ${artLiteral(v.full)},\n  compact: ${artLiteral(v.compact)},\n  small: ${small},\n}`,
+      `const ${name.get(stem)}: Variants = {\n  full: ${artLiteral(v.full)},\n  hires: ${artLiteral(v.hires)},\n  compact: ${artLiteral(v.compact)},\n  small: ${small},\n}`,
     )
   }
   lines.push('')
@@ -287,13 +445,13 @@ export function emitModule(result: BuildResult): string {
   lines.push('}')
   lines.push('')
   lines.push(
-    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'; style: 'nes' | 'snes'; raritySlot: number | null; isPlaceholder: boolean } & Variants>> = {",
+    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'; style: 'nes' | 'snes'; raritySlot: number | null; raritySlotHires: number | null; isPlaceholder: boolean } & Variants>> = {",
   )
   for (const s of sprites) {
     const v = name.get(s.stem)
     const small = s.kind === 'item' ? `${v}.small` : 'null'
     lines.push(
-      `  '${s.id}': { id: '${s.id}', kind: '${s.kind}', style: '${s.style}', raritySlot: ${s.raritySlot}, isPlaceholder: ${s.isPlaceholder}, full: ${v}.full, compact: ${v}.compact, small: ${small} },`,
+      `  '${s.id}': { id: '${s.id}', kind: '${s.kind}', style: '${s.style}', raritySlot: ${s.raritySlot}, raritySlotHires: ${s.raritySlotHires}, isPlaceholder: ${s.isPlaceholder}, full: ${v}.full, hires: ${v}.hires, compact: ${v}.compact, small: ${small} },`,
     )
   }
   lines.push('}')
@@ -304,8 +462,8 @@ export function emitModule(result: BuildResult): string {
   return lines.join('\n')
 }
 
-/** Median cut to 64 over the opaque pixels of every snes stem. */
-export function deriveSnesMaster(images: readonly Rgba[]): number[] {
+/** Median cut to `size` over the opaque pixels of every image. */
+function deriveMaster(images: readonly Rgba[], size: number): number[] {
   const counts = new Map<number, number>()
   for (const image of images) {
     for (let i = 0; i < image.data.length; i += 4) {
@@ -314,7 +472,22 @@ export function deriveSnesMaster(images: readonly Rgba[]): number[] {
       counts.set(rgb, (counts.get(rgb) ?? 0) + 1)
     }
   }
-  return medianCut(counts, 64)
+  return medianCut(counts, size)
+}
+
+/** Median cut to 64 over the opaque pixels of every snes stem. */
+export function deriveSnesMaster(images: readonly Rgba[]): number[] {
+  return deriveMaster(images, 64)
+}
+
+/** Median cut to 128 over the opaque pixels of every 1.5x PNG. */
+export function deriveHiresMaster(images: readonly Rgba[]): number[] {
+  return deriveMaster(images, HIRES_MASTER_SIZE)
+}
+
+/** The distinct `fileHires` paths, in manifest order. */
+export function hiresMasterPaths(manifest: Manifest): string[] {
+  return [...new Set(manifest.sprites.flatMap((s) => (s.fileHires ? [s.fileHires] : [])))]
 }
 
 /** The distinct `file` paths of the snes sprites: the master comes from real art, never a concept alias. */
@@ -370,10 +543,37 @@ async function main(): Promise<void> {
     )
     return
   }
+  if (process.argv.includes('--derive-hires-master')) {
+    const images = hiresMasterPaths(manifest)
+      .map(loadArt)
+      .filter((i): i is Rgba => i !== null)
+    const master = deriveHiresMaster(images)
+    const path = manifest.palettes.hires ?? 'palettes/hires.json'
+    writeFileSync(join(ART_DIR, path), `${JSON.stringify(master.map(hex), null, 2)}\n`)
+    if (manifest.palettes.hires === undefined) {
+      // Rewrites only the palettes line, in the shape biome formats it.
+      const file = join(ART_DIR, 'manifest.json')
+      const palettes = { ...manifest.palettes, hires: path }
+      const block = Object.entries(palettes)
+        .map(([k, v]) => `    "${k}": "${v}"`)
+        .join(',\n')
+      const text = readFileSync(file, 'utf8').replace(
+        /"palettes": \{[^}]*\}/,
+        `"palettes": {\n${block}\n  }`,
+      )
+      writeFileSync(file, text)
+    }
+    console.log(`art/${path}: ${master.length} colours from ${images.length} files`)
+    return
+  }
   const palette = (path: string) => readJson<string[]>(join(ART_DIR, path)).map(parseHex)
   const result = buildSprites({
     manifest,
-    palettes: { nes: palette(manifest.palettes.nes), snes: palette(manifest.palettes.snes) },
+    palettes: {
+      nes: palette(manifest.palettes.nes),
+      snes: palette(manifest.palettes.snes),
+      hires: manifest.palettes.hires === undefined ? [] : palette(manifest.palettes.hires),
+    },
     load: loadArt,
     expected: await expectedIds(),
   })

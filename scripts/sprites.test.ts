@@ -1,13 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { parseHex, readPng } from './png'
+import { blank, parseHex, type Rgba, readPng } from './png'
 import {
   type BuildInput,
   buildSprites,
   downsample,
   emitModule,
+  hiresMasterPaths,
   type Indexed,
+  type Manifest,
   type ManifestEntry,
   snesMasterPaths,
 } from './sprites'
@@ -20,11 +22,28 @@ const NES = (
 ).map(parseHex)
 const SNES = [...new Set(NES)]
 
+/** In-memory PNGs by path, checked before the fixtures. */
+const MEM = new Map<string, Rgba>()
+
+function image(width: number, height: number, colour: (x: number, y: number) => number | null) {
+  const img = blank(width, height)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const c = colour(x, y)
+      if (c === null) continue
+      img.data.set([(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff, 255], (y * width + x) * 4)
+    }
+  }
+  return img
+}
+
 function build(sprites: ManifestEntry[], expected = sprites.map((s) => s.id)) {
   const input: BuildInput = {
     manifest: { palettes: { nes: '', snes: '' }, sprites },
-    palettes: { nes: NES, snes: SNES },
+    palettes: { nes: NES, snes: SNES, hires: SNES },
     load: (path) => {
+      const mem = MEM.get(path)
+      if (mem) return mem
       try {
         return readPng(join(FIXTURES, path))
       } catch {
@@ -171,5 +190,163 @@ describe('sprites build', () => {
       'sprites/enemy/captain.png',
       'sprites/world_boss/maw.png',
     ])
+  })
+
+  describe('the hires variant', () => {
+    const solid = (w: number, h: number, c = 0xc84c0c) => image(w, h, () => c)
+    MEM.set('hi/24.png', solid(24, 24))
+    MEM.set('hi/30.png', solid(30, 30))
+    MEM.set('hi/boss30.png', solid(40, 30))
+    MEM.set(
+      'hi/17.png',
+      image(17, 4, (x) => SNES[x] ?? 0),
+    )
+
+    it('builds a 24 × 24 hires from a 24 × 24 fileHires', () => {
+      const r = build([item('nes-4.png', { fileHires: 'hi/24.png' })])
+      expect(r.errors).toEqual([])
+      expect(r.art.get('nes-4')?.hires).toMatchObject({ width: 24, height: 24 })
+    })
+
+    it('fails a 17-colour fileHires', () => {
+      const r = build([item('nes-4.png', { fileHires: 'hi/17.png' })])
+      expect(r.errors).toEqual(['item:thing: hires 17 colours, the 1.5x art allows 16'])
+    })
+
+    it('shrinks a fileHires larger than the canvas to fit it', () => {
+      const r = build([item('nes-4.png', { fileHires: 'hi/30.png' })])
+      expect(r.errors).toEqual([])
+      const hires = r.art.get('nes-4')?.hires
+      expect(hires).toMatchObject({ width: 24, height: 24 })
+      expect([...(hires?.idx ?? [])].every((v) => v !== 0)).toBe(true)
+    })
+
+    it("never grows a turn boss's fileHires to its 36-row fit", () => {
+      const r = build([
+        {
+          id: 'enemy:boar',
+          file: 'snes-48x34.png',
+          fileHires: 'hi/boss30.png',
+          style: 'snes',
+          fit: { height: 24 },
+        },
+      ])
+      expect(r.errors).toEqual([])
+      expect(r.art.get('snes-48x34@h24')?.hires).toMatchObject({ width: 40, height: 30 })
+    })
+
+    it('fails a hero whose rarity slot lands in two separate regions after the snap', () => {
+      const RED = 0xc84c0c
+      const NEAR = 0xc84c0d // a different source colour that snaps to the same master entry
+      const hero = (fileHires: string): ManifestEntry => ({
+        id: 'hero:knight',
+        file: 'nes-4.png',
+        fileHires,
+        style: 'nes',
+        rarityColor: '#c84c0c',
+        rarityColorHires: '#c84c0c',
+      })
+      const two = (b: number) => image(24, 24, (x) => (x < 4 ? RED : x > 19 ? b : 0xfcfcfc))
+      MEM.set(
+        'hi/one.png',
+        image(24, 24, (x) => (x < 4 ? RED : 0xfcfcfc)),
+      )
+      MEM.set('hi/two.png', two(RED))
+      MEM.set('hi/twonear.png', two(NEAR))
+      const one = build([hero('hi/one.png')])
+      expect(one.errors).toEqual([])
+      const slot = one.sprites[0]?.raritySlotHires ?? -1
+      expect(one.art.get('nes-4')?.hires.palette[slot]).toBe(RED)
+      for (const path of ['hi/two.png', 'hi/twonear.png']) {
+        expect(build([hero(path)]).errors).toEqual([
+          'hero:knight: rarityColorHires is not one region',
+        ])
+      }
+      expect(build([{ ...hero('hi/one.png'), rarityColorHires: undefined }]).errors).toEqual([
+        'hero:knight: a hero with fileHires needs a rarityColorHires',
+      ])
+    })
+
+    it('gives an entry without fileHires its full art at 1.5 times its size', () => {
+      const r = build([
+        item('nes-4.png'),
+        { id: 'enemy:boar', file: 'snes-48x34.png', style: 'snes' },
+        { id: 'hero:knight', file: 'nes-12x9.png', style: 'nes', rarityColor: '#c84c0c' },
+      ])
+      expect(r.errors).toEqual([])
+      const v = r.art.get('nes-4')
+      expect(v?.hires).toMatchObject({ width: 24, height: 24, palette: v?.full.palette })
+      // Nearest neighbour: hires (i, j) reads full (floor(i / 1.5), floor(j / 1.5)).
+      const full = v?.full
+      const hires = v?.hires
+      for (const [i, j] of [
+        [0, 0],
+        [5, 7],
+        [23, 23],
+      ] as const) {
+        expect(hires?.idx[j * 24 + i]).toBe(
+          full?.idx[Math.floor(j / 1.5) * 16 + Math.floor(i / 1.5)],
+        )
+      }
+      expect(r.art.get('snes-48x34')?.hires).toMatchObject({ width: 72, height: 51 })
+      const knight = r.sprites.find((s) => s.id === 'hero:knight')
+      expect(knight?.raritySlotHires).toBe(knight?.raritySlot)
+    })
+
+    it('fails a fileHires when the manifest names no hires master', () => {
+      const input: BuildInput = {
+        manifest: {
+          palettes: { nes: '', snes: '' },
+          sprites: [item('hi/24.png', { fileHires: 'hi/24.png' })],
+        },
+        palettes: { nes: NES, snes: SNES, hires: [] },
+        load: (path) => MEM.get(path) ?? null,
+        expected: ['item:thing'],
+      }
+      expect(buildSprites(input).errors).toEqual(['item:thing: fileHires needs palettes.hires'])
+    })
+
+    it('derives the hires master from fileHires paths only, each once', () => {
+      const manifest: Manifest = {
+        palettes: { nes: '', snes: '' },
+        sprites: [
+          {
+            id: 'enemy:a',
+            file: 'sprites/enemy/a.png',
+            fileHires: 'sprites-hires/enemy/a.png',
+            style: 'nes',
+          },
+          { id: 'enemy:b', file: 'sprites/enemy/b.png', style: 'nes' },
+          {
+            id: 'enemy:c',
+            file: 'sprites/enemy/a.png',
+            fileHires: 'sprites-hires/enemy/a.png',
+            style: 'nes',
+          },
+          {
+            id: 'world_boss:d',
+            file: 'sprites/world_boss/d.png',
+            fileHires: 'sprites-hires/world_boss/d.png',
+            style: 'snes',
+          },
+        ],
+      }
+      expect(hiresMasterPaths(manifest)).toEqual([
+        'sprites-hires/enemy/a.png',
+        'sprites-hires/world_boss/d.png',
+      ])
+    })
+
+    it('emits hires and raritySlotHires, byte-identical across two runs', () => {
+      const entries: ManifestEntry[] = [
+        item('nes-12x9.png', { fileHires: 'hi/24.png' }),
+        { id: 'hero:knight', alias: 'nes-4', style: 'nes', rarityColor: '#c84c0c' },
+        { id: 'enemy:boar', file: 'snes-48x34.png', style: 'snes', fit: { height: 24 } },
+      ]
+      const a = emitModule(build(entries))
+      expect(a).toBe(emitModule(build([...entries].reverse())))
+      expect(a).toContain('hires: { width: 24, height: 24')
+      expect(a).toMatch(/'hero:knight': \{[^\n]*raritySlotHires: \d+/)
+    })
   })
 })
