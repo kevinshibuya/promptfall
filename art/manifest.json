@@ -11,7 +11,7 @@
       "id": "hero_attack:knight",
       "file": "sprites/hero_attack/knight.png",
       "style": "nes",
-      "rarityColor": "#de0602"
+      "rarityColor": "#df0301"
     },
     {
       "id": "hero:black_mage",
@@ -23,7 +23,7 @@
       "id": "hero_attack:black_mage",
       "file": "sprites/hero_attack/black_mage.png",
       "style": "nes",
-      "rarityColor": "#640dac"
+      "rarityColor": "#6d0faf"
     },
     {
       "id": "hero:white_mage",
@@ -33,21 +33,21 @@
     },
     {
       "id": "hero_attack:white_mage",
-      "alias": "concept/nes-white_mage",
+      "file": "sprites/hero_attack/white_mage.png",
       "style": "nes",
-      "rarityColor": "#ed4624"
+      "rarityColor": "#86eff5"
     },
     {
       "id": "hero:archer",
       "file": "sprites/hero/archer.png",
       "style": "nes",
-      "rarityColor": "#bb860a"
+      "rarityColor": "#f0bc3c"
     },
     {
       "id": "hero_attack:archer",
       "file": "sprites/hero_attack/archer.png",
       "style": "nes",
-      "rarityColor": "#fbe703"
+      "rarityColor": "#f0bc3c"
     },
     { "id": "enemy:road_slime", "file": "sprites/enemy/road_slime.png", "style": "nes" },
     { "id": "enemy:field_rat", "file": "sprites/enemy/field_rat.png", "style": "nes" },

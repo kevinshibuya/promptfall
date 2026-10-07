@@ -452,7 +452,7 @@ Legendary shows its rarity area in the rarity colour. Full check line.
 
 **Boundaries:** Heroes only.
 
-- [ ] grids out; edit; PNGs back; build; contact; full check line; commit
+- [x] grids out; edit; PNGs back; build; contact; full check line; commit
 
 ### Task 7: world bosses, the SNES master, review batch 1
 
