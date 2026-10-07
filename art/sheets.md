@@ -6,7 +6,8 @@ Every sheet behind a sprite in `art/sprites/`: the prompt that drew it, the refe
 `~/.claude/bin/codex-run.sh <label> exec -m gpt-6-astra … -i=<ref> …` (gpt-image-2 through codex's
 image_gen tool); `<repo>` is the repository root.
 
-Review: https://claude.ai/artifact/W5SVGYNdDG8ojecpbx9RNt (batch 1 published 2026-10-07).
+Review: https://claude.ai/artifact/W5SVGYNdDG8ojecpbx9RNt (batch 1 published 2026-10-07). Kevin gave every
+group GREEN on the 1.5× art on 2026-10-07 (version 11).
 
 ## dense-heroes-zone1-items.png
 

@@ -635,7 +635,8 @@ bosses. Full check line.
 beyond a redo (a new hero design, a different canvas): stop and report `blocked: <the request>`.
 
 - [x] zone 12 run; slice; build; contact; batch (0 placeholders; the placeholder test was added with the zone 12 landing, shown red against the previous build)
-- [ ] redo rounds until every group is GREEN; record; full check line; commit
+- [x] redo rounds until every group is GREEN; record; full check line; commit (all GREEN on the 1.5× art,
+  2026-10-07)
 
 ### Task 12: finish
 
