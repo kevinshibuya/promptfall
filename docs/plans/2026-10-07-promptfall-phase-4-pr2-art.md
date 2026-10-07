@@ -288,9 +288,9 @@ check line.
 **Boundaries:** No change to `scripts/sprites.ts` or the plugin. A real sheet the rules cannot read
 (a band error on an approved sheet): stop and report `blocked: <sheet, row, what fails>`.
 
-- [ ] tests first, red
-- [ ] gutters; port the prototype; `--native`, sub-directories, per-sprite errors
-- [ ] the dense-sheet smoke run; full check line; commit
+- [x] tests first, red
+- [x] gutters; port the prototype; `--native`, sub-directories, per-sprite errors
+- [x] the dense-sheet smoke run; full check line; commit
 
 ### Task 2: `pnpm grid` for hand cleanup
 
