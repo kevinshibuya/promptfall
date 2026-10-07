@@ -82,7 +82,9 @@ export function sellWindow(input: PaneInput, at: Rect): PanelBuild {
           ? `Fee ${gold(listingFee(price))} · you get ${gold(saleNet(price))}`
           : typed
             ? 'A price from 1 to 1,000,000 gold'
-            : 'Pick an order or set a price.',
+            : input.hasInput
+              ? 'Pick an order or set a price.'
+              : 'Pick an order or a price.',
         'q: back.',
       ]
     }

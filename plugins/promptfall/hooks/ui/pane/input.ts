@@ -50,6 +50,8 @@ export type PaneInput = FrameInput & {
   art: boolean
   /** The surface has an Input (the sell price, the order price, the chat line). */
   hasInput: boolean
+  /** The surface has an Input, but the pane is too short for its row: `hasInput` is false. */
+  shortPane?: true
   remainingMs: (deadline: number) => number
   market: MarketState
   orders: OrdersState

@@ -249,6 +249,13 @@ This replaces PR 2's pre-check through `sellState`. Known cost: a narrow pane (u
 at exactly 14 rows with a field showing has a 13-row picture, under the narrow floor without the
 tab window, so it reads "needs more room". A wide inline pane (96 columns and up) fits.
 
+Execution note (2026-10-06, after the merge): the known cost is gone. A field whose row would push
+the picture under its floor is left out, and the pane builds as a surface without an Input
+(presets for prices; Chat reads `Posting needs a taller pane.`). On a terminal the hidden stops
+now follow the field in the tree, so the field is no longer the ring's last element, and a
+re-focus after the stops change goes back to a field the ring is on
+(`docs/manual-pass/2026-10-06-ui-pr3.md`, "Surface pass").
+
 **The panel slot.** A panel (the sell window, the order form) takes the whole right column (wide)
 or the band (narrow), as PR 2's sell window does. A pick opened from a panel takes the panel's
 place: the same slot, `menuWindow`, whole column.

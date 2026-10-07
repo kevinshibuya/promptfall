@@ -119,3 +119,9 @@ test('wide and narrow pass tilePositions', () => {
       expect([w.key, pos.get(w.key)]).toEqual([w.key, { x: w.x, y: w.y ?? 0 }])
   }
 })
+
+test('a pane too short for the field says so, not that the surface cannot post', () => {
+  const b = chatPane(input(chatWorld(3), {}, { hasInput: false, shortPane: true }))
+  expect(b.field).toBeNull()
+  expect(message(b)).toEqual(['Posting needs a taller pane.', ''])
+})
