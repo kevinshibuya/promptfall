@@ -124,7 +124,7 @@ from `docs/plans/phase-4-concepts/`, is a red.
    stands on it (a bandana, a long coat, a cutlass), taller than the heroes. It dissolves when it
    dies and the stage shrinks back.
 4. **Turn boss.** A turn of 10 or more tool calls brings the Wild Boar: the stage grows to 12
-   rows and the boar fills the stage's height.
+   rows and the boar stands nearly as tall as the stage (33 of its 36 pixel rows on Ghostty).
 5. **Cues.** `/promptfall sound on`. A Rare or Epic drop plays a short double coin chime, a
    Legendary drop a longer rising coin shower, a level up a short rising climb. Common and
    Uncommon drops stay silent. `/promptfall sound off`. Damage numbers on a hit are a third larger

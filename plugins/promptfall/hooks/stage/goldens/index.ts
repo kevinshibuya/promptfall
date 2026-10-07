@@ -9,11 +9,11 @@ import type {
 } from '../scenarios'
 
 export const GOLDENS: Record<Scenario, Golden> = {
-  rest: {rasterHash: "7dbfc1da03f7611b", imageHash: "e8558d2c96a1d76f", svgHash: "3515bfc6c9057a67", svgChars: 11859, rasterPairs: 52, imageHashHires: "bd4492d9bd7ccdd4"},
-  boss: {rasterHash: "22a897aba0961e82", imageHash: "d55388e83f36b0b5", svgHash: "a7416debce3c81c4", svgChars: 16761, rasterPairs: 43, imageHashHires: "0702c7001957eec2"},
-  compact: {rasterHash: "670cfcb8135e427b", imageHash: "d82956de31bf6c7d", svgHash: "29f37516b453c74a", svgChars: 3679, rasterPairs: 32, imageHashHires: "d82956de31bf6c7d"},
-  dissolve: {rasterHash: "0231ec1915a8c73f", imageHash: "33e5c7b5e56b06fb", svgHash: "f508c52eb4bf707e", svgChars: 12823, rasterPairs: 47, imageHashHires: "bf0b03a7682d8681"},
-  drop: {rasterHash: "63cf5ea52d94ad0b", imageHash: "ad96b934b63151a9", svgHash: "9e8e98f55561788a", svgChars: 14340, rasterPairs: 55, imageHashHires: "4797d8636725a603"},
+  rest: {rasterHash: "7dbfc1da03f7611b", imageHash: "e8558d2c96a1d76f", svgHash: "3515bfc6c9057a67", svgChars: 11859, rasterPairs: 52, imageHashHires: "bd4492d9bd7ccdd4", svgHashLo: "e6b3f4456d5ce4da"},
+  boss: {rasterHash: "22a897aba0961e82", imageHash: "d55388e83f36b0b5", svgHash: "a7416debce3c81c4", svgChars: 16761, rasterPairs: 43, imageHashHires: "0702c7001957eec2", svgHashLo: "015a894326cc96e3"},
+  compact: {rasterHash: "670cfcb8135e427b", imageHash: "d82956de31bf6c7d", svgHash: "29f37516b453c74a", svgChars: 3679, rasterPairs: 32, imageHashHires: "d82956de31bf6c7d", svgHashLo: "29f37516b453c74a"},
+  dissolve: {rasterHash: "0231ec1915a8c73f", imageHash: "33e5c7b5e56b06fb", svgHash: "f508c52eb4bf707e", svgChars: 12823, rasterPairs: 47, imageHashHires: "bf0b03a7682d8681", svgHashLo: "1212c4acaa04c064"},
+  drop: {rasterHash: "63cf5ea52d94ad0b", imageHash: "ad96b934b63151a9", svgHash: "9e8e98f55561788a", svgChars: 14340, rasterPairs: 55, imageHashHires: "4797d8636725a603", svgHashLo: "b6993465040b14a9"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {

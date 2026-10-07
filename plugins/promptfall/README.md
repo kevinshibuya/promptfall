@@ -181,8 +181,8 @@ it drops loot.
 
 - **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
   Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
-  numbers as text. The desktop app draws it as an `Svg`, always the full stage: the art 116 to
-  160 pixels wide, scaled to the band's width (ADR 0004). The desktop scrolls a band taller than
+  numbers as text. The desktop app draws it as an `Svg`, always the full stage: 116 to 160
+  columns, so 174 to 240 pixels of 1.5× art, scaled to the band's width (ADR 0004, ADR 0006). The desktop scrolls a band taller than
   its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
   band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
 - **Two art densities.** The full stage on an `Image` terminal and on the desktop draws the 1.5×
@@ -282,7 +282,8 @@ fails when it is stale (`pnpm sprites:check`).
 - `art/palettes/nes.json` is the 64-entry NES master palette (the FCEUX table, duplicates kept so
   the indices match). `art/palettes/snes.json` is the shared 64-colour SNES master, written by
   `pnpm sprites --derive-snes-master` from the opaque pixels of every `snes` entry's `file`
-  (aliases are skipped). It is derived once, from the zone 1 and world bosses, and then locked.
+  (aliases are skipped): all 28 bosses and world bosses. It is locked since zone 12's bosses landed;
+  re-deriving it changes every boss's art.
 - Every opaque pixel snaps to its style's master palette. An `nes` sprite may then hold at most 4
   colours and fit 16 × 16 (smaller art is padded, bottom-centred). An `snes` sprite may hold at
   most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.

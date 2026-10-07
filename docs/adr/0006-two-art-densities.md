@@ -18,8 +18,11 @@ fixed and spends the extra pixels only where the renderer can show them. The `Im
 1.5× frame 4 times instead of 6, so it is the same size on screen and the same bytes. The desktop
 `Svg` keeps its rendered width and grows its viewBox.
 
+The fit only shrinks, so a native smaller than its 1.5× canvas keeps its own size: a few bosses
+(the fallen star, the crypt ogre) draw smaller on screen at 1.5 than at 1×.
+
 Kevin wanted the natives' detail on screen (grill round 4, 2026-10-07). gpt-image-2 draws the
-natives at a median of 22 px. The 1× cut shrinks that by about 0.6 and loses the detail, and a
+natives at a median of 22 px. The 1× cut shrinks that to 16 and loses the detail, and a
 smarter 16 px reducer did not get it back.
 
 ## Considered options
@@ -34,10 +37,14 @@ smarter 16 px reducer did not get it back.
 ## Consequences
 
 - Two drawings per sprite to keep in step. `art/sheets.md`'s canonical cut writes both from the
-  same native. The 1.5× hero poses carry hand fixes, kept as grids and written back by the script.
+  same native. The 1.5× hero poses carry hand fixes, kept as grids beside the raw sheets (gitignored, on
+  Kevin's Mac; `pnpm grid <png>` regenerates them from the committed PNGs) and written back by the
+  script.
 - The 1.5× art has its own 128-colour master, `art/palettes/hires.json`, derived from every 1.5×
   PNG. The 1× masters are unchanged.
-- The `Svg` of a 1.5× frame is longer. Measured, the worst legal frame (a 72 × 51 checker boss
-  and three checker heroes) is 81,653 characters, under the engine's 131,072. `svgWithFallback`
-  still draws the 1× `Svg` for a frame past the cap.
+- The `Svg` of a 1.5× frame is longer. A 72 × 51 checker boss with three checker heroes measures
+  81,653 characters. A fuller legal frame (that boss, four 16-colour dithered enemies, two of them
+  dissolving, three heroes and a drop) measures 116,102, about 12% under the engine's 131,072.
+  `svgWithFallback` draws the 1× `Svg` for a frame past the cap. PR 3's animation frames add to
+  the defs, so they spend this headroom.
 - `generated.ts` holds both drawings: 335 KB, from 157 KB.

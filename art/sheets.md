@@ -521,7 +521,7 @@ at 16 × 16 over their cuts (`art/sheets/grids/`), so after a re-cut, write them
 
 2026-10-07, the 1.5× art: every call also writes the sprite's 1.5× cut to `art/sprites-hires/`
 (`--hires`: the native fitted to 24 × 24 or 72 × 51, 16 colours). The 1.5× art is never
-hand-drawn; the script ends by writing the hand-drawn 1× sprites back, so a re-cut leaves
+hand-drawn, except the eight hero poses below; the script ends by writing the hand-drawn 1× sprites back, so a re-cut leaves
 `art/sprites` unchanged. After a re-cut, `pnpm sprites --derive-hires-master` re-derives
 `art/palettes/hires.json`, then `pnpm sprites`.
 

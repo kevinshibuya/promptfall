@@ -34,7 +34,7 @@ import type { Box } from './layout'
 import { MessageLog } from './log'
 import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
-import { svgWithFallback } from './svg'
+import { renderSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
 
@@ -49,6 +49,8 @@ export type Golden = {
   rasterPairs: number
   /** The Image frame of the scale-1.5 model. */
   imageHashHires: string
+  /** The scale-1 Svg: the desktop's fall-back past the cap. */
+  svgHashLo: string
 }
 /** `model` at scale 1 (Raster); `hires` at HIRES_SCALE (Image, and the Svg under its cap). */
 export type Staged = {
@@ -160,6 +162,9 @@ export function goldenOf(s: Staged): Golden {
     svgChars: svg.length,
     rasterPairs: rasterPairs(cells),
     imageHashHires: fnv1a64(hires.rgba),
+    svgHashLo: fnv1a64(
+      renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' }),
+    ),
   }
 }
 
