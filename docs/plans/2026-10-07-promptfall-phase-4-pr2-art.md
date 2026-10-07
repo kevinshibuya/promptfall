@@ -494,9 +494,9 @@ contact folders written; the artifact URL recorded in `art/sheets.md`. Full chec
 
 **Boundaries:** One image run. No other sprites.
 
-- [ ] image run in the background; slice; check native sizes
-- [ ] cleanup; derive test; derive; build
-- [ ] contact; review batch 1 published; full check line; commit
+- [x] image run in the background; slice; check native sizes
+- [x] cleanup; derive test; derive; build
+- [x] contact; review batch 1 published; full check line; commit
 
 ### Task 8: monster sheet A, zones 2 to 9
 
@@ -664,13 +664,18 @@ desktop app (skipped and said so in the PR if the codex quota is gone), push, an
 against `ai-staging` with the manual-pass steps, the list of checks that ran, and the review wave
 this repo uses (grill Q23: `reviewer` on Opus alone). Stop: the review is Kevin's to trigger.
 
+**1.5× addition** (`docs/plans/2026-10-07-promptfall-phase-4-pr2-hires.md`, Task H7): the stage
+goldens carry `imageHashHires` and the 1.5× `svgHash`, and the full check line covers the hires
+scenarios (`golden.test.ts`'s 1.5× budget, fall-back and frame-size tests). The README, Part B and
+ADR 0006 already describe the two art densities.
+
 **Acceptance check:** `art/concept/` gone and `pnpm sprites:check` clean; the full check line clean
 on the PR's head; `gh pr view` shows the PR open against `ai-staging`.
 
 **Boundaries:** No merge. No art changes in this task.
 
-- [ ] delete concept art; goldens
-- [ ] manual pass Part B; README; tick boxes
+- [x] delete concept art; goldens
+- [x] manual pass Part B; README; tick boxes
 - [ ] full check line; `codex-computer-use`; push; PR; stop
 
 ## Self-review

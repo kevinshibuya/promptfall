@@ -20,7 +20,9 @@ always the full stage scaled to the band), four sound cues, sprites in the dialo
 art pipeline that builds them, all on the concept sheets as placeholders.
 Phase 4, PR 2 is the real art: 4 heroes with attack poses, 72 monsters and bosses, 4 world bosses
 and 40 items, drawn by gpt-image-2 on sprite sheets and cut to size (`pnpm slice`), with the hero
-sprites cleaned by hand, and four CC0 8-bit sound cues.
+sprites cleaned by hand, and four CC0 8-bit sound cues. Each sprite is drawn twice: the 1.5× art
+for the full stage in Ghostty, kitty and the desktop, and the 1× art for half-block terminals, the
+compact stage and the lists (ADR 0006).
 
 The combat flow replaced "every unit acts once per tick" with action gauges, an action queue and a
 weighted picker: units act one at a time, in the order their gauges filled, and each hero class
@@ -67,7 +69,7 @@ The plugin README covers commands, hotkeys, the market and the world: [plugins/p
 | `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot, a virtual clock, seeded bots that play over HTTP, and server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`) |
 | `plugins/promptfall` | The Claude Code mod, with the three packages bundled into `hooks/vendor/` |
 | `scripts/vendor.mjs` | Builds those bundles |
-| `art/` | The sprite manifest, palettes and the sprites in `art/sprites/` that `pnpm sprites` turns into the plugin's sprite module, `art/sheets.md` (the prompt and cut behind each sprite sheet), and the window font's source |
+| `art/` | The sprite manifest, palettes and the sprites in `art/sprites/` (1×) and `art/sprites-hires/` (1.5×) that `pnpm sprites` turns into the plugin's sprite module, `art/sheets.md` (the prompt and cut behind each sprite sheet), and the window font's source |
 | `scripts/font.ts` | Bakes the window font into the plugin's glyph module (`pnpm font`) |
 | `docs/` | The spec, the phase plans and the manual-pass scripts |
 

@@ -185,6 +185,13 @@ it drops loot.
   160 pixels wide, scaled to the band's width (ADR 0004). The desktop scrolls a band taller than
   its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
   band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
+- **Two art densities.** The full stage on an `Image` terminal and on the desktop draws the 1.5×
+  art: `stageAt(…, { scale: 1.5 })` multiplies every stage-pixel distance by 1.5, so a 120 × 8
+  stage is 180 × 24 pixels, and the `Image` is upscaled 4 times instead of 6 (the same size on
+  screen). Damage numbers draw their 3 × 5 glyphs in 2 × 2 blocks. The `Raster`, the compact
+  stage and the list windows keep the 1× art, since a half-block cell shows one pixel per column.
+  The desktop `Svg` falls back to the 1× art for a frame whose 1.5× markup would pass the
+  engine's 131,072-character cap; legal art stays under it (ADR 0006).
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
@@ -281,18 +288,28 @@ fails when it is stale (`pnpm sprites:check`).
   most 16 colours and fit 48 × 34. The build fails a sprite that breaks either rule, naming it.
 - The build also writes a `compact` variant (8 px tall) of every sprite and an 8 × 4 `small`
   variant of every item, for the compact stage and the half-block lists.
+- Each sprite has a second drawing, its 1.5× art, for the full stage on `Image` terminals and the
+  desktop. An entry names it with `fileHires` (a PNG in `art/sprites-hires/<kind>/<name>.png`)
+  and, for a hero, `rarityColorHires`. The 1.5× art snaps to `art/palettes/hires.json`, a
+  128-colour master that `pnpm sprites --derive-hires-master` writes from every `fileHires` PNG.
+  It may hold 16 colours and fit 24 × 24 (`nes`, padded) or 72 × 51 (`snes`); a turn boss fits
+  36 rows. A larger PNG is shrunk to fit, never grown. A hero's `rarityColorHires` slot must be
+  one 8-connected region after the snap, or the build fails. An entry without `fileHires` gets
+  its 1× art upscaled 1.5 times.
 - `pnpm slice <sheet.png> <out-dir> --grid <cols>x<rows> [--row r] --colours n (--size 16 | --fit
-  48x34) [--names kind/a,kind/b] [--native <dir>]` cuts a magenta-keyed sheet. It finds each
+  48x34) [--names kind/a,kind/b] [--native <dir>] [--hires <dir>]` cuts a magenta-keyed sheet. It finds each
   sprite by the magenta gutters around it (`--grid` counts sprites per row and rows), reads the
   sprite's art-pixel size from its black outline, samples one value per art pixel, then shrinks
   to the canvas by a majority vote that keeps the outline black. `--native` also writes each
-  sprite at its own pixel grid. A sprite it cannot read is reported and skipped.
+  sprite at its own pixel grid, and `--hires` its 1.5× cut: the native fitted to 1.5 times the
+  canvas, in 16 colours. A sprite it cannot read is reported and skipped.
 - `pnpm grid <in.png>` prints a sprite as text, a legend (`0` is black, `.` transparent) and one
   character per pixel; `pnpm grid --png <in.txt> <out.png>` writes it back. The hero sprites were
   cleaned up this way.
 - `pnpm contact --zone <n> | --heroes | --items <a,b> | --world-bosses` renders each built sprite
-  at 6×, its native cut at 4× and, for a zone, the stage at rest, with its zone boss and with its
-  turn boss, into `.promptfall/contact/<label>/`, for review.
+  at 6× and its 1.5× art at 4× (`-hires`), its native cut at 4× and, for a zone, the stage at
+  rest, with its zone boss and with its turn boss, at 1.5× (`stage-*.png`) and at 1×
+  (`stage-*-1x.png`), into `.promptfall/contact/<label>/`, for review.
 - The Inventory and Heroes list windows lead each row with its sprite, fitted into 16 × 16 px,
   where pictures draw (an Image terminal, the desktop); the raster windows leave the two cells
   blank. The Market list keeps its sprite as before.

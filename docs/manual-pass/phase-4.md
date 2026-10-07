@@ -101,34 +101,42 @@ CLAUDE_CODE_PLUGIN_DIRS` and quit and reopen it again.
 
 ## Part B: the real art and the cues (PR 2)
 
-Part B checks what PR 2 changes: every sprite is real art, and the four cues are 8-bit clips. Run
-it after Part A's setup (sound off, motion full, renderer auto). Every sprite on the stage, in the
+Part B checks what PR 2 changes: every sprite is real art, drawn twice, and the four cues are
+8-bit clips. Ghostty and the desktop draw the full stage with the 1.5× art; iTerm2, the compact
+stage and the lists draw the 1× art. Run it after Part A's setup (sound off, motion full, renderer
+auto). Every sprite on the stage, in the
 lists and on the Market should be pixel art drawn for its id. A grey crate, or a concept sprite
 from `docs/plans/phase-4-concepts/`, is a red.
 
 ### Ghostty
 
 1. **Start.** `claude --plugin-dir plugins/promptfall` in a window at least 130 columns wide. The
-   Party tab's stage shows the zone 1 ground and the party on the right, facing left: the knight
-   (white plate, red plume, a shield with a cross), the black mage (a blue-violet pointed hat, a
-   shadowed face with pale eyes, a pale scarf), the white mage (a white hood, a teal stole, a staff
-   with a ring). Each hero's rarity shows on one area: the knight's cape, the black mage's robe,
-   the white mage's stole, the archer's cape. Grey is Common, green Uncommon, blue Rare, purple
-   Epic, gold Legendary.
+   Party tab's stage shows the zone 1 ground and the party on the right, facing left, in the 1.5×
+   art: finer pixels than iTerm2's half-blocks of the same sprite, with a thin outline and shading.
+   The knight has white plate, a red plume and a shield with a red cross. The black mage has a
+   blue-violet pointed hat and pale eyes under it. The white mage has a white hood and a staff with
+   a cyan orb. Each hero's rarity shows on one area: the knight's cape, the black mage's robe, the
+   white mage's staff orb, the archer's cape. Grey is Common, green Uncommon, blue Rare, purple
+   Epic, gold Legendary. The ground strip is three fine pixel rows.
 2. **Zone 1 monsters.** Play a few waves. Road slimes, field rats, goblin scouts and hedge sprites
    appear at the left, each with a black outline, none of them a generic concept monster.
 3. **Zone boss.** Keep playing to wave 11. The stage grows to 17 rows and the Bandit Captain
    stands on it (a bandana, a long coat, a cutlass), taller than the heroes. It dissolves when it
    dies and the stage shrinks back.
 4. **Turn boss.** A turn of 10 or more tool calls brings the Wild Boar: the stage grows to 12
-   rows and the boar is 24 pixels tall.
+   rows and the boar fills the stage's height.
 5. **Cues.** `/promptfall sound on`. A Rare or Epic drop plays a short double coin chime, a
    Legendary drop a longer rising coin shower, a level up a short rising climb. Common and
-   Uncommon drops stay silent. `/promptfall sound off`.
+   Uncommon drops stay silent. `/promptfall sound off`. Damage numbers on a hit are a third larger
+   than before this PR, drawn in 2 × 2 pixel blocks.
 6. **Lists.** `/promptfall`. Each Inventory row leads with its item's 16-pixel sprite (a sword, a
    staff, a robe, a ring), and each Heroes row with its class sprite in its rarity colour.
-7. **Compact.** Narrow the window to between 100 and 115 columns. The compact stage shows the same
-   art shrunk to 8 pixels tall: still recognisable shapes, outlines intact.
+7. **Compact.** Narrow the window to between 100 and 115 columns. The compact stage shows the 1×
+   art shrunk to 8 pixels tall: still recognisable shapes, outlines intact. Widen the window back:
+   the full stage returns to the 1.5× art.
+7a. **iTerm2.** Open the same session in iTerm2. The stage draws in half-block cells with the 1×
+   art: the same heroes and monsters, blockier, and the white mage's rarity sits on her chest
+   stripe.
 8. **Later zones.** If you have a save past zone 1, or play long enough, the ground changes colour
    with the zone and each zone has its own monsters and bosses. The review page lists them all.
 
@@ -136,8 +144,9 @@ from `docs/plans/phase-4-concepts/`, is a red.
 
 Load the plugin and start the HTTP fake as in Part A's desktop steps (15), with `--boss-in 300`.
 
-9. **The stage.** The SVG stage shows the same heroes, monsters and ground as Ghostty step 1, sharp
-   at any band width.
+9. **The stage.** The SVG stage shows the same 1.5× heroes, monsters and ground as Ghostty step 1,
+   sharp at any band width, at the same size on screen as before this PR. Damage numbers are a
+   third larger.
 10. **World boss.** Turn sound on and start the `afplay` watcher (Part A step 21). About 300 s after
     the fake started, the world boss toast shows, the cue is a falling alarm (`boss.wav` in the
     log), and the stage grows with The Promptwyrm: a red coiled serpent-dragon, not a concept boss.

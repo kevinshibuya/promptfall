@@ -256,7 +256,7 @@ the two differ byte for byte. The artifact is republished. Full check line.
 
 **Boundaries:** No code.
 
-- [ ] docs; ADR; plan notes; full check line; commit
+- [x] docs; ADR; plan notes; full check line; commit
 
 ## Self-review
 
