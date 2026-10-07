@@ -74,3 +74,17 @@ attack, a hit), and a different attack animation for each hero. Round 3 opens th
 ## Scope
 
 PR 2 adds the 2× stage (rounds 1 and 2). PR 3 is the frames (round 3) and gets its own plan.
+
+## Round 4 (Kevin, 2026-10-07, after the plan review)
+
+The plan review found that at 2× the natives (median 22 px on the long side) draw about a third
+smaller than today's sprites, since a 2× slot is 32 px; growing them would smear the pixels. A
+mock of the resting stage confirmed it.
+
+- Q24: the detail density is 1.5×, not 2×. Canvases: `nes` 24 × 24, `snes` at most 72 × 51, turn
+  bosses fit to 36 rows (shrink only). The full stage is 180 × 24 pixels at rest (51 with a zone
+  boss); the Image renderer upscales it 4× (same bytes as today). Every motion distance and layout
+  constant is multiplied by 1.5 and rounded. Rounds 1 and 2 hold with 1.5 for 2.
+- Q25: the damage numbers draw their 3 × 5 glyphs as 2 × 2 blocks at 1.5×: a third larger than
+  today on screen.
+- The glossary term becomes **1.5× art** (Q15's "2× art").

@@ -160,7 +160,7 @@ _Avoid_: scene, arena, battlefield, viewport
 **Sprite**:
 The pixel art of one hero class, enemy, world boss or item, with its animation frames.
 Replaces the glyph where pixels draw; the glyph stays as its fallback. Each sprite has two
-drawings of the same design: its **2× art**, for the stage on surfaces that draw pictures, and
+drawings of the same design: its **1.5× art**, for the stage on surfaces that draw pictures, and
 its **1× art**, for half-block terminals, the compact stage and the list windows.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
 
