@@ -677,7 +677,8 @@ on the PR's head; `gh pr view` shows the PR open against `ai-staging`.
 
 - [x] delete concept art; goldens
 - [x] manual pass Part B; README; tick boxes
-- [ ] full check line; `codex-computer-use`; push; PR; stop
+- [x] full check line; `codex-computer-use`; push; PR; stop (PR #14, merged into `ai-staging`
+  2026-10-07 after Kevin's GREEN; the desktop leg left to the manual pass)
 
 ## Self-review
 
