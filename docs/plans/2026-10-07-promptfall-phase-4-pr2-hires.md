@@ -136,8 +136,8 @@ manifest and asserts every `file` entry other than `fallback` has a `fileHires`.
 
 **Boundaries:** No 1× art changes. No stage code.
 
-- [ ] re-cut with `--hires`; write-backs; manifest; derive; build; hand fixes; full check line;
-  commit
+- [x] re-cut with `--hires`; write-backs; manifest; derive; build; hand fixes; full check line;
+  commit (the white mage's rarity area is the staff orb, not the chest: see `art/sheets.md`)
 
 ### Task H4: the stage at scale 1.5 on Image terminals
 

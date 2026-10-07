@@ -1,238 +1,782 @@
 {
-  "palettes": { "nes": "palettes/nes.json", "snes": "palettes/snes.json" },
+  "palettes": {
+    "nes": "palettes/nes.json",
+    "snes": "palettes/snes.json",
+    "hires": "palettes/hires.json"
+  },
   "sprites": [
     {
       "id": "hero:knight",
       "file": "sprites/hero/knight.png",
+      "fileHires": "sprites-hires/hero/knight.png",
       "style": "nes",
-      "rarityColor": "#df0301"
+      "rarityColor": "#df0301",
+      "rarityColorHires": "#fb0803"
     },
     {
       "id": "hero_attack:knight",
       "file": "sprites/hero_attack/knight.png",
+      "fileHires": "sprites-hires/hero_attack/knight.png",
       "style": "nes",
-      "rarityColor": "#df0301"
+      "rarityColor": "#df0301",
+      "rarityColorHires": "#fa0904"
     },
     {
       "id": "hero:black_mage",
       "file": "sprites/hero/black_mage.png",
+      "fileHires": "sprites-hires/hero/black_mage.png",
       "style": "nes",
-      "rarityColor": "#6d0faf"
+      "rarityColor": "#6d0faf",
+      "rarityColorHires": "#7112b3"
     },
     {
       "id": "hero_attack:black_mage",
       "file": "sprites/hero_attack/black_mage.png",
+      "fileHires": "sprites-hires/hero_attack/black_mage.png",
       "style": "nes",
-      "rarityColor": "#6d0faf"
+      "rarityColor": "#6d0faf",
+      "rarityColorHires": "#7513b8"
     },
     {
       "id": "hero:white_mage",
       "file": "sprites/hero/white_mage.png",
+      "fileHires": "sprites-hires/hero/white_mage.png",
       "style": "nes",
-      "rarityColor": "#86eff5"
+      "rarityColor": "#86eff5",
+      "rarityColorHires": "#07e4fa"
     },
     {
       "id": "hero_attack:white_mage",
       "file": "sprites/hero_attack/white_mage.png",
+      "fileHires": "sprites-hires/hero_attack/white_mage.png",
       "style": "nes",
-      "rarityColor": "#86eff5"
+      "rarityColor": "#86eff5",
+      "rarityColorHires": "#11e3fb"
     },
     {
       "id": "hero:archer",
       "file": "sprites/hero/archer.png",
+      "fileHires": "sprites-hires/hero/archer.png",
       "style": "nes",
-      "rarityColor": "#f0bc3c"
+      "rarityColor": "#f0bc3c",
+      "rarityColorHires": "#fbeb05"
     },
     {
       "id": "hero_attack:archer",
       "file": "sprites/hero_attack/archer.png",
+      "fileHires": "sprites-hires/hero_attack/archer.png",
       "style": "nes",
-      "rarityColor": "#f0bc3c"
+      "rarityColor": "#f0bc3c",
+      "rarityColorHires": "#fbed03"
     },
-    { "id": "enemy:road_slime", "file": "sprites/enemy/road_slime.png", "style": "nes" },
-    { "id": "enemy:field_rat", "file": "sprites/enemy/field_rat.png", "style": "nes" },
-    { "id": "enemy:goblin_scout", "file": "sprites/enemy/goblin_scout.png", "style": "nes" },
-    { "id": "enemy:hedge_sprite", "file": "sprites/enemy/hedge_sprite.png", "style": "nes" },
-    { "id": "enemy:bandit_captain", "file": "sprites/enemy/bandit_captain.png", "style": "snes" },
+    {
+      "id": "enemy:road_slime",
+      "file": "sprites/enemy/road_slime.png",
+      "fileHires": "sprites-hires/enemy/road_slime.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:field_rat",
+      "file": "sprites/enemy/field_rat.png",
+      "fileHires": "sprites-hires/enemy/field_rat.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:goblin_scout",
+      "file": "sprites/enemy/goblin_scout.png",
+      "fileHires": "sprites-hires/enemy/goblin_scout.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:hedge_sprite",
+      "file": "sprites/enemy/hedge_sprite.png",
+      "fileHires": "sprites-hires/enemy/hedge_sprite.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:bandit_captain",
+      "file": "sprites/enemy/bandit_captain.png",
+      "fileHires": "sprites-hires/enemy/bandit_captain.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:wild_boar",
       "file": "sprites/enemy/wild_boar.png",
+      "fileHires": "sprites-hires/enemy/wild_boar.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:bramble_wolf", "file": "sprites/enemy/bramble_wolf.png", "style": "nes" },
-    { "id": "enemy:moss_golem", "file": "sprites/enemy/moss_golem.png", "style": "nes" },
-    { "id": "enemy:wood_goblin", "file": "sprites/enemy/wood_goblin.png", "style": "nes" },
-    { "id": "enemy:whisper_wisp", "file": "sprites/enemy/whisper_wisp.png", "style": "nes" },
-    { "id": "enemy:elder_treant", "file": "sprites/enemy/elder_treant.png", "style": "snes" },
+    {
+      "id": "enemy:bramble_wolf",
+      "file": "sprites/enemy/bramble_wolf.png",
+      "fileHires": "sprites-hires/enemy/bramble_wolf.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:moss_golem",
+      "file": "sprites/enemy/moss_golem.png",
+      "fileHires": "sprites-hires/enemy/moss_golem.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:wood_goblin",
+      "file": "sprites/enemy/wood_goblin.png",
+      "fileHires": "sprites-hires/enemy/wood_goblin.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:whisper_wisp",
+      "file": "sprites/enemy/whisper_wisp.png",
+      "fileHires": "sprites-hires/enemy/whisper_wisp.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:elder_treant",
+      "file": "sprites/enemy/elder_treant.png",
+      "fileHires": "sprites-hires/enemy/elder_treant.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:owlbear_cub",
       "file": "sprites/enemy/owlbear_cub.png",
+      "fileHires": "sprites-hires/enemy/owlbear_cub.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:bog_lurker", "file": "sprites/enemy/bog_lurker.png", "style": "nes" },
-    { "id": "enemy:marsh_leech", "file": "sprites/enemy/marsh_leech.png", "style": "nes" },
-    { "id": "enemy:mire_toad", "file": "sprites/enemy/mire_toad.png", "style": "nes" },
-    { "id": "enemy:will_o_wisp", "file": "sprites/enemy/will_o_wisp.png", "style": "nes" },
-    { "id": "enemy:sigh_hag", "file": "sprites/enemy/sigh_hag.png", "style": "snes" },
+    {
+      "id": "enemy:bog_lurker",
+      "file": "sprites/enemy/bog_lurker.png",
+      "fileHires": "sprites-hires/enemy/bog_lurker.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:marsh_leech",
+      "file": "sprites/enemy/marsh_leech.png",
+      "fileHires": "sprites-hires/enemy/marsh_leech.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:mire_toad",
+      "file": "sprites/enemy/mire_toad.png",
+      "fileHires": "sprites-hires/enemy/mire_toad.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:will_o_wisp",
+      "file": "sprites/enemy/will_o_wisp.png",
+      "fileHires": "sprites-hires/enemy/will_o_wisp.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:sigh_hag",
+      "file": "sprites/enemy/sigh_hag.png",
+      "fileHires": "sprites-hires/enemy/sigh_hag.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:giant_heron",
       "file": "sprites/enemy/giant_heron.png",
+      "fileHires": "sprites-hires/enemy/giant_heron.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:barrow_wight", "file": "sprites/enemy/barrow_wight.png", "style": "nes" },
-    { "id": "enemy:grave_hound", "file": "sprites/enemy/grave_hound.png", "style": "nes" },
-    { "id": "enemy:bone_soldier", "file": "sprites/enemy/bone_soldier.png", "style": "nes" },
-    { "id": "enemy:cairn_crawler", "file": "sprites/enemy/cairn_crawler.png", "style": "nes" },
-    { "id": "enemy:barrow_king", "file": "sprites/enemy/barrow_king.png", "style": "snes" },
+    {
+      "id": "enemy:barrow_wight",
+      "file": "sprites/enemy/barrow_wight.png",
+      "fileHires": "sprites-hires/enemy/barrow_wight.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:grave_hound",
+      "file": "sprites/enemy/grave_hound.png",
+      "fileHires": "sprites-hires/enemy/grave_hound.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:bone_soldier",
+      "file": "sprites/enemy/bone_soldier.png",
+      "fileHires": "sprites-hires/enemy/bone_soldier.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:cairn_crawler",
+      "file": "sprites/enemy/cairn_crawler.png",
+      "fileHires": "sprites-hires/enemy/cairn_crawler.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:barrow_king",
+      "file": "sprites/enemy/barrow_king.png",
+      "fileHires": "sprites-hires/enemy/barrow_king.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:crypt_ogre",
       "file": "sprites/enemy/crypt_ogre.png",
+      "fileHires": "sprites-hires/enemy/crypt_ogre.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:salt_crab", "file": "sprites/enemy/salt_crab.png", "style": "nes" },
-    { "id": "enemy:gull_harpy", "file": "sprites/enemy/gull_harpy.png", "style": "nes" },
-    { "id": "enemy:drowned_sailor", "file": "sprites/enemy/drowned_sailor.png", "style": "nes" },
-    { "id": "enemy:tide_witch", "file": "sprites/enemy/tide_witch.png", "style": "nes" },
-    { "id": "enemy:glass_leviathan", "file": "sprites/enemy/glass_leviathan.png", "style": "snes" },
+    {
+      "id": "enemy:salt_crab",
+      "file": "sprites/enemy/salt_crab.png",
+      "fileHires": "sprites-hires/enemy/salt_crab.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:gull_harpy",
+      "file": "sprites/enemy/gull_harpy.png",
+      "fileHires": "sprites-hires/enemy/gull_harpy.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:drowned_sailor",
+      "file": "sprites/enemy/drowned_sailor.png",
+      "fileHires": "sprites-hires/enemy/drowned_sailor.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:tide_witch",
+      "file": "sprites/enemy/tide_witch.png",
+      "fileHires": "sprites-hires/enemy/tide_witch.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:glass_leviathan",
+      "file": "sprites/enemy/glass_leviathan.png",
+      "fileHires": "sprites-hires/enemy/glass_leviathan.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:reef_troll",
       "file": "sprites/enemy/reef_troll.png",
+      "fileHires": "sprites-hires/enemy/reef_troll.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:ember_imp", "file": "sprites/enemy/ember_imp.png", "style": "nes" },
-    { "id": "enemy:magma_beetle", "file": "sprites/enemy/magma_beetle.png", "style": "nes" },
-    { "id": "enemy:cinder_orc", "file": "sprites/enemy/cinder_orc.png", "style": "nes" },
-    { "id": "enemy:flame_adept", "file": "sprites/enemy/flame_adept.png", "style": "nes" },
-    { "id": "enemy:emberfall_wyrm", "file": "sprites/enemy/emberfall_wyrm.png", "style": "snes" },
+    {
+      "id": "enemy:ember_imp",
+      "file": "sprites/enemy/ember_imp.png",
+      "fileHires": "sprites-hires/enemy/ember_imp.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:magma_beetle",
+      "file": "sprites/enemy/magma_beetle.png",
+      "fileHires": "sprites-hires/enemy/magma_beetle.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:cinder_orc",
+      "file": "sprites/enemy/cinder_orc.png",
+      "fileHires": "sprites-hires/enemy/cinder_orc.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:flame_adept",
+      "file": "sprites/enemy/flame_adept.png",
+      "fileHires": "sprites-hires/enemy/flame_adept.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:emberfall_wyrm",
+      "file": "sprites/enemy/emberfall_wyrm.png",
+      "fileHires": "sprites-hires/enemy/emberfall_wyrm.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:slag_giant",
       "file": "sprites/enemy/slag_giant.png",
+      "fileHires": "sprites-hires/enemy/slag_giant.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:frost_wolf", "file": "sprites/enemy/frost_wolf.png", "style": "nes" },
-    { "id": "enemy:ice_troll", "file": "sprites/enemy/ice_troll.png", "style": "nes" },
-    { "id": "enemy:rime_golem", "file": "sprites/enemy/rime_golem.png", "style": "nes" },
-    { "id": "enemy:snow_shaman", "file": "sprites/enemy/snow_shaman.png", "style": "nes" },
-    { "id": "enemy:frostvein_yeti", "file": "sprites/enemy/frostvein_yeti.png", "style": "snes" },
+    {
+      "id": "enemy:frost_wolf",
+      "file": "sprites/enemy/frost_wolf.png",
+      "fileHires": "sprites-hires/enemy/frost_wolf.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:ice_troll",
+      "file": "sprites/enemy/ice_troll.png",
+      "fileHires": "sprites-hires/enemy/ice_troll.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:rime_golem",
+      "file": "sprites/enemy/rime_golem.png",
+      "fileHires": "sprites-hires/enemy/rime_golem.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:snow_shaman",
+      "file": "sprites/enemy/snow_shaman.png",
+      "fileHires": "sprites-hires/enemy/snow_shaman.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:frostvein_yeti",
+      "file": "sprites/enemy/frostvein_yeti.png",
+      "fileHires": "sprites-hires/enemy/frostvein_yeti.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:avalanche_drake",
       "file": "sprites/enemy/avalanche_drake.png",
+      "fileHires": "sprites-hires/enemy/avalanche_drake.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:drowned_monk", "file": "sprites/enemy/drowned_monk.png", "style": "nes" },
-    { "id": "enemy:abbey_gargoyle", "file": "sprites/enemy/abbey_gargoyle.png", "style": "nes" },
-    { "id": "enemy:bell_wraith", "file": "sprites/enemy/bell_wraith.png", "style": "nes" },
-    { "id": "enemy:eel_serpent", "file": "sprites/enemy/eel_serpent.png", "style": "nes" },
-    { "id": "enemy:sunken_abbot", "file": "sprites/enemy/sunken_abbot.png", "style": "snes" },
+    {
+      "id": "enemy:drowned_monk",
+      "file": "sprites/enemy/drowned_monk.png",
+      "fileHires": "sprites-hires/enemy/drowned_monk.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:abbey_gargoyle",
+      "file": "sprites/enemy/abbey_gargoyle.png",
+      "fileHires": "sprites-hires/enemy/abbey_gargoyle.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:bell_wraith",
+      "file": "sprites/enemy/bell_wraith.png",
+      "fileHires": "sprites-hires/enemy/bell_wraith.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:eel_serpent",
+      "file": "sprites/enemy/eel_serpent.png",
+      "fileHires": "sprites-hires/enemy/eel_serpent.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:sunken_abbot",
+      "file": "sprites/enemy/sunken_abbot.png",
+      "fileHires": "sprites-hires/enemy/sunken_abbot.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:choir_of_bones",
       "file": "sprites/enemy/choir_of_bones.png",
+      "fileHires": "sprites-hires/enemy/choir_of_bones.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:ash_ghoul", "file": "sprites/enemy/ash_ghoul.png", "style": "nes" },
-    { "id": "enemy:dust_stalker", "file": "sprites/enemy/dust_stalker.png", "style": "nes" },
-    { "id": "enemy:cinder_colossus", "file": "sprites/enemy/cinder_colossus.png", "style": "nes" },
-    { "id": "enemy:ash_oracle", "file": "sprites/enemy/ash_oracle.png", "style": "nes" },
-    { "id": "enemy:waste_tyrant", "file": "sprites/enemy/waste_tyrant.png", "style": "snes" },
+    {
+      "id": "enemy:ash_ghoul",
+      "file": "sprites/enemy/ash_ghoul.png",
+      "fileHires": "sprites-hires/enemy/ash_ghoul.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:dust_stalker",
+      "file": "sprites/enemy/dust_stalker.png",
+      "fileHires": "sprites-hires/enemy/dust_stalker.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:cinder_colossus",
+      "file": "sprites/enemy/cinder_colossus.png",
+      "fileHires": "sprites-hires/enemy/cinder_colossus.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:ash_oracle",
+      "file": "sprites/enemy/ash_oracle.png",
+      "fileHires": "sprites-hires/enemy/ash_oracle.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:waste_tyrant",
+      "file": "sprites/enemy/waste_tyrant.png",
+      "fileHires": "sprites-hires/enemy/waste_tyrant.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:sand_basilisk",
       "file": "sprites/enemy/sand_basilisk.png",
+      "fileHires": "sprites-hires/enemy/sand_basilisk.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:star_sentinel", "file": "sprites/enemy/star_sentinel.png", "style": "nes" },
-    { "id": "enemy:comet_hound", "file": "sprites/enemy/comet_hound.png", "style": "nes" },
-    { "id": "enemy:spire_warden", "file": "sprites/enemy/spire_warden.png", "style": "nes" },
-    { "id": "enemy:astral_seer", "file": "sprites/enemy/astral_seer.png", "style": "nes" },
-    { "id": "enemy:fallen_star", "file": "sprites/enemy/fallen_star.png", "style": "snes" },
+    {
+      "id": "enemy:star_sentinel",
+      "file": "sprites/enemy/star_sentinel.png",
+      "fileHires": "sprites-hires/enemy/star_sentinel.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:comet_hound",
+      "file": "sprites/enemy/comet_hound.png",
+      "fileHires": "sprites-hires/enemy/comet_hound.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:spire_warden",
+      "file": "sprites/enemy/spire_warden.png",
+      "fileHires": "sprites-hires/enemy/spire_warden.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:astral_seer",
+      "file": "sprites/enemy/astral_seer.png",
+      "fileHires": "sprites-hires/enemy/astral_seer.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:fallen_star",
+      "file": "sprites/enemy/fallen_star.png",
+      "fileHires": "sprites-hires/enemy/fallen_star.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:void_manta",
       "file": "sprites/enemy/void_manta.png",
+      "fileHires": "sprites-hires/enemy/void_manta.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:hollow_knight", "file": "sprites/enemy/hollow_knight.png", "style": "nes" },
-    { "id": "enemy:court_jester", "file": "sprites/enemy/court_jester.png", "style": "nes" },
-    { "id": "enemy:throne_guard", "file": "sprites/enemy/throne_guard.png", "style": "nes" },
-    { "id": "enemy:court_mage", "file": "sprites/enemy/court_mage.png", "style": "nes" },
-    { "id": "enemy:hollow_king", "file": "sprites/enemy/hollow_king.png", "style": "snes" },
+    {
+      "id": "enemy:hollow_knight",
+      "file": "sprites/enemy/hollow_knight.png",
+      "fileHires": "sprites-hires/enemy/hollow_knight.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:court_jester",
+      "file": "sprites/enemy/court_jester.png",
+      "fileHires": "sprites-hires/enemy/court_jester.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:throne_guard",
+      "file": "sprites/enemy/throne_guard.png",
+      "fileHires": "sprites-hires/enemy/throne_guard.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:court_mage",
+      "file": "sprites/enemy/court_mage.png",
+      "fileHires": "sprites-hires/enemy/court_mage.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:hollow_king",
+      "file": "sprites/enemy/hollow_king.png",
+      "fileHires": "sprites-hires/enemy/hollow_king.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:royal_chimera",
       "file": "sprites/enemy/royal_chimera.png",
+      "fileHires": "sprites-hires/enemy/royal_chimera.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
-    { "id": "enemy:ink_horror", "file": "sprites/enemy/ink_horror.png", "style": "nes" },
-    { "id": "enemy:blank_page", "file": "sprites/enemy/blank_page.png", "style": "nes" },
-    { "id": "enemy:quill_golem", "file": "sprites/enemy/quill_golem.png", "style": "nes" },
-    { "id": "enemy:erased_scribe", "file": "sprites/enemy/erased_scribe.png", "style": "nes" },
-    { "id": "enemy:unwritten_one", "file": "sprites/enemy/unwritten_one.png", "style": "snes" },
+    {
+      "id": "enemy:ink_horror",
+      "file": "sprites/enemy/ink_horror.png",
+      "fileHires": "sprites-hires/enemy/ink_horror.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:blank_page",
+      "file": "sprites/enemy/blank_page.png",
+      "fileHires": "sprites-hires/enemy/blank_page.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:quill_golem",
+      "file": "sprites/enemy/quill_golem.png",
+      "fileHires": "sprites-hires/enemy/quill_golem.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:erased_scribe",
+      "file": "sprites/enemy/erased_scribe.png",
+      "fileHires": "sprites-hires/enemy/erased_scribe.png",
+      "style": "nes"
+    },
+    {
+      "id": "enemy:unwritten_one",
+      "file": "sprites/enemy/unwritten_one.png",
+      "fileHires": "sprites-hires/enemy/unwritten_one.png",
+      "style": "snes"
+    },
     {
       "id": "enemy:margin_beast",
       "file": "sprites/enemy/margin_beast.png",
+      "fileHires": "sprites-hires/enemy/margin_beast.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
     {
       "id": "world_boss:the_promptwyrm",
       "file": "sprites/world_boss/the_promptwyrm.png",
+      "fileHires": "sprites-hires/world_boss/the_promptwyrm.png",
       "style": "snes"
     },
-    { "id": "world_boss:hallucinox", "file": "sprites/world_boss/hallucinox.png", "style": "snes" },
+    {
+      "id": "world_boss:hallucinox",
+      "file": "sprites/world_boss/hallucinox.png",
+      "fileHires": "sprites-hires/world_boss/hallucinox.png",
+      "style": "snes"
+    },
     {
       "id": "world_boss:the_context_leviathan",
       "file": "sprites/world_boss/the_context_leviathan.png",
+      "fileHires": "sprites-hires/world_boss/the_context_leviathan.png",
       "style": "snes"
     },
-    { "id": "world_boss:tokenmaw", "file": "sprites/world_boss/tokenmaw.png", "style": "snes" },
-    { "id": "item:iron_sword", "file": "sprites/item/iron_sword.png", "style": "nes" },
-    { "id": "item:bronze_axe", "file": "sprites/item/bronze_axe.png", "style": "nes" },
-    { "id": "item:steel_longsword", "file": "sprites/item/steel_longsword.png", "style": "nes" },
-    { "id": "item:mithril_blade", "file": "sprites/item/mithril_blade.png", "style": "nes" },
-    { "id": "item:dragonfang", "file": "sprites/item/dragonfang.png", "style": "nes" },
-    { "id": "item:oak_staff", "file": "sprites/item/oak_staff.png", "style": "nes" },
-    { "id": "item:ember_rod", "file": "sprites/item/ember_rod.png", "style": "nes" },
-    { "id": "item:rune_staff", "file": "sprites/item/rune_staff.png", "style": "nes" },
-    { "id": "item:storm_rod", "file": "sprites/item/storm_rod.png", "style": "nes" },
-    { "id": "item:void_scepter", "file": "sprites/item/void_scepter.png", "style": "nes" },
-    { "id": "item:willow_staff", "file": "sprites/item/willow_staff.png", "style": "nes" },
-    { "id": "item:healers_mace", "file": "sprites/item/healers_mace.png", "style": "nes" },
-    { "id": "item:silver_crook", "file": "sprites/item/silver_crook.png", "style": "nes" },
-    { "id": "item:sacred_mace", "file": "sprites/item/sacred_mace.png", "style": "nes" },
-    { "id": "item:seraph_staff", "file": "sprites/item/seraph_staff.png", "style": "nes" },
-    { "id": "item:oak_bow", "file": "sprites/item/oak_bow.png", "style": "nes" },
-    { "id": "item:short_bow", "file": "sprites/item/short_bow.png", "style": "nes" },
-    { "id": "item:longbow", "file": "sprites/item/longbow.png", "style": "nes" },
-    { "id": "item:elven_bow", "file": "sprites/item/elven_bow.png", "style": "nes" },
-    { "id": "item:starshot_bow", "file": "sprites/item/starshot_bow.png", "style": "nes" },
-    { "id": "item:chainmail", "file": "sprites/item/chainmail.png", "style": "nes" },
-    { "id": "item:bronze_plate", "file": "sprites/item/bronze_plate.png", "style": "nes" },
-    { "id": "item:steel_plate", "file": "sprites/item/steel_plate.png", "style": "nes" },
-    { "id": "item:mithril_mail", "file": "sprites/item/mithril_mail.png", "style": "nes" },
-    { "id": "item:dragon_plate", "file": "sprites/item/dragon_plate.png", "style": "nes" },
-    { "id": "item:cloth_robe", "file": "sprites/item/cloth_robe.png", "style": "nes" },
-    { "id": "item:silk_robe", "file": "sprites/item/silk_robe.png", "style": "nes" },
-    { "id": "item:mystic_robe", "file": "sprites/item/mystic_robe.png", "style": "nes" },
-    { "id": "item:sage_robe", "file": "sprites/item/sage_robe.png", "style": "nes" },
-    { "id": "item:astral_robe", "file": "sprites/item/astral_robe.png", "style": "nes" },
-    { "id": "item:leather_vest", "file": "sprites/item/leather_vest.png", "style": "nes" },
-    { "id": "item:hide_coat", "file": "sprites/item/hide_coat.png", "style": "nes" },
-    { "id": "item:ranger_garb", "file": "sprites/item/ranger_garb.png", "style": "nes" },
-    { "id": "item:shadow_leather", "file": "sprites/item/shadow_leather.png", "style": "nes" },
-    { "id": "item:wind_cloak", "file": "sprites/item/wind_cloak.png", "style": "nes" },
-    { "id": "item:copper_ring", "file": "sprites/item/copper_ring.png", "style": "nes" },
-    { "id": "item:bone_charm", "file": "sprites/item/bone_charm.png", "style": "nes" },
-    { "id": "item:silver_amulet", "file": "sprites/item/silver_amulet.png", "style": "nes" },
-    { "id": "item:gold_bangle", "file": "sprites/item/gold_bangle.png", "style": "nes" },
-    { "id": "item:phoenix_pendant", "file": "sprites/item/phoenix_pendant.png", "style": "nes" },
+    {
+      "id": "world_boss:tokenmaw",
+      "file": "sprites/world_boss/tokenmaw.png",
+      "fileHires": "sprites-hires/world_boss/tokenmaw.png",
+      "style": "snes"
+    },
+    {
+      "id": "item:iron_sword",
+      "file": "sprites/item/iron_sword.png",
+      "fileHires": "sprites-hires/item/iron_sword.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:bronze_axe",
+      "file": "sprites/item/bronze_axe.png",
+      "fileHires": "sprites-hires/item/bronze_axe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:steel_longsword",
+      "file": "sprites/item/steel_longsword.png",
+      "fileHires": "sprites-hires/item/steel_longsword.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:mithril_blade",
+      "file": "sprites/item/mithril_blade.png",
+      "fileHires": "sprites-hires/item/mithril_blade.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:dragonfang",
+      "file": "sprites/item/dragonfang.png",
+      "fileHires": "sprites-hires/item/dragonfang.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:oak_staff",
+      "file": "sprites/item/oak_staff.png",
+      "fileHires": "sprites-hires/item/oak_staff.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:ember_rod",
+      "file": "sprites/item/ember_rod.png",
+      "fileHires": "sprites-hires/item/ember_rod.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:rune_staff",
+      "file": "sprites/item/rune_staff.png",
+      "fileHires": "sprites-hires/item/rune_staff.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:storm_rod",
+      "file": "sprites/item/storm_rod.png",
+      "fileHires": "sprites-hires/item/storm_rod.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:void_scepter",
+      "file": "sprites/item/void_scepter.png",
+      "fileHires": "sprites-hires/item/void_scepter.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:willow_staff",
+      "file": "sprites/item/willow_staff.png",
+      "fileHires": "sprites-hires/item/willow_staff.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:healers_mace",
+      "file": "sprites/item/healers_mace.png",
+      "fileHires": "sprites-hires/item/healers_mace.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:silver_crook",
+      "file": "sprites/item/silver_crook.png",
+      "fileHires": "sprites-hires/item/silver_crook.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:sacred_mace",
+      "file": "sprites/item/sacred_mace.png",
+      "fileHires": "sprites-hires/item/sacred_mace.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:seraph_staff",
+      "file": "sprites/item/seraph_staff.png",
+      "fileHires": "sprites-hires/item/seraph_staff.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:oak_bow",
+      "file": "sprites/item/oak_bow.png",
+      "fileHires": "sprites-hires/item/oak_bow.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:short_bow",
+      "file": "sprites/item/short_bow.png",
+      "fileHires": "sprites-hires/item/short_bow.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:longbow",
+      "file": "sprites/item/longbow.png",
+      "fileHires": "sprites-hires/item/longbow.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:elven_bow",
+      "file": "sprites/item/elven_bow.png",
+      "fileHires": "sprites-hires/item/elven_bow.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:starshot_bow",
+      "file": "sprites/item/starshot_bow.png",
+      "fileHires": "sprites-hires/item/starshot_bow.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:chainmail",
+      "file": "sprites/item/chainmail.png",
+      "fileHires": "sprites-hires/item/chainmail.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:bronze_plate",
+      "file": "sprites/item/bronze_plate.png",
+      "fileHires": "sprites-hires/item/bronze_plate.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:steel_plate",
+      "file": "sprites/item/steel_plate.png",
+      "fileHires": "sprites-hires/item/steel_plate.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:mithril_mail",
+      "file": "sprites/item/mithril_mail.png",
+      "fileHires": "sprites-hires/item/mithril_mail.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:dragon_plate",
+      "file": "sprites/item/dragon_plate.png",
+      "fileHires": "sprites-hires/item/dragon_plate.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:cloth_robe",
+      "file": "sprites/item/cloth_robe.png",
+      "fileHires": "sprites-hires/item/cloth_robe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:silk_robe",
+      "file": "sprites/item/silk_robe.png",
+      "fileHires": "sprites-hires/item/silk_robe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:mystic_robe",
+      "file": "sprites/item/mystic_robe.png",
+      "fileHires": "sprites-hires/item/mystic_robe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:sage_robe",
+      "file": "sprites/item/sage_robe.png",
+      "fileHires": "sprites-hires/item/sage_robe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:astral_robe",
+      "file": "sprites/item/astral_robe.png",
+      "fileHires": "sprites-hires/item/astral_robe.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:leather_vest",
+      "file": "sprites/item/leather_vest.png",
+      "fileHires": "sprites-hires/item/leather_vest.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:hide_coat",
+      "file": "sprites/item/hide_coat.png",
+      "fileHires": "sprites-hires/item/hide_coat.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:ranger_garb",
+      "file": "sprites/item/ranger_garb.png",
+      "fileHires": "sprites-hires/item/ranger_garb.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:shadow_leather",
+      "file": "sprites/item/shadow_leather.png",
+      "fileHires": "sprites-hires/item/shadow_leather.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:wind_cloak",
+      "file": "sprites/item/wind_cloak.png",
+      "fileHires": "sprites-hires/item/wind_cloak.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:copper_ring",
+      "file": "sprites/item/copper_ring.png",
+      "fileHires": "sprites-hires/item/copper_ring.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:bone_charm",
+      "file": "sprites/item/bone_charm.png",
+      "fileHires": "sprites-hires/item/bone_charm.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:silver_amulet",
+      "file": "sprites/item/silver_amulet.png",
+      "fileHires": "sprites-hires/item/silver_amulet.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:gold_bangle",
+      "file": "sprites/item/gold_bangle.png",
+      "fileHires": "sprites-hires/item/gold_bangle.png",
+      "style": "nes"
+    },
+    {
+      "id": "item:phoenix_pendant",
+      "file": "sprites/item/phoenix_pendant.png",
+      "fileHires": "sprites-hires/item/phoenix_pendant.png",
+      "style": "nes"
+    },
     { "id": "fallback", "file": "fallback.png", "style": "nes" }
   ]
 }

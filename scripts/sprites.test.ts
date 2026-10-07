@@ -349,4 +349,15 @@ describe('sprites build', () => {
       expect(a).toMatch(/'hero:knight': \{[^\n]*raritySlotHires: \d+/)
     })
   })
+
+  it('gives every file entry of the real manifest but the fallback a fileHires', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),
+    ) as Manifest
+    const missing = manifest.sprites.filter(
+      (s) => s.file !== undefined && s.id !== 'fallback' && s.fileHires === undefined,
+    )
+    expect(missing.map((s) => s.id)).toEqual([])
+    expect(manifest.palettes.hires).toBe('palettes/hires.json')
+  })
 })

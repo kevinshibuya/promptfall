@@ -519,10 +519,30 @@ was re-cut with this script; it supersedes the cut commands above. The hero spri
 at 16 × 16 over their cuts (`art/sheets/grids/`), so after a re-cut, write them back with
 `pnpm grid --png art/sheets/grids/<kind>-<name>.txt art/sprites/<kind>/<name>.png`.
 
+2026-10-07, the 1.5× art: every call also writes the sprite's 1.5× cut to `art/sprites-hires/`
+(`--hires`: the native fitted to 24 × 24 or 72 × 51, 16 colours). The 1.5× art is never
+hand-drawn; the script ends by writing the hand-drawn 1× sprites back, so a re-cut leaves
+`art/sprites` unchanged. After a re-cut, `pnpm sprites --derive-hires-master` re-derives
+`art/palettes/hires.json`, then `pnpm sprites`.
+
+The eight 1.5× hero poses carry hand fixes, kept as grids (`art/sheets/grids/hires-<kind>-<name>.txt`)
+and written back by the script. The rarity slot must be one 8-connected region after the snap to
+the 1.5× master, so on each pose the rarity area, shading included, is flattened to its
+`rarityColorHires`, and every other pixel that snapped to the same master entry moves to the
+nearest other entry:
+
+- knight and knight attack: the cape (`#fb0803`, `#fa0904`); the plume, the shield cross and the
+  tabard stripe move to a darker red.
+- black mage and its attack: the robe (`#7112b3`, `#7513b8`); the hat and a sleeve edge are
+  repainted `#5726a3` (a blue-violet: any purple near the robe's merges with it in the median cut).
+- white mage and its attack: the staff orb (`#07e4fa`, `#11e3fb`), not the chest: the natives have
+  no chest sigil in one region; the cyan specks on the body move to a lighter cyan.
+- archer and its attack: the cape (`#fbeb05`, `#fbed03`).
+
 ```sh
 # Re-cuts every shipped sprite from its sheet. Run from the repository root.
 set -e
-N="--native art/sheets/native"
+N="--native art/sheets/native --hires art/sprites-hires"
 D="--grid 8x4 --colours 4 --size 16 $N"
 B="--grid 2x2 --colours 16 --fit 48x34 $N"
 s() { pnpm -s slice "$@" | grep -v ' 16x16 native\| native .* block' || true; }
@@ -551,5 +571,12 @@ for z in z2z3:elder_treant,owlbear_cub:sigh_hag,giant_heron z4z5:barrow_king,cry
   cut art/sheets/bosses-${parts[1]}.png art/sprites ${=B} --row 0 --names enemy/${parts[2]/,/,enemy/}
   cut art/sheets/bosses-${parts[1]}.png art/sprites ${=B} --row 1 --names enemy/${parts[3]/,/,enemy/}
 done
-rm -rf art/sprites/x art/sheets/native/x /tmp/promptfall-hero-cuts
+# The hand-drawn 1× sprites, over their cuts, and the hand-fixed 1.5× hero poses.
+for g in enemy-hollow_knight enemy-throne_guard enemy-court_mage enemy-ink_horror; do
+  pnpm -s grid --png art/sheets/grids/$g.txt art/sprites/${g/-//}.png >/dev/null
+done
+for g in hero-knight hero-black_mage hero-white_mage hero-archer hero_attack-knight hero_attack-black_mage hero_attack-white_mage hero_attack-archer; do
+  pnpm -s grid --png art/sheets/grids/hires-$g.txt art/sprites-hires/${g/-//}.png >/dev/null
+done
+rm -rf art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-hero-cuts
 ```
