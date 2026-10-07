@@ -265,6 +265,16 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z4z5.png.
 ```
 
+Cut:
+
+```sh
+O="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native"
+pnpm slice art/sheets/bosses-z4z5.png art/sprites $=O --row 0 --names enemy/barrow_king,enemy/crypt_ogre
+pnpm slice art/sheets/bosses-z4z5.png art/sprites $=O --row 1 --names enemy/glass_leviathan,enemy/reef_troll
+```
+
+Result: block about 10, the zone 1 bosses' pixel; all four ship (54 × 34, 34 × 25, 57 × 38, 43 × 31).
+
 ## bosses-z6z7.png
 
 2026-10-07, run `pf2-bosses-z6z7`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
@@ -287,6 +297,64 @@ STYLE (match the attached reference sheet's pixel style exactly, but these are N
 - No text, no letters, no numbers, no labels, no grid lines, no watermark.
 
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z6z7.png.
+```
+
+Cut:
+
+```sh
+O="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native"
+pnpm slice art/sheets/bosses-z6z7.png art/sprites $=O --row 0 --names enemy/emberfall_wyrm,enemy/slag_giant
+pnpm slice art/sheets/bosses-z6z7.png art/sprites $=O --row 1 --names enemy/frostvein_yeti,enemy/avalanche_drake
+```
+
+Result: block about 7. The slag giant (49 × 31) and the avalanche drake (62 × 34) ship; the emberfall wyrm (77 × 43) and the frostvein yeti (71 × 42) are wider than 64 and go to Redos.
+
+## bosses-z8z9.png
+
+2026-10-07, run `pf2-bosses-z8z9`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height. Build every boss from the same large pixel blocks as the bosses in the attached zone 1 boss sheet, never finer pixels: each zone boss fills at most about three-quarters of its cell's width and two-thirds of its cell's height, the smaller boss less.
+Top left, the zone boss of Sunken Abbey (a flooded stone abbey: teal water, wet stone, candle gold): SUNKEN ABBOT: a towering undead abbot in rotted vestments and a mitre, a crozier dripping water. Top right, the smaller boss of Sunken Abbey, about two-thirds the size: CHOIR OF BONES: three singing skulls in choir collars fused onto a bone pillar. Bottom left, the zone boss of Ashen Waste (a grey ash desert under a red sky: ash grey, rust, bone): WASTE TYRANT: a giant warlord in scorched black plate, a horned helm and a huge cleaver. Bottom right, the smaller boss of Ashen Waste: SAND BASILISK: a long sand-yellow lizard with a frilled crest and a stony glare.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z8z9.png.
+```
+
+## bosses-z10z11.png
+
+2026-10-07, run `pf2-bosses-z10z11`. References: `art/sheets/dense-heroes-zone1-items.png`, `art/sheets/zone1-bosses.png`.
+
+Prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1 boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline, hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its height. Build every boss from the same large pixel blocks as the bosses in the attached zone 1 boss sheet, never finer pixels: each zone boss fills at most about three-quarters of its cell's width and two-thirds of its cell's height, the smaller boss less.
+Top left, the zone boss of Starfall Spire (a tower among the stars: deep navy, silver, starlight): FALLEN STAR: a burning fallen star: a jagged crystal core with arms of white fire. Top right, the smaller boss of Starfall Spire, about two-thirds the size: VOID MANTA: a dark purple manta ray gliding, star speckles on its wings. Bottom left, the zone boss of Hollow King's Court (a dead royal court: purple, tarnished gold, black): HOLLOW KING: an empty crowned royal robe with two glowing eyes and a black sceptre. Bottom right, the smaller boss of Hollow King's Court: ROYAL CHIMERA: a chimera with lion, goat and serpent heads in royal purple and gold.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/bosses-z10z11.png.
 ```
 
 ## Redos
@@ -344,3 +412,5 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:elder_treant` | bosses-z2z3 | 66 × 56 as drawn: the zone 1 bosses' coarser pixel |
 | `enemy:sigh_hag` | bosses-z2z3 | 63 × 52 as drawn: the zone 1 bosses' coarser pixel |
 | `enemy:giant_heron` | bosses-z2z3 | 66 × 50 as drawn: the zone 1 bosses' coarser pixel |
+| `enemy:emberfall_wyrm` | bosses-z6z7 | 77 × 43 as drawn: the zone 1 bosses' coarser pixel |
+| `enemy:frostvein_yeti` | bosses-z6z7 | 71 × 42 as drawn: the zone 1 bosses' coarser pixel |

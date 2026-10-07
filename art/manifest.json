@@ -86,10 +86,10 @@
     { "id": "enemy:grave_hound", "alias": "concept/nes-swift", "style": "nes" },
     { "id": "enemy:bone_soldier", "alias": "concept/nes-brute", "style": "nes" },
     { "id": "enemy:cairn_crawler", "alias": "concept/nes-tank", "style": "nes" },
-    { "id": "enemy:barrow_king", "alias": "concept/snes-boss-3", "style": "snes" },
+    { "id": "enemy:barrow_king", "file": "sprites/enemy/barrow_king.png", "style": "snes" },
     {
       "id": "enemy:crypt_ogre",
-      "alias": "concept/snes-boss-3",
+      "file": "sprites/enemy/crypt_ogre.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -97,10 +97,10 @@
     { "id": "enemy:gull_harpy", "alias": "concept/nes-swift", "style": "nes" },
     { "id": "enemy:drowned_sailor", "alias": "concept/nes-brute", "style": "nes" },
     { "id": "enemy:tide_witch", "alias": "concept/nes-caster", "style": "nes" },
-    { "id": "enemy:glass_leviathan", "alias": "concept/snes-boss-0", "style": "snes" },
+    { "id": "enemy:glass_leviathan", "file": "sprites/enemy/glass_leviathan.png", "style": "snes" },
     {
       "id": "enemy:reef_troll",
-      "alias": "concept/snes-boss-0",
+      "file": "sprites/enemy/reef_troll.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -111,7 +111,7 @@
     { "id": "enemy:emberfall_wyrm", "alias": "concept/snes-boss-1", "style": "snes" },
     {
       "id": "enemy:slag_giant",
-      "alias": "concept/snes-boss-1",
+      "file": "sprites/enemy/slag_giant.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
@@ -122,7 +122,7 @@
     { "id": "enemy:frostvein_yeti", "alias": "concept/snes-boss-2", "style": "snes" },
     {
       "id": "enemy:avalanche_drake",
-      "alias": "concept/snes-boss-2",
+      "file": "sprites/enemy/avalanche_drake.png",
       "style": "snes",
       "fit": { "height": 24 }
     },
