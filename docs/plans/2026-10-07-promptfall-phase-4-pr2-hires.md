@@ -104,7 +104,7 @@ placeholders with the current manifest (no `palettes.hires`). Full check line.
 **Boundaries:** No change to the 1× variants, limits or masters, nor to plugin code beyond the
 `Sprite` type and the generated module.
 
-- [ ] tests, red; implement; build; full check line; commit
+- [x] tests, red; implement; build; full check line; commit
 
 ### Task H3: land the 1.5× art
 
