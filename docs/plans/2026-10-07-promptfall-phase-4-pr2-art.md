@@ -47,26 +47,32 @@ is untouched.
   -s workspace-write --skip-git-repo-check -i=<ref> … "<prompt>"`, with `-C` and the output path
   inside the gitignored `art/sheets/` (absolute path). References use the attached `-i=<path>` form.
   Labels start `pf2-`.
-- Run it with `run_in_background: true` and wait for the completion notification. Never poll and
-  never sleep-loop: no Opus is spent idling on codex (Kevin, grill round 4). Independent sheets may
-  run two at a time.
+- Run it with `run_in_background: true` and an explicit Bash `timeout` of 600000, and wait for the
+  completion notification. Never poll and never sleep-loop: no Opus is spent idling on codex
+  (Kevin, grill round 4). Independent sheets may run two at a time.
 - After each run: `file <out>` must report PNG image data, and `~/.claude/bin/codex-usage.sh` is
   read once. A run costs about 0.7% of the weekly window and 5% of the 5-hour window.
-- **A limit hit is a hard stop** for every image task: no retry, no other GPT model, no reset credit.
-  Finish the non-codex tasks that do not depend on the missing sheet, then report the reset time and
-  stop. A 5-hour window above 85% before a run: wait for its reset (report it), don't start a run.
+- **A limit hit stops everything at once** (grill round 4): no retry, no other GPT model, no reset
+  credit, no further task. Commit what is done, report the reset time and the step to resume from,
+  and stop. A 5-hour window above 85% before a run: don't start it; report the reset time and stop
+  the same way.
 - The prompt is always assembled in this order: `bg.txt`, the sheet's body, `common.txt`, then
   `Use your image_gen tool (gpt-image-2). Save the result as a PNG to <abs path>.` The magenta
   block goes first because two of three runs came back on black without it.
 - Every run after Task 5 attaches the approved style references, in this order: the dense sheet
   `art/sheets/dense-heroes-zone1-items.png` and the boss sheet `art/sheets/zone1-bosses.png`.
-- The sheet bodies are verbatim in this plan (Tasks 7 to 11), built from the briefs table below.
+- The sheet bodies are templates in this plan (Tasks 7 to 10, reused by Task 11) with `<…>` slots
+  filled from the Briefs tables. The assembled prompt is written into `art/sheets.md` before each
+  run.
+- Sprites must not touch each other. A prompt line that already holds: "generous magenta gaps so no
+  two sprites touch or overlap" (`common.txt`). The slicer finds sprites by those gaps (Task 1).
 
 ### Review
 
-- One review artifact, created in Task 7 and updated in place after: the gate page's look (its
-  file is the template, copied into `.promptfall/review/index.html`: dark ground, sprite strips at
-  6×, captions with ids). Each batch section shows the raw sheet (JPEG, 1024 wide), the contact
+- One review artifact, created in Task 7 and updated in place after, in the gate page's look: fetch
+  the gate page's HTML with the Artifact tool (`action: "read"`, url
+  https://claude.ai/artifact/FgkfcBP9UwjDWRXc3Ubi2S) into `.promptfall/review/index.html` as the
+  template (dark ground, sprite strips at 6×, captions with ids). Each batch section shows the raw sheet (JPEG, 1024 wide), the contact
   images, and the ids. Kevin answers per zone (or per group) with GREEN or the ids to redo.
 - Review never blocks the work. A task that publishes a batch continues to the next task. Redo ids
   collect in `art/sheets.md` under "Redos" and ride the spare cells of a later sheet (Task 11).
@@ -191,72 +197,99 @@ Items, places and paper show no letters or numbers.
 4. **The contact script writes a folder of PNGs, not one image**, so the review artifact can caption
    each sprite with its id in HTML; text rendered into a PNG would need a font path the stage
    doesn't have.
+6. **`--grid` counts sprites instead of cutting equal cells** (grill Q18 said "same CLI"; the flags
+   are the same, their meaning shifts). The plan review found that equal cells clipped approved
+   sprites: the dense sheet's heroes reach row 270 past the 256 boundary, and the bandit captain
+   starts at row 473 above 512.
 5. **`art/concept/` is deleted in Task 12** once no manifest entry aliases it; the `alias` support
    in `scripts/sprites.ts` stays for later content.
 
 ## Tasks
 
-### Task 1: `pnpm slice` recovers the native grid
+### Task 1: `pnpm slice` finds sprites by their gaps and recovers the native grid
 
 **Files:**
-- `scripts/slice-sheet.ts` — modify: replace the point-sampled shrink in `sliceCell` with native-grid recovery and an outline-aware majority shrink; add `--native <dir>`; nothing else in the CLI changes
+- `scripts/slice-sheet.ts` — modify: sprite boxes from magenta gutters instead of equal cells;
+  native-grid recovery and an outline-aware majority shrink instead of point sampling; `--native
+  <dir>`; `--names` entries may hold one `/` (a sub-directory, created on write); a failing cell is
+  reported and skipped, not fatal
 - `scripts/slice-sheet.test.ts` — create
 - `scripts/png.ts` — modify only if a helper is missing (none expected)
 
 **Interfaces:**
-- Produces: `sliceCell(cell: Rgba, options: SliceOptions): { art: Rgba; native: Rgba }` (was `Rgba`);
-  `sliceSheet(sheet, options): { art: Rgba; native: Rgba }[]`; CLI flag `--native <dir>` writing
-  each cell's native art as `<dir>/<name>.png`. `SliceOptions` is unchanged.
+- Produces: `sliceSheet(sheet: Rgba, options: SliceOptions): SliceResult[]` with
+  `type SliceResult = { art: Rgba; native: Rgba; block: number } | { error: string }`, one per
+  sprite in reading order (row by row, left to right); CLI flags as today plus `--native <dir>`.
+  `--names hero/knight,hero_attack/knight` writes `<out>/hero/knight.png` and, with `--native`,
+  `<native>/hero/knight.png`. The CLI prints one line per sprite (`<path> <w>x<h> native <W>x<H>
+  block <b>`) or `<name>: <error>`, and exits 1 after the last sprite if any failed. `SliceOptions`
+  is unchanged; `--grid <cols>x<rows>` now means how many sprites per row and how many rows.
 
-**Work:** Port `docs/plans/phase-4-pr2/slice-prototype.ts` into `sliceCell`. The algorithm is
-load-bearing; keep these exact rules:
+**Work:** The algorithm is load-bearing; keep these rules exactly. Port the prototype
+`docs/plans/phase-4-pr2/slice-prototype.ts` for steps 3 to 8.
 
-1. Key and crop as today (`isKey`, `mainRun` on rows then columns).
-2. **Art-pixel size `b`** = within the crop, scanning every second row left to right, collect the
-   lengths of runs of dark pixels (all of R, G, B below 50) of length ≥ 4; take the commonest
-   length `m`, then `b` = the count-weighted mean of lengths `m − 1`, `m`, `m + 1`. The outline is
-   one art pixel thick, so its run is `b`. No dark run ≥ 4 in a cell: throw
-   `Error('<cell index>: no outline found')`; every sprite has an outline.
-3. **Grid offset**, per axis: collect the positions where neighbouring pixels differ (either side
-   keyed, or squared RGB distance > 40²), scanning every second line; the offset `o` in
+1. **Rows by gutters.** Mark each sheet row as occupied if it holds any non-key pixel (`isKey` as
+   today). Occupied runs separated by fully keyed rows are row bands. While there are more bands than
+   `rows`, merge the two neighbouring bands with the narrowest keyed gap between them. Fewer bands
+   than `rows` (sprites touching across rows): that whole row range errors as
+   `row <r>: sprites touch, no gutter`. `--row <r>` keeps band `r` only.
+2. **Sprites by gutters**, within each band, the same way over columns with `cols` as the count:
+   merging the narrowest gaps re-attaches detached pieces (a spell burst, an arrow tip) to their
+   sprite. Fewer column runs than `cols`: error the band as `row <r>: sprites touch, no gutter`.
+   The sprite's box is its column run × the band's rows, trimmed to its non-key pixels.
+3. **Art-pixel size `b`**: within the box, scanning every second row left to right, collect the
+   lengths of runs of dark pixels (each of R, G, B below 50) of length ≥ 4; `m` is the commonest
+   length (ties: the shorter); `b` is the count-weighted mean of lengths `m − 1`, `m`, `m + 1`. No
+   such run: the sprite errors `no outline found`. After all sprites of the sheet are measured, a
+   `b` outside 0.7 to 1.4 times the sheet's median `b` is replaced by the median (dark-bodied
+   sprites merge their outline into the fill); print `block <b> (median)` for those.
+4. **Grid offset**, per axis: collect the positions where neighbouring pixels differ (either side
+   keyed, or squared RGB distance > 40²), scanning every second line of the box; the offset `o` in
    `[0, b)` in steps of 0.25 that puts the most transitions within 1.5 px of a grid line
-   (`o + k·b`) wins.
-4. **Native art**: the grid starts at the last grid line at or before the crop's start; each native
+   (`o + k·b`) wins; ties: the lowest `o`.
+5. **Native art**: the grid starts at the last grid line at or before the box's start; each native
    pixel is the commonest value among the 5 × 5 sample points at fractions 0.3, 0.4, 0.5, 0.6, 0.7
-   of its block (keyed counts as transparent). Trim empty native rows and columns.
-5. **Shrink**, never grow: `s = min(1, target width / W, target height / H)` where the target is
+   of its block, scanned row by row (keyed counts as transparent; ties: the value seen first). Trim
+   empty native rows and columns.
+6. **Shrink**, never grow: `s = min(1, target width / W, target height / H)` where the target is
    `size × size` or the `fit` box; output `round(W·s) × round(H·s)`, at least 1. Each output pixel
-   covers the native block range `[floor(i·W/w), max(floor((i+1)·W/w), floor(i·W/w)+1))` per axis.
+   covers the native range `[floor(i·W/w), max(floor((i+1)·W/w), floor(i·W/w)+1))` per axis.
    Transparent if more than half of the covered pixels are transparent; else outline black
    `#000000` if dark pixels are at least a third of the opaque ones; else the commonest non-dark
-   colour.
-6. **Quantise** to `colours`: black plus `medianCut` of the non-black colours into `colours − 1`,
+   colour (ties: the one seen first).
+7. **Quantise** to `colours`: black plus `medianCut` of the non-black colours into `colours − 1`,
    each pixel mapped with `nearest`.
-7. `--size` pads to the square canvas bottom-centred, as today. `--fit` returns the shrunk art
+8. `--size` pads to the square canvas bottom-centred, as today; `--fit` returns the shrunk art
    unpadded, as today.
 
 The internal structure (helpers, names) is your choice.
 
 **Acceptance check:** `pnpm vitest run scripts/slice-sheet.test.ts`, with tests that build sheets
-in memory (magenta ground, a known indexed art drawn at a given block size and offset):
-- a 16 × 16 art with a one-pixel outline drawn at block 11 offset 3 slices back to exactly that art;
-- the same at block 7.3 (non-integer) slices back exactly;
-- a 20 × 20 art at block 10 with `--size 16`: the output is 16 × 16 and every opaque pixel next to a
-  transparent one is black (the outline survives the shrink);
-- a 12 × 10 art with `--size 16`: 16 × 16 output with the 12 × 10 art bottom-centred, not
-  upscaled;
-- a cell without an outline throws `no outline found`;
-- `--native` returns the unshrunk art.
+in memory on magenta. Test art has a curved, irregular outline (a disc or a blob, never a
+rectangle), since a rectangle round-trips under the old point sampling too:
+- two rows of sprites where row 0's sprites hang 15 px past the sheet's half-height line and row 1
+  starts above it: every sprite comes back whole (the equal-cell slicer clips them);
+- a detached 2 × 2 burst 6 px right of a sprite, inside its column gap, stays with that sprite;
+- a 16 × 16 blob at block 7.3 with a 2 px non-key fringe on one side round-trips to exactly the
+  blob (point sampling fails this one);
+- a 20 × 20 blob at block 10 with `--size 16`: 16 × 16 output, and every opaque pixel next to a
+  transparent one is black;
+- a 12 × 10 blob with `--size 16`: 16 × 16 output with the blob bottom-centred, not upscaled;
+- a sheet whose median `b` is 10 with one sprite reading 20 uses 10 for it;
+- one sprite without an outline errors `no outline found` and its neighbours still slice;
+- two sprites touching across rows error `sprites touch, no gutter`.
 
-Red before: the module has no `native` field and the exact round trips fail under point sampling.
-Then `pnpm slice art/sheets/dense-heroes-zone1-items.png /tmp/x --grid 8x4 --row 0 --colours 4
---size 16 --names a,b,c,d,e,f,g,h` writes eight 16 × 16 PNGs. Full check line.
+Red before: `sliceSheet` returns plain `Rgba`s and the clipping, fringe and burst cases fail. Then
+`pnpm slice art/sheets/dense-heroes-zone1-items.png /tmp/x --grid 8x4 --row 0 --colours 4 --size 16
+--native /tmp/xn --names hero/a,hero/b,hero/c,hero/d,hero_attack/a,hero_attack/b,hero_attack/c,hero_attack/d`
+writes eight 16 × 16 PNGs in two sub-directories, and each native has its bottom outline row. Full
+check line.
 
-**Boundaries:** No change to `scripts/sprites.ts` or the plugin. On a sheet the rules above cannot
-read, stop and report `blocked: <sheet, cell, what fails>`.
+**Boundaries:** No change to `scripts/sprites.ts` or the plugin. A real sheet the rules cannot read
+(a band error on an approved sheet): stop and report `blocked: <sheet, row, what fails>`.
 
 - [ ] tests first, red
-- [ ] port the prototype into `sliceCell`, `--native`
+- [ ] gutters; port the prototype; `--native`, sub-directories, per-sprite errors
 - [ ] the dense-sheet smoke run; full check line; commit
 
 ### Task 2: `pnpm grid` for hand cleanup
@@ -295,10 +328,12 @@ Full check line.
   `stage/compose`, `stageAt` from `stage/model`, `StageTimeline` from `stage/timeline`, the fixture
   builders `wave`, `boss`, `turnBoss`, `worldBoss`, `HEROES` from `stage/fixtures`, the zone rosters
   from `@promptfall/sim` content.
-- Produces: `pnpm contact --zone <n> | --heroes | --items <id,id,…> | --world-bosses`, writing
-  `.promptfall/contact/<label>/` (labels `zone-<n>`, `heroes`, `items`, `world-bosses`) holding
-  `<id>.png` (the built, palette-locked sprite at 6× on the terminal ground `#1e1e24`),
-  `native-<id>.png` when `art/sheets/native/<id>.png` exists (4×), and for a zone `stage-rest.png`
+- Produces: `contact(target, { out, native }): string[]` (the written paths) and the CLI
+  `pnpm contact --zone <n> | --heroes | --items <name,name,…> | --world-bosses [--out <dir>]
+  [--native <dir>]`, defaults `.promptfall/contact` and `art/sheets/native`, writing
+  `<out>/<label>/` (labels `zone-<n>`, `heroes`, `items`, `world-bosses`) holding `<kind>-<name>.png`
+  for sprite id `<kind>:<name>` (the built, palette-locked sprite at 6× on the terminal ground
+  `#1e1e24`), `native-<kind>-<name>.png` when `<native>/<kind>/<name>.png` exists (4×), and for a zone `stage-rest.png`
   (its first three roster monsters against the fixture party), `stage-boss.png` (its zone boss at
   rest after the spawn has finished, stage grown) and `stage-turn.png` (its turn boss), each at 6×.
   Heroes: idle and attack poses in each rarity. Prints the written paths.
@@ -308,8 +343,11 @@ for the zone's roster; the zone number goes into the view so the ground strip ta
 colour. Observe the boss far enough before `now` that no spawn motion is live. Internal structure
 is your choice.
 
-**Acceptance check:** `pnpm vitest run scripts/contact.test.ts`: the zone 1 run writes six sprite
-PNGs plus three stage PNGs, and `stage-boss.png` is 720 × 204 (120 columns × 34 pixel rows at 6×).
+**Acceptance check:** `pnpm vitest run scripts/contact.test.ts`, with `out` and `native` in a temp
+dir (the test never writes into the repo): the zone 1 run writes its six sprite PNGs and three stage
+PNGs (assert those files exist; don't assert a total count), `stage-boss.png` is 720 × 204 (120
+columns × 34 pixel rows at 6×), and a native placed at `<native>/enemy/road_slime.png` appears as
+`native-enemy-road_slime.png`.
 Red before: the script does not exist. Then `pnpm contact --zone 1` and `file` on its outputs. Full
 check line.
 
@@ -359,27 +397,32 @@ a test pins a cue's byte size, report it rather than editing the test silently.
 
 **Interfaces:** Consumes Task 1's `pnpm slice`.
 
-**Work:** Slice the dense sheet with `--grid 8x4 --colours 4 --size 16`, rows 0 to 3, names in the
-sheet's order: row 0 `knight,black_mage,white_mage,archer` then the same four as attack poses (cut
-into `hero_attack/`); row 1 `road_slime,field_rat,goblin_scout,hedge_sprite,iron_sword,oak_staff,chainmail,copper_ring`;
-row 2 `bronze_axe,steel_longsword,ember_rod,healers_mace,short_bow,bronze_plate,silk_robe,leather_vest`;
-row 3 `bone_charm,silver_amulet,gold_bangle,phoenix_pendant,mithril_blade,rune_staff,elven_bow,dragon_plate`.
-Slice `zone1-bosses.png` row 1 with `--grid 2x2 --row 1 --colours 16 --fit 48x34 --names
-bandit_captain,wild_boar`. Write `--native art/sheets/native` on every cut. Read each hero PNG's
+**Work:** Every cut writes into `art/sprites` with `--native art/sheets/native` and
+`<kind>/<name>` names. Slice the dense sheet with `--grid 8x4 --colours 4 --size 16`, one `--row`
+at a time, names in the sheet's order: row 0
+`hero/knight,hero/black_mage,hero/white_mage,hero/archer,hero_attack/knight,hero_attack/black_mage,hero_attack/white_mage,hero_attack/archer`;
+row 1 `enemy/road_slime,enemy/field_rat,enemy/goblin_scout,enemy/hedge_sprite,item/iron_sword,item/oak_staff,item/chainmail,item/copper_ring`;
+row 2 `item/bronze_axe,item/steel_longsword,item/ember_rod,item/healers_mace,item/short_bow,item/bronze_plate,item/silk_robe,item/leather_vest`;
+row 3 `item/bone_charm,item/silver_amulet,item/gold_bangle,item/phoenix_pendant,item/mithril_blade,item/rune_staff,item/elven_bow,item/dragon_plate`.
+Slice `zone1-bosses.png` with `--grid 2x2 --row 1 --colours 16 --fit 48x34 --names
+enemy/bandit_captain,enemy/wild_boar`. These cuts differ slightly from the gate page, whose
+equal-cell cuts clipped the heroes' feet and the captain's bandana; batch 1 (Task 7) shows Kevin the
+corrected cuts. Read each hero PNG's
 colours and set `rarityColor` to the rarity area's exact colour (Global constraints). The dense
 sheet's prompt is `bg.txt` + `p5.txt` + `common.txt` with references `heroes-take-a.png`,
 `zone1-bosses.png` and `docs/plans/phase-4-concepts/nes-sheet.png`; zone 1 run 3's is `bg.txt` +
 `tpl.txt` + `p2.txt` + `common.txt` with references `tpl-zone.png` and `zone1-r2.png` (all in
 `art/sheets/`). Record both in `art/sheets.md`.
 
-**Acceptance check:** `pnpm sprites` reports 90 placeholders; `pnpm contact --zone 1`, `--heroes`
-and `--items <the 20 ids>` write their folders; look at each once. Full check line. The stage goldens
+**Acceptance check:** `pnpm sprites` reports 90 placeholders (92 if the white mage stays aliased,
+below); `pnpm contact --zone 1`, `--heroes` and `--items <the 20 names>` write their folders; look at each once. Full check line. The stage goldens
 draw zone 1 and the heroes, so `golden.test.ts` is expected to fail on the new art: regenerate with
 `pnpm stage:goldens`, say so in the commit, and confirm the adversarial Svg budget test passes
 unchanged. Any later task that changes zone 1, the heroes or the SNES master does the same. Red before: 124 placeholders.
 
-**Boundaries:** No new art beyond these 34. A hero whose rarity area does not survive the cut
-(white mage's sigil smaller than 4 pixels) is left for Task 6, not fixed here.
+**Boundaries:** No new art beyond these 34. A hero pose whose rarity colour does not survive the
+cut at all fails the build (`raritySlotOf`), so that pose keeps its concept `alias` until Task 6
+fixes it; say so in the commit.
 
 - [ ] slice into `art/sprites/`; manifest; `art/sheets.md`
 - [ ] `pnpm sprites`; contact folders; goldens if needed; full check line; commit
@@ -398,7 +441,11 @@ write the PNG back. Fix: stray single pixels; breaks in the outline; the idle an
 using the same colours and the same palette order; each rarity area at least 10 pixels and
 unbroken (enlarge the white mage's sigil into a sash or mantle in the same colour if needed); a
 face readable at 16 px (eyes as single dark pixels, the black mage's eyes in a light colour on its
-dark face). Keep the designs; this is cleanup, not redesign. Stay within 4 colours including black.
+dark face). The rarity tint recolours a whole palette index, so the rarity colour may appear only
+on the rarity area and on trim that reads well in any rarity colour (the knight's plume and shield
+cross may keep the cape's colour). The black mage's hat must not share the robe's colour: within 4
+colours that is black, a fixed hat colour, the robe as the rarity slot, and the pale scarf colour
+reused for the eyes. Any pose that kept its alias in Task 5 switches to `file` here. Keep the designs; this is cleanup, not redesign. Stay within 4 colours including black.
 
 **Acceptance check:** `pnpm sprites` passes; `pnpm contact --heroes`; each pose in Common and
 Legendary shows its rarity area in the rarity colour. Full check line.
@@ -412,8 +459,11 @@ Legendary shows its rarity area in the rarity colour. Full check line.
 **Files:**
 - `art/sprites/world_boss/{the_promptwyrm,hallucinox,the_context_leviathan,tokenmaw}.png` — create
 - `art/manifest.json` — modify: the four `world_boss:*` entries switch to `file`
-- `scripts/sprites.ts` — modify: `--derive-snes-master` reads `file` entries only (Narrowing 3)
-- `scripts/sprites.test.ts` — modify: a test that a derive ignores an alias
+- `scripts/sprites.ts` — modify: extract `snesMasterPaths(manifest: Manifest): string[]` (the
+  distinct `file` paths of `snes` entries, aliases skipped; Narrowing 3) and use it in
+  `--derive-snes-master`
+- `scripts/sprites.test.ts` — modify: `snesMasterPaths` skips an aliased `snes` entry and an `nes`
+  `file` entry
 - `art/palettes/snes.json` — regenerated once
 - `art/sheets.md`, `plugins/promptfall/hooks/sprites/generated.ts`, stage goldens if they change
 
@@ -428,11 +478,13 @@ references `art/sheets/world-bosses-r1.png` (the designs) then the two style ref
 > Top left THE PROMPTWYRM, top right HALLUCINOX, bottom left THE CONTEXT LEVIATHAN, bottom right
 > TOKENMAW.
 
-Slice `--grid 2x2 --colours 16 --fit 48x34` rows 0 and 1 with `--native`. A native size above
-62 × 44 (a shrink below 0.77) is a failed run: report the sizes and stop the task; don't rerun on
-your own. Then the cleanup of Task 6's rules through `pnpm grid` (outline, stray pixels, a readable
-face and silhouette at 48 × 34, at most 16 colours). Then the derive change (test first), `pnpm
-sprites --derive-snes-master`, `pnpm sprites`. The master is now locked: no later task derives it.
+Slice `--grid 2x2 --colours 16 --fit 48x34`, rows 0 and 1, names `world_boss/<name>`. A native
+size above 64 × 46 (a shrink below about 0.74) is a failed run: report the sizes and stop the task;
+don't rerun on your own. Then the cleanup of Task 6's rules through `pnpm grid` (outline, stray
+pixels, a readable face and silhouette at 48 × 34, at most 16 colours). Then, in this order: switch
+the four `world_boss:*` manifest entries to `file`; the `snesMasterPaths` test, red then green;
+`pnpm sprites --derive-snes-master` (it must report 6 stems: zone 1's two bosses and the four world
+bosses); `pnpm sprites`. The master is now locked: no later task derives it.
 Then `pnpm contact --world-bosses`, `--zone 1` (its bosses snap to the new master), `--heroes`,
 `--items`, and publish **review batch 1** (heroes, zone 1, the 20 items, the world bosses) to the
 review artifact (Review, above). Continue to Task 8 without waiting.
@@ -459,21 +511,26 @@ references. Body:
 > 16x16-art-pixel 8-bit sprite with at most 3 colours plus the black outline, small in its cell,
 > with magenta all around it, in exactly the style and pixel size of the attached dense sheet. Each
 > row holds two zones of a fantasy idle RPG, four monsters each, left to right.
-> Row 1, cells 1-4, Whisperwood (<theme>): <four briefs in roster order>; cells 5-8, Marsh of
-> Sighs (<theme>): <four briefs>.
-> Row 2: Old Barrow Hills, then Saltglass Coast. Row 3: Emberfall Caves, then Frostvein Pass.
-> Row 4: Sunken Abbey, then Ashen Waste.
+> Row 1, cells 1-4, Whisperwood (<theme 2>): <briefs 2>; cells 5-8, Marsh of Sighs (<theme 3>):
+> <briefs 3>.
+> Row 2, cells 1-4, Old Barrow Hills (<theme 4>): <briefs 4>; cells 5-8, Saltglass Coast
+> (<theme 5>): <briefs 5>.
+> Row 3, cells 1-4, Emberfall Caves (<theme 6>): <briefs 6>; cells 5-8, Frostvein Pass
+> (<theme 7>): <briefs 7>.
+> Row 4, cells 1-4, Sunken Abbey (<theme 8>): <briefs 8>; cells 5-8, Ashen Waste (<theme 9>):
+> <briefs 9>.
 
-Fill each `<…>` from the Briefs tables (zone theme; each monster as `NAME: brief`), roster order
-per zone: zone 2 `bramble_wolf, moss_golem, wood_goblin, whisper_wisp`; zone 3 `bog_lurker,
+Fill each `<theme n>` from the zone table and each `<briefs n>` with that zone's four monsters as
+`1. NAME: brief` … `4. NAME: brief`, in roster order: zone 2 `bramble_wolf, moss_golem, wood_goblin, whisper_wisp`; zone 3 `bog_lurker,
 marsh_leech, mire_toad, will_o_wisp`; zone 4 `barrow_wight, grave_hound, bone_soldier,
 cairn_crawler`; zone 5 `salt_crab, gull_harpy, drowned_sailor, tide_witch`; zone 6 `ember_imp,
 magma_beetle, cinder_orc, flame_adept`; zone 7 `frost_wolf, ice_troll, rime_golem, snow_shaman`;
 zone 8 `drowned_monk, abbey_gargoyle, bell_wraith, eel_serpent`; zone 9 `ash_ghoul, dust_stalker,
 cinder_colossus, ash_oracle`. Write the assembled prompt into `art/sheets.md` before the run.
-Slice `--grid 8x4 --colours 4 --size 16 --native art/sheets/native`, rows 0 to 3, names in that
-order. A sprite whose native size exceeds 21 in either axis is a redo, not a failure: log it under
-Redos. Manifest, `pnpm sprites`, `pnpm contact --zone 2` … `--zone 9`, publish **review batch 2**
+Slice into `art/sprites` with `--grid 8x4 --colours 4 --size 16 --native art/sheets/native`, one
+row at a time, names `enemy/<id>` in that order. A sprite whose native size exceeds 21 in either
+axis, or that the slicer reports as an error, is a redo, not a failure: log it under Redos and
+leave its entry aliased. Manifest, `pnpm sprites`, `pnpm contact --zone 2` … `--zone 9`, publish **review batch 2**
 (the monster rows of zones 2 to 9, plus the sheet). Continue.
 
 **Acceptance check:** 54 placeholders; contact folders; artifact updated. Full check line.
@@ -502,8 +559,8 @@ Monsters in roster order: zone 10 `star_sentinel, comet_hound, spire_warden, ast
 quill_golem, erased_scribe`. Items in this order: `dragonfang, storm_rod, void_scepter,
 willow_staff, silver_crook, sacred_mace, seraph_staff, oak_bow, longbow, starshot_bow,
 steel_plate, mithril_mail, cloth_robe, mystic_robe, sage_robe, astral_robe, hide_coat,
-ranger_garb, shadow_leather, wind_cloak`. Slice and log as Task 8. Contact `--zone 10` to `--zone
-12` and `--items <the 20 ids>`; publish **review batch 3**. Continue.
+ranger_garb, shadow_leather, wind_cloak`. Slice and log as Task 8. Names `enemy/<id>` and `item/<id>`.
+Contact `--zone 10` to `--zone 12` and `--items <the 20 names>`; publish **review batch 3**. Continue.
 
 **Acceptance check:** 22 placeholders; contact folders; artifact updated. Full check line.
 
@@ -522,13 +579,17 @@ ranger_garb, shadow_leather, wind_cloak`. Slice and log as Task 8. Contact `--zo
 > Generate one landscape 1536x1024 sprite sheet: a strict 2 x 2 grid of four equal cells, one boss
 > per cell, in exactly the style and the coarse pixel size of the bosses in the attached zone 1
 > boss sheet: richer 16-bit style, up to 16 colours each, light shading allowed, a black outline,
-> hard square pixels, no anti-aliasing. All face right.
+> hard square pixels, no anti-aliasing. All face right. Each boss is no wider than twice its
+> height.
 > Top left, the zone boss of <zone a> (<theme a>): <NAME: brief>. Top right, the smaller boss of
 > <zone a>, about two-thirds the size: <NAME: brief>. Bottom left, the zone boss of <zone b>
 > (<theme b>): <NAME: brief>. Bottom right, the smaller boss of <zone b>: <NAME: brief>.
 
-Slice `--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native`, rows 0 and 1, names zone
-boss then turn boss. A native size above 62 × 44 is a redo (log it). After each pair of runs:
+Slice into `art/sprites` with `--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native`,
+one row at a time, names `enemy/<zone boss>,enemy/<turn boss>`. A redo (log it, leave the entry
+aliased): a native size above 64 × 46; a slicer error; a turn boss wider than twice its height (the
+build fits turn bosses to 24 rows, and a wider one breaks the 48-pixel canvas,
+`scripts/sprites.ts` `fit`). After each pair of runs:
 manifest, `pnpm sprites`, contact for those zones, publish the batch (**review batches 4 to 6**),
 continue.
 
@@ -546,19 +607,29 @@ check line.
 **Files:** `art/sprites/**` — create or replace for the ids involved; `art/manifest.json`,
 `art/sheets.md`, `generated.ts` — modify.
 
+**Files (also):** `plugins/promptfall/hooks/sprites/sprites.test.ts` — modify: a test that
+`PLACEHOLDER_COUNT === 0` and no `SPRITES` entry has `isPlaceholder`.
+
 **Work:** Gather Kevin's answers so far into "Redos" in `art/sheets.md` (id, his note). Then:
-- one 2 × 2 boss run, label `pf2-bosses-z12`: top row `unwritten_one` and `margin_beast`; bottom
-  row the two oldest boss redos, or a second take of zone 12's two bosses if none (Narrowing 2);
-- small-sprite redos: one dense 8 × 4 run per 32 redos (label `pf2-redos-<n>`), each cell's brief
-  being the original brief plus Kevin's note; spare cells take a second take of the redos with the
-  most notes. Never leave a dense cell empty.
+- one 2 × 2 boss run, label `pf2-bosses-z12`, on Task 10's body template: top left
+  `unwritten_one` (zone boss of The Unwritten Reach), top right `margin_beast`; the bottom row the
+  two oldest boss redos (each its brief plus Kevin's note, in the template's zone-boss and
+  smaller-boss slots by role), or a second take of zone 12's two bosses if none (Narrowing 2);
+- small-sprite redos: one run per up to 32 redos (label `pf2-redos-<n>`) on Task 8's dense opening,
+  then rows listing each cell as `NAME: brief. Change: <Kevin's note>` (items add Task 9's item
+  sentence); spare cells take a second take of the redos with the most notes. Never leave a dense
+  cell empty. A redo that comes back twice with two takes: Kevin picks the take on the artifact.
+
+Before the batch that lands the last placeholders, add the placeholder test and run `claude plugin
+test plugins/promptfall`: red with the remaining count. After it lands: green.
 
 Slice, build, contact, publish the batch. Repeat while Kevin names redos. When every zone, the
 heroes, the items and the world bosses have Kevin's GREEN on the artifact, record each GREEN with
 its date in `art/sheets.md` and finish the task.
 
-**Acceptance check:** `pnpm sprites` reports 0 placeholders; `art/sheets.md` lists a GREEN for
-zones 1 to 12, heroes, items and world bosses. Full check line.
+**Acceptance check:** the placeholder test red before the last batch, green after; `pnpm sprites`
+reports 0 placeholders; `art/sheets.md` lists a GREEN for zones 1 to 12, heroes, items and world
+bosses. Full check line.
 
 **Boundaries:** Only ids that are new or named as redos. A design change Kevin asks for that goes
 beyond a redo (a new hero design, a different canvas): stop and report `blocked: <the request>`.
@@ -570,8 +641,10 @@ beyond a redo (a new hero design, a different canvas): stop and report `blocked:
 
 **Files:**
 - `art/concept/` — delete (Narrowing 5)
-- `plugins/promptfall/hooks/sprites/sprites.test.ts` — modify: a test that `PLACEHOLDER_COUNT === 0`
-  and no `SPRITES` entry has `isPlaceholder`
+- `plugins/promptfall/README.md` — modify: the art pipeline section (around lines 271 to 283): the
+  derive reads `file` entries only; PR 1's "every sprite is an alias" paragraph and the
+  `art/concept/` references give way to `art/sprites/` and `art/sheets.md`; document `pnpm slice`'s
+  gutters and `--native`, `pnpm grid` and `pnpm contact`
 - `plugins/promptfall/hooks/stage/goldens/*` — regenerated by `pnpm stage:goldens`
 - `docs/manual-pass/phase-4.md` — modify: Part B (the real art)
 - `README.md` — modify: Status gains phase 4 PR 2; the `art/` row names `art/sprites/` and
@@ -579,7 +652,7 @@ beyond a redo (a new hero design, a different canvas): stop and report `blocked:
 - `docs/plans/2026-10-07-promptfall-phase-4-pr2-art.md` — modify: tick the boxes
 
 **Work:** Delete the concept PNGs once `grep '"alias"' art/manifest.json` finds nothing (the
-`fallback` entry is a `file`). Add the test. Regenerate the stage goldens and say so in the
+`fallback` entry is a `file`). Regenerate the stage goldens and say so in the
 commit; the adversarial Svg budget test in `golden.test.ts` must pass unchanged. Part B of the
 manual pass, for Ghostty (Kevin's terminal), then the desktop app: start a session, the Party tab
 shows zone art and the party in rarity colours; force a zone boss with the fake server and see the
@@ -588,15 +661,15 @@ shower, a level-up the short climb, a world boss arrival the falling alarm; the 
 shows the 16-pixel item sprites; the compact stage (a terminal 100 to 115 columns wide) shows the
 downsampled art. Then the full check line, the `codex-computer-use` check against Ghostty and the
 desktop app (skipped and said so in the PR if the codex quota is gone), push, and open the PR
-against `ai-staging` with the manual-pass steps and the list of checks that ran. Stop: the review
-is Kevin's to trigger.
+against `ai-staging` with the manual-pass steps, the list of checks that ran, and the review wave
+this repo uses (grill Q23: `reviewer` on Opus alone). Stop: the review is Kevin's to trigger.
 
-**Acceptance check:** the new test red before the last placeholder is gone, green after; the full
-check line clean on the PR's head; `gh pr view` shows the PR open against `ai-staging`.
+**Acceptance check:** `art/concept/` gone and `pnpm sprites:check` clean; the full check line clean
+on the PR's head; `gh pr view` shows the PR open against `ai-staging`.
 
 **Boundaries:** No merge. No art changes in this task.
 
-- [ ] delete concept art; placeholder test; goldens
+- [ ] delete concept art; goldens
 - [ ] manual pass Part B; README; tick boxes
 - [ ] full check line; `codex-computer-use`; push; PR; stop
 
@@ -606,8 +679,16 @@ check line clean on the PR's head; `gh pr view` shows the PR open against `ai-st
   Q6 and Q14 (Task 5), Q7 and Q11 (Global constraints, Task 6), Q8 (prompt order), Q9 and Q19
   (Task 3, Review), Q10 (direction GREEN, the style references), Q12 and Q15 (Tasks 8 to 10,
   Narrowings 1 and 2), Q16 (Task 7), Q17 (Briefs), Q18 (Task 1), Q20 (`art/sprites/`,
-  `art/sheets.md`, gitignored sheets), Q21 (Task 7, Narrowing 3), Q22 (Task 4), Q23 (Review,
+  `art/sheets.md`, gitignored sheets, Task 12's plugin README), Q21 (Task 7, Narrowing 3), Q22 (Task 4), Q23 (Review,
   Task 12), the quota rule (Codex image runs).
+- Plan review (reviewer on Opus, 2026-10-07): the equal-cell cut clipped approved sprites (now
+  gutters, Task 1); tests that point sampling would pass (now curved art, a fringe, clipping);
+  colliding idle and attack names (now `<kind>/<name>`); Task 8's empty row slots; the placeholder
+  test's red state (now Task 11); turn-boss width, dark-bodied block sizes, per-sprite errors, the
+  rarity tint's reach, the white mage alias fallback, `snesMasterPaths` and its order, the plugin
+  README, the review template's source, the quota stop, the background timeout, the contact test's
+  temp dirs: all folded in. Noted, not changed: scripts are outside `pnpm typecheck` (true before
+  this plan); the SNES master comes from 6 sprites and is locked (grill Q21).
 - Placeholder arithmetic: 125 manifest entries; `fallback` is a `file`, so `pnpm sprites` starts at
   124 placeholders (8 hero sprites, 72 enemies, 4 world bosses, 40 items). Task 5 lands 34 (8 hero
   sprites, 4 monsters, 2 bosses, 20 items) → 90; Task 7 the 4 world bosses → 86; Task 8 32

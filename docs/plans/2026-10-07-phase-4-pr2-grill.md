@@ -71,6 +71,10 @@ Review page: https://claude.ai/artifact/FgkfcBP9UwjDWRXc3Ubi2S. Nine image runs 
   0.8 to 1.0 shrink, details kept). Zone bosses two to a row came out 58 × 42 (0.81 to 48 × 34);
   world bosses four to a row came out about 60 × 74 (0.46, muddy). A lone boss filling the sheet
   is worse still.
+- **Correction (plan review):** the sizes above were measured on equal grid cells, which clipped
+  sprites that cross a cell edge (the dense sheet's hero feet, the bandit captain's bandana). The
+  true sizes are a little larger (the captain's height about 46, not 42). The plan's slicer finds
+  sprites by their magenta gutters instead.
 - **The slicer's point sampling breaks at non-integer ratios.** A scratch prototype recovers each
   cell's native grid (the art-pixel size is the commonest dark run, i.e. the one-pixel outline;
   the offset from colour transitions) and shrinks by an outline-aware majority vote (a target
