@@ -301,7 +301,7 @@ export class StageLoop {
           compose: composeMs,
           ms: Date.now() - blitStart,
           bytes: payloadBytes(frame),
-          deny: result.deny !== undefined,
+          deny: result.deny === undefined ? 'no' : JSON.stringify(result.deny.slice(0, 160)),
         })
         this.blitCount += 1
         this.lastActors = actors
@@ -360,7 +360,12 @@ export class StageLoop {
       for (const args of sends) {
         const blitStart = Date.now()
         const result = await this.io.blit(args)
-        trace('blit', { what: args.key, ms: Date.now() - blitStart, bytes: payloadBytes(args) })
+        trace('blit', {
+          what: args.key,
+          ms: Date.now() - blitStart,
+          bytes: payloadBytes(args),
+          deny: result.deny === undefined ? 'no' : JSON.stringify(result.deny.slice(0, 160)),
+        })
         this.blitCount += 1
         if (gen !== this.gen) return null
         if (result.deny !== undefined) {
