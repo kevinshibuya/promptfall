@@ -433,6 +433,10 @@ class GameSession implements GameHandle {
     return this.engine.accountId()
   }
 
+  view(): Promise<GameView | null> {
+    return this.io.view()
+  }
+
   async leaderboards(): Promise<Boards | Unauthorized> {
     const auth = await this.storedAuth()
     try {

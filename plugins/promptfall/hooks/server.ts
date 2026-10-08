@@ -36,8 +36,8 @@ export function resolveClient(
       // Nothing a sandbox account holds may reach the market or chat: it never links.
       linkApprover: async () => (sandbox ? null : { login: 'player' }),
       // Chat and the world boss need other players: off on the in-process ledger.
-      // The sandbox runs the world boss so boss mode can be seen.
-      flags: { 'chat.enabled': false, 'worldboss.enabled': sandbox },
+      // The sandbox runs the world boss so boss mode can be seen, and takes the sandbox's grants.
+      flags: { 'chat.enabled': false, 'worldboss.enabled': sandbox, 'sandbox.enabled': sandbox },
     })
     return {
       client: ledger,

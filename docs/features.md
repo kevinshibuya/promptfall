@@ -234,12 +234,13 @@ the tactics.
 line once the grant is in the view; `/promptfall sandbox` alone lists them. `boss <name>` makes a
 zone boss or turn boss the next encounter, moving the party to its zone. `worldboss` spawns a
 world boss and engages the party; `worldboss end` settles it. `item <base> [rarity]` drops an item
-through the normal drop, common unless a rarity is given. `level <hero> <n>` raises a hero level
-by level up to its rarity's cap. `gold <n>` adds gold. `zone <n>` moves the party to that zone at
-wave 1. `recruit [rarity]` recruits a hero, and refuses with a full roster. `wipe` makes the party
-fall now. `reset` throws the sandbox save away and starts a fresh one in place. Names match by
-the start of a name, any word in it or its id, and an ambiguous or unknown name answers with the
-candidates.
+through the normal drop, common unless a rarity is given; with the inventory full it is vendored,
+as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
+gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
+refuses with a full roster. `wipe` makes the party fall now. `boss`, `zone` and `wipe` refuse while
+the party fights a world boss. `reset` throws the sandbox save away and starts a fresh one in
+place. Names match by the start of a name, any word in it or its id, and an ambiguous or unknown
+name answers with the candidates.
 
 ## Planned
 

@@ -175,8 +175,12 @@ test('sandbox alone lists the nine verbs, one line each', async ($, on) => {
     'wipe',
     'reset',
   ])
-  expect(lines.find((l) => l.trim().startsWith('boss'))).toContain('not yet')
-  expect(lines.find((l) => l.trim().startsWith('gold'))).not.toContain('not yet')
+  expect(lines.find((l) => l.trim().startsWith('worldboss'))).toContain('not yet')
+  for (const verb of ['boss', 'item', 'level', 'gold', 'zone', 'recruit', 'wipe', 'reset']) {
+    expect(lines.find((l) => l.trim().startsWith(`${verb} `) || l.trim() === verb)).not.toContain(
+      'not yet',
+    )
+  }
 })
 
 const PANE = {
@@ -264,4 +268,41 @@ test('the desktop attach reads the switch too, and the desktop purse shows the m
     | undefined
   expect(String(strip?.props.alt)).toContain('Sandbox')
   await ui.unmount()
+})
+
+/** Bootstraps an account on the resolved in-process ledger: its host and the account's id. */
+async function hostWithAccount(sandbox: boolean) {
+  const { client, host } = resolveClient(
+    null,
+    {
+      kv: new MemoryKeyValue(),
+      now: async () => 1_000_000,
+      fetch: async () => {
+        throw new Error('no network')
+      },
+    },
+    sandbox,
+  )
+  const boot = await client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  const auth = { deviceToken: boot.deviceToken }
+  const credits = async () => {
+    const info = await client.account(auth)
+    if ('reason' in info) throw new Error(info.reason)
+    return info.delivery.events.filter((e) => e.event.t === 'credited').length
+  }
+  if (!host) throw new Error('no host')
+  return { host, accountId: boot.account.accountId, credits }
+}
+
+test('the sandbox ledger runs with sandbox.enabled on; the real one refuses grants but credits', async () => {
+  const sandbox = await hostWithAccount(true)
+  expect(await sandbox.host.sandbox(sandbox.accountId, { t: 'sandbox_wipe' })).toEqual({ ok: true })
+  const real = await hostWithAccount(false)
+  expect(await real.host.sandbox(real.accountId, { t: 'sandbox_wipe' })).toEqual({
+    ok: false,
+    reason: 'sandbox_off',
+  })
+  // `sandbox gold` goes through credit, which the flag does not gate.
+  await real.host.credit(real.accountId, 5000, 'sandbox')
+  expect(await real.credits()).toBe(1)
 })

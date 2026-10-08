@@ -110,6 +110,8 @@ export type GameHandle = {
   host: () => LedgerHost | null
   /** The account the engine plays, once bootstrapped. */
   accountId: () => string | null
+  /** The view as last published: what the band and the dialog draw. */
+  view: () => Promise<GameView | null>
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>
