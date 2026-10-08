@@ -205,13 +205,16 @@ export function stageAt(
   const actors: StageActor[] = []
   const bosses: StageActor[] = []
   const live = new Set(view.enemies.map((e) => e.id))
+  // The party stands in its order, left to right as the heroes window lists it: the first hero
+  // faces the enemies, the last stands at the right edge.
+  const partySize = Math.min(view.heroes.length, 3)
   // Where the party starts: an enemy never stands in it.
-  const lastHero = view.heroes.slice(0, 3).at(-1)
-  const heroLeft = lastHero
+  const frontHero = view.heroes[0]
+  const heroLeft = frontHero
     ? width -
       edge -
-      variant(spriteFor('hero', lastHero.cls), opts.compact, scale).width -
-      (Math.min(view.heroes.length, 3) - 1) * pitch
+      variant(spriteFor('hero', frontHero.cls), opts.compact, scale).width -
+      (partySize - 1) * pitch
     : width
   // Enemies stand in slot order, each clear of the one before when there is room: a boss is
   // wider than the pitch, and minions can join its encounter.
@@ -282,7 +285,8 @@ export function stageAt(
     const shown = poses[pose]
     const flashing = !fallen && isFlashing(hero.id)
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
-    const x = width - edge - art.width - index * pitch + lungeOffset(lunge, now, scale)
+    const x =
+      width - edge - art.width - (partySize - 1 - index) * pitch + lungeOffset(lunge, now, scale)
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
     actors.push({
       key: hero.id,
