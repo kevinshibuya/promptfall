@@ -205,25 +205,41 @@
       "id": "enemy:bog_lurker",
       "file": "sprites/enemy/bog_lurker.png",
       "fileHires": "sprites-hires/enemy/bog_lurker.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/bog_lurker-windup.png",
+        "strike": "sprites-frames/enemy/bog_lurker-strike.png"
+      }
     },
     {
       "id": "enemy:marsh_leech",
       "file": "sprites/enemy/marsh_leech.png",
       "fileHires": "sprites-hires/enemy/marsh_leech.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/marsh_leech-windup.png",
+        "strike": "sprites-frames/enemy/marsh_leech-strike.png"
+      }
     },
     {
       "id": "enemy:mire_toad",
       "file": "sprites/enemy/mire_toad.png",
       "fileHires": "sprites-hires/enemy/mire_toad.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/mire_toad-windup.png",
+        "strike": "sprites-frames/enemy/mire_toad-strike.png"
+      }
     },
     {
       "id": "enemy:will_o_wisp",
       "file": "sprites/enemy/will_o_wisp.png",
       "fileHires": "sprites-hires/enemy/will_o_wisp.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/will_o_wisp-windup.png",
+        "strike": "sprites-frames/enemy/will_o_wisp-strike.png"
+      }
     },
     {
       "id": "enemy:sigh_hag",
@@ -242,25 +258,41 @@
       "id": "enemy:barrow_wight",
       "file": "sprites/enemy/barrow_wight.png",
       "fileHires": "sprites-hires/enemy/barrow_wight.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/barrow_wight-windup.png",
+        "strike": "sprites-frames/enemy/barrow_wight-strike.png"
+      }
     },
     {
       "id": "enemy:grave_hound",
       "file": "sprites/enemy/grave_hound.png",
       "fileHires": "sprites-hires/enemy/grave_hound.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/grave_hound-windup.png",
+        "strike": "sprites-frames/enemy/grave_hound-strike.png"
+      }
     },
     {
       "id": "enemy:bone_soldier",
       "file": "sprites/enemy/bone_soldier.png",
       "fileHires": "sprites-hires/enemy/bone_soldier.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/bone_soldier-windup.png",
+        "strike": "sprites-frames/enemy/bone_soldier-strike.png"
+      }
     },
     {
       "id": "enemy:cairn_crawler",
       "file": "sprites/enemy/cairn_crawler.png",
       "fileHires": "sprites-hires/enemy/cairn_crawler.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/cairn_crawler-windup.png",
+        "strike": "sprites-frames/enemy/cairn_crawler-strike.png"
+      }
     },
     {
       "id": "enemy:barrow_king",

@@ -635,16 +635,6 @@ entry (`.promptfall/frames/fix-rarity.ts`):
 - white mage wind-up (`#02e1fd`, the staff orb; 5 cyan pixels on the body moved).
 - archer wind-up (`#fdee04`, the cape; 6 pixels of the bow hand moved).
 
-## Redos (frames)
-
-| Id | Frame | From | Note |
-| --- | --- | --- | --- |
-| `hero:knight` | windup | frames-heroes | frame size drift: native 30 against idle 21 (+43%); the sword overhead adds height, so the fit shrinks the pixels |
-| `hero:knight` | follow | frames-heroes | frame size drift: native 30 against idle 21 (+43%) |
-| `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
-| `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
-| `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |
-
 ## frames-monsters-1.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-1.png` (`pnpm refsheet art/sheets/ref-frames-monsters-1.png
@@ -672,6 +662,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 - No text, no letters, no numbers, no labels, no grid lines, no watermark.
 
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-1.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take, for all eight.
+
+```sh
+D=art/sheets/frames-monsters-1.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/road_slime-windup,enemy/field_rat-windup,enemy/goblin_scout-windup,enemy/hedge_sprite-windup,enemy/bramble_wolf-windup,enemy/moss_golem-windup,enemy/wood_goblin-windup,enemy/whisper_wisp-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/road_slime-strike,enemy/field_rat-strike,enemy/goblin_scout-strike,enemy/hedge_sprite-strike,enemy/bramble_wolf-strike,enemy/moss_golem-strike,enemy/wood_goblin-strike,enemy/whisper_wisp-strike
 ```
 
 ## frames-monsters-2.png
@@ -702,6 +701,26 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-2.png.
 ```
+
+Picks: row 1 (wind-up) and row 4 (the second take's strike) for all eight: in row 2 the bog
+lurker's tentacle touches the marsh leech, so the slicer finds no gutter.
+
+```sh
+D=art/sheets/frames-monsters-2.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/bog_lurker-windup,enemy/marsh_leech-windup,enemy/mire_toad-windup,enemy/will_o_wisp-windup,enemy/barrow_wight-windup,enemy/grave_hound-windup,enemy/bone_soldier-windup,enemy/cairn_crawler-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/bog_lurker-strike,enemy/marsh_leech-strike,enemy/mire_toad-strike,enemy/will_o_wisp-strike,enemy/barrow_wight-strike,enemy/grave_hound-strike,enemy/bone_soldier-strike,enemy/cairn_crawler-strike
+```
+
+## Redos (frames)
+
+| Id | Frame | From | Note |
+| --- | --- | --- | --- |
+| `hero:knight` | windup | frames-heroes | frame size drift: native 30 against idle 21 (+43%); the sword overhead adds height, so the fit shrinks the pixels |
+| `hero:knight` | follow | frames-heroes | frame size drift: native 30 against idle 21 (+43%) |
+| `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
+| `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
+| `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |
 | `enemy:road_slime` | strike | frames-monsters-1 | frame size drift: native 20 against idle 12 (+67%) |
 | `enemy:field_rat` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
 | `enemy:field_rat` | strike | frames-monsters-1 | frame size drift: native 29 against idle 20 (+45%) |
@@ -712,3 +731,6 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:wood_goblin` | strike | frames-monsters-1 | frame size drift: native 38 against idle 25 (+52%) |
 | `enemy:whisper_wisp` | windup | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |
 | `enemy:whisper_wisp` | strike | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |
+| `enemy:bog_lurker` | strike | frames-monsters-2 | frame size drift: native 30 against idle 20 (+50%) |
+| `enemy:marsh_leech` | strike | frames-monsters-2 | frame size drift: native 28 against idle 20 (+40%) |
+| `enemy:bone_soldier` | strike | frames-monsters-2 | frame size drift: native 30 against idle 23 (+30%) |
