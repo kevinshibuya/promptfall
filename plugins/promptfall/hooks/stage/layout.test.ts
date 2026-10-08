@@ -71,6 +71,39 @@ test('a stage too tall for the band keeps its size and shows its bottom rows, do
   expect(layoutFor(17, { bodyColumns: 115, maxRows: 20 }, 'terminal', PARTY).kind).toBe('compact')
 })
 
+test('the crop stops at the tallest actor: under it an Image zooms out, a Raster goes compact', () => {
+  const boss = { tab: 'party', extra: 0, minRows: 17 } as const
+  // A boss on a 16-row band: 11 rows left, under the boss's 17. The Raster cannot scale.
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', boss).kind).toBe('compact')
+  // The Image widens the scene until its picture meets IMAGE_MAX_BYTES (214 columns at 17 rows)
+  // and draws it into the 11 rows, so nothing is cropped and the boss stays whole.
+  expect(
+    layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', { ...boss, scalable: true }),
+  ).toEqual({
+    kind: 'full',
+    box: { columns: 214, rows: 17 },
+    cells: { columns: 138, rows: 11 },
+    bandRows: 16,
+  })
+  // A turn boss (12 rows) on a 17-row band: 12 rows left meet its floor, so it is cropped, not zoomed.
+  expect(
+    layoutFor(17, { bodyColumns: 144, maxRows: 17 }, 'terminal', {
+      ...boss,
+      minRows: 12,
+      scalable: true,
+    }),
+  ).toEqual({
+    kind: 'full',
+    box: { columns: 144, rows: 17 },
+    cells: { columns: 144, rows: 12 },
+    bandRows: 17,
+  })
+  // Under the compact stage's 4 rows the Image is compact too.
+  expect(
+    layoutFor(17, { bodyColumns: 144, maxRows: 8 }, 'terminal', { ...boss, scalable: true }).kind,
+  ).toBe('compact')
+})
+
 test('Loot and World are the strip alone: 5 rows, collapsed under 5 rows or 100 columns', () => {
   for (const tab of ['loot', 'world'] as const) {
     expect(layoutFor(17, { bodyColumns: 120, maxRows: 20 }, 'terminal', { tab, extra: 0 })).toEqual(

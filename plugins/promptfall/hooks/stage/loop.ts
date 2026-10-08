@@ -107,8 +107,12 @@ export function stageFrame(
     scale: renderer === 'image' ? HIRES_SCALE : 1,
   })
   // A short band shows the stage's bottom rows: the frame is cropped to the cells' pixels, and
-  // the Raster's numbers move up with it (one clamped to the box's top stays visible).
-  const cells = layout.kind === 'full' ? layout.cells : undefined
+  // the Raster's numbers move up with it (one clamped to the box's top stays visible). A zoom-out
+  // (cells narrower than the box) scales the whole frame instead, so nothing is cropped.
+  const cells =
+    layout.kind === 'full' && layout.cells?.columns === layout.box.columns
+      ? layout.cells
+      : undefined
   const shown = (frame: Frame): Frame =>
     cells ? cropBottom(frame, Math.ceil(cells.rows * 2 * model.scale)) : frame
   if (renderer === 'raster') {
@@ -258,6 +262,8 @@ export class StageLoop {
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
       tab: site.strip.tab,
       extra: site.strip.extra,
+      minRows: this.timeline.minRowsAt(view, now),
+      scalable: site.renderer === 'image',
     })
     if (!sameLayout(site.layout, layout)) {
       // Grow or shrink is a redraw: the next render mounts the new site.

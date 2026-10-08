@@ -8,6 +8,9 @@ export const STAGE_ROWS = 17
  * and 16 px at 1x are 8 rows). The stage keeps its art size and loses the sky above (ADR 0010).
  */
 export const STAGE_MIN_ROWS = 8
+/** The crop's floor with a turn boss (36 px at 1.5x, 24 at 1x) and with a zone or world boss (51, 34). */
+export const TURN_BOSS_MIN_ROWS = 12
+export const BOSS_MIN_ROWS = 17
 export const COMPACT_STAGE_ROWS = 4
 export const COMPACT_STAGE_COLUMNS = 52
 export const FULL_MIN_COLUMNS = 116

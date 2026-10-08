@@ -598,10 +598,10 @@ for (const [name, view, rowsOf] of [
   })
 }
 
-test("a short band shows the stage's bottom rows at full size; under 8 rows left, compact", async ($, on) => {
+test("a short band shows the stage's bottom rows at full size; under the tallest actor, compact", async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, RASTER)
-  shown.view = boss()
+  shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   // 16 rows: 11 for the stage above the 5-row strip, the sky cropped (ADR 0010).
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
@@ -609,6 +609,12 @@ test("a short band shows the stage's bottom rows at full size; under 8 rows left
   const stage = await ui.find({ key: 'stage' })
   expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 11])
   await ui.unmount()
+  // A boss needs all 17: the Raster cannot scale, so the same band is compact.
+  shown.view = boss()
+  const withBoss = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
+  expect(await height(withBoss)).toBe(6)
+  await withBoss.unmount()
+  shown.view = wave()
   // 12 rows: 7 left, under the actors' 8: compact.
   const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
   expect(await height(short)).toBe(6)
@@ -668,7 +674,8 @@ test('the image renderer draws the stage Image and one Image per window, each wi
 
 test('a short band keys the image stage by the rows it shows, and the loop blits to it', async ($, on) => {
   // Ghostty kept a keyed Image at its first placement's height: each size is its own key. A boss
-  // no longer grows the stage (ADR 0010); the band's rows change its size instead.
+  // no longer grows the stage (ADR 0010); the band's rows change its size instead. With a boss
+  // the 15 rows left are under its 17, so the Image zooms the whole scene out into them.
   const { data, shown, clock, blits } = harness(on)
   settings(data, { renderer: 'image' })
   shown.view = boss()
@@ -862,9 +869,9 @@ test('on the desktop the stage sits in a column, so its frame takes the band wid
   await ui.unmount()
 })
 
-test('on a short desktop band the stage keeps its size and shows its bottom rows; a tall one shows it whole', async ($, on) => {
+test('on a short desktop band the stage keeps its size and shows its bottom rows; a boss scales instead', async ($, on) => {
   const { shown } = harness(on)
-  shown.view = boss()
+  shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
   const { stage } = await svgs(ui)
@@ -883,6 +890,14 @@ test('on a short desktop band the stage keeps its size and shows its bottom rows
   expect(stage?.props.height).toBeUndefined()
   expect(stage?.props.width).toBeUndefined()
   await ui.unmount()
+  // A boss needs all 17 rows: the stage scales down to the rows left instead (ADR 0004).
+  shown.view = boss()
+  const withBoss = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+  const scaled = (await svgs(withBoss)).stage
+  expect(String(scaled?.props.source)).toContain('viewBox="0 0 174 51"')
+  expect(scaled?.props.height).toBe(Math.round(cap))
+  expect(scaled?.props.width).toBe(Math.floor((cap * 116) / 34))
+  await withBoss.unmount()
   shown.view = wave()
   const tall = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
   expect(String((await svgs(tall)).stage?.props.source)).toContain('viewBox="0 0 174 51"')
