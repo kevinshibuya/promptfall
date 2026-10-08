@@ -1237,6 +1237,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-10.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-10.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/fallen_star-windup,enemy/void_manta-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/fallen_star-strike,enemy/void_manta-strike
+```
+
 ## frames-bosses-11.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-11.png` (`pnpm refsheet art/sheets/ref-frames-bosses-11.png
@@ -1450,3 +1459,9 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:waste_tyrant` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 78% |
 | `enemy:sand_basilisk` | windup | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 69% |
 | `enemy:sand_basilisk` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `enemy:fallen_star` | strike | frames-bosses-10 | frame size drift: native 67 against idle 47 (+43%) |
+| `enemy:void_manta` | windup | frames-bosses-10 | frame size drift: native 61 against idle 46 (+33%) |
+| `enemy:void_manta` | strike | frames-bosses-10 | frame size drift: native 82 against idle 46 (+78%) |
+| `enemy:fallen_star` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 70% |
+| `enemy:void_manta` | windup | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:void_manta` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 64% |

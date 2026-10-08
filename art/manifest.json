@@ -688,14 +688,22 @@
       "id": "enemy:fallen_star",
       "file": "sprites/enemy/fallen_star.png",
       "fileHires": "sprites-hires/enemy/fallen_star.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/fallen_star-windup.png",
+        "strike": "sprites-frames/enemy/fallen_star-strike.png"
+      }
     },
     {
       "id": "enemy:void_manta",
       "file": "sprites/enemy/void_manta.png",
       "fileHires": "sprites-hires/enemy/void_manta.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/void_manta-windup.png",
+        "strike": "sprites-frames/enemy/void_manta-strike.png"
+      }
     },
     {
       "id": "enemy:hollow_knight",
