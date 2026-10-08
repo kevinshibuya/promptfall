@@ -629,25 +629,41 @@
       "id": "enemy:hollow_knight",
       "file": "sprites/enemy/hollow_knight.png",
       "fileHires": "sprites-hires/enemy/hollow_knight.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/hollow_knight-windup.png",
+        "strike": "sprites-frames/enemy/hollow_knight-strike.png"
+      }
     },
     {
       "id": "enemy:court_jester",
       "file": "sprites/enemy/court_jester.png",
       "fileHires": "sprites-hires/enemy/court_jester.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/court_jester-windup.png",
+        "strike": "sprites-frames/enemy/court_jester-strike.png"
+      }
     },
     {
       "id": "enemy:throne_guard",
       "file": "sprites/enemy/throne_guard.png",
       "fileHires": "sprites-hires/enemy/throne_guard.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/throne_guard-windup.png",
+        "strike": "sprites-frames/enemy/throne_guard-strike.png"
+      }
     },
     {
       "id": "enemy:court_mage",
       "file": "sprites/enemy/court_mage.png",
       "fileHires": "sprites-hires/enemy/court_mage.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/court_mage-windup.png",
+        "strike": "sprites-frames/enemy/court_mage-strike.png"
+      }
     },
     {
       "id": "enemy:hollow_king",
@@ -666,25 +682,41 @@
       "id": "enemy:ink_horror",
       "file": "sprites/enemy/ink_horror.png",
       "fileHires": "sprites-hires/enemy/ink_horror.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/ink_horror-windup.png",
+        "strike": "sprites-frames/enemy/ink_horror-strike.png"
+      }
     },
     {
       "id": "enemy:blank_page",
       "file": "sprites/enemy/blank_page.png",
       "fileHires": "sprites-hires/enemy/blank_page.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/blank_page-windup.png",
+        "strike": "sprites-frames/enemy/blank_page-strike.png"
+      }
     },
     {
       "id": "enemy:quill_golem",
       "file": "sprites/enemy/quill_golem.png",
       "fileHires": "sprites-hires/enemy/quill_golem.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/quill_golem-windup.png",
+        "strike": "sprites-frames/enemy/quill_golem-strike.png"
+      }
     },
     {
       "id": "enemy:erased_scribe",
       "file": "sprites/enemy/erased_scribe.png",
       "fileHires": "sprites-hires/enemy/erased_scribe.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/erased_scribe-windup.png",
+        "strike": "sprites-frames/enemy/erased_scribe-strike.png"
+      }
     },
     {
       "id": "enemy:unwritten_one",

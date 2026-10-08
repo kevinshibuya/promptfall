@@ -497,6 +497,16 @@ describe('sprites build', () => {
     })
   })
 
+  it('gives every nes enemy of the real manifest a wind-up and a strike', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),
+    ) as Manifest
+    const enemies = manifest.sprites.filter((s) => s.id.startsWith('enemy:') && s.style === 'nes')
+    expect(enemies).toHaveLength(48)
+    const missing = enemies.filter((s) => !s.frames?.windup || !s.frames.strike)
+    expect(missing.map((s) => s.id)).toEqual([])
+  })
+
   it('gives every file entry of the real manifest but the fallback a fileHires', () => {
     const manifest = JSON.parse(
       readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),

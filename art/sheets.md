@@ -861,6 +861,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-6.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the hollow knight's sword touches the court jester: a forced gutter splits them.
+
+```sh
+D=art/sheets/frames-monsters-6.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/hollow_knight-windup,enemy/court_jester-windup,enemy/throne_guard-windup,enemy/court_mage-windup,enemy/ink_horror-windup,enemy/blank_page-windup,enemy/quill_golem-windup,enemy/erased_scribe-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/hollow_knight-strike,enemy/court_jester-strike,enemy/throne_guard-strike,enemy/court_mage-strike,enemy/ink_horror-strike,enemy/blank_page-strike,enemy/quill_golem-strike,enemy/erased_scribe-strike --gutters 202
+```
+
 ## frames-bosses-1.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-1.png` (`pnpm refsheet art/sheets/ref-frames-bosses-1.png
@@ -957,3 +966,16 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:spire_warden` | strike | frames-monsters-5 | frame size drift: native 32 against idle 26 (+23%) |
 | `enemy:astral_seer` | windup | frames-monsters-5 | frame size drift: native 28 against idle 21 (+33%) |
 | `enemy:astral_seer` | strike | frames-monsters-5 | frame size drift: native 27 against idle 21 (+29%) |
+| `enemy:hollow_knight` | windup | frames-monsters-6 | frame size drift: native 33 against idle 22 (+50%) |
+| `enemy:hollow_knight` | strike | frames-monsters-6 | frame size drift: native 35 against idle 22 (+59%) |
+| `enemy:court_jester` | windup | frames-monsters-6 | frame size drift: native 31 against idle 21 (+48%) |
+| `enemy:court_jester` | strike | frames-monsters-6 | frame size drift: native 29 against idle 21 (+38%) |
+| `enemy:throne_guard` | windup | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:throne_guard` | strike | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:court_mage` | windup | frames-monsters-6 | frame size drift: native 34 against idle 23 (+48%) |
+| `enemy:court_mage` | strike | frames-monsters-6 | frame size drift: native 31 against idle 23 (+35%) |
+| `enemy:ink_horror` | strike | frames-monsters-6 | frame size drift: native 34 against idle 25 (+36%) |
+| `enemy:quill_golem` | windup | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:quill_golem` | strike | frames-monsters-6 | frame size drift: native 33 against idle 22 (+50%) |
+| `enemy:erased_scribe` | windup | frames-monsters-6 | frame size drift: native 26 against idle 21 (+24%) |
+| `enemy:erased_scribe` | strike | frames-monsters-6 | frame size drift: native 27 against idle 21 (+29%) |
