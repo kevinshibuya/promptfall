@@ -1,6 +1,9 @@
 import type { KeyValue } from './vendor/protocol.js'
 
-const PREFIX = 'promptfall:'
+/** The real save's prefix; the machine's settings sit under it whichever save plays. */
+export const PREFIX = 'promptfall:'
+/** The sandbox save's prefix: its books, device token and lease. */
+export const SANDBOX_PREFIX = 'promptfall-sandbox:'
 
 /** `$.store`'s three calls, as closures written at the hook (the engine forbids passing `$`). */
 export type StoreCalls = {
@@ -11,27 +14,31 @@ export type StoreCalls = {
 }
 
 /**
- * The fake server's KeyValue over `$.store`, every key under `promptfall:`.
+ * The fake server's KeyValue over `$.store`, every key under one prefix:
+ * `promptfall:` for the real save, `promptfall-sandbox:` for the sandbox.
  * Values pass through as they are; the store keeps JSON.
  */
 export class StoreKeyValue implements KeyValue {
-  constructor(private readonly store: StoreCalls) {}
+  constructor(
+    private readonly store: StoreCalls,
+    private readonly prefix: string = PREFIX,
+  ) {}
 
   get(key: string): Promise<unknown> {
-    return this.store.get(PREFIX + key)
+    return this.store.get(this.prefix + key)
   }
 
   set(key: string, value: unknown): Promise<void> {
-    return this.store.set(PREFIX + key, value)
+    return this.store.set(this.prefix + key, value)
   }
 
   delete(key: string): Promise<void> {
-    return this.store.delete(PREFIX + key)
+    return this.store.delete(this.prefix + key)
   }
 
-  /** The keys under `promptfall:`, the prefix stripped. */
+  /** The keys under the prefix, the prefix stripped. */
   async keys(): Promise<string[]> {
     const all = await this.store.keys()
-    return all.filter((k) => k.startsWith(PREFIX)).map((k) => k.slice(PREFIX.length))
+    return all.filter((k) => k.startsWith(this.prefix)).map((k) => k.slice(this.prefix.length))
   }
 }
