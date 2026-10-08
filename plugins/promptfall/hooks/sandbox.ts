@@ -42,8 +42,11 @@ function matches(query: string, c: Named): boolean {
   )
 }
 
-/** The one candidate `query` names, or the reply: several ask which one, none lists them all. */
-function pick<T extends Named>(
+/**
+ * The one candidate `query` names, or the reply: several ask which one, none lists them all.
+ * A name several candidates share carries its id, which `matches` accepts.
+ */
+export function pick<T extends Named>(
   kind: string,
   plural: string,
   query: string,
@@ -51,7 +54,10 @@ function pick<T extends Named>(
 ): T | string {
   const found = all.filter((c) => matches(query, c))
   if (found.length === 1 && found[0]) return found[0]
-  if (found.length > 1) return `Which one: ${found.map((c) => c.name).join(', ')}`
+  if (found.length > 1) {
+    const shared = (c: T) => c.id && found.filter((o) => o.name === c.name).length > 1
+    return `Which one: ${found.map((c) => (shared(c) ? `${c.name} (${c.id})` : c.name)).join(', ')}`
+  }
   return `No ${kind} named '${query}'\n${plural}: ${all.map((c) => c.name).join(', ')}`
 }
 
@@ -85,7 +91,7 @@ function rarity(query: string | undefined): Rarity | string {
 
 /** What a refused grant answers, by the outcome's detail; a verb adds its own. */
 const REFUSED: Record<string, string> = {
-  boss_mode: 'Sandbox: not in boss mode',
+  boss_mode: 'Sandbox: the party is fighting a world boss, nothing changed',
   roster_full: 'Sandbox: roster full, nobody recruited',
 }
 

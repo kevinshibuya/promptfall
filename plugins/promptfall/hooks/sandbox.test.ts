@@ -2,6 +2,7 @@ import type { On, RenderElement } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 import type { GameView } from '../types'
 import { RETRYING_NOTICE } from './engine'
+import { pick } from './sandbox'
 import { resolveClient } from './server'
 import { SETTINGS_DEFAULT } from './state'
 import { paneText } from './ui/pane/testing'
@@ -301,4 +302,16 @@ test('the sandbox ledger runs with sandbox.enabled on; the real one refuses gran
   // `sandbox gold` goes through credit, which the flag does not gate.
   await real.host.credit(real.accountId, 5000, 'sandbox')
   expect(await real.credits()).toBe(1)
+})
+
+test('heroes who share a name show their id in which one, and the id picks one', async () => {
+  const roster = [
+    { id: 'h3k', name: 'Aldric the Bold' },
+    { id: 'h9q', name: 'Aldric the Bold' },
+    { id: 'h2m', name: 'Aldwyn the Grey' },
+  ]
+  expect(pick('hero', 'Heroes', 'ald', roster)).toBe(
+    'Which one: Aldric the Bold (h3k), Aldric the Bold (h9q), Aldwyn the Grey',
+  )
+  expect(pick('hero', 'Heroes', 'h9q', roster)).toEqual(roster[1])
 })

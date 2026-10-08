@@ -316,8 +316,8 @@ test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
   await run('gold 1')
   expect(view().boss).not.toBeNull()
   const before = { zone: view().zone, wipes: view().wipes }
-  expect(await run('wipe')).toBe('Sandbox: not in boss mode')
-  expect(await run('zone 5')).toBe('Sandbox: not in boss mode')
+  expect(await run('wipe')).toBe('Sandbox: the party is fighting a world boss, nothing changed')
+  expect(await run('zone 5')).toBe('Sandbox: the party is fighting a world boss, nothing changed')
   expect({ zone: view().zone, wipes: view().wipes }).toEqual(before)
 })
 

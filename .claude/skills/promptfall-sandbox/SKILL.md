@@ -31,14 +31,14 @@ The sandbox is a separate save on the in-process fake where `/promptfall sandbox
 | `wipe` | none | `sandbox_wipe`: the wipe path, as if every party hero hit 0 HP: the `wipe` effect, the retreat one zone, the wipe counted, toast `Party wiped, retreating to zone 2` | `Sandbox: the party fell, retreating to zone 2` |
 | `reset` | none | The account reset: books and token go, lease and settings stay, a fresh account bootstraps in the same session | `Sandbox: the save starts over` |
 
-In boss mode `boss`, `zone` and `wipe` answer `Sandbox: not in boss mode` and change nothing; `item`, `level` and `recruit` apply. Bad arguments answer the verb's `Usage: /promptfall sandbox …` line, an unknown verb answers `No sandbox verb 'x'.` and the listing, and any other refusal answers `Sandbox: nothing changed (<reason>)`.
+In boss mode `boss`, `zone` and `wipe` answer `Sandbox: the party is fighting a world boss, nothing changed` and change nothing; `item`, `level` and `recruit` apply. Bad arguments answer the verb's `Usage: /promptfall sandbox …` line, an unknown verb answers `No sandbox verb 'x'.` and the listing, and any other refusal answers `Sandbox: nothing changed (<reason>)`.
 
 ## Names
 
 `boss` matches zone and turn bosses by enemy name, `item` item bases by name or id, `level` the roster's heroes by name (epithet included), a rarity by its name (`common` to `legendary`). A name matches as a case-insensitive prefix of the display name, of any word in it, or of the id: `treant`, `elder` and `elder_t` all find Elder Treant.
 
 - One match runs.
-- Several answer `Which one: Oak Staff, Oak Bow` and run nothing.
+- Several answer `Which one: Oak Staff, Oak Bow` and run nothing. Heroes who share a name show their id, `Aldric the Bold (h3k)`, and the id picks one.
 - None answers `No boss named 'x'` (or item, hero, rarity) and, on the next line, the full list for that kind.
 
 In `item`, the last word is the rarity unless the whole argument names a base. The exact names are in the `promptfall-content` skill's reference.
