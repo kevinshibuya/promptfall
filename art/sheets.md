@@ -1126,6 +1126,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-7.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-7.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/frostvein_yeti-windup,enemy/avalanche_drake-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/frostvein_yeti-strike,enemy/avalanche_drake-strike
+```
+
 ## frames-bosses-8.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-8.png` (`pnpm refsheet art/sheets/ref-frames-bosses-8.png
@@ -1424,3 +1433,5 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:sunken_abbot` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 50% |
 | `enemy:choir_of_bones` | windup | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 72% |
 | `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 46% |
+| `enemy:avalanche_drake` | strike | frames-bosses-7 | frame size drift: native 84 against idle 62 (+35%) |
+| `enemy:avalanche_drake` | windup | frames-bosses-7 | frame size drift: the fit to the idle canvas shrinks it to 77% |

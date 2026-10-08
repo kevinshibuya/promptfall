@@ -505,14 +505,22 @@
       "id": "enemy:frostvein_yeti",
       "file": "sprites/enemy/frostvein_yeti.png",
       "fileHires": "sprites-hires/enemy/frostvein_yeti.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/frostvein_yeti-windup.png",
+        "strike": "sprites-frames/enemy/frostvein_yeti-strike.png"
+      }
     },
     {
       "id": "enemy:avalanche_drake",
       "file": "sprites/enemy/avalanche_drake.png",
       "fileHires": "sprites-hires/enemy/avalanche_drake.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/avalanche_drake-windup.png",
+        "strike": "sprites-frames/enemy/avalanche_drake-strike.png"
+      }
     },
     {
       "id": "enemy:drowned_monk",
