@@ -129,6 +129,7 @@ function enemySpriteId(enemy: { def: string; name: string; kind: string }): stri
  * effects and the enemy list's changes start. No clock of its own: every method takes `now`.
  */
 export class StageTimeline {
+  /** Every enemy on stage or departing, in arrival order: the line, left to right. */
   private entries = new Map<string, Known>()
   private departed = new Set<string>()
   /** The heroes on the stage, by id, with their class. */
@@ -137,8 +138,8 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
-  /** No newcomer steps on stage before this: a departed enemy's fade and drop, then a pause. */
-  private enterAfter = Number.NEGATIVE_INFINITY
+  /** No newcomer steps on stage before any of these: each kill's fade and drop, then a pause. */
+  private gaps = new Map<string, number>()
   /** Each enemy's place in the line, left to right in slot order, and the slide that took it there. */
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
   /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
@@ -164,11 +165,13 @@ export class StageTimeline {
       })
     }
     // A kill plays out before the next enemy enters: its fade, its drop, then a pause.
+    for (const [id, until] of this.gaps) if (until <= now) this.gaps.delete(id)
     for (const id of this.departed) {
       const end = this.motions
         .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
         .reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
-      this.enterAfter = Math.max(this.enterAfter, end + WAVE_GAP_MS)
+      // Once its fade and drop are over and pruned, the pause they set stands.
+      if (Number.isFinite(end)) this.gaps.set(id, end + WAVE_GAP_MS)
     }
     // A departed enemy keeps its entry and slot until its dissolve and any drop end.
     for (const id of this.departed) {
@@ -183,6 +186,7 @@ export class StageTimeline {
       if (known && known.spriteId === spriteId && known.kind === enemy.kind) {
         // Back after leaving (a resync can revive an enemy the prediction killed): live again.
         if (this.departed.delete(enemy.id)) {
+          this.gaps.delete(enemy.id)
           this.motions = this.motions.filter(
             (m) => !(m.actor === enemy.id && (m.kind === 'dissolve' || m.kind === 'drop')),
           )
@@ -200,7 +204,7 @@ export class StageTimeline {
         }
         continue
       }
-      if (this.observed && now < this.enterAfter) continue
+      if (this.observed && now < this.enterAfter()) continue
       const slot = this.freeSlot(now)
       if (slot === null) continue
       this.entries.set(enemy.id, {
@@ -218,9 +222,16 @@ export class StageTimeline {
     this.settlePlaces(now)
   }
 
+  /** When the last kill's pause is over: no newcomer steps on before it. */
+  private enterAfter(): number {
+    return Math.max(Number.NEGATIVE_INFINITY, ...this.gaps.values())
+  }
+
   /**
    * Drops every queued action (one not started by `now`) and what it would show; the action under
-   * way plays out, and the next one may start where the first queued one would have.
+   * way plays out, and the next one may start where the first queued one would have. A departed
+   * enemy whose killing blow was dropped fades from its last hit still shown, or now, and its drop
+   * pops after that fade; the next observe times the pause from there.
    */
   private dropQueued(now: number): void {
     const queued = this.actions_.filter((a) => a.start > now)
@@ -229,6 +240,22 @@ export class StageTimeline {
     this.motions = this.motions.filter((m) => m.from < cut || !ACTION_KINDS.has(m.kind))
     this.actions_ = this.actions_.filter((a) => a.start < cut)
     this.actionEnd = Math.min(this.actionEnd, cut)
+    for (const id of this.departed) {
+      const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
+      if (dissolve === undefined) continue
+      const from = this.motions
+        .filter((m) => m.kind === 'flash' && m.actor === id)
+        .reduce((end, m) => Math.max(end, m.until), now)
+      if (from >= dissolve.from) continue
+      const faded = from + DISSOLVE_MS
+      this.motions = this.motions.map((m) => {
+        if (m === dissolve) return { ...m, from, until: faded }
+        if (m.actor === id && m.kind === 'drop' && m.from > faded) {
+          return { ...m, from: faded, until: faded + DROP_MS }
+        }
+        return m
+      })
+    }
   }
 
   /** Enemies stand side by side: a gap closes with a slide, a newcomer starts in its place. */
@@ -495,8 +522,9 @@ export class StageTimeline {
     return this.motions.filter((m) => m.until > now)
   }
 
+  /** The enemies in line order: by arrival, so a newcomer joins the end and never shoves. */
   known(): readonly Known[] {
-    return [...this.entries.values()].sort((a, b) => a.slot - b.slot)
+    return [...this.entries.values()]
   }
 
   isDeparted(id: string): boolean {
@@ -516,7 +544,7 @@ export class StageTimeline {
 
   isBusy(now: number): boolean {
     // Through the pause after a kill too, so the next enemy steps on at its time.
-    if (now < this.enterAfter) return true
+    if (now < this.enterAfter()) return true
     if ([...this.places.values()].some((p) => p.until > now)) return true
     return this.motions.some((m) => m.until > now)
   }

@@ -318,8 +318,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         const cells = cellsOf(layout) ?? box
         // A redraw of the site the loop is drawing reuses the picture it last sent: the engine
         // sends nothing for a source it already drew, and the loop's next frame is at most a beat
-        // away. A new size, or no loop yet, composes once.
-        const reused = renderer === 'image' ? (loop?.stageSource(stageKey(cells)) ?? null) : null
+        // away. A new size or layout, a stage drawn again, or no loop yet, composes once.
+        const reused =
+          renderer === 'image' ? (loop?.stageSource(stageKey(cells), layout) ?? null) : null
         const frame =
           reused !== null
             ? { source: reused }

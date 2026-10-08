@@ -244,7 +244,7 @@ test('enemies stand side by side: once one is gone, the ones after it slide over
   expect(t.placeAt('e1', gone + SLIDE_MS)).toBe(0)
 })
 
-test('survivors keep their slots and a newcomer takes the lowest free one after the pause, with a spawn', () => {
+test('survivors keep their places and a newcomer joins the end of the line after the pause, with a spawn', () => {
   const t = observed()
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
@@ -259,19 +259,19 @@ test('survivors keep their slots and a newcomer takes the lowest free one after 
     maxHp: 9,
     kind: 'wave',
   })
-  t.observe(v, NOW + DISSOLVE_MS + WAVE_GAP_MS)
+  const enter = NOW + DISSOLVE_MS + WAVE_GAP_MS
+  t.observe(v, enter)
+  // The newcomer takes the freed slot but stands after the survivors: the line never shoves back.
   expect(t.known().map((k) => [k.id, k.slot])).toEqual([
-    ['e4', 0],
     ['e2', 1],
     ['e3', 2],
+    ['e4', 0],
   ])
-  expect(of(t.active(NOW + DISSOLVE_MS + WAVE_GAP_MS), 'spawn')).toEqual([
-    {
-      kind: 'spawn',
-      actor: 'e4',
-      from: NOW + DISSOLVE_MS + WAVE_GAP_MS,
-      until: NOW + DISSOLVE_MS + WAVE_GAP_MS + SPAWN_MS,
-    },
+  for (const at of [enter, enter + SLIDE_MS / 2, enter + SLIDE_MS]) {
+    expect(['e2', 'e3', 'e4'].map((id) => t.placeAt(id, at))).toEqual([0, 1, 2])
+  }
+  expect(of(t.active(enter), 'spawn')).toEqual([
+    { kind: 'spawn', actor: 'e4', from: enter, until: enter + SPAWN_MS },
   ])
 })
 
@@ -513,6 +513,41 @@ test('a stage two rounds behind drops the attacks that have not started', () => 
   expect(Math.max(...starts)).toBeLessThanOrEqual(2 * 2000 + ACTION_MS)
   // The attack under way when the cap drops the queue still plays out.
   expect(starts).toContain(0 + WINDUP_HOLD_MS)
+})
+
+test('a kill whose blow the backlog cap drops fades and drops from then, not from the dropped blow', () => {
+  const t = observed()
+  // Six attacks queue ahead of the blow that kills e1 and drops a sword, three seconds out.
+  const queue = Array.from({ length: 6 }, () => [act('e2', 0), hit('e2', 'h1')]).flat()
+  t.onEffects(
+    [...queue, act('h1', 0), hit('h1', 'e1'), { k: 'drop', item: item('iron_sword') }],
+    NOW,
+    2000,
+  )
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id !== 'e1')
+  t.observe(v, NOW + 1)
+  // The next round pushes the stage two rounds behind: the queue, the killing blow with it, goes.
+  const cut = NOW + 2000
+  t.onEffects(Array.from({ length: 10 }, () => [act('e2', 0), hit('e2', 'h1')]).flat(), cut, 2000)
+  expect(of(t.active(cut), 'flash').filter((m) => m.actor === 'e1')).toEqual([])
+  expect(of(t.active(cut), 'dissolve')).toEqual([
+    { kind: 'dissolve', actor: 'e1', from: cut, until: cut + DISSOLVE_MS },
+  ])
+  const dropFrom = cut + DISSOLVE_MS
+  expect(of(t.active(cut), 'drop')[0]).toMatchObject({ actor: 'e1', from: dropFrom })
+  // The pause after it starts from the re-timed drop.
+  t.observe(v, cut + 1)
+  expect(t.isBusy(dropFrom + DROP_MS + WAVE_GAP_MS - 1)).toBe(true)
+  const next = wave()
+  next.enemies = next.enemies.filter((e) => e.id !== 'e1')
+  next.enemies.push({
+    ...next.enemies[0],
+    id: 'e4',
+    name: 'Road Slime',
+  } as (typeof next.enemies)[number])
+  t.observe(next, dropFrom + DROP_MS + WAVE_GAP_MS)
+  expect(t.known().map((k) => k.id)).toContain('e4')
 })
 
 test('a kill plays in beats: the fade, then the drop, then a pause, then the next enemy', () => {

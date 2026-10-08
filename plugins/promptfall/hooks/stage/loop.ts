@@ -128,8 +128,11 @@ export class StageLoop {
   private fresh = false
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
-  /** The stage picture last sent, by element key, for a redraw of the same site to reuse. */
-  private lastStage: { key: string; source: { png: string } } | null = null
+  /**
+   * The stage picture last sent, by element key and layout, for a redraw of the same site to
+   * reuse; dropped once the stage goes away, so a stage drawn again never shows an old picture.
+   */
+  private lastStage: { key: string; layout: Layout; source: { png: string } } | null = null
   /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
   private beat: number | null = null
 
@@ -146,6 +149,7 @@ export class StageLoop {
     if (site === null) {
       if (this.site !== null) this.gen += 1
       this.site = null
+      this.lastStage = null
       this.cancel()
       return
     }
@@ -168,9 +172,10 @@ export class StageLoop {
     }
   }
 
-  /** The picture the loop last sent to the stage Image keyed `key`, or null. */
-  stageSource(key: string): { png: string } | null {
-    return this.lastStage?.key === key ? this.lastStage.source : null
+  /** The picture the loop last sent to the stage Image keyed `key` in `layout`, or null. */
+  stageSource(key: string, layout: Layout): { png: string } | null {
+    const last = this.lastStage
+    return last?.key === key && sameLayout(last.layout, layout) ? last.source : null
   }
 
   /** New effects landed: draw the next frame now. */
@@ -220,6 +225,8 @@ export class StageLoop {
       return
     }
     if (next === null) return
+    // A wake during the frame runs the next at once, and the beat starts over from it.
+    if (this.rerun) this.beat = null
     this.arm(this.rerun ? 0 : next)
   }
 
@@ -292,9 +299,12 @@ export class StageLoop {
         if (gen !== this.gen) return null
         if (result.deny !== undefined) {
           this.stopped = true
+          this.lastStage = null
           return null
         }
-        if ('source' in frame) this.lastStage = { key: site.key, source: frame.source }
+        if ('source' in frame) {
+          this.lastStage = { key: site.key, layout: site.layout, source: frame.source }
+        }
       }
     }
 

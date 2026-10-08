@@ -190,14 +190,57 @@ test('the last stage picture the loop sent is there for a redraw of the same sit
   const h = harness(clock)
   const s = { ...site('image'), key: 'stage-120x8' }
   h.loop.mount(s)
-  expect(h.loop.stageSource('stage-120x8')).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
   h.timeline.onEffects(hit, 1_000_000)
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
   const sent = h.blits.filter((b) => b.key === 'stage-120x8').at(-1)
   expect(sent && 'source' in sent ? sent.source : null).not.toBe(null)
-  expect(h.loop.stageSource('stage-120x8')).toBe(sent && 'source' in sent ? sent.source : null)
-  expect(h.loop.stageSource('stage-130x8')).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(
+    sent && 'source' in sent ? sent.source : null,
+  )
+  expect(h.loop.stageSource('stage-130x8', s.layout)).toBe(null)
+})
+
+test('a stage picture is not reused once the stage went away, after a deny, or for another layout', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  const s = { ...site('image'), key: 'stage-120x8' }
+  const draw = async () => {
+    h.loop.mount(s)
+    h.timeline.onEffects(hit, await clock.now())
+    h.loop.wake()
+    await clock.advance(EVENT_FRAME_MS)
+    expect(h.loop.stageSource('stage-120x8', s.layout)).not.toBe(null)
+  }
+  await draw()
+  // The same cells under another layout (a scaled boss stage) is another picture.
+  const box = s.layout.box ?? { columns: 120, rows: 8 }
+  const scaled = { kind: 'full' as const, box: { ...box, rows: 13 }, cells: box, bandRows: 18 }
+  expect(h.loop.stageSource('stage-120x8', scaled)).toBe(null)
+  h.loop.mount(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  await draw()
+  h.state.answer = { deny: 'not mounted' }
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+})
+
+test('a wake during a frame runs the next at once, and the beat starts over from it', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, 30)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  let views = 0
+  h.state.onView = () => {
+    views += 1
+    if (views === 2) h.loop.wake()
+  }
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 5)
+  const gaps = h.times.slice(1, 4).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS, 30, EVENT_FRAME_MS])
 })
 
 test('mount(null) stops the blits', async () => {
