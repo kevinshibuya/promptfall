@@ -5,6 +5,8 @@ import {
   COMPACT_STAGE_COLUMNS,
   COMPACT_STAGE_ROWS,
   FULL_MIN_COLUMNS,
+  IMAGE_MAX_BYTES,
+  IMAGE_SCALE,
   MIN_COLUMNS,
   STAGE_MAX_COLUMNS,
 } from './tuning'
@@ -45,15 +47,19 @@ export function layoutFor(
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STRIP_ROWS + opts.extra }
   }
-  // An Image scales to its box: a stage too tall for the band (a boss, a long prompt) shrinks into
-  // the rows left, keeping its proportions, rather than flipping the band to compact.
+  // An Image scales to its box: a stage too tall for the band (a boss, a long prompt) zooms out
+  // rather than flipping the band to compact. The scene widens so that, scaled into the rows left,
+  // it still spans the band; as far as its picture stays within IMAGE_MAX_BYTES.
   const room = props.maxRows - STRIP_ROWS - opts.extra
   if (opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= COMPACT_STAGE_ROWS) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
+    // The Image's bytes: columns × rows cells at IMAGE_SCALE × 2·IMAGE_SCALE pixels, 4 a pixel.
+    const budget = Math.floor(IMAGE_MAX_BYTES / (IMAGE_SCALE * 2 * IMAGE_SCALE * 4 * rows))
+    const scene = Math.min(Math.round((columns * rows) / room), budget)
     return {
       kind: 'full',
-      box: { columns, rows },
-      cells: { columns: Math.round((columns * room) / rows), rows: room },
+      box: { columns: scene, rows },
+      cells: { columns: Math.min(columns, Math.round((scene * room) / rows)), rows: room },
       bandRows: props.maxRows,
     }
   }
