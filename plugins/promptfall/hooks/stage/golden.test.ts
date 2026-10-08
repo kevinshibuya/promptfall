@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
+import { BACKDROPS } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { item, listing, marketPage, paneInput, paneView } from '../ui/pane/fixtures'
@@ -120,6 +121,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'enemy:bandit_captain', boss, 4, 0, false),
       ...heroes.map((art, i) =>
@@ -142,9 +144,9 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
   withinBudgets(model, busyMotions('e1'), NOW)
 })
 
-test('at scale 1.5 the rest frame is 180 × 24 and the boss frame 180 × 51', () => {
+test('at scale 1.5 the rest frame and the boss frame are both 180 × 51 (ADR 0010)', () => {
   const rest = composeFrame(stage('rest').hires, { numbers: true })
-  expect([rest.width, rest.height]).toEqual([180, 24])
+  expect([rest.width, rest.height]).toEqual([180, 51])
   const boss = composeFrame(stage('boss').hires, { numbers: true })
   expect([boss.width, boss.height]).toEqual([180, 51])
   expect(stage('compact').hires.scale).toBe(1)
@@ -156,6 +158,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'enemy:bandit_captain', boss, 6, 0, false),
       ...heroes.map((art, i) => actor(`h${i + 1}`, `hero:${i}`, art, 210 - i * 27, 27, true)),
@@ -195,6 +198,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'adversarial:boss', boss, 4, 0, false),
       ...heroes.map((art, i) =>
@@ -305,6 +309,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
   return {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'adversarial:boss', boss, k(4), 0, false),
       ...heroes.map((art, i) =>
@@ -362,19 +367,40 @@ test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg, 11
   expect(svg.length).toBe(113_047)
 })
 
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,353 characters at 1.5x, so the 1x Svg (51,341)', () => {
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,408 characters at 1.5x, so the 1x Svg (51,396)', () => {
   const hi = fullerFrame(1.5, true, NOW)
   const lo = fullerFrame(1, true, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_353)
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_408)
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(51_341)
+  expect(svg.length).toBe(51_396)
 })
 
-test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 32,731 characters, under the cap', () => {
+test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 53,127 characters over the zone 1 backdrop, under the cap', () => {
   const s = stage('boss-strike')
   const svg = renderSvg(s.hires, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
-  expect(svg.length).toBe(32_731)
+  expect(svg.length).toBe(53_127)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+})
+
+test('the fuller frame over every zone backdrop stays in budget at both scales', () => {
+  const zones = Object.keys(BACKDROPS)
+  expect(zones.length).toBeGreaterThan(0)
+  for (const zone of zones) {
+    const b = BACKDROPS[zone]
+    if (!b) continue
+    const lo = fullerFrame(1, true, NOW)
+    const hi = fullerFrame(1.5, true, NOW)
+    const loModel = { ...lo.model, backdrop: b.full }
+    const hiModel = { ...hi.model, backdrop: b.hires }
+    withinBudgets(loModel, lo.motions, NOW)
+    withinBudgets(hiModel, hi.motions, NOW)
+    for (const smil of [true, false]) {
+      const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
+      expect(svgWithFallback(hiModel, loModel, hi.motions, opts).length, zone).toBeLessThan(
+        SVG_MAX_CHARS,
+      )
+    }
+  }
 })

@@ -1,7 +1,7 @@
 import type { GameView } from '../../types'
 import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
-import { spriteFor } from '../sprites/index'
+import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
@@ -80,7 +80,13 @@ export type StageNumber = { text: string; x: number; y: number; rgb: number }
 export type StageDrop = { spriteId: string; art: SpriteArt; x: number; y: number; alpha: number }
 export type StageModel = {
   box: Box
+  /** The ground strip's colour: drawn alone when the zone has no backdrop. */
   ground: number
+  /**
+   * The zone's painting at this scale, bottom-anchored and centre-cropped to the frame (edge
+   * columns extended past its width); null on the compact stage and for a zone without one.
+   */
+  backdrop: SpriteArt | null
   actors: StageActor[]
   numbers: StageNumber[]
   drops: StageDrop[]
@@ -356,6 +362,7 @@ export function stageAt(
   return {
     box,
     ground: ZONE_GROUND[view.zone - 1] ?? ZONE_GROUND[0] ?? 0,
+    backdrop: opts.compact ? null : backdropFor(view.zone, scale),
     actors,
     numbers,
     drops,

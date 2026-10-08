@@ -28,7 +28,8 @@ function put(bytes: Uint8Array, w: number, value: number): void {
 
 /**
  * Raster cells for a frame composed with `numbers: false`, then each number's glyphs as text
- * cells (fg its colour, bg CLEAR) at cell (floor x, floor y / 2), clamped inside the box.
+ * cells at cell (floor x, floor y / 2), clamped inside the box: fg its colour, bg the scene pixel
+ * under the cell (the backdrop, or CLEAR where there is none), so a number is not a box.
  */
 export function encodeRaster(frame: Frame, numbers: readonly StageNumber[]): string {
   const columns = frame.width
@@ -61,7 +62,7 @@ export function encodeRaster(frame: Frame, numbers: readonly StageNumber[]): str
       const w = (y * columns + x0 + c) * 3
       put(bytes, w, n.text.charCodeAt(c))
       put(bytes, w + 1, n.rgb)
-      put(bytes, w + 2, CLEAR)
+      put(bytes, w + 2, pixel(frame, x0 + c, y * 2) ?? CLEAR)
     }
   }
   return encode(bytes)

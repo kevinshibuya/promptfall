@@ -8,7 +8,7 @@ import { stripScene } from '../ui/strip'
 import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
 import { GAUGE_FRAME_MS } from '../windows/tuning'
-import { composeFrame } from './compose'
+import { composeFrame, cropBottom, type Frame } from './compose'
 import type { GaugeTrack } from './gauges'
 import { pngImage } from './image'
 import { cellsOf, type Layout, layoutFor, sameLayout } from './layout'
@@ -106,11 +106,23 @@ export function stageFrame(
     motion,
     scale: renderer === 'image' ? HIRES_SCALE : 1,
   })
+  // A short band shows the stage's bottom rows: the frame is cropped to the cells' pixels, and
+  // the Raster's numbers move up with it (one clamped to the box's top stays visible). A zoom-out
+  // (cells narrower than the box) scales the whole frame instead, so nothing is cropped.
+  const cells =
+    layout.kind === 'full' && layout.cells?.columns === layout.box.columns
+      ? layout.cells
+      : undefined
+  const shown = (frame: Frame): Frame =>
+    cells ? cropBottom(frame, Math.ceil(cells.rows * 2 * model.scale)) : frame
   if (renderer === 'raster') {
-    return { cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers) }
+    const frame = shown(composeFrame(model, { numbers: false }))
+    const cut = Math.ceil(model.box.rows * 2 * model.scale) - frame.height
+    const numbers = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
+    return { cells: encodeRaster(frame, numbers) }
   }
   return {
-    source: pngImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
+    source: pngImage(shown(composeFrame(model, { numbers: true })), IMAGE_SCALE / model.scale),
   }
 }
 
@@ -250,6 +262,7 @@ export class StageLoop {
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
       tab: site.strip.tab,
       extra: site.strip.extra,
+      minRows: this.timeline.minRowsAt(view, now),
       scalable: site.renderer === 'image',
     })
     if (!sameLayout(site.layout, layout)) {

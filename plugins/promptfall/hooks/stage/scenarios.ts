@@ -43,6 +43,7 @@ import {
   HIRES_SCALE,
   LUNGE_MS,
   SPAWN_MS,
+  STAGE_ROWS,
   WINDUP_HOLD_MS,
 } from './tuning'
 
@@ -82,7 +83,7 @@ export type Staged = {
 }
 
 const NOW = GOLDEN_NOW
-const FULL: Box = { columns: 120, rows: 8 }
+const FULL: Box = { columns: 120, rows: STAGE_ROWS }
 const item = {
   id: 'i1',
   base: 'iron_sword',

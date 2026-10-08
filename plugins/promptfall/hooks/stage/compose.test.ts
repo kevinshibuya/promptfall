@@ -1,6 +1,7 @@
 import { expect, test } from 'claude-code/testing'
+import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
-import { artFrame, composeFrame } from './compose'
+import { artFrame, backdropOrigin, composeFrame, mirrored } from './compose'
 import { DIGITS } from './font'
 import { fnv1a64 } from './hash'
 import { type StageModel, samePoses } from './model'
@@ -12,6 +13,7 @@ function model(overrides: Partial<StageModel> = {}): StageModel {
   return {
     box: { columns: 40, rows: 10 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [],
     numbers: [],
     drops: [],
@@ -121,4 +123,51 @@ test('at scale 1.5 the frame is 1.5 times the box, the ground 3 rows, a glyph pi
       }
     }
   }
+})
+
+/** An 8 × 4 painting where pixel (x, y) is palette index 1 + y * 8 + x, colour 0x010101 × index. */
+function painting() {
+  const idx = new Uint8Array(32)
+  for (let i = 0; i < 32; i++) idx[i] = i + 1
+  const palette = [0, ...Array.from({ length: 32 }, (_, i) => 0x010101 * (i + 1))]
+  return { width: 8, height: 4, palette, pixels: encode(idx) }
+}
+const rgbAt = (f: { width: number; rgba: Uint8ClampedArray }, x: number, y: number) => {
+  const i = (y * f.width + x) * 4
+  return f.rgba[i + 3]
+    ? ((f.rgba[i] ?? 0) << 16) | ((f.rgba[i + 1] ?? 0) << 8) | (f.rgba[i + 2] ?? 0)
+    : null
+}
+
+test('a backdrop fills the frame bottom-anchored and centred, mirrored past its sides, the sky above', () => {
+  // A 12 × 6 frame around an 8 × 4 painting: the painting lands at (2, 2).
+  const f = composeFrame(model({ box: { columns: 12, rows: 3 }, backdrop: painting() }), {
+    numbers: false,
+  })
+  expect(backdropOrigin(painting(), 12, 6)).toEqual({ x: 2, y: 2 })
+  expect(rgbAt(f, 5, 3)).toBe(0x010101 * (1 + 8 + 3))
+  // Past the sides: the painting mirrored (frame x 0 is painting column 1, x 11 is column 6);
+  // above it: its top row. No frame pixel stays transparent.
+  expect(rgbAt(f, 0, 0)).toBe(0x010101 * 2)
+  expect(rgbAt(f, 11, 5)).toBe(0x010101 * (1 + 24 + 6))
+  expect(rgbAt(f, 1, 4)).toBe(0x010101 * (1 + 16))
+  expect(rgbAt(f, 1, 2)).toBe(0x010101 * 1)
+  expect(opaqueIn(f, 12, 6)).toBe(72)
+  // No ground strip over it: the bottom row is the painting's.
+  expect(rgbAt(f, 2, 5)).toBe(0x010101 * (1 + 24))
+})
+
+test('a frame smaller than its backdrop crops the sides evenly and the sky', () => {
+  const f = composeFrame(model({ box: { columns: 4, rows: 1 }, backdrop: painting() }), {
+    numbers: false,
+  })
+  expect(backdropOrigin(painting(), 4, 2)).toEqual({ x: -2, y: -2 })
+  expect(rgbAt(f, 0, 0)).toBe(0x010101 * (1 + 16 + 2))
+  expect(rgbAt(f, 3, 1)).toBe(0x010101 * (1 + 24 + 5))
+})
+
+test('mirrored continues a row past both edges without a seam', () => {
+  expect([-3, -2, -1, 0, 1, 7, 8, 9, 15, 16, 17].map((i) => mirrored(i, 8))).toEqual([
+    2, 1, 0, 0, 1, 7, 7, 6, 0, 0, 1,
+  ])
 })
