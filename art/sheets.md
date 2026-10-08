@@ -540,6 +540,10 @@ nearest other entry:
   no chest sigil in one region; the cyan specks on the body move to a lighter cyan.
 - archer and its attack: the cape (`#fbeb05`, `#fbed03`).
 
+2026-10-08, the frames (phase 4 PR 3): the script ends by re-cutting every drawn frame and the
+three effect sprites from their frames sheets, as each sheet's section records, and writing the
+five hand-fixed hero frames back from their grids (`art/sheets/grids/hires-hero-<name>-<frame>.txt`).
+
 ```sh
 # Re-cuts every shipped sprite from its sheet. Run from the repository root.
 set -e
@@ -580,6 +584,77 @@ for g in hero-knight hero-black_mage hero-white_mage hero-archer hero_attack-kni
   pnpm -s grid --png art/sheets/grids/hires-$g.txt art/sprites-hires/${g/-//}.png >/dev/null
 done
 rm -rf art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-hero-cuts
+
+# The frames (phase 4 PR 3): the drawn frames, the effect sprites, the hand-fixed hero frames.
+# frames-heroes
+cut art/sheets/frames-heroes.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names hero/knight-windup,hero/knight-follow,hero/black_mage-windup,x/w,hero/archer-windup,x/a,x/b,x/c
+cut art/sheets/frames-heroes.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names x/a,x/b,x/c,hero/white_mage-windup,x/d,x/e,x/f,x/g
+cut art/sheets/frames-heroes.png art/sprites --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-hires --row 0 --names x/d,x/e,x/f,x/g,x/h,effect/fireball,effect/light_burst,effect/arrow
+# frames-monsters-1
+cut art/sheets/frames-monsters-1.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/road_slime-windup,enemy/field_rat-windup,enemy/goblin_scout-windup,enemy/hedge_sprite-windup,enemy/bramble_wolf-windup,enemy/moss_golem-windup,enemy/wood_goblin-windup,enemy/whisper_wisp-windup
+cut art/sheets/frames-monsters-1.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/road_slime-strike,enemy/field_rat-strike,enemy/goblin_scout-strike,enemy/hedge_sprite-strike,enemy/bramble_wolf-strike,enemy/moss_golem-strike,enemy/wood_goblin-strike,enemy/whisper_wisp-strike
+# frames-monsters-2
+cut art/sheets/frames-monsters-2.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/bog_lurker-windup,enemy/marsh_leech-windup,enemy/mire_toad-windup,enemy/will_o_wisp-windup,enemy/barrow_wight-windup,enemy/grave_hound-windup,enemy/bone_soldier-windup,enemy/cairn_crawler-windup
+cut art/sheets/frames-monsters-2.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 3 --names enemy/bog_lurker-strike,enemy/marsh_leech-strike,enemy/mire_toad-strike,enemy/will_o_wisp-strike,enemy/barrow_wight-strike,enemy/grave_hound-strike,enemy/bone_soldier-strike,enemy/cairn_crawler-strike
+# frames-monsters-3
+cut art/sheets/frames-monsters-3.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/salt_crab-windup,enemy/gull_harpy-windup,enemy/drowned_sailor-windup,enemy/tide_witch-windup,enemy/ember_imp-windup,enemy/magma_beetle-windup,enemy/cinder_orc-windup,enemy/flame_adept-windup
+cut art/sheets/frames-monsters-3.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/salt_crab-strike,enemy/gull_harpy-strike,enemy/drowned_sailor-strike,enemy/tide_witch-strike,enemy/ember_imp-strike,enemy/magma_beetle-strike,enemy/cinder_orc-strike,enemy/flame_adept-strike --gutters 214
+# frames-monsters-4
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/frost_wolf-windup,enemy/ice_troll-windup,enemy/rime_golem-windup,enemy/snow_shaman-windup,enemy/drowned_monk-windup,enemy/abbey_gargoyle-windup,enemy/bell_wraith-windup,enemy/eel_serpent-windup
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names x/s0,x/s1,x/s2,x/s3,enemy/drowned_monk-strike,enemy/abbey_gargoyle-strike,enemy/bell_wraith-strike,enemy/eel_serpent-strike --gutters 206,364,598,732,1348
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 3 --names enemy/frost_wolf-strike,enemy/ice_troll-strike,enemy/rime_golem-strike,enemy/snow_shaman-strike,x/s4,x/s5,x/s6,x/s7 --gutters 745,986,1370
+# frames-monsters-5
+cut art/sheets/frames-monsters-5.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/ash_ghoul-windup,enemy/dust_stalker-windup,enemy/cinder_colossus-windup,enemy/ash_oracle-windup,enemy/star_sentinel-windup,enemy/comet_hound-windup,enemy/spire_warden-windup,enemy/astral_seer-windup
+cut art/sheets/frames-monsters-5.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/ash_ghoul-strike,enemy/dust_stalker-strike,enemy/cinder_colossus-strike,enemy/ash_oracle-strike,enemy/star_sentinel-strike,enemy/comet_hound-strike,enemy/spire_warden-strike,enemy/astral_seer-strike --gutters 1352
+# frames-monsters-6
+cut art/sheets/frames-monsters-6.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/hollow_knight-windup,enemy/court_jester-windup,enemy/throne_guard-windup,enemy/court_mage-windup,enemy/ink_horror-windup,enemy/blank_page-windup,enemy/quill_golem-windup,enemy/erased_scribe-windup
+cut art/sheets/frames-monsters-6.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/hollow_knight-strike,enemy/court_jester-strike,enemy/throne_guard-strike,enemy/court_mage-strike,enemy/ink_horror-strike,enemy/blank_page-strike,enemy/quill_golem-strike,enemy/erased_scribe-strike --gutters 202
+# frames-bosses-1
+cut art/sheets/frames-bosses-1.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/bandit_captain-windup,enemy/wild_boar-windup
+cut art/sheets/frames-bosses-1.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/bandit_captain-strike,enemy/wild_boar-strike
+# frames-bosses-2
+cut art/sheets/frames-bosses-2.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/elder_treant-windup,enemy/owlbear_cub-windup
+cut art/sheets/frames-bosses-2.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/elder_treant-strike,enemy/owlbear_cub-strike
+# frames-bosses-3
+cut art/sheets/frames-bosses-3.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/sigh_hag-windup,enemy/giant_heron-windup
+cut art/sheets/frames-bosses-3.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/sigh_hag-strike,enemy/giant_heron-strike
+# frames-bosses-4
+cut art/sheets/frames-bosses-4.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/barrow_king-windup,enemy/crypt_ogre-windup
+cut art/sheets/frames-bosses-4.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/barrow_king-strike,enemy/crypt_ogre-strike
+# frames-bosses-5
+cut art/sheets/frames-bosses-5.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/glass_leviathan-windup,enemy/reef_troll-windup
+cut art/sheets/frames-bosses-5.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/glass_leviathan-strike,enemy/reef_troll-strike
+# frames-bosses-6
+cut art/sheets/frames-bosses-6.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/emberfall_wyrm-windup,enemy/slag_giant-windup
+cut art/sheets/frames-bosses-6.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/emberfall_wyrm-strike,enemy/slag_giant-strike
+# frames-bosses-7
+cut art/sheets/frames-bosses-7.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/frostvein_yeti-windup,enemy/avalanche_drake-windup
+cut art/sheets/frames-bosses-7.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/frostvein_yeti-strike,enemy/avalanche_drake-strike
+# frames-bosses-8
+cut art/sheets/frames-bosses-8.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/sunken_abbot-windup,enemy/choir_of_bones-windup
+cut art/sheets/frames-bosses-8.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/sunken_abbot-strike,enemy/choir_of_bones-strike
+# frames-bosses-9
+cut art/sheets/frames-bosses-9.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/waste_tyrant-windup,enemy/sand_basilisk-windup
+cut art/sheets/frames-bosses-9.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/waste_tyrant-strike,enemy/sand_basilisk-strike
+# frames-bosses-10
+cut art/sheets/frames-bosses-10.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/fallen_star-windup,enemy/void_manta-windup
+cut art/sheets/frames-bosses-10.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/fallen_star-strike,enemy/void_manta-strike
+# frames-bosses-11
+cut art/sheets/frames-bosses-11.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/hollow_king-windup,enemy/royal_chimera-windup
+cut art/sheets/frames-bosses-11.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/hollow_king-strike,enemy/royal_chimera-strike
+# frames-bosses-12
+cut art/sheets/frames-bosses-12.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/unwritten_one-windup,enemy/margin_beast-windup
+cut art/sheets/frames-bosses-12.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/unwritten_one-strike,enemy/margin_beast-strike
+# frames-bosses-13
+cut art/sheets/frames-bosses-13.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names world_boss/the_promptwyrm-windup,world_boss/hallucinox-windup
+cut art/sheets/frames-bosses-13.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names world_boss/the_promptwyrm-strike,world_boss/hallucinox-strike
+# frames-bosses-14
+cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names world_boss/the_context_leviathan-windup,world_boss/tokenmaw-windup
+cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
+for g in knight-windup knight-follow black_mage-windup white_mage-windup archer-windup; do
+  pnpm -s grid --png art/sheets/grids/hires-hero-$g.txt art/sprites-frames/hero/$g.png >/dev/null
+done
+rm -rf art/sprites/x art/sprites-hires/x art/sprites-frames/x art/sheets/native/x /tmp/promptfall-frame-cuts
 ```
 
 ## frames-heroes.png
@@ -1395,6 +1470,10 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_cont
 ```
 
 ## Redos (frames)
+
+Kevin, 2026-10-08: the frames ship as drawn. The 22 runs of PR 3 spent most of a weekly codex
+window, and redoing this list would cost about 19 more with the same prompts. The list is a set of
+candidates for a later pass that refines the sprites and frames, not a redo order.
 
 | Id | Frame | From | Note |
 | --- | --- | --- | --- |

@@ -161,8 +161,21 @@ _Avoid_: scene, arena, battlefield, viewport
 The pixel art of one hero class, enemy, world boss or item, with its animation frames.
 Replaces the glyph where pixels draw; the glyph stays as its fallback. Each sprite has two
 drawings of the same design: its **1.5× art**, for the stage on surfaces that draw pictures, and
-its **1× art**, for half-block terminals, the compact stage and the list windows.
+its **1× art**, for half-block terminals, the compact stage and the list windows. Its frames are
+1.5× art only.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
+
+**Frame**:
+One drawing of a sprite's animation on the stage: idle A, idle B, wind-up, strike,
+follow-through or hit. Wind-up, strike and follow-through are drawn; idle B and hit are derived
+from idle A by fixed transforms. Every frame sits on the idle art's canvas.
+_Avoid_: cel, pose (for the frames themselves; a pose is which frame an actor shows)
+
+**Effect sprite**:
+The fireball, light burst or arrow the stage moves during a hero's action: a bolt flies from the
+caster to its target, a burst sits on it. An ordinary sprite of kind `effect`. The sim's
+`Effect` (a combat event) is unrelated.
+_Avoid_: projectile, particle, VFX
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
