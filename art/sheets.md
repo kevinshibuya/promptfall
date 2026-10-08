@@ -1302,6 +1302,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-12.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-12.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/unwritten_one-windup,enemy/margin_beast-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/unwritten_one-strike,enemy/margin_beast-strike
+```
+
 ## frames-bosses-13.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-13.png` (`pnpm refsheet art/sheets/ref-frames-bosses-13.png
@@ -1465,3 +1474,8 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:fallen_star` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 70% |
 | `enemy:void_manta` | windup | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 75% |
 | `enemy:void_manta` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 64% |
+| `enemy:unwritten_one` | strike | frames-bosses-12 | frame size drift: native 95 against idle 61 (+56%) |
+| `enemy:margin_beast` | windup | frames-bosses-12 | frame size drift: native 84 against idle 67 (+25%) |
+| `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: native 97 against idle 67 (+45%) |
+| `enemy:margin_beast` | windup | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 78% |

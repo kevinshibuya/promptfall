@@ -802,14 +802,22 @@
       "id": "enemy:unwritten_one",
       "file": "sprites/enemy/unwritten_one.png",
       "fileHires": "sprites-hires/enemy/unwritten_one.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/unwritten_one-windup.png",
+        "strike": "sprites-frames/enemy/unwritten_one-strike.png"
+      }
     },
     {
       "id": "enemy:margin_beast",
       "file": "sprites/enemy/margin_beast.png",
       "fileHires": "sprites-hires/enemy/margin_beast.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/margin_beast-windup.png",
+        "strike": "sprites-frames/enemy/margin_beast-strike.png"
+      }
     },
     {
       "id": "world_boss:the_promptwyrm",
