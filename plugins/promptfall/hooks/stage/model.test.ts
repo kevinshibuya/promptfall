@@ -43,14 +43,15 @@ const actor = (actors: StageActor[], key: string) => {
 const overlaps = (a: StageActor, b: StageActor) =>
   a.x < b.x + b.art.width && b.x < a.x + a.art.width
 
-test('enemies from the left by slot, heroes from the right, feet on the ground, no overlap', () => {
+test('enemies from the left by slot, heroes in party order with the last at the right, feet on the ground, no overlap', () => {
   const m = at()
   ;['e1', 'e2', 'e3'].forEach((key, i) => {
     expect(actor(m.actors, key).x).toBe(ACTOR_EDGE + ACTOR_PITCH * i)
   })
+  // Left to right as the heroes window lists them: the first faces the enemies, the last stands back.
   ;['h1', 'h2', 'h3'].forEach((key, i) => {
     const a = actor(m.actors, key)
-    expect(a.x).toBe(116 - ACTOR_EDGE - 16 - ACTOR_PITCH * i)
+    expect(a.x).toBe(116 - ACTOR_EDGE - 16 - ACTOR_PITCH * (2 - i))
     expect(a.flipX).toBe(true)
   })
   for (const a of m.actors) expect(a.y + a.art.height).toBe(16)
@@ -75,7 +76,7 @@ test('the rarity slot takes the hero rarity colour', () => {
 test('a flashing actor draws white; a lunging hero steps toward the enemies', () => {
   const effects: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
   const mid = at(wave(), effects, NOW + LUNGE_MS / 2)
-  expect(actor(mid.actors, 'h1').x).toBe(116 - ACTOR_EDGE - 16 - LUNGE_PX)
+  expect(actor(mid.actors, 'h1').x).toBe(116 - ACTOR_EDGE - 16 - ACTOR_PITCH * 2 - LUNGE_PX)
   const e1 = actor(mid.actors, 'e1')
   expect(e1.flashing).toBe(true)
   expect(e1.palette.slice(1).every((c) => c === FLASH_RGB)).toBe(true)
@@ -113,7 +114,7 @@ test('a fallen hero has its palette halved per channel', () => {
 test('the compact box uses compact art, the compact pitch and no edge', () => {
   const m = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
   expect(actor(m.actors, 'e2').x).toBe(COMPACT_PITCH)
-  expect(actor(m.actors, 'h1').x).toBe(52 - actor(m.actors, 'h1').art.width)
+  expect(actor(m.actors, 'h3').x).toBe(52 - actor(m.actors, 'h3').art.width)
   for (const a of m.actors) expect(a.art.height).toBeLessThanOrEqual(8)
 })
 
@@ -160,8 +161,8 @@ test('at scale 1.5 the full stage carries the 1.5x art and every distance grows 
   expect(h1.art).toBe(knight.hires)
   expect(h1.raritySlot).toBe(knight.raritySlotHires)
   expect(h1.palette[knight.raritySlotHires ?? -1]).toBe(RARITY_RGB[wave().heroes[0]?.rarity ?? ''])
-  // 116 columns are 174 pixels; edge 6, pitch 27.
-  expect(h1.x).toBe(174 - 6 - 24)
+  // 116 columns are 174 pixels; edge 6, pitch 27. The knight leads, two pitches in from the edge.
+  expect(h1.x).toBe(174 - 6 - 24 - 2 * 27)
   expect(actor(rest.actors, 'h2').x).toBe(174 - 6 - 24 - 27)
   expect(actor(rest.actors, 'e1').x).toBe(6)
   expect(actor(rest.actors, 'e2').x).toBe(6 + 27)
