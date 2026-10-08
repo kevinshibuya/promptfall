@@ -1376,6 +1376,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-14.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-14.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names world_boss/the_context_leviathan-windup,world_boss/tokenmaw-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
+```
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -1494,3 +1503,7 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:hollow_king` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 78% |
 | `enemy:royal_chimera` | windup | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
 | `enemy:royal_chimera` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
+| `world_boss:the_context_leviathan` | windup | frames-bosses-14 | frame size drift: native 57 against idle 73 (-22%) |
+| `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: native 89 against idle 73 (+22%) |
+| `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `world_boss:tokenmaw` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 72% |

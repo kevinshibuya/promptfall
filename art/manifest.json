@@ -843,13 +843,21 @@
       "id": "world_boss:the_context_leviathan",
       "file": "sprites/world_boss/the_context_leviathan.png",
       "fileHires": "sprites-hires/world_boss/the_context_leviathan.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/world_boss/the_context_leviathan-windup.png",
+        "strike": "sprites-frames/world_boss/the_context_leviathan-strike.png"
+      }
     },
     {
       "id": "world_boss:tokenmaw",
       "file": "sprites/world_boss/tokenmaw.png",
       "fileHires": "sprites-hires/world_boss/tokenmaw.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/world_boss/tokenmaw-windup.png",
+        "strike": "sprites-frames/world_boss/tokenmaw-strike.png"
+      }
     },
     {
       "id": "item:iron_sword",
