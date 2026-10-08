@@ -94,4 +94,22 @@ describe('contact', () => {
       expect(existsSync(join(out, 'zone-1', `enemy-${def}-frames.png`)), def).toBe(framed)
     }
   })
+
+  it('writes the action shots: a strike and a hit per zone, a bolt and a burst for the heroes', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'contact-'))
+    const out = join(dir, 'out')
+    contact({ kind: 'zone', zone: 1 }, { out, native: join(dir, 'native') })
+    contact({ kind: 'heroes' }, { out, native: join(dir, 'native') })
+    for (const shot of [
+      'zone-1/stage-strike',
+      'zone-1/stage-hit',
+      'heroes/stage-bolt',
+      'heroes/stage-burst',
+    ]) {
+      const img = readPng(join(out, `${shot}.png`))
+      expect([img.width, img.height], shot).toEqual([720, 96])
+    }
+    const strike = readFileSync(join(out, 'zone-1/stage-strike.png'))
+    expect(strike.equals(readFileSync(join(out, 'zone-1/stage-hit.png')))).toBe(false)
+  })
 })

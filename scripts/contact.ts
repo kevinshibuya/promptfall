@@ -128,6 +128,23 @@ function staged(view: GameView, scale: 1 | 1.5): Frame {
   })
 }
 
+/** The view at 1.5 `ms` after `actor` struck `target`, at 4x. */
+function acting(view: GameView, actor: string, target: string, ms: number): Rgba {
+  const t = new StageTimeline()
+  t.observe(view, NOW - SETTLED)
+  t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target, amount: 9 },
+    ],
+    NOW - ms,
+  )
+  t.observe(view, NOW)
+  const box = { columns: 120, rows: t.rowsAt(view, NOW) }
+  const model = stageAt(view, t, NOW, box, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  return scaled(rgbaOf(composeFrame(model, { numbers: false })), 4)
+}
+
 export function contact(target: ContactTarget, opts: { out: string; native: string }): string[] {
   const label = target.kind === 'zone' ? `zone-${target.zone}` : target.kind
   const folder = join(opts.out, label)
@@ -179,6 +196,12 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
       views('stage-rest', inZone(wave(), target.zone, zone.enemies.slice(0, 3)))
       views('stage-boss', inZone(boss(), target.zone, [zone.boss]))
       views('stage-turn', inZone(turnBoss(), target.zone, [zone.turnBoss]))
+      // The front enemy strikes the knight: 150 ms in (strike frame, lunge returning, the knight's
+      // hit frame and blink), then 240 ms in (the hit frame, the blink over).
+      const rest = inZone(wave(), target.zone, zone.enemies.slice(0, 3))
+      const front = rest.enemies[0]?.id ?? ''
+      put('stage-strike', acting(rest, front, 'h1', 150))
+      put('stage-hit', acting(rest, front, 'h1', 240))
       break
     }
     case 'heroes': {
@@ -197,6 +220,9 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
           }
         }
       }
+      // The black mage's fireball halfway, the white mage's burst on its target, 220 ms in.
+      put('stage-bolt', acting(wave(), 'h2', 'e1', 220))
+      put('stage-burst', acting(wave(), 'h3', 'e1', 220))
       break
     }
     case 'items':
