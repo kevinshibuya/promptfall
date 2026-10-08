@@ -238,10 +238,8 @@ test('sandbox level raises a hero level by level, refuses its own level and stop
   expect(toasts.filter((t) => t.includes(' reached level '))).toEqual([])
   expect(await run('level ald 7')).toBe(`Sandbox: ${name} is level 7`)
   expect(aldric()?.level).toBe(7)
-  expect(toasts.filter((t) => t.includes(' reached level '))).toEqual([
-    `${name} reached level 6`,
-    `${name} reached level 7`,
-  ])
+  // One burst levels it twice: one toast, at the highest level.
+  expect(toasts.filter((t) => t.includes(' reached level '))).toEqual([`${name} reached level 7`])
   expect(await run('level ald 99')).toBe(`Sandbox: ${name} is level 20, the common cap`)
   expect(aldric()?.level).toBe(20)
   expect(await run('level ald 30')).toBe(`Sandbox: ${name} is level 20, the common cap`)
