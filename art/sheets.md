@@ -1009,6 +1009,21 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-4.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-4.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/barrow_king-windup,enemy/crypt_ogre-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/barrow_king-strike,enemy/crypt_ogre-strike
+```
+
+## The 5-hour window stops (frames)
+
+- 2026-10-08 01:05: the window stood at 94% after boss sheet 4 (sheets: the hero sheet, monster
+  sheets 1 to 6, boss sheets 1 to 4 and the rerun of boss sheet 1, 12 runs). It resets at 03:04;
+  boss sheet 5 is next.
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -1076,3 +1091,10 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:giant_heron` | strike | frames-bosses-3 | frame size drift: native 103 against idle 66 (+56%) |
 | `enemy:giant_heron` | windup | frames-bosses-3 | frame size drift: the fit to the idle canvas shrinks it to 71% |
 | `enemy:giant_heron` | strike | frames-bosses-3 | frame size drift: the fit to the idle canvas shrinks it to 67% |
+| `enemy:barrow_king` | strike | frames-bosses-4 | frame size drift: native 73 against idle 54 (+35%) |
+| `enemy:crypt_ogre` | windup | frames-bosses-4 | frame size drift: native 45 against idle 34 (+32%) |
+| `enemy:crypt_ogre` | strike | frames-bosses-4 | frame size drift: native 61 against idle 34 (+79%) |
+| `enemy:barrow_king` | windup | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 76% |
+| `enemy:barrow_king` | strike | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:crypt_ogre` | windup | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 56% |
+| `enemy:crypt_ogre` | strike | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 56% |

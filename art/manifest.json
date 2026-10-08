@@ -322,14 +322,22 @@
       "id": "enemy:barrow_king",
       "file": "sprites/enemy/barrow_king.png",
       "fileHires": "sprites-hires/enemy/barrow_king.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/barrow_king-windup.png",
+        "strike": "sprites-frames/enemy/barrow_king-strike.png"
+      }
     },
     {
       "id": "enemy:crypt_ogre",
       "file": "sprites/enemy/crypt_ogre.png",
       "fileHires": "sprites-hires/enemy/crypt_ogre.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/crypt_ogre-windup.png",
+        "strike": "sprites-frames/enemy/crypt_ogre-strike.png"
+      }
     },
     {
       "id": "enemy:salt_crab",
