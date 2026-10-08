@@ -14,6 +14,7 @@ import {
   NUMBER_RGB_ENEMY,
   NUMBER_RGB_HEAL,
   NUMBER_RGB_HERO,
+  SLIDE_MS,
   SPAWN_MS,
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
@@ -124,6 +125,8 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
+  /** Each enemy's place in the line, left to right in slot order, and the slide that took it there. */
+  private places = new Map<string, { from: number; to: number; start: number; until: number }>()
   /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
   private actions_: (Action & { keep: number })[] = []
 
@@ -190,6 +193,32 @@ export class StageTimeline {
       }
     }
     this.observed = true
+    this.settlePlaces(now)
+  }
+
+  /** Enemies stand side by side: a gap closes with a slide, a newcomer starts in its place. */
+  private settlePlaces(now: number): void {
+    const order = this.known()
+    const ids = new Set(order.map((k) => k.id))
+    for (const id of this.places.keys()) if (!ids.has(id)) this.places.delete(id)
+    order.forEach((known, place) => {
+      const current = this.places.get(known.id)
+      if (current === undefined) {
+        this.places.set(known.id, { from: place, to: place, start: now, until: now })
+      } else if (current.to !== place) {
+        const from = this.placeAt(known.id, now)
+        this.places.set(known.id, { from, to: place, start: now, until: now + SLIDE_MS })
+      }
+    })
+  }
+
+  /** An enemy's place in the line, fractional while it slides (eased out); its slot if unknown. */
+  placeAt(id: string, now: number): number {
+    const p = this.places.get(id)
+    if (p === undefined) return this.entries.get(id)?.slot ?? 0
+    if (now >= p.until) return p.to
+    const t = (now - p.start) / (p.until - p.start)
+    return p.from + (p.to - p.from) * (1 - (1 - t) * (1 - t))
   }
 
   /**
@@ -447,6 +476,7 @@ export class StageTimeline {
   }
 
   isBusy(now: number): boolean {
+    if ([...this.places.values()].some((p) => p.until > now)) return true
     return this.motions.some((m) => m.until > now)
   }
 

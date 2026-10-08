@@ -37,6 +37,8 @@ export const NUMBER_MS = 700
 export const NUMBER_RISE_PX = 6
 export const DISSOLVE_MS = 420
 export const SPAWN_MS = 360
+/** An enemy's slide into the gap a departed one left. */
+export const SLIDE_MS = 240
 export const DROP_MS = 600
 export const DROP_RISE_PX = 10
 export const IDLE_FRAME_MS = 500

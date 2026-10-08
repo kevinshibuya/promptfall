@@ -11,6 +11,7 @@ import {
   LUNGE_MS,
   NUMBER_MS,
   NUMBER_RGB_HEAL,
+  SLIDE_MS,
   SPAWN_MS,
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
@@ -213,6 +214,26 @@ test('a departed enemy dissolves after its last flash and keeps its slot until t
   expect(t.known().find((k) => k.id === 'e1')?.slot).toBe(0)
   t.observe(v, flashEnd + DISSOLVE_MS)
   expect(t.known().map((k) => k.id)).toEqual(['e2', 'e3'])
+})
+
+test('enemies stand side by side: once one is gone, the ones after it slide over', () => {
+  const t = observed()
+  expect(['e1', 'e2', 'e3'].map((id) => t.placeAt(id, NOW))).toEqual([0, 1, 2])
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id !== 'e2')
+  // Dissolving, e2 still holds its place.
+  t.observe(v, NOW)
+  expect(t.placeAt('e3', NOW + 10)).toBe(2)
+  // Gone: e3 slides from 2 to 1, and the stage is busy while it does.
+  const gone = NOW + DISSOLVE_MS
+  t.observe(v, gone)
+  expect(t.placeAt('e3', gone)).toBe(2)
+  const mid = t.placeAt('e3', gone + SLIDE_MS / 2)
+  expect(mid).toBeGreaterThan(1)
+  expect(mid).toBeLessThan(2)
+  expect(t.isBusy(gone + SLIDE_MS / 2)).toBe(true)
+  expect(t.placeAt('e3', gone + SLIDE_MS)).toBe(1)
+  expect(t.placeAt('e1', gone + SLIDE_MS)).toBe(0)
 })
 
 test('survivors keep their slots and a newcomer takes the lowest free one, with a spawn', () => {
