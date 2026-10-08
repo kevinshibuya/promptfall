@@ -898,6 +898,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-1.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike), from the rerun pf3-frames-bosses-1b: the first run came back on black with a glow (kept as frames-bosses-1-black.png, unused).
+
+```sh
+D=art/sheets/frames-bosses-1.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/bandit_captain-windup,enemy/wild_boar-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/bandit_captain-strike,enemy/wild_boar-strike
+```
+
 ## frames-bosses-2.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-2.png` (`pnpm refsheet art/sheets/ref-frames-bosses-2.png
@@ -992,3 +1001,7 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/elder_treant-
 | `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: native 79 against idle 46 (+72%) |
 | `enemy:owlbear_cub` | windup | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 75% |
 | `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 64% |
+| `enemy:bandit_captain` | strike | frames-bosses-1 | frame size drift: native 94 against idle 58 (+62%) |
+| `enemy:wild_boar` | strike | frames-bosses-1 | frame size drift: native 85 against idle 53 (+60%) |
+| `enemy:wild_boar` | windup | frames-bosses-1 | frame size drift: the fit to the idle canvas shrinks it to 70% |
+| `enemy:wild_boar` | strike | frames-bosses-1 | frame size drift: the fit to the idle canvas shrinks it to 74% |

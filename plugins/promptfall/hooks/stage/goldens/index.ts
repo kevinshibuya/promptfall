@@ -20,6 +20,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
   bolt: {rasterHash: "a3b15fd50129a231", imageHash: "86c8e09fc4afb03f", svgHash: "c3a604bec6bae69c", svgChars: 19755, rasterPairs: 56, imageHashHires: "c9dad9c53ba2fd26", svgHashLo: "359b7f603b327368"},
   burst: {rasterHash: "0de37bd3e057b723", imageHash: "f58e693c9ce1b2de", svgHash: "aa9450a433286062", svgChars: 22938, rasterPairs: 51, imageHashHires: "728236d1f25fa816", svgHashLo: "03e9fa05cd2c5500"},
   'enemy-strike': {rasterHash: "2dc3842800862923", imageHash: "064b27b440bd6c83", svgHash: "7a09e5932eeed2be", svgChars: 20490, rasterPairs: 51, imageHashHires: "1e29457513680fc1", svgHashLo: "1ebe859e91defd51"},
+  'boss-strike': {rasterHash: "1475527f413204ba", imageHash: "8b5bcd3a9716c3f5", svgHash: "82c964dc7f532e0a", svgChars: 32734, rasterPairs: 79, imageHashHires: "b7d664cc0e994018", svgHashLo: "b1c24ba3231aea2d"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {

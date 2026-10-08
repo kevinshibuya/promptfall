@@ -51,6 +51,7 @@ export const SCENARIOS = [
   'bolt',
   'burst',
   'enemy-strike',
+  'boss-strike',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -143,6 +144,19 @@ export function stage(name: Scenario): Staged {
     // The goblin scout 150 ms into its action: its strike frame, the knight's hit frame.
     case 'enemy-strike':
       return attacking('e1', 150, 'h1')
+    // The bandit captain 60 ms into its attack on the knight: its wind-up frame, the lunge out.
+    case 'boss-strike': {
+      t.observe(boss(), NOW - 60)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e9', action: 'attack', at: 0 },
+          { k: 'hit', by: 'e9', target: 'h1', amount: 31 },
+        ],
+        NOW - 60,
+      )
+      t.observe(boss(), NOW)
+      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+    }
     case 'rest': {
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)

@@ -371,3 +371,10 @@ test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a
   expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
   expect(svg.length).toBe(51_341)
 })
+
+test('the bandit captain 60 ms into its attack, on its drawn frames: a 1.5x SMIL Svg of 32,734 characters, under the cap', () => {
+  const s = stage('boss-strike')
+  const svg = renderSvg(s.hires, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  expect(svg.length).toBe(32_734)
+  expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+})

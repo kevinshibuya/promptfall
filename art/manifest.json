@@ -139,14 +139,22 @@
       "id": "enemy:bandit_captain",
       "file": "sprites/enemy/bandit_captain.png",
       "fileHires": "sprites-hires/enemy/bandit_captain.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/bandit_captain-windup.png",
+        "strike": "sprites-frames/enemy/bandit_captain-strike.png"
+      }
     },
     {
       "id": "enemy:wild_boar",
       "file": "sprites/enemy/wild_boar.png",
       "fileHires": "sprites-hires/enemy/wild_boar.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/wild_boar-windup.png",
+        "strike": "sprites-frames/enemy/wild_boar-strike.png"
+      }
     },
     {
       "id": "enemy:bramble_wolf",
