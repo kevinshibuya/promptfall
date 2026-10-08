@@ -192,14 +192,22 @@
       "id": "enemy:elder_treant",
       "file": "sprites/enemy/elder_treant.png",
       "fileHires": "sprites-hires/enemy/elder_treant.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/elder_treant-windup.png",
+        "strike": "sprites-frames/enemy/elder_treant-strike.png"
+      }
     },
     {
       "id": "enemy:owlbear_cub",
       "file": "sprites/enemy/owlbear_cub.png",
       "fileHires": "sprites-hires/enemy/owlbear_cub.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/owlbear_cub-windup.png",
+        "strike": "sprites-frames/enemy/owlbear_cub-strike.png"
+      }
     },
     {
       "id": "enemy:bog_lurker",

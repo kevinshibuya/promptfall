@@ -429,6 +429,7 @@ describe('sprites build', () => {
       expect(r.errors).toEqual([])
       const strike = r.sprites[0]?.frames?.strike.art
       expect(strike).toMatchObject({ width: 60, height: 40 })
+      expect(r.drift).toEqual([])
       // shrunk to 60 × 38 and padded bottom-centred: the top two rows are empty
       expect([...(strike?.idx.subarray(0, 120) ?? [])].every((v) => v === 0)).toBe(true)
       expect(strike?.idx[2 * 60]).not.toBe(0)
@@ -488,6 +489,21 @@ describe('sprites build', () => {
       ])
       expect(r.errors).toEqual([])
       expect(r.drift).toEqual(['enemy:d frames.windup: native 26 against idle 20 (+30%)'])
+    })
+
+    it('lists a frame the fit shrinks by more than 20%', () => {
+      MEM.set('fr/90x44.png', solid(90, 44))
+      const r = build([
+        {
+          id: 'enemy:boss',
+          file: 'snes-48x34.png',
+          fileHires: 'fr/60x40.png',
+          style: 'snes',
+          frames: { windup: 'fr/60x40.png', strike: 'fr/90x44.png' },
+        },
+      ])
+      expect(r.errors).toEqual([])
+      expect(r.drift).toEqual(['enemy:boss frames.strike: the fit shrinks it to 67%'])
     })
 
     it('expects the three effect sprites', async () => {

@@ -67,7 +67,10 @@ export type BuildResult = {
   errors: string[]
   sprites: BuiltSprite[]
   art: Map<string, Variants>
-  /** Frames whose native's long side is over 20% off its idle native's: a report, not an error. */
+  /**
+   * Frames whose native's long side is over 20% off its idle native's, or that the fit to the idle
+   * canvas shrinks by more than 20%: a report, not an error.
+   */
   drift: string[]
 }
 
@@ -350,6 +353,9 @@ function buildFrame(
     )
   }
   art = pad(art, idle.width, idle.height)
+  if (s < 1 - FRAME_DRIFT) {
+    drift.push(`${id} frames.${name}: the fit shrinks it to ${Math.round(s * 100)}%`)
+  }
 
   const idleFile = entry.file
   const frameNative = input.load(nativeOf(path))

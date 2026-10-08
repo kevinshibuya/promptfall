@@ -926,6 +926,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-2.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-2.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/elder_treant-windup,enemy/owlbear_cub-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/elder_treant-strike,enemy/owlbear_cub-strike
+```
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -979,3 +988,7 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:quill_golem` | strike | frames-monsters-6 | frame size drift: native 33 against idle 22 (+50%) |
 | `enemy:erased_scribe` | windup | frames-monsters-6 | frame size drift: native 26 against idle 21 (+24%) |
 | `enemy:erased_scribe` | strike | frames-monsters-6 | frame size drift: native 27 against idle 21 (+29%) |
+| `enemy:elder_treant` | strike | frames-bosses-2 | frame size drift: native 100 against idle 66 (+52%) |
+| `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: native 79 against idle 46 (+72%) |
+| `enemy:owlbear_cub` | windup | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 64% |
