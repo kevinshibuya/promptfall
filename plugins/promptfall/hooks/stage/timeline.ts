@@ -2,9 +2,12 @@ import type { GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
 import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
+  BOLT_MS,
+  BURST_MS,
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
+  FOLLOW_MS,
   IDLE_FRAME_MS,
   LUNGE_MS,
   NUMBER_MS,
@@ -15,11 +18,29 @@ import {
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
   STAGE_TURN_BOSS_ROWS,
+  WINDUP_MS,
 } from './tuning'
+
+/** How an actor attacks: enemies lunge; heroes by class (grill Q20). */
+export type AttackShape = 'lunge' | 'lunge_follow' | 'bolt' | 'burst'
+export type EffectId = 'fireball' | 'light_burst' | 'arrow'
 
 export type Motion =
   | { kind: 'lunge'; actor: string; from: number; until: number; dir: 1 | -1 }
   | { kind: 'flash'; actor: string; from: number; until: number }
+  | { kind: 'windup'; actor: string; from: number; until: number }
+  | { kind: 'strike'; actor: string; from: number; until: number; shape: AttackShape }
+  | { kind: 'follow'; actor: string; from: number; until: number }
+  | { kind: 'hit'; actor: string; from: number; until: number }
+  | {
+      kind: 'effect'
+      actor: string
+      target: string
+      effect: EffectId
+      from: number
+      until: number
+      shape: 'bolt' | 'burst'
+    }
   | { kind: 'number'; actor: string; text: string; rgb: number; from: number; until: number }
   | { kind: 'dissolve'; actor: string; from: number; until: number }
   | { kind: 'spawn'; actor: string; from: number; until: number }
@@ -30,8 +51,34 @@ export type Known = { id: string; spriteId: string; kind: string; slot: number; 
 
 const SLOTS = 3
 
-/** An action's lunge and its impact flash: the next action starts once both are over. */
-export const ACTION_MS = Math.max(LUNGE_MS, LUNGE_MS / 2 + FLASH_MS)
+/**
+ * The attacker's longest busy span: the knight's lunge and follow-through, a bolt's wind-up and
+ * flight, or a lunge's impact flash. The next action starts once it is over.
+ */
+export const ACTION_MS = Math.max(
+  LUNGE_MS + FOLLOW_MS,
+  WINDUP_MS + BOLT_MS,
+  LUNGE_MS / 2 + FLASH_MS,
+)
+
+const SHAPE_OF_CLASS: Readonly<Record<string, AttackShape>> = {
+  knight: 'lunge_follow',
+  black_mage: 'bolt',
+  archer: 'bolt',
+  white_mage: 'burst',
+}
+const EFFECT_OF_CLASS: Readonly<Record<string, EffectId>> = {
+  black_mage: 'fireball',
+  archer: 'arrow',
+  white_mage: 'light_burst',
+}
+
+/** Ms from an action's start to its impact, per shape. */
+export function impactOf(shape: AttackShape): number {
+  if (shape === 'bolt') return WINDUP_MS + BOLT_MS
+  if (shape === 'burst') return WINDUP_MS + BURST_MS / 2
+  return LUNGE_MS / 2
+}
 
 type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
@@ -71,7 +118,8 @@ function enemySpriteId(enemy: { def: string; name: string; kind: string }): stri
 export class StageTimeline {
   private entries = new Map<string, Known>()
   private departed = new Set<string>()
-  private heroes = new Set<string>()
+  /** The heroes on the stage, by id, with their class. */
+  private heroes = new Map<string, string>()
   private motions: Motion[] = []
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
@@ -82,7 +130,7 @@ export class StageTimeline {
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
-    this.heroes = new Set(view.heroes.map((h) => h.id))
+    this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
     const live = new Set(view.enemies.map((e) => e.id))
 
     for (const [id, known] of this.entries) {
@@ -190,11 +238,17 @@ export class StageTimeline {
     return this.heroes.has(id) || this.entries.has(id)
   }
 
+  /** Enemies lunge; heroes by class: the knight follows through, the mages and the archer cast. */
+  shapeOf(actor: string): AttackShape {
+    const cls = this.heroes.get(actor)
+    return (cls !== undefined ? SHAPE_OF_CLASS[cls] : undefined) ?? 'lunge'
+  }
+
   /**
    * One action at a time: each `act` starts its action at its battle-time offset stretched to the
-   * cadence (grill 1.6), never before the previous action's lunge and flash are over. The actor
-   * lunges once; every hit and heal of the action lands at one impact. Each animation keeps its
-   * own speed whatever the cadence.
+   * cadence (grill 1.6), never before the previous action is over. The actor winds up and strikes
+   * in its shape (the choreography of the frames plan); every hit and heal of the action lands at
+   * one impact. Each animation keeps its own speed whatever the cadence.
    */
   onEffects(effects: readonly Effect[], now: number, cadenceMs: number = TICK_MS): number[] {
     // observe prunes too, but nothing observes while the band is hidden or on another tab.
@@ -215,24 +269,78 @@ export class StageTimeline {
           keep: start + 2 * cadenceMs,
         })
       }
-      const impact = start + LUNGE_MS / 2
-      let shown = false
       const act = group.act
-      if (act && this.isActor(act.actor)) {
-        const dir = this.heroes.has(act.actor) ? -1 : 1
-        this.motions.push({
-          kind: 'lunge',
-          actor: act.actor,
-          from: start,
-          until: start + LUNGE_MS,
-          dir,
-        })
+      const shape = act ? this.shapeOf(act.actor) : 'lunge'
+      const impact = start + impactOf(shape)
+      let shown = false
+      const attacker = act && this.isActor(act.actor) ? act.actor : null
+      const effectId =
+        attacker !== null ? EFFECT_OF_CLASS[this.heroes.get(attacker) ?? ''] : undefined
+      if (attacker !== null) {
+        const strikeFrom = start + WINDUP_MS
+        this.motions.push({ kind: 'windup', actor: attacker, from: start, until: strikeFrom })
+        if (shape === 'lunge' || shape === 'lunge_follow') {
+          const dir = this.heroes.has(attacker) ? -1 : 1
+          this.motions.push({
+            kind: 'lunge',
+            actor: attacker,
+            from: start,
+            until: start + LUNGE_MS,
+            dir,
+          })
+          this.motions.push({
+            kind: 'strike',
+            actor: attacker,
+            from: strikeFrom,
+            until: start + LUNGE_MS,
+            shape,
+          })
+          if (shape === 'lunge_follow') {
+            this.motions.push({
+              kind: 'follow',
+              actor: attacker,
+              from: start + LUNGE_MS,
+              until: start + LUNGE_MS + FOLLOW_MS,
+            })
+          }
+        } else {
+          const span = shape === 'bolt' ? BOLT_MS : BURST_MS
+          this.motions.push({
+            kind: 'strike',
+            actor: attacker,
+            from: strikeFrom,
+            until: strikeFrom + span,
+            shape,
+          })
+        }
         shown = true
+      }
+      /** The bolt or burst of an in-place shape, one per hit or healed target. */
+      const effectOn = (target: string): void => {
+        if (attacker === null || effectId === undefined) return
+        if (shape !== 'bolt' && shape !== 'burst') return
+        const from = start + WINDUP_MS
+        this.motions.push({
+          kind: 'effect',
+          actor: attacker,
+          target,
+          effect: effectId,
+          from,
+          until: from + (shape === 'bolt' ? BOLT_MS : BURST_MS),
+          shape,
+        })
       }
       let last: { target: string; flashEnd: number } | null = null
       for (const effect of group.effects) {
         if (effect.k === 'hit') {
           if (this.isActor(effect.target)) {
+            effectOn(effect.target)
+            this.motions.push({
+              kind: 'hit',
+              actor: effect.target,
+              from: impact,
+              until: impact + FLASH_MS,
+            })
             this.motions.push({
               kind: 'flash',
               actor: effect.target,
@@ -252,6 +360,7 @@ export class StageTimeline {
           last = { target: effect.target, flashEnd: impact + FLASH_MS }
         } else if (effect.k === 'heal') {
           if (!this.isActor(effect.target)) continue
+          effectOn(effect.target)
           this.motions.push({
             kind: 'number',
             actor: effect.target,

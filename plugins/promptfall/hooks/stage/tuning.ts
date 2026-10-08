@@ -21,7 +21,18 @@ export const COMPACT_PITCH = 8
 // Motion, in ms and px.
 export const LUNGE_MS = 240
 export const LUNGE_PX = 4
+/** The wind-up frame covers the lunge's outward half; the strike shows from the apex (reading 1). */
+export const WINDUP_MS = 120
+/** The knight's follow-through, in place after the lunge. */
+export const FOLLOW_MS = 120
+/** A bolt's flight, from the strike to the impact. */
+export const BOLT_MS = 200
+/** The light burst on its target; the impact lands halfway through. */
+export const BURST_MS = 200
+/** The hit frame's duration, and the 1x white flash. */
 export const FLASH_MS = 160
+/** The white overlay at 1.5x: longer than one event frame, so the Image loop cannot step over it. */
+export const BLINK_MS = 100
 export const NUMBER_MS = 700
 export const NUMBER_RISE_PX = 6
 export const DISSOLVE_MS = 420
