@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { blank, parseHex, type Rgba, readPng } from './png'
 import {
   type BuildInput,
+  buildBackdrops,
   buildSprites,
   downsample,
   EFFECT_IDS,
@@ -543,5 +544,82 @@ describe('sprites build', () => {
     )
     expect(missing.map((s) => s.id)).toEqual([])
     expect(manifest.palettes.hires).toBe('palettes/hires.json')
+  })
+})
+
+describe('backdrops', () => {
+  const opaque = (w: number, h: number, colours: number) =>
+    image(w, h, (x, y) => 0x101010 * (((x + y) % colours) + 1))
+  const input = (
+    backdrops: Manifest['backdrops'],
+    load: (path: string) => Rgba | null,
+  ): BuildInput => ({
+    manifest: { palettes: { nes: '', snes: '' }, sprites: [], backdrops },
+    palettes: { nes: NES, snes: SNES, hires: SNES },
+    load,
+    expected: [],
+  })
+  const files = (full: Rgba | null, hires: Rgba | null) => (path: string) =>
+    path === 'backdrops/zone-1.png' ? full : path === 'backdrops-hires/zone-1.png' ? hires : null
+  const entry = { zone: 1, file: 'backdrops/zone-1.png', fileHires: 'backdrops-hires/zone-1.png' }
+
+  it('indexes each painting by its own colours at the full stage size, 1x and 1.5x', () => {
+    const errors: string[] = []
+    const built = buildBackdrops(
+      input([entry], files(opaque(160, 34, 3), opaque(240, 51, 16))),
+      errors,
+    )
+    expect(errors).toEqual([])
+    expect(built).toHaveLength(1)
+    const b = built[0]
+    expect([b?.full.width, b?.full.height, b?.hires.width, b?.hires.height]).toEqual([
+      160, 34, 240, 51,
+    ])
+    expect(b?.full.palette).toEqual([0, 0x101010, 0x202020, 0x303030])
+    expect(b?.hires.palette).toHaveLength(17)
+    expect(b?.full.idx.every((v) => v >= 1 && v <= 3)).toBe(true)
+    expect(b?.full.idx[0]).toBe(1)
+    expect(b?.full.idx[1]).toBe(2)
+    const module = emitModule({
+      errors: [],
+      sprites: [],
+      art: new Map(),
+      backdrops: built,
+      drift: [],
+    })
+    expect(module).toContain(
+      'export const BACKDROPS: Readonly<Record<string, { full: Art; hires: Art }>> = {',
+    )
+    expect(module).toContain(
+      "  '1': { full: { width: 160, height: 34, palette: [0x000000, 0x101010, 0x202020, 0x303030]",
+    )
+  })
+
+  it('rejects a wrong size, a transparent pixel, too many colours, a missing file and a duplicate zone', () => {
+    const check = (backdrops: Manifest['backdrops'], full: Rgba | null, hires: Rgba | null) => {
+      const errors: string[] = []
+      const built = buildBackdrops(input(backdrops, files(full, hires)), errors)
+      return { errors, built }
+    }
+    expect(check([entry], opaque(160, 33, 3), opaque(240, 51, 3)).errors).toEqual([
+      'backdrop zone 1: art/backdrops/zone-1.png is 160 x 33, not 160 x 34',
+    ])
+    const holed = opaque(240, 51, 3)
+    holed.data[3] = 0
+    expect(check([entry], opaque(160, 34, 3), holed).errors).toEqual([
+      'backdrop zone 1: art/backdrops-hires/zone-1.png has 1 transparent pixels',
+    ])
+    expect(check([entry], opaque(160, 34, 17), opaque(240, 51, 3)).errors).toEqual([
+      'backdrop zone 1: art/backdrops/zone-1.png has 17 colours, a backdrop allows 16',
+    ])
+    expect(check([entry], null, opaque(240, 51, 3)).errors).toEqual([
+      'backdrop zone 1: missing file art/backdrops/zone-1.png',
+    ])
+    const twice = check([entry, entry], opaque(160, 34, 3), opaque(240, 51, 3))
+    expect(twice.errors).toEqual(['backdrop zone 1: duplicate zone'])
+    expect(twice.built).toHaveLength(1)
+    expect(check([{ ...entry, zone: 0 }], null, null).errors).toEqual([
+      'backdrop zone 0: zone must be a positive integer',
+    ])
   })
 })

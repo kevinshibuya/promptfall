@@ -1478,5 +1478,9 @@ export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero
   'world_boss:tokenmaw': { id: 'world_boss:tokenmaw', kind: 'world_boss', style: 'snes', raritySlot: null, raritySlotHires: null, isPlaceholder: false, full: a127.full, hires: a127.hires, compact: a127.compact, small: null, frames: { windup: { art: f155, raritySlot: null }, strike: { art: f156, raritySlot: null }, follow: null } },
 }
 
+/** The zone backdrops by zone number: the 1x painting and its 1.5x twin, each the full stage. */
+export const BACKDROPS: Readonly<Record<string, { full: Art; hires: Art }>> = {
+}
+
 export const SPRITE_COUNT = 128
 export const PLACEHOLDER_COUNT = 0

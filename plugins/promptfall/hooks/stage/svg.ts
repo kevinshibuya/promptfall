@@ -3,7 +3,7 @@ import { shearShifts, squashRow } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
-import { frameSize } from './compose'
+import { backdropOrigin, frameSize } from './compose'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
 import {
@@ -117,6 +117,17 @@ export function artPaths(art: SpriteArt, raritySlot: number | null): string {
     .join('')
 }
 
+/** A backdrop's paths, built once per painting: it is static and the largest art on the stage. */
+const backdropCache = new WeakMap<SpriteArt, string>()
+function backdropPaths(art: SpriteArt): string {
+  let paths = backdropCache.get(art)
+  if (paths === undefined) {
+    paths = artPaths(art, null)
+    backdropCache.set(art, paths)
+  }
+  return paths
+}
+
 /**
  * The stage as one SVG document. Each art stem is drawn once under <defs> and <use>d per actor.
  * With `smil`, motions under way or still to come animate from their offsets against `now`
@@ -164,8 +175,16 @@ export function renderSvg(
   const bob = opts.motion === 'full' ? bobbingAt(opts.now) * bobPx : 0
   const ground = px(2)
 
+  // The backdrop as paths, like any art (no <image>): bottom-anchored and centred, as compose
+  // places it. The Svg stage never outgrows the painting (ADR 0004: terminal geometry, boss rows
+  // at most), so no edge needs extending here.
   const body: string[] = [
-    `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${hex(model.ground)}"/>`,
+    model.backdrop
+      ? (() => {
+          const at = backdropOrigin(model.backdrop, W, H)
+          return `<g transform="translate(${at.x} ${at.y})">${backdropPaths(model.backdrop)}</g>`
+        })()
+      : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${hex(model.ground)}"/>`,
   ]
   const base = new Map<string, { x: number; y: number; actor: StageActor }>()
 

@@ -1,4 +1,5 @@
 import { expect, test } from 'claude-code/testing'
+import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
@@ -337,4 +338,37 @@ test('under SMIL an effect draws under the numbers, as on the pixel surfaces', (
   )
   expect(effectAt).toBeGreaterThan(-1)
   expect(effectAt).toBeLessThan(svg.indexOf('<text'))
+})
+
+test('a backdrop draws as paths under the actors, in place of the ground strip; never an <image>', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  const base = stageAt(v, t, NOW, BOX, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  const idx = new Uint8Array(240 * 51).fill(1)
+  for (let x = 0; x < 240; x++) idx[50 * 240 + x] = 2
+  const backdrop = { width: 240, height: 51, palette: [0, 0x203040, 0x506070], pixels: encode(idx) }
+  const s = renderSvg({ ...base, backdrop }, [], {
+    smil: false,
+    now: NOW,
+    width: 960,
+    motion: 'still',
+  })
+  expect(s).not.toContain('<image')
+  expect(s).not.toContain('<rect x="0" y="21"')
+  // The 180 × 24 frame (120 columns, 8 rows at 1.5) centre-crops the 240 × 51 painting.
+  const at = s.indexOf('<g transform="translate(-30 -27)">')
+  expect(at).toBeGreaterThan(0)
+  const actors = s.indexOf('<use')
+  expect(at).toBeLessThan(actors)
+  expect(s.slice(at, actors)).toContain('<path fill="#203040"')
+  expect(s.slice(at, actors)).toContain('<path fill="#506070" d="M0 50h240v1h-240z"/>')
+  // The strip stays for a model without a backdrop.
+  const bare = renderSvg({ ...base, backdrop: null }, [], {
+    smil: false,
+    now: NOW,
+    width: 960,
+    motion: 'still',
+  })
+  expect(bare).toContain('<rect x="0" y="21" width="180" height="3"')
 })

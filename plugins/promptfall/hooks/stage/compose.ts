@@ -64,15 +64,45 @@ function blit(
 }
 
 /**
- * The stage as pixels: the ground strip on the bottom two rows (three at scale 1.5), the actors in slot order, the
- * drops, the effect sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
+ * Where a backdrop's top-left lands in a `width × height` frame: bottom-anchored, centred. A frame
+ * narrower or shorter than the painting crops it (the sides, then the sky); a wider or taller one
+ * extends its edge columns and its top row.
+ */
+export function backdropOrigin(
+  art: { width: number; height: number },
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  return { x: Math.floor((width - art.width) / 2), y: height - art.height }
+}
+
+/** The whole frame painted from the backdrop, each pixel clamped into the painting. */
+function drawBackdrop(frame: Frame, art: SpriteArt): void {
+  const px = pixelsOf(art)
+  const { x: ox, y: oy } = backdropOrigin(art, frame.width, frame.height)
+  for (let y = 0; y < frame.height; y++) {
+    const sy = Math.min(art.height - 1, Math.max(0, y - oy))
+    for (let x = 0; x < frame.width; x++) {
+      const sx = Math.min(art.width - 1, Math.max(0, x - ox))
+      put(frame, x, y, art.palette[px[sy * art.width + sx] ?? 0] ?? 0)
+    }
+  }
+}
+
+/**
+ * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
+ * on the bottom two rows, three at scale 1.5), the actors in slot order, the drops, the effect
+ * sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
   const { width, height } = frameSize(model)
   const frame = blankFrame(width, height)
-  const ground = Math.round(2 * model.scale)
-  for (let y = Math.max(0, frame.height - ground); y < frame.height; y++) {
-    for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
+  if (model.backdrop) drawBackdrop(frame, model.backdrop)
+  else {
+    const ground = Math.round(2 * model.scale)
+    for (let y = Math.max(0, frame.height - ground); y < frame.height; y++) {
+      for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
+    }
   }
   for (const a of model.actors) {
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)

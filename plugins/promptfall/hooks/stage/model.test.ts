@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
-import { spriteFor } from '../sprites/index'
+import { backdropFor, spriteFor } from '../sprites/index'
 import type { Effect } from '../vendor/sim.js'
 import { composeFrame } from './compose'
 import { boss, wave } from './fixtures'
@@ -313,4 +313,19 @@ test('the compact stage draws every pose and effect from compact art, its frame 
   expect(bolt.effects[0]?.art).toBe(spriteFor('effect', 'fireball').compact)
   const f = composeFrame(bolt, { numbers: false })
   expect([f.width, f.height]).toEqual([52, 8])
+})
+
+test('the backdrop is the zone painting at the stage scale, and none on the compact stage', () => {
+  const full = at(wave(), [], NOW, { columns: 120, rows: 8 }, { compact: false, motion: 'still' })
+  expect(full.backdrop).toBe(backdropFor(1, 1))
+  const hires = at(
+    wave(),
+    [],
+    NOW,
+    { columns: 120, rows: 8 },
+    { compact: false, motion: 'still', scale: 1.5 },
+  )
+  expect(hires.backdrop).toBe(backdropFor(1, 1.5))
+  const compact = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
+  expect(compact.backdrop).toBe(null)
 })

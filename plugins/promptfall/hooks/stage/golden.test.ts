@@ -120,6 +120,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'enemy:bandit_captain', boss, 4, 0, false),
       ...heroes.map((art, i) =>
@@ -156,6 +157,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'enemy:bandit_captain', boss, 6, 0, false),
       ...heroes.map((art, i) => actor(`h${i + 1}`, `hero:${i}`, art, 210 - i * 27, 27, true)),
@@ -195,6 +197,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'adversarial:boss', boss, 4, 0, false),
       ...heroes.map((art, i) =>
@@ -305,6 +308,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
   return {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
+    backdrop: null,
     actors: [
       actor('e1', 'adversarial:boss', boss, k(4), 0, false),
       ...heroes.map((art, i) =>
