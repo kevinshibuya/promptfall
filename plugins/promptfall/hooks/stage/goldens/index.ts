@@ -13,12 +13,13 @@ export const GOLDENS: Record<Scenario, Golden> = {
   boss: {rasterHash: "22a897aba0961e82", imageHash: "d55388e83f36b0b5", svgHash: "a7416debce3c81c4", svgChars: 16761, rasterPairs: 43, imageHashHires: "0702c7001957eec2", svgHashLo: "015a894326cc96e3"},
   compact: {rasterHash: "670cfcb8135e427b", imageHash: "d82956de31bf6c7d", svgHash: "29f37516b453c74a", svgChars: 3679, rasterPairs: 32, imageHashHires: "d82956de31bf6c7d", svgHashLo: "29f37516b453c74a"},
   dissolve: {rasterHash: "0231ec1915a8c73f", imageHash: "33e5c7b5e56b06fb", svgHash: "f508c52eb4bf707e", svgChars: 12823, rasterPairs: 47, imageHashHires: "bf0b03a7682d8681", svgHashLo: "1212c4acaa04c064"},
-  drop: {rasterHash: "63cf5ea52d94ad0b", imageHash: "ad96b934b63151a9", svgHash: "9e8e98f55561788a", svgChars: 14340, rasterPairs: 55, imageHashHires: "4797d8636725a603", svgHashLo: "b6993465040b14a9"},
+  drop: {rasterHash: "63cf5ea52d94ad0b", imageHash: "ad96b934b63151a9", svgHash: "9ac4ad2717092963", svgChars: 14389, rasterPairs: 55, imageHashHires: "7f7ac3dda3224dcb", svgHashLo: "b6993465040b14a9"},
   windup: {rasterHash: "2ed502f6498ec740", imageHash: "618e1a4cbb364e08", svgHash: "c52300d3ae3b4263", svgChars: 12462, rasterPairs: 53, imageHashHires: "f2e0a34bbc638bdb", svgHashLo: "8fe4f97b1c67283c"},
   strike: {rasterHash: "70d56fc48329d864", imageHash: "31eff5131a00a8e4", svgHash: "a7ce3183be3d1597", svgChars: 12368, rasterPairs: 48, imageHashHires: "e4fe82a0a6577fa4", svgHashLo: "17df289705d53630"},
   follow: {rasterHash: "210297b645b9294a", imageHash: "b644e58edb75f3d1", svgHash: "0eea444a67a9cb88", svgChars: 11597, rasterPairs: 53, imageHashHires: "af7da557e1fbcfaf", svgHashLo: "6409f0879d674b18"},
   bolt: {rasterHash: "a3b15fd50129a231", imageHash: "86c8e09fc4afb03f", svgHash: "eb681e3b7bb20413", svgChars: 12767, rasterPairs: 56, imageHashHires: "c9dad9c53ba2fd26", svgHashLo: "5e2a636d9b76d934"},
   burst: {rasterHash: "0de37bd3e057b723", imageHash: "f58e693c9ce1b2de", svgHash: "743f304dbdaeda68", svgChars: 12628, rasterPairs: 51, imageHashHires: "728236d1f25fa816", svgHashLo: "2e3dee5325141f07"},
+  'enemy-strike': {rasterHash: "2dc3842800862923", imageHash: "064b27b440bd6c83", svgHash: "dea7ca08c6bd1736", svgChars: 12343, rasterPairs: 51, imageHashHires: "1e29457513680fc1", svgHashLo: "1ebe859e91defd51"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {

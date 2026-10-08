@@ -50,6 +50,7 @@ export const SCENARIOS = [
   'follow',
   'bolt',
   'burst',
+  'enemy-strike',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -109,14 +110,14 @@ function killed(t1: number, effects: Effect[], box: Box): Staged {
   return staged(after, t, box)
 }
 
-/** `actor` attacked the slot-0 enemy `ms` before NOW. */
-function attacking(actor: string, ms: number): Staged {
+/** `actor` attacked `target` (the slot-0 enemy by default) `ms` before NOW. */
+function attacking(actor: string, ms: number, target = 'e1'): Staged {
   const t = new StageTimeline()
   t.observe(wave(), NOW - ms)
   t.onEffects(
     [
       { k: 'act', actor, action: 'attack', at: 0 },
-      { k: 'hit', by: actor, target: 'e1', amount: 9 },
+      { k: 'hit', by: actor, target, amount: 9 },
     ],
     NOW - ms,
   )
@@ -139,6 +140,9 @@ export function stage(name: Scenario): Staged {
       return attacking('h2', 220)
     case 'burst':
       return attacking('h3', 220)
+    // The goblin scout 150 ms into its action: its strike frame, the knight's hit frame.
+    case 'enemy-strike':
+      return attacking('e1', 150, 'h1')
     case 'rest': {
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)

@@ -644,3 +644,71 @@ entry (`.promptfall/frames/fix-rarity.ts`):
 | `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
 | `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
 | `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |
+
+## frames-monsters-1.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-1.png` (`pnpm refsheet art/sheets/ref-frames-monsters-1.png
+--columns 8 --cell 192x256 --scale 7 enemy/road_slime,enemy/field_rat,enemy/goblin_scout,enemy/hedge_sprite,enemy/bramble_wolf,enemy/moss_golem,enemy/wood_goblin,enemy/whisper_wisp`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. road slime, 2. field rat, 3. goblin scout, 4. hedge sprite, 5. bramble wolf, 6. moss golem, 7. wood goblin, 8. whisper wisp.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-1.png.
+```
+
+## frames-monsters-2.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-2.png` (`pnpm refsheet art/sheets/ref-frames-monsters-2.png
+--columns 8 --cell 192x256 --scale 7 enemy/bog_lurker,enemy/marsh_leech,enemy/mire_toad,enemy/will_o_wisp,enemy/barrow_wight,enemy/grave_hound,enemy/bone_soldier,enemy/cairn_crawler`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. bog lurker, 2. marsh leech, 3. mire toad, 4. will o wisp, 5. barrow wight, 6. grave hound, 7. bone soldier, 8. cairn crawler.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-2.png.
+```
+| `enemy:road_slime` | strike | frames-monsters-1 | frame size drift: native 20 against idle 12 (+67%) |
+| `enemy:field_rat` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
+| `enemy:field_rat` | strike | frames-monsters-1 | frame size drift: native 29 against idle 20 (+45%) |
+| `enemy:goblin_scout` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
+| `enemy:goblin_scout` | strike | frames-monsters-1 | frame size drift: native 31 against idle 20 (+55%) |
+| `enemy:moss_golem` | windup | frames-monsters-1 | frame size drift: native 30 against idle 24 (+25%) |
+| `enemy:moss_golem` | strike | frames-monsters-1 | frame size drift: native 34 against idle 24 (+42%) |
+| `enemy:wood_goblin` | strike | frames-monsters-1 | frame size drift: native 38 against idle 25 (+52%) |
+| `enemy:whisper_wisp` | windup | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |
+| `enemy:whisper_wisp` | strike | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |

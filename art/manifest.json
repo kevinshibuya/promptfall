@@ -99,25 +99,41 @@
       "id": "enemy:road_slime",
       "file": "sprites/enemy/road_slime.png",
       "fileHires": "sprites-hires/enemy/road_slime.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/road_slime-windup.png",
+        "strike": "sprites-frames/enemy/road_slime-strike.png"
+      }
     },
     {
       "id": "enemy:field_rat",
       "file": "sprites/enemy/field_rat.png",
       "fileHires": "sprites-hires/enemy/field_rat.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/field_rat-windup.png",
+        "strike": "sprites-frames/enemy/field_rat-strike.png"
+      }
     },
     {
       "id": "enemy:goblin_scout",
       "file": "sprites/enemy/goblin_scout.png",
       "fileHires": "sprites-hires/enemy/goblin_scout.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/goblin_scout-windup.png",
+        "strike": "sprites-frames/enemy/goblin_scout-strike.png"
+      }
     },
     {
       "id": "enemy:hedge_sprite",
       "file": "sprites/enemy/hedge_sprite.png",
       "fileHires": "sprites-hires/enemy/hedge_sprite.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/hedge_sprite-windup.png",
+        "strike": "sprites-frames/enemy/hedge_sprite-strike.png"
+      }
     },
     {
       "id": "enemy:bandit_captain",
@@ -136,25 +152,41 @@
       "id": "enemy:bramble_wolf",
       "file": "sprites/enemy/bramble_wolf.png",
       "fileHires": "sprites-hires/enemy/bramble_wolf.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/bramble_wolf-windup.png",
+        "strike": "sprites-frames/enemy/bramble_wolf-strike.png"
+      }
     },
     {
       "id": "enemy:moss_golem",
       "file": "sprites/enemy/moss_golem.png",
       "fileHires": "sprites-hires/enemy/moss_golem.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/moss_golem-windup.png",
+        "strike": "sprites-frames/enemy/moss_golem-strike.png"
+      }
     },
     {
       "id": "enemy:wood_goblin",
       "file": "sprites/enemy/wood_goblin.png",
       "fileHires": "sprites-hires/enemy/wood_goblin.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/wood_goblin-windup.png",
+        "strike": "sprites-frames/enemy/wood_goblin-strike.png"
+      }
     },
     {
       "id": "enemy:whisper_wisp",
       "file": "sprites/enemy/whisper_wisp.png",
       "fileHires": "sprites-hires/enemy/whisper_wisp.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/whisper_wisp-windup.png",
+        "strike": "sprites-frames/enemy/whisper_wisp-strike.png"
+      }
     },
     {
       "id": "enemy:elder_treant",
