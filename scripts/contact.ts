@@ -1,13 +1,15 @@
 // Contact sheets for art review: each built sprite at ship size (its 1x art at 6x, its 1.5x art at
 // 4x as `-hires`), its native cut beside it, and a zone's monsters and bosses on the real stage at
-// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). One PNG per picture so the review page can caption
-// each with its id.
+// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). Each actor with drawn frames also gets its frame
+// strip (`-frames`: idle A, idle B, wind-up, strike, follow-through when set, hit, at 4x). One PNG
+// per picture so the review page can caption each with its id.
 //
 // tsx scripts/contact.ts --zone <n> | --heroes | --items <name,name,…> | --world-bosses
 //   [--out <dir>] [--native <dir>]
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { content } from '@promptfall/sim'
+import { lighten, shear, squash } from '../plugins/promptfall/hooks/sprites/derive'
 import { SPRITES } from '../plugins/promptfall/hooks/sprites/generated'
 import type { Sprite } from '../plugins/promptfall/hooks/sprites/types'
 import { artFrame, composeFrame, type Frame } from '../plugins/promptfall/hooks/stage/compose'
@@ -54,6 +56,46 @@ const rgbaOf = (f: Frame): Rgba => ({
   height: f.height,
   data: new Uint8Array(f.rgba),
 })
+
+/** Pictures side by side, bottom-aligned, `gap` screen pixels of ground between. */
+function row(images: readonly Rgba[], gap: number): Rgba {
+  const width = images.reduce((w, i) => w + i.width, 0) + gap * (images.length - 1)
+  const height = Math.max(...images.map((i) => i.height))
+  const data = new Uint8Array(width * height * 4)
+  for (let p = 0; p < width * height; p++)
+    data.set([BG >> 16, (BG >> 8) & 0xff, BG & 0xff, 255], p * 4)
+  let ox = 0
+  for (const img of images) {
+    const oy = height - img.height
+    for (let y = 0; y < img.height; y++) {
+      data.set(
+        img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4),
+        ((oy + y) * width + ox) * 4,
+      )
+    }
+    ox += img.width + gap
+  }
+  return { width, height, data }
+}
+
+/** The frame strip of a sprite with drawn frames, at 4x; null without frames. */
+function frameStrip(s: Sprite): Rgba | null {
+  if (!s.frames) return null
+  const { windup, strike, follow } = s.frames
+  const hit = shear(s.hires).art
+  const arts = [
+    artFrame(s.hires, s.hires.palette),
+    artFrame(squash(s.hires), s.hires.palette),
+    artFrame(windup.art, windup.art.palette),
+    artFrame(strike.art, strike.art.palette),
+    ...(follow ? [artFrame(follow.art, follow.art.palette)] : []),
+    artFrame(hit, hit.palette.map(lighten)),
+  ]
+  return row(
+    arts.map((f) => scaled(rgbaOf(f), 4)),
+    4,
+  )
+}
 
 function sprite(id: string): Sprite {
   const s = SPRITES[id]
@@ -122,6 +164,11 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
   const both = (id: string) => {
     shipped(id)
     nativeOf(id)
+    const strip = frameStrip(sprite(id))
+    if (strip) {
+      const [kind, name] = id.split(':') as [string, string]
+      put(`${kind}-${name}-frames`, strip)
+    }
   }
 
   switch (target.kind) {

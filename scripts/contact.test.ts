@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { content } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
+import { shear } from '../plugins/promptfall/hooks/sprites/derive'
+import { SPRITES } from '../plugins/promptfall/hooks/sprites/generated'
 import { contact } from './contact'
 import { blank, readPng, writePng } from './png'
 
@@ -62,5 +64,34 @@ describe('contact', () => {
         readFileSync(join(folder, 'hero-knight-epic-hires.png')),
       ),
     ).toBe(false)
+  })
+
+  it("writes each hero's frame strip: A, B, wind-up, strike, follow-through when set, hit", () => {
+    const dir = mkdtempSync(join(tmpdir(), 'contact-'))
+    const out = join(dir, 'out')
+    contact({ kind: 'heroes' }, { out, native: join(dir, 'native') })
+    const folder = join(out, 'heroes')
+    const width = (id: string, cells: number) => {
+      const hires = SPRITES[id]?.hires
+      if (!hires) throw new Error(id)
+      const { grow } = shear(hires)
+      return (hires.width * cells + grow) * 4 + (cells - 1) * 4
+    }
+    const knight = readPng(join(folder, 'hero-knight-frames.png'))
+    expect([knight.width, knight.height]).toEqual([width('hero:knight', 6), 24 * 4])
+    const archer = readPng(join(folder, 'hero-archer-frames.png'))
+    expect(archer.width).toBe(width('hero:archer', 5))
+    expect(existsSync(join(folder, 'hero_attack-knight-frames.png'))).toBe(false)
+  })
+
+  it('writes a frame strip exactly for the zone actors with frames', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'contact-'))
+    const out = join(dir, 'out')
+    contact({ kind: 'zone', zone: 1 }, { out, native: join(dir, 'native') })
+    const zone = content.zones[0]
+    for (const def of [...(zone?.enemies ?? []), zone?.boss, zone?.turnBoss]) {
+      const framed = SPRITES[`enemy:${def}`]?.frames != null
+      expect(existsSync(join(out, 'zone-1', `enemy-${def}-frames.png`)), def).toBe(framed)
+    }
   })
 })
