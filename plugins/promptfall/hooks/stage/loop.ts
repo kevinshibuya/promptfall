@@ -11,7 +11,7 @@ import { sceneCells } from '../windows/raster'
 import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame } from './compose'
 import type { GaugeTrack } from './gauges'
-import { encodeImage } from './image'
+import { pngImage } from './image'
 import { cellsOf, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { stageAt } from './model'
@@ -99,7 +99,7 @@ export function stageFrame(
   layout: Layout,
   renderer: 'raster' | 'image',
   motion: Settings['motion'],
-): { cells: string } | { source: { rgba: string; width: number; height: number } } {
+): { cells: string } | { source: { png: string } } {
   if (!layout.box) throw new Error('no stage in a collapsed layout')
   // The full stage draws the 1.5x art on Image; Raster and the compact stage stay at 1.
   const model = stageAt(view, timeline, now, layout.box, {
@@ -111,7 +111,7 @@ export function stageFrame(
     return { cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers) }
   }
   return {
-    source: encodeImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
+    source: pngImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
   }
 }
 
@@ -339,7 +339,7 @@ export class StageLoop {
           const json = JSON.stringify(win)
           if (this.sent.get(key) === json) continue
           this.sent.set(key, json)
-          const source = encodeImage(windowFrame(win), WINDOW_SCALE)
+          const source = pngImage(windowFrame(win), WINDOW_SCALE)
           sends.push({
             requestId: site.requestId,
             key,

@@ -2,7 +2,7 @@ import { atom, type On, read, update } from 'claude-code'
 import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
-import { encodeImage } from '../stage/image'
+import { pngImage } from '../stage/image'
 import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
@@ -249,7 +249,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             {scene.windows.map((w) => (
               <Image
                 key={windowKey(w)}
-                source={encodeImage(windowFrame(w), WINDOW_SCALE)}
+                source={pngImage(windowFrame(w), WINDOW_SCALE)}
                 columns={w.columns}
                 rows={w.rows}
                 alt={w.alt}

@@ -1,6 +1,7 @@
 import type { UiBlitArgs, UiBlitResult } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import type { GameView, Settings } from '../../types'
+import { decode } from '../sprites/base64'
 import { SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { boss, wave } from './fixtures'
@@ -430,13 +431,20 @@ test('a bare site (World) blits the strip and no stage; a boss arriving is not a
   expect(h.invalidations).toHaveLength(0)
 })
 
+/** A PNG source's width and height, from its IHDR. */
+function pngSize(source: { png: string }): [number, number] {
+  const bytes = decode(source.png)
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  return [view.getUint32(16), view.getUint32(20)]
+}
+
 test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled 6 times', () => {
   const t = new StageTimeline()
   t.observe(wave(), 0)
   const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
   const image = stageFrame(wave(), t, 0, full, 'image', 'full')
   if (!('source' in image)) throw new Error('expected an Image source')
-  expect([image.source.width, image.source.height]).toEqual([720, 96])
+  expect(pngSize(image.source)).toEqual([720, 96])
   const narrow = layoutFor(t.rowsAt(wave(), 0), { bodyColumns: 105, maxRows: 30 }, 'terminal', {
     tab: 'party',
     extra: 0,
@@ -444,5 +452,5 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   expect(narrow.kind).toBe('compact')
   const compact = stageFrame(wave(), t, 0, narrow, 'image', 'full')
   if (!('source' in compact)) throw new Error('expected an Image source')
-  expect([compact.source.width, compact.source.height]).toEqual([312, 48])
+  expect(pngSize(compact.source)).toEqual([312, 48])
 })

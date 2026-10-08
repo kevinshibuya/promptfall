@@ -79,6 +79,14 @@ for (const file of ['protocol.js', 'protocol.d.ts', 'ledger.js', 'ledger.d.ts'])
   writeFileSync(path, text)
 }
 
+// zlib for the stage's PNG frames (hooks/stage/png.ts): fflate's zlibSync alone, tree-shaken.
+await build({
+  ...common,
+  entry: { fflate: join(root, 'scripts/fflate-entry.ts') },
+  noExternal: ['fflate'],
+  dts: { resolve: true },
+})
+
 const BUNDLES = ['sim', 'protocol', 'ledger'].flatMap((name) => [`${name}.js`, `${name}.d.ts`])
 for (const file of BUNDLES) {
   const text = readFileSync(join(vendor, file), 'utf8')

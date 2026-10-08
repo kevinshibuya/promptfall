@@ -20,7 +20,7 @@ import type {
 } from '../../../types'
 import type { GameHandle } from '../../engine'
 import { fnv1a64 } from '../../stage/hash'
-import { encodeImage } from '../../stage/image'
+import { pngImage } from '../../stage/image'
 import { DESKTOP_COLUMN_PX, SVG_INTERACTIVE } from '../../stage/tuning'
 import { DIALOG_DEFAULT } from '../../state'
 import type { PlayerEvent } from '../../vendor/sim.js'
@@ -135,7 +135,7 @@ export function placed(requestId: string, signature: string): void {
 
 // Image sources by window key and content, so a cursor move re-encodes only what changed.
 const IMAGE_CACHE_MAX = 64
-const images = new Map<string, { rgba: string; width: number; height: number }>()
+const images = new Map<string, { png: string }>()
 function imageOf(win: Win) {
   const key = `${windowKey(win)}:${fnv1a64(JSON.stringify(win))}`
   const hit = images.get(key)
@@ -144,7 +144,7 @@ function imageOf(win: Win) {
     images.set(key, hit)
     return hit
   }
-  const made = encodeImage(windowFrame(win), WINDOW_SCALE)
+  const made = pngImage(windowFrame(win), WINDOW_SCALE)
   images.set(key, made)
   if (images.size > IMAGE_CACHE_MAX) images.delete(images.keys().next().value as string)
   return made

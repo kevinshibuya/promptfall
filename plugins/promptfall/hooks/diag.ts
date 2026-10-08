@@ -21,9 +21,9 @@ export function trace(tag: string, fields: Record<string, string | number | bool
 /** Size in bytes of what a blit or a tree carries for its picture. */
 export function payloadBytes(x: { cells?: string; source?: unknown }): number {
   if (typeof x.cells === 'string') return x.cells.length
-  const s = x.source as { rgba?: string } | string | undefined
+  const s = x.source as { rgba?: string; png?: string } | string | undefined
   if (typeof s === 'string') return s.length
-  return s?.rgba?.length ?? 0
+  return s?.png?.length ?? s?.rgba?.length ?? 0
 }
 
 let writer: ((path: string, text: string) => Promise<void>) | null = null
