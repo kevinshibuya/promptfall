@@ -2,7 +2,7 @@
 
 Run from the repository root. Each step says what you should see; a step that shows something else
 is a red. Part A covers PR 1 (the engine, on the concept sprites as placeholders); part B comes with
-PR 2 (the art).
+PR 2 (the art); part C with PR 3 (the animation frames).
 
 On terminals, the band needs room: the full stage wants at least 116 columns and 10 free rows (19 with a zone
 boss), the compact stage 100 columns. Widen the window or shrink the font when a step asks for a
@@ -156,3 +156,56 @@ Load the plugin and start the HTTP fake as in Part A's desktop steps (15), with 
     Ghostty step 6.
 13. **Finish.** `/promptfall sound off`, `/promptfall server local`, then unset
     `CLAUDE_CODE_PLUGIN_DIRS` as in Part A.
+
+## Part C: the animation frames (PR 3)
+
+Part C checks what PR 3 changes: on the 1.5× stage every actor breathes on two frames, winds up
+and strikes on its own drawings, and leans back when hit; the mages cast in place while an effect
+sprite crosses the stage. Run it after Part A's setup (sound off, motion full, renderer auto). The
+desktop needs a Claude.app relaunch to load the new plugin code. The motion is fast: an attack is
+a third of a second, so watch one actor at a time, and play long enough to see several.
+
+### Ghostty
+
+1. **The idle pair.** At rest the party and the monsters breathe: every half-second each actor
+   swaps between its standing drawing and one a pixel shorter in the middle. Nothing bobs up and
+   down any more at this size.
+2. **An enemy's attack.** Watch a monster on the left act. On the way out it shows a coiled,
+   wind-up drawing; from the apex of the lunge it shows its strike drawing (weapon, claws or jaws
+   forward), then returns to its standing pair. A drawing that jumps in size or place against its
+   standing one is a red for the review page, not for this pass.
+3. **The knight.** The knight lunges with its sword raised, strikes in its attack pose at the
+   apex, and holds a follow-through (sword low, cape flying) for a moment after the lunge.
+4. **The casters.** The black mage raises its staff in place and a fireball flies from it across
+   the stage to its target; the archer draws and an arrow flies. The white mage raises its staff
+   and a white and gold star bursts on its target, on an enemy when it attacks and on the healed
+   hero when it heals. The mages no longer lunge.
+5. **The hit.** A struck actor leans back from its facing side for a sixth of a second, its
+   colours a little paler, with a white blink at the start. On Ghostty the lean lasts about two
+   event frames, so it is easiest to see on a boss: wait for the Bandit Captain (wave 11) and watch
+   it take the party's hits.
+6. **Motion still.** `/promptfall motion still`. The idle pair stops: every actor holds its
+   standing drawing. Attacks, hits, dissolves and drops still play. `/promptfall motion full`.
+
+### iTerm2 and Terminal.app
+
+7. **Nothing changes but the mages.** The half-block stage draws as before: one drawing per
+   actor, the 1-pixel bob, the lunge, the white flash for the whole hit. The black mage, the white
+   mage and the archer now act in place: each shows its attack drawing while a small fireball,
+   star or arrow crosses the stage, and the knight's attack is unchanged.
+
+### Desktop app
+
+Load the plugin as in Part A's desktop steps (15), after relaunching Claude.app.
+
+8. **The idle pair first.** At rest every actor alternates its standing drawing and the shorter
+   one each half-second, as on Ghostty step 1. This is the first thing to check: the shorter
+   drawing is idle A clipped in two bands, a technique no desktop pass has tried yet. A figure
+   that vanishes, flickers or shows a gap row every other half-second is a red.
+9. **Attacks and hits.** As Ghostty steps 2 to 5: the wind-up, the strike from the apex, the
+   knight's follow-through, the fireball, arrow and burst, the lean and the 100 ms white blink.
+10. **A boss's attack.** In a zone boss fight the boss attacks on its own drawn frames. The stage
+   keeps its 1.5× drawing; a frame that drops to the coarser 1× art for a moment is the fall-back
+   past the `Svg` cap and worth a note, not a red.
+11. **Motion still.** `/promptfall motion still` freezes the idle pair as Ghostty step 6;
+    `/promptfall motion full`. Finish as in Part B step 13.

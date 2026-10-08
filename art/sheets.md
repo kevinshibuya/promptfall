@@ -540,6 +540,10 @@ nearest other entry:
   no chest sigil in one region; the cyan specks on the body move to a lighter cyan.
 - archer and its attack: the cape (`#fbeb05`, `#fbed03`).
 
+2026-10-08, the frames (phase 4 PR 3): the script ends by re-cutting every drawn frame and the
+three effect sprites from their frames sheets, as each sheet's section records, and writing the
+five hand-fixed hero frames back from their grids (`art/sheets/grids/hires-hero-<name>-<frame>.txt`).
+
 ```sh
 # Re-cuts every shipped sprite from its sheet. Run from the repository root.
 set -e
@@ -580,4 +584,1018 @@ for g in hero-knight hero-black_mage hero-white_mage hero-archer hero_attack-kni
   pnpm -s grid --png art/sheets/grids/hires-$g.txt art/sprites-hires/${g/-//}.png >/dev/null
 done
 rm -rf art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-hero-cuts
+
+# The frames (phase 4 PR 3): the drawn frames, the effect sprites, the hand-fixed hero frames.
+# frames-heroes
+cut art/sheets/frames-heroes.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names hero/knight-windup,hero/knight-follow,hero/black_mage-windup,x/w,hero/archer-windup,x/a,x/b,x/c
+cut art/sheets/frames-heroes.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names x/a,x/b,x/c,hero/white_mage-windup,x/d,x/e,x/f,x/g
+cut art/sheets/frames-heroes.png art/sprites --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-hires --row 0 --names x/d,x/e,x/f,x/g,x/h,effect/fireball,effect/light_burst,effect/arrow
+# frames-monsters-1
+cut art/sheets/frames-monsters-1.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/road_slime-windup,enemy/field_rat-windup,enemy/goblin_scout-windup,enemy/hedge_sprite-windup,enemy/bramble_wolf-windup,enemy/moss_golem-windup,enemy/wood_goblin-windup,enemy/whisper_wisp-windup
+cut art/sheets/frames-monsters-1.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/road_slime-strike,enemy/field_rat-strike,enemy/goblin_scout-strike,enemy/hedge_sprite-strike,enemy/bramble_wolf-strike,enemy/moss_golem-strike,enemy/wood_goblin-strike,enemy/whisper_wisp-strike
+# frames-monsters-2
+cut art/sheets/frames-monsters-2.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/bog_lurker-windup,enemy/marsh_leech-windup,enemy/mire_toad-windup,enemy/will_o_wisp-windup,enemy/barrow_wight-windup,enemy/grave_hound-windup,enemy/bone_soldier-windup,enemy/cairn_crawler-windup
+cut art/sheets/frames-monsters-2.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 3 --names enemy/bog_lurker-strike,enemy/marsh_leech-strike,enemy/mire_toad-strike,enemy/will_o_wisp-strike,enemy/barrow_wight-strike,enemy/grave_hound-strike,enemy/bone_soldier-strike,enemy/cairn_crawler-strike
+# frames-monsters-3
+cut art/sheets/frames-monsters-3.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/salt_crab-windup,enemy/gull_harpy-windup,enemy/drowned_sailor-windup,enemy/tide_witch-windup,enemy/ember_imp-windup,enemy/magma_beetle-windup,enemy/cinder_orc-windup,enemy/flame_adept-windup
+cut art/sheets/frames-monsters-3.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/salt_crab-strike,enemy/gull_harpy-strike,enemy/drowned_sailor-strike,enemy/tide_witch-strike,enemy/ember_imp-strike,enemy/magma_beetle-strike,enemy/cinder_orc-strike,enemy/flame_adept-strike --gutters 214
+# frames-monsters-4
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/frost_wolf-windup,enemy/ice_troll-windup,enemy/rime_golem-windup,enemy/snow_shaman-windup,enemy/drowned_monk-windup,enemy/abbey_gargoyle-windup,enemy/bell_wraith-windup,enemy/eel_serpent-windup
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names x/s0,x/s1,x/s2,x/s3,enemy/drowned_monk-strike,enemy/abbey_gargoyle-strike,enemy/bell_wraith-strike,enemy/eel_serpent-strike --gutters 206,364,598,732,1348
+cut art/sheets/frames-monsters-4.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 3 --names enemy/frost_wolf-strike,enemy/ice_troll-strike,enemy/rime_golem-strike,enemy/snow_shaman-strike,x/s4,x/s5,x/s6,x/s7 --gutters 745,986,1370
+# frames-monsters-5
+cut art/sheets/frames-monsters-5.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/ash_ghoul-windup,enemy/dust_stalker-windup,enemy/cinder_colossus-windup,enemy/ash_oracle-windup,enemy/star_sentinel-windup,enemy/comet_hound-windup,enemy/spire_warden-windup,enemy/astral_seer-windup
+cut art/sheets/frames-monsters-5.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/ash_ghoul-strike,enemy/dust_stalker-strike,enemy/cinder_colossus-strike,enemy/ash_oracle-strike,enemy/star_sentinel-strike,enemy/comet_hound-strike,enemy/spire_warden-strike,enemy/astral_seer-strike --gutters 1352
+# frames-monsters-6
+cut art/sheets/frames-monsters-6.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/hollow_knight-windup,enemy/court_jester-windup,enemy/throne_guard-windup,enemy/court_mage-windup,enemy/ink_horror-windup,enemy/blank_page-windup,enemy/quill_golem-windup,enemy/erased_scribe-windup
+cut art/sheets/frames-monsters-6.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/hollow_knight-strike,enemy/court_jester-strike,enemy/throne_guard-strike,enemy/court_mage-strike,enemy/ink_horror-strike,enemy/blank_page-strike,enemy/quill_golem-strike,enemy/erased_scribe-strike --gutters 202
+# frames-bosses-1
+cut art/sheets/frames-bosses-1.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/bandit_captain-windup,enemy/wild_boar-windup
+cut art/sheets/frames-bosses-1.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/bandit_captain-strike,enemy/wild_boar-strike
+# frames-bosses-2
+cut art/sheets/frames-bosses-2.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/elder_treant-windup,enemy/owlbear_cub-windup
+cut art/sheets/frames-bosses-2.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/elder_treant-strike,enemy/owlbear_cub-strike
+# frames-bosses-3
+cut art/sheets/frames-bosses-3.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/sigh_hag-windup,enemy/giant_heron-windup
+cut art/sheets/frames-bosses-3.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/sigh_hag-strike,enemy/giant_heron-strike
+# frames-bosses-4
+cut art/sheets/frames-bosses-4.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/barrow_king-windup,enemy/crypt_ogre-windup
+cut art/sheets/frames-bosses-4.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/barrow_king-strike,enemy/crypt_ogre-strike
+# frames-bosses-5
+cut art/sheets/frames-bosses-5.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/glass_leviathan-windup,enemy/reef_troll-windup
+cut art/sheets/frames-bosses-5.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/glass_leviathan-strike,enemy/reef_troll-strike
+# frames-bosses-6
+cut art/sheets/frames-bosses-6.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/emberfall_wyrm-windup,enemy/slag_giant-windup
+cut art/sheets/frames-bosses-6.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/emberfall_wyrm-strike,enemy/slag_giant-strike
+# frames-bosses-7
+cut art/sheets/frames-bosses-7.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/frostvein_yeti-windup,enemy/avalanche_drake-windup
+cut art/sheets/frames-bosses-7.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/frostvein_yeti-strike,enemy/avalanche_drake-strike
+# frames-bosses-8
+cut art/sheets/frames-bosses-8.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/sunken_abbot-windup,enemy/choir_of_bones-windup
+cut art/sheets/frames-bosses-8.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/sunken_abbot-strike,enemy/choir_of_bones-strike
+# frames-bosses-9
+cut art/sheets/frames-bosses-9.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/waste_tyrant-windup,enemy/sand_basilisk-windup
+cut art/sheets/frames-bosses-9.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/waste_tyrant-strike,enemy/sand_basilisk-strike
+# frames-bosses-10
+cut art/sheets/frames-bosses-10.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/fallen_star-windup,enemy/void_manta-windup
+cut art/sheets/frames-bosses-10.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/fallen_star-strike,enemy/void_manta-strike
+# frames-bosses-11
+cut art/sheets/frames-bosses-11.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/hollow_king-windup,enemy/royal_chimera-windup
+cut art/sheets/frames-bosses-11.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/hollow_king-strike,enemy/royal_chimera-strike
+# frames-bosses-12
+cut art/sheets/frames-bosses-12.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names enemy/unwritten_one-windup,enemy/margin_beast-windup
+cut art/sheets/frames-bosses-12.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names enemy/unwritten_one-strike,enemy/margin_beast-strike
+# frames-bosses-13
+cut art/sheets/frames-bosses-13.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names world_boss/the_promptwyrm-windup,world_boss/hallucinox-windup
+cut art/sheets/frames-bosses-13.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names world_boss/the_promptwyrm-strike,world_boss/hallucinox-strike
+# frames-bosses-14
+cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names world_boss/the_context_leviathan-windup,world_boss/tokenmaw-windup
+cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
+for g in knight-windup knight-follow black_mage-windup white_mage-windup archer-windup; do
+  pnpm -s grid --png art/sheets/grids/hires-hero-$g.txt art/sprites-frames/hero/$g.png >/dev/null
+done
+rm -rf art/sprites/x art/sprites-hires/x art/sprites-frames/x art/sheets/native/x /tmp/promptfall-frame-cuts
 ```
+
+## frames-heroes.png
+
+2026-10-07, phase 4 PR 3 (Task F2): the heroes' wind-up and follow-through frames and the three
+effect sprites. References: `art/sheets/ref-frames-heroes.png` (`pnpm refsheet art/sheets/ref-frames-heroes.png
+--columns 8 --cell 192x256 --scale 7 hero/knight,hero_attack/knight,hero/black_mage,hero/white_mage,hero/archer,hero_attack/black_mage,hero_attack/white_mage,hero_attack/archer`),
+`art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows, left to right: column 1 the knight idle, column 2 the knight attacking, column 3 the black mage, column 4 the white mage, column 5 the archer, and columns 6 to 8 the black mage casting, the white mage casting and the archer shooting (for their staffs and bow only).
+Row 1, one per column: 1 the knight winding up (sword raised high behind the head, weight back); 2 the knight's follow-through (sword swung down past the front foot, cape flying); 3 the black mage gathering fire (staff raised, a small flame at its tip, robe billowing); 4 the white mage raising the staff overhead with both hands; 5 the archer drawing the bow (string pulled to the cheek, arrow nocked); 6 a fireball (a round orange and yellow ball of fire with a short trailing flame, flying right, no figure); 7 a burst of holy light (a white and gold eight-rayed star, no figure); 8 a wooden arrow with a steel head and feather fletching, flying right, drawn horizontally, no figure.
+Rows 2, 3 and 4: three more different takes of the same eight, in the same columns.
+The hero sprites keep the exact designs of the reference (same armour, hats, capes, colours, same size), only in these poses. Characters face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-heroes.png.
+```
+
+Picks, by eye: row 1 (the first take) for the knight's wind-up and follow-through, the black mage,
+the archer and the three effects; row 2 for the white mage (the staff overhead in both hands).
+
+```sh
+D=art/sheets/frames-heroes.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 0 --names hero/knight-windup,hero/knight-follow,hero/black_mage-windup,x/w,hero/archer-windup,x/a,x/b,x/c
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 1 --names x/a,x/b,x/c,hero/white_mage-windup,x/d,x/e,x/f,x/g
+pnpm slice $D art/sprites $=C --hires art/sprites-hires --row 0 --names x/d,x/e,x/f,x/g,x/h,effect/fireball,effect/light_burst,effect/arrow
+rm -rf art/sprites-frames/x art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-frame-cuts
+```
+
+The five hero frames carry hand fixes for the one-region rule (Task F3), kept as grids
+(`art/sheets/grids/hires-hero-<name>-<frame>.txt`) and written back by the canonical cut. On each,
+the largest 8-connected region that snaps to the frame's rarity entry is flattened to its
+`frameRarityColors` value, and every other pixel on that entry moves to the nearest other master
+entry (`.promptfall/frames/fix-rarity.ts`):
+
+- knight wind-up (`#fb0f06`, the cape; 13 pixels of plume and shield cross moved) and
+  follow-through (`#fc0c02`, the cape; the plume, 9 pixels, moved).
+- black mage wind-up (`#6d19ab`, the robe; the hat, 32 pixels, and three specks moved).
+- white mage wind-up (`#02e1fd`, the staff orb; 5 cyan pixels on the body moved).
+- archer wind-up (`#fdee04`, the cape; 6 pixels of the bow hand moved).
+
+## frames-monsters-1.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-1.png` (`pnpm refsheet art/sheets/ref-frames-monsters-1.png
+--columns 8 --cell 192x256 --scale 7 enemy/road_slime,enemy/field_rat,enemy/goblin_scout,enemy/hedge_sprite,enemy/bramble_wolf,enemy/moss_golem,enemy/wood_goblin,enemy/whisper_wisp`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. road slime, 2. field rat, 3. goblin scout, 4. hedge sprite, 5. bramble wolf, 6. moss golem, 7. wood goblin, 8. whisper wisp.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-1.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take, for all eight.
+
+```sh
+D=art/sheets/frames-monsters-1.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/road_slime-windup,enemy/field_rat-windup,enemy/goblin_scout-windup,enemy/hedge_sprite-windup,enemy/bramble_wolf-windup,enemy/moss_golem-windup,enemy/wood_goblin-windup,enemy/whisper_wisp-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/road_slime-strike,enemy/field_rat-strike,enemy/goblin_scout-strike,enemy/hedge_sprite-strike,enemy/bramble_wolf-strike,enemy/moss_golem-strike,enemy/wood_goblin-strike,enemy/whisper_wisp-strike
+```
+
+## frames-monsters-2.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-2.png` (`pnpm refsheet art/sheets/ref-frames-monsters-2.png
+--columns 8 --cell 192x256 --scale 7 enemy/bog_lurker,enemy/marsh_leech,enemy/mire_toad,enemy/will_o_wisp,enemy/barrow_wight,enemy/grave_hound,enemy/bone_soldier,enemy/cairn_crawler`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. bog lurker, 2. marsh leech, 3. mire toad, 4. will o wisp, 5. barrow wight, 6. grave hound, 7. bone soldier, 8. cairn crawler.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-2.png.
+```
+
+Picks: row 1 (wind-up) and row 4 (the second take's strike) for all eight: in row 2 the bog
+lurker's tentacle touches the marsh leech, so the slicer finds no gutter.
+
+```sh
+D=art/sheets/frames-monsters-2.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/bog_lurker-windup,enemy/marsh_leech-windup,enemy/mire_toad-windup,enemy/will_o_wisp-windup,enemy/barrow_wight-windup,enemy/grave_hound-windup,enemy/bone_soldier-windup,enemy/cairn_crawler-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/bog_lurker-strike,enemy/marsh_leech-strike,enemy/mire_toad-strike,enemy/will_o_wisp-strike,enemy/barrow_wight-strike,enemy/grave_hound-strike,enemy/bone_soldier-strike,enemy/cairn_crawler-strike
+```
+
+## frames-monsters-3.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-3.png` (`pnpm refsheet art/sheets/ref-frames-monsters-3.png
+--columns 8 --cell 192x256 --scale 7 enemy/salt_crab,enemy/gull_harpy,enemy/drowned_sailor,enemy/tide_witch,enemy/ember_imp,enemy/magma_beetle,enemy/cinder_orc,enemy/flame_adept`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. salt crab, 2. gull harpy, 3. drowned sailor, 4. tide witch, 5. ember imp, 6. magma beetle, 7. cinder orc, 8. flame adept.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-3.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the salt crab's claw touches the gull harpy's wing over one sheet column; `--gutters 214` splits them there (a sixth of a native pixel).
+
+```sh
+D=art/sheets/frames-monsters-3.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/salt_crab-windup,enemy/gull_harpy-windup,enemy/drowned_sailor-windup,enemy/tide_witch-windup,enemy/ember_imp-windup,enemy/magma_beetle-windup,enemy/cinder_orc-windup,enemy/flame_adept-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/salt_crab-strike,enemy/gull_harpy-strike,enemy/drowned_sailor-strike,enemy/tide_witch-strike,enemy/ember_imp-strike,enemy/magma_beetle-strike,enemy/cinder_orc-strike,enemy/flame_adept-strike --gutters 214
+```
+
+## frames-monsters-4.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-4.png` (`pnpm refsheet art/sheets/ref-frames-monsters-4.png
+--columns 8 --cell 192x256 --scale 7 enemy/frost_wolf,enemy/ice_troll,enemy/rime_golem,enemy/snow_shaman,enemy/drowned_monk,enemy/abbey_gargoyle,enemy/bell_wraith,enemy/eel_serpent`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. frost wolf, 2. ice troll, 3. rime golem, 4. snow shaman, 5. drowned monk, 6. abbey gargoyle, 7. bell wraith, 8. eel serpent.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-4.png.
+```
+
+Picks: row 1 for every wind-up. The strikes reach across the cell lines in both takes, so each
+creature takes the row it touches least in: row 4 for the frost wolf, ice troll, rime golem and
+snow shaman, row 2 for the drowned monk, abbey gargoyle, bell wraith and eel serpent. Forced
+gutters split the touching cells; beside each, the slicer drops a neighbour's tip that reaches
+across.
+
+```sh
+D=art/sheets/frames-monsters-4.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/frost_wolf-windup,enemy/ice_troll-windup,enemy/rime_golem-windup,enemy/snow_shaman-windup,enemy/drowned_monk-windup,enemy/abbey_gargoyle-windup,enemy/bell_wraith-windup,enemy/eel_serpent-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names x/s0,x/s1,x/s2,x/s3,enemy/drowned_monk-strike,enemy/abbey_gargoyle-strike,enemy/bell_wraith-strike,enemy/eel_serpent-strike --gutters 206,364,598,732,1348
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/frost_wolf-strike,enemy/ice_troll-strike,enemy/rime_golem-strike,enemy/snow_shaman-strike,x/s4,x/s5,x/s6,x/s7 --gutters 745,986,1370
+rm -rf art/sprites-frames/x art/sheets/native/x
+```
+
+## frames-monsters-5.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-5.png` (`pnpm refsheet art/sheets/ref-frames-monsters-5.png
+--columns 8 --cell 192x256 --scale 7 enemy/ash_ghoul,enemy/dust_stalker,enemy/cinder_colossus,enemy/ash_oracle,enemy/star_sentinel,enemy/comet_hound,enemy/spire_warden,enemy/astral_seer`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. ash ghoul, 2. dust stalker, 3. cinder colossus, 4. ash oracle, 5. star sentinel, 6. comet hound, 7. spire warden, 8. astral seer.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-5.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the spire warden's spear tip touches the astral seer: a forced gutter splits them.
+
+```sh
+D=art/sheets/frames-monsters-5.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/ash_ghoul-windup,enemy/dust_stalker-windup,enemy/cinder_colossus-windup,enemy/ash_oracle-windup,enemy/star_sentinel-windup,enemy/comet_hound-windup,enemy/spire_warden-windup,enemy/astral_seer-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/ash_ghoul-strike,enemy/dust_stalker-strike,enemy/cinder_colossus-strike,enemy/ash_oracle-strike,enemy/star_sentinel-strike,enemy/comet_hound-strike,enemy/spire_warden-strike,enemy/astral_seer-strike --gutters 1352
+```
+
+## frames-monsters-6.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-6.png` (`pnpm refsheet art/sheets/ref-frames-monsters-6.png
+--columns 8 --cell 192x256 --scale 7 enemy/hollow_knight,enemy/court_jester,enemy/throne_guard,enemy/court_mage,enemy/ink_horror,enemy/blank_page,enemy/quill_golem,enemy/erased_scribe`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. hollow knight, 2. court jester, 3. throne guard, 4. court mage, 5. ink horror, 6. blank page, 7. quill golem, 8. erased scribe.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-6.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the hollow knight's sword touches the court jester: a forced gutter splits them.
+
+```sh
+D=art/sheets/frames-monsters-6.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/hollow_knight-windup,enemy/court_jester-windup,enemy/throne_guard-windup,enemy/court_mage-windup,enemy/ink_horror-windup,enemy/blank_page-windup,enemy/quill_golem-windup,enemy/erased_scribe-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/hollow_knight-strike,enemy/court_jester-strike,enemy/throne_guard-strike,enemy/court_mage-strike,enemy/ink_horror-strike,enemy/blank_page-strike,enemy/quill_golem-strike,enemy/erased_scribe-strike --gutters 202
+```
+
+## frames-bosses-1.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-1.png` (`pnpm refsheet art/sheets/ref-frames-bosses-1.png
+--columns 2 --cell 768x512 --scale 7 enemy/bandit_captain,enemy/wild_boar`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: bandit captain on the left, wild boar on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-1.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), from the rerun pf3-frames-bosses-1b: the first run came back on black with a glow (kept as frames-bosses-1-black.png, unused).
+
+```sh
+D=art/sheets/frames-bosses-1.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/bandit_captain-windup,enemy/wild_boar-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/bandit_captain-strike,enemy/wild_boar-strike
+```
+
+## frames-bosses-2.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-2.png` (`pnpm refsheet art/sheets/ref-frames-bosses-2.png
+--columns 2 --cell 768x512 --scale 7 enemy/elder_treant,enemy/owlbear_cub`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: elder treant on the left, owlbear cub on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-2.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-2.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/elder_treant-windup,enemy/owlbear_cub-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/elder_treant-strike,enemy/owlbear_cub-strike
+```
+
+## frames-bosses-3.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-3.png` (`pnpm refsheet art/sheets/ref-frames-bosses-3.png
+--columns 2 --cell 768x512 --scale 7 enemy/sigh_hag,enemy/giant_heron`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: sigh hag on the left, giant heron on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-3.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-3.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/sigh_hag-windup,enemy/giant_heron-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/sigh_hag-strike,enemy/giant_heron-strike
+```
+
+## frames-bosses-4.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-4.png` (`pnpm refsheet art/sheets/ref-frames-bosses-4.png
+--columns 2 --cell 768x512 --scale 7 enemy/barrow_king,enemy/crypt_ogre`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: barrow king on the left, crypt ogre on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-4.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-4.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/barrow_king-windup,enemy/crypt_ogre-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/barrow_king-strike,enemy/crypt_ogre-strike
+```
+
+## The 5-hour window stops (frames)
+
+- 2026-10-08 01:05: the window stood at 94% after boss sheet 4 (sheets: the hero sheet, monster
+  sheets 1 to 6, boss sheets 1 to 4 and the rerun of boss sheet 1, 12 runs). It resets at 03:04;
+  boss sheet 5 is next.
+
+## frames-bosses-5.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-5.png` (`pnpm refsheet art/sheets/ref-frames-bosses-5.png
+--columns 2 --cell 768x512 --scale 7 enemy/glass_leviathan,enemy/reef_troll`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: glass leviathan on the left, reef troll on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-5.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-5.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/glass_leviathan-windup,enemy/reef_troll-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/glass_leviathan-strike,enemy/reef_troll-strike
+```
+
+## frames-bosses-6.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-6.png` (`pnpm refsheet art/sheets/ref-frames-bosses-6.png
+--columns 2 --cell 768x512 --scale 7 enemy/emberfall_wyrm,enemy/slag_giant`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: emberfall wyrm on the left, slag giant on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-6.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-6.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/emberfall_wyrm-windup,enemy/slag_giant-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/emberfall_wyrm-strike,enemy/slag_giant-strike
+```
+
+## frames-bosses-7.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-7.png` (`pnpm refsheet art/sheets/ref-frames-bosses-7.png
+--columns 2 --cell 768x512 --scale 7 enemy/frostvein_yeti,enemy/avalanche_drake`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: frostvein yeti on the left, avalanche drake on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-7.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-7.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/frostvein_yeti-windup,enemy/avalanche_drake-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/frostvein_yeti-strike,enemy/avalanche_drake-strike
+```
+
+## frames-bosses-8.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-8.png` (`pnpm refsheet art/sheets/ref-frames-bosses-8.png
+--columns 2 --cell 768x512 --scale 7 enemy/sunken_abbot,enemy/choir_of_bones`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: sunken abbot on the left, choir of bones on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-8.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-8.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/sunken_abbot-windup,enemy/choir_of_bones-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/sunken_abbot-strike,enemy/choir_of_bones-strike
+```
+
+## frames-bosses-9.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-9.png` (`pnpm refsheet art/sheets/ref-frames-bosses-9.png
+--columns 2 --cell 768x512 --scale 7 enemy/waste_tyrant,enemy/sand_basilisk`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: waste tyrant on the left, sand basilisk on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-9.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-9.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/waste_tyrant-windup,enemy/sand_basilisk-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/waste_tyrant-strike,enemy/sand_basilisk-strike
+```
+
+## frames-bosses-10.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-10.png` (`pnpm refsheet art/sheets/ref-frames-bosses-10.png
+--columns 2 --cell 768x512 --scale 7 enemy/fallen_star,enemy/void_manta`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: fallen star on the left, void manta on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-10.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-10.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/fallen_star-windup,enemy/void_manta-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/fallen_star-strike,enemy/void_manta-strike
+```
+
+## frames-bosses-11.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-11.png` (`pnpm refsheet art/sheets/ref-frames-bosses-11.png
+--columns 2 --cell 768x512 --scale 7 enemy/hollow_king,enemy/royal_chimera`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: hollow king on the left, royal chimera on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-11.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-11.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/hollow_king-windup,enemy/royal_chimera-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/hollow_king-strike,enemy/royal_chimera-strike
+```
+
+## frames-bosses-12.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-12.png` (`pnpm refsheet art/sheets/ref-frames-bosses-12.png
+--columns 2 --cell 768x512 --scale 7 enemy/unwritten_one,enemy/margin_beast`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: unwritten one on the left, margin beast on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-12.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-12.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/unwritten_one-windup,enemy/margin_beast-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/unwritten_one-strike,enemy/margin_beast-strike
+```
+
+## frames-bosses-13.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-13.png` (`pnpm refsheet art/sheets/ref-frames-bosses-13.png
+--columns 2 --cell 768x512 --scale 7 world_boss/the_promptwyrm,world_boss/hallucinox`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: the promptwyrm on the left, hallucinox on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-13.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-13.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names world_boss/the_promptwyrm-windup,world_boss/hallucinox-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_promptwyrm-strike,world_boss/hallucinox-strike
+```
+
+## frames-bosses-14.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-14.png` (`pnpm refsheet art/sheets/ref-frames-bosses-14.png
+--columns 2 --cell 768x512 --scale 7 world_boss/the_context_leviathan,world_boss/tokenmaw`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: the context leviathan on the left, tokenmaw on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-14.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-14.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names world_boss/the_context_leviathan-windup,world_boss/tokenmaw-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
+```
+
+## Redos (frames)
+
+Kevin, 2026-10-08: the frames ship as drawn. The 22 runs of PR 3 spent most of a weekly codex
+window, and redoing this list would cost about 19 more with the same prompts. The list is a set of
+candidates for a later pass that refines the sprites and frames, not a redo order.
+
+| Id | Frame | From | Note |
+| --- | --- | --- | --- |
+| `hero:knight` | windup | frames-heroes | frame size drift: native 30 against idle 21 (+43%); the sword overhead adds height, so the fit shrinks the pixels |
+| `hero:knight` | follow | frames-heroes | frame size drift: native 30 against idle 21 (+43%) |
+| `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
+| `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
+| `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |
+| `enemy:road_slime` | strike | frames-monsters-1 | frame size drift: native 20 against idle 12 (+67%) |
+| `enemy:field_rat` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
+| `enemy:field_rat` | strike | frames-monsters-1 | frame size drift: native 29 against idle 20 (+45%) |
+| `enemy:goblin_scout` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
+| `enemy:goblin_scout` | strike | frames-monsters-1 | frame size drift: native 31 against idle 20 (+55%) |
+| `enemy:moss_golem` | windup | frames-monsters-1 | frame size drift: native 30 against idle 24 (+25%) |
+| `enemy:moss_golem` | strike | frames-monsters-1 | frame size drift: native 34 against idle 24 (+42%) |
+| `enemy:wood_goblin` | strike | frames-monsters-1 | frame size drift: native 38 against idle 25 (+52%) |
+| `enemy:whisper_wisp` | windup | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |
+| `enemy:whisper_wisp` | strike | frames-monsters-1 | frame size drift: native 23 against idle 18 (+28%) |
+| `enemy:bog_lurker` | strike | frames-monsters-2 | frame size drift: native 30 against idle 20 (+50%) |
+| `enemy:marsh_leech` | strike | frames-monsters-2 | frame size drift: native 28 against idle 20 (+40%) |
+| `enemy:bone_soldier` | strike | frames-monsters-2 | frame size drift: native 30 against idle 23 (+30%) |
+| `enemy:drowned_sailor` | strike | frames-monsters-3 | frame size drift: native 32 against idle 24 (+33%) |
+| `enemy:ember_imp` | windup | frames-monsters-3 | frame size drift: native 31 against idle 25 (+24%) |
+| `enemy:ember_imp` | strike | frames-monsters-3 | frame size drift: native 37 against idle 25 (+48%) |
+| `enemy:ice_troll` | windup | frames-monsters-4 | frame size drift: native 35 against idle 27 (+30%) |
+| `enemy:ice_troll` | strike | frames-monsters-4 | frame size drift: native 33 against idle 27 (+22%) |
+| `enemy:rime_golem` | windup | frames-monsters-4 | frame size drift: native 31 against idle 25 (+24%) |
+| `enemy:rime_golem` | strike | frames-monsters-4 | frame size drift: native 33 against idle 25 (+32%) |
+| `enemy:snow_shaman` | windup | frames-monsters-4 | frame size drift: native 40 against idle 28 (+43%) |
+| `enemy:drowned_monk` | windup | frames-monsters-4 | frame size drift: native 32 against idle 25 (+28%) |
+| `enemy:abbey_gargoyle` | windup | frames-monsters-4 | frame size drift: native 34 against idle 24 (+42%) |
+| `enemy:abbey_gargoyle` | strike | frames-monsters-4 | frame size drift: native 31 against idle 24 (+29%) |
+| `enemy:ash_ghoul` | strike | frames-monsters-5 | frame size drift: native 32 against idle 24 (+33%) |
+| `enemy:ash_oracle` | windup | frames-monsters-5 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:star_sentinel` | strike | frames-monsters-5 | frame size drift: native 31 against idle 24 (+29%) |
+| `enemy:comet_hound` | strike | frames-monsters-5 | frame size drift: native 28 against idle 21 (+33%) |
+| `enemy:spire_warden` | strike | frames-monsters-5 | frame size drift: native 32 against idle 26 (+23%) |
+| `enemy:astral_seer` | windup | frames-monsters-5 | frame size drift: native 28 against idle 21 (+33%) |
+| `enemy:astral_seer` | strike | frames-monsters-5 | frame size drift: native 27 against idle 21 (+29%) |
+| `enemy:hollow_knight` | windup | frames-monsters-6 | frame size drift: native 33 against idle 22 (+50%) |
+| `enemy:hollow_knight` | strike | frames-monsters-6 | frame size drift: native 35 against idle 22 (+59%) |
+| `enemy:court_jester` | windup | frames-monsters-6 | frame size drift: native 31 against idle 21 (+48%) |
+| `enemy:court_jester` | strike | frames-monsters-6 | frame size drift: native 29 against idle 21 (+38%) |
+| `enemy:throne_guard` | windup | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:throne_guard` | strike | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:court_mage` | windup | frames-monsters-6 | frame size drift: native 34 against idle 23 (+48%) |
+| `enemy:court_mage` | strike | frames-monsters-6 | frame size drift: native 31 against idle 23 (+35%) |
+| `enemy:ink_horror` | strike | frames-monsters-6 | frame size drift: native 34 against idle 25 (+36%) |
+| `enemy:quill_golem` | windup | frames-monsters-6 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:quill_golem` | strike | frames-monsters-6 | frame size drift: native 33 against idle 22 (+50%) |
+| `enemy:erased_scribe` | windup | frames-monsters-6 | frame size drift: native 26 against idle 21 (+24%) |
+| `enemy:erased_scribe` | strike | frames-monsters-6 | frame size drift: native 27 against idle 21 (+29%) |
+| `enemy:elder_treant` | strike | frames-bosses-2 | frame size drift: native 100 against idle 66 (+52%) |
+| `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: native 79 against idle 46 (+72%) |
+| `enemy:owlbear_cub` | windup | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:owlbear_cub` | strike | frames-bosses-2 | frame size drift: the fit to the idle canvas shrinks it to 64% |
+| `enemy:bandit_captain` | strike | frames-bosses-1 | frame size drift: native 94 against idle 58 (+62%) |
+| `enemy:wild_boar` | strike | frames-bosses-1 | frame size drift: native 85 against idle 53 (+60%) |
+| `enemy:wild_boar` | windup | frames-bosses-1 | frame size drift: the fit to the idle canvas shrinks it to 70% |
+| `enemy:wild_boar` | strike | frames-bosses-1 | frame size drift: the fit to the idle canvas shrinks it to 74% |
+| `enemy:sigh_hag` | windup | frames-bosses-3 | frame size drift: native 77 against idle 63 (+22%) |
+| `enemy:sigh_hag` | strike | frames-bosses-3 | frame size drift: native 103 against idle 63 (+63%) |
+| `enemy:giant_heron` | windup | frames-bosses-3 | frame size drift: native 82 against idle 66 (+24%) |
+| `enemy:giant_heron` | strike | frames-bosses-3 | frame size drift: native 103 against idle 66 (+56%) |
+| `enemy:giant_heron` | windup | frames-bosses-3 | frame size drift: the fit to the idle canvas shrinks it to 71% |
+| `enemy:giant_heron` | strike | frames-bosses-3 | frame size drift: the fit to the idle canvas shrinks it to 67% |
+| `enemy:barrow_king` | strike | frames-bosses-4 | frame size drift: native 73 against idle 54 (+35%) |
+| `enemy:crypt_ogre` | windup | frames-bosses-4 | frame size drift: native 45 against idle 34 (+32%) |
+| `enemy:crypt_ogre` | strike | frames-bosses-4 | frame size drift: native 61 against idle 34 (+79%) |
+| `enemy:barrow_king` | windup | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 76% |
+| `enemy:barrow_king` | strike | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:crypt_ogre` | windup | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 56% |
+| `enemy:crypt_ogre` | strike | frames-bosses-4 | frame size drift: the fit to the idle canvas shrinks it to 56% |
+| `enemy:glass_leviathan` | strike | frames-bosses-5 | frame size drift: native 93 against idle 57 (+63%) |
+| `enemy:reef_troll` | strike | frames-bosses-5 | frame size drift: native 78 against idle 44 (+77%) |
+| `enemy:glass_leviathan` | windup | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 79% |
+| `enemy:glass_leviathan` | strike | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 79% |
+| `enemy:reef_troll` | windup | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `enemy:reef_troll` | strike | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 61% |
+| `enemy:slag_giant` | windup | frames-bosses-6 | frame size drift: native 63 against idle 49 (+29%) |
+| `enemy:slag_giant` | strike | frames-bosses-6 | frame size drift: native 71 against idle 49 (+45%) |
+| `enemy:emberfall_wyrm` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:slag_giant` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `enemy:slag_giant` | strike | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 69% |
+| `enemy:sunken_abbot` | windup | frames-bosses-8 | frame size drift: native 48 against idle 38 (+26%) |
+| `enemy:sunken_abbot` | strike | frames-bosses-8 | frame size drift: native 78 against idle 38 (+105%) |
+| `enemy:choir_of_bones` | windup | frames-bosses-8 | frame size drift: native 43 against idle 35 (+23%) |
+| `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: native 50 against idle 35 (+43%) |
+| `enemy:sunken_abbot` | windup | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 79% |
+| `enemy:sunken_abbot` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 50% |
+| `enemy:choir_of_bones` | windup | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 72% |
+| `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 46% |
+| `enemy:avalanche_drake` | strike | frames-bosses-7 | frame size drift: native 84 against idle 62 (+35%) |
+| `enemy:avalanche_drake` | windup | frames-bosses-7 | frame size drift: the fit to the idle canvas shrinks it to 77% |
+| `enemy:waste_tyrant` | strike | frames-bosses-9 | frame size drift: native 91 against idle 56 (+63%) |
+| `enemy:sand_basilisk` | windup | frames-bosses-9 | frame size drift: native 56 against idle 45 (+24%) |
+| `enemy:sand_basilisk` | strike | frames-bosses-9 | frame size drift: native 78 against idle 45 (+73%) |
+| `enemy:waste_tyrant` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:sand_basilisk` | windup | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 69% |
+| `enemy:sand_basilisk` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `enemy:fallen_star` | strike | frames-bosses-10 | frame size drift: native 67 against idle 47 (+43%) |
+| `enemy:void_manta` | windup | frames-bosses-10 | frame size drift: native 61 against idle 46 (+33%) |
+| `enemy:void_manta` | strike | frames-bosses-10 | frame size drift: native 82 against idle 46 (+78%) |
+| `enemy:fallen_star` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 70% |
+| `enemy:void_manta` | windup | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:void_manta` | strike | frames-bosses-10 | frame size drift: the fit to the idle canvas shrinks it to 64% |
+| `enemy:unwritten_one` | strike | frames-bosses-12 | frame size drift: native 95 against idle 61 (+56%) |
+| `enemy:margin_beast` | windup | frames-bosses-12 | frame size drift: native 84 against idle 67 (+25%) |
+| `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: native 97 against idle 67 (+45%) |
+| `enemy:margin_beast` | windup | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:hollow_king` | strike | frames-bosses-11 | frame size drift: native 96 against idle 56 (+71%) |
+| `enemy:royal_chimera` | windup | frames-bosses-11 | frame size drift: native 82 against idle 54 (+52%) |
+| `enemy:royal_chimera` | strike | frames-bosses-11 | frame size drift: native 90 against idle 54 (+67%) |
+| `enemy:hollow_king` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:royal_chimera` | windup | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
+| `enemy:royal_chimera` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
+| `world_boss:the_context_leviathan` | windup | frames-bosses-14 | frame size drift: native 57 against idle 73 (-22%) |
+| `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: native 89 against idle 73 (+22%) |
+| `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 75% |
+| `world_boss:tokenmaw` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 72% |
+| `world_boss:the_promptwyrm` | strike | frames-bosses-13 | frame size drift: native 80 against idle 53 (+51%) |
+| `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: native 76 against idle 55 (+38%) |
+| `world_boss:the_promptwyrm` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 58% |

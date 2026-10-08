@@ -1,8 +1,10 @@
 import { expect, test } from 'claude-code/testing'
+import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { spriteFor } from '../sprites/index'
 import type { Effect } from '../vendor/sim.js'
+import { composeFrame } from './compose'
 import { boss, wave } from './fixtures'
-import { type StageActor, stageAt } from './model'
+import { lungeOffset, type StageActor, stageAt } from './model'
 import { StageTimeline } from './timeline'
 import {
   ACTOR_EDGE,
@@ -75,7 +77,9 @@ test('a flashing actor draws white; a lunging hero steps toward the enemies', ()
   const e1 = actor(mid.actors, 'e1')
   expect(e1.flashing).toBe(true)
   expect(e1.palette.slice(1).every((c) => c === FLASH_RGB)).toBe(true)
-  expect(actor(mid.actors, 'h1').spriteId).toBe('hero_attack:knight')
+  const h1 = actor(mid.actors, 'h1')
+  expect(h1.spriteId).toBe('hero:knight')
+  expect(h1.art).toBe(spriteFor('hero_attack', 'knight').full)
 })
 
 test('the idle bob moves with motion full only', () => {
@@ -178,4 +182,132 @@ test('the compact stage ignores the scale and an enemy carries no rarity slot', 
   expect(actor(m.actors, 'h1').art).toBe(spriteFor('hero', 'knight').compact)
   expect(actor(m.actors, 'e1').raritySlot).toBe(null)
   expect(actor(at().actors, 'h1').raritySlot).toBe(spriteFor('hero', 'knight').raritySlot)
+})
+
+const HI: Opts = { compact: false, motion: 'full', scale: HIRES_SCALE }
+const LO: Opts = { compact: false, motion: 'full', scale: 1 }
+const knightHits: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
+const slimeHits: Effect[] = [{ k: 'act', actor: 'e1', action: 'attack', at: 0 }, hit('e1', 'h1')]
+const knight = spriteFor('hero', 'knight')
+const knightAttack = spriteFor('hero_attack', 'knight')
+
+test('at 1.5 the knight winds up, strikes in its attack art and follows through', () => {
+  const windup = actor(at(wave(), knightHits, NOW + 60, BOX, HI).actors, 'h1')
+  const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
+  expect(windup.pose).toBe('windup')
+  expect(windup.art).toBe(knight.frames?.windup.art)
+  expect(windup.x).toBe(
+    rest.x +
+      lungeOffset(
+        { kind: 'lunge', actor: 'h1', from: NOW, until: NOW + LUNGE_MS, dir: -1 },
+        NOW + 60,
+        HIRES_SCALE,
+      ),
+  )
+  expect(windup.x).not.toBe(rest.x)
+  const strike = actor(at(wave(), knightHits, NOW + 180, BOX, HI).actors, 'h1')
+  expect(strike.pose).toBe('strike')
+  expect(strike.art).toBe(knightAttack.hires)
+  expect(strike.spriteId).toBe('hero:knight')
+  const follow = actor(at(wave(), knightHits, NOW + 300, BOX, HI).actors, 'h1')
+  expect(follow.pose).toBe('follow')
+  expect(follow.art).toBe(knight.frames?.follow?.art)
+})
+
+test('at 1.5 the struck enemy leans back from its idle place, lightened, and blinks white', () => {
+  const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'e1')
+  const struck = actor(at(wave(), knightHits, NOW + 150, BOX, HI).actors, 'e1')
+  const idle = spriteFor('enemy', 'goblin_scout').hires
+  const leaned = shear(idle)
+  expect(struck.pose).toBe('hit')
+  expect(struck.poses.hit.art).toBe(leaned.art)
+  expect(struck.poses.hit.dx).toBe(-leaned.grow)
+  expect(struck.x).toBe(rest.x)
+  expect(struck.poses.hit.palette).toEqual(idle.palette.map((c, i) => (i === 0 ? c : lighten(c))))
+  expect(struck.flashing).toBe(true)
+  const later = actor(at(wave(), knightHits, NOW + 230, BOX, HI).actors, 'e1')
+  expect(later.pose).toBe('hit')
+  expect(later.flashing).toBe(false)
+  expect(later.palette).toEqual(later.poses.hit.palette)
+})
+
+test('at 1.5 a struck hero leans back with no offset, from its idle place', () => {
+  const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
+  const struck = actor(at(wave(), slimeHits, NOW + 150, BOX, HI).actors, 'h1')
+  expect(struck.pose).toBe('hit')
+  expect(struck.poses.hit.dx).toBe(0)
+  expect(struck.x).toBe(rest.x)
+})
+
+test('at 1 the knight shows its attack art through the lunge and its idle art after', () => {
+  for (const ms of [60, 180]) {
+    expect(actor(at(wave(), knightHits, NOW + ms, BOX, LO).actors, 'h1').art).toBe(
+      knightAttack.full,
+    )
+  }
+  expect(actor(at(wave(), knightHits, NOW + 300, BOX, LO).actors, 'h1').art).toBe(knight.full)
+  const e1 = actor(at(wave(), knightHits, NOW + 230, BOX, LO).actors, 'e1')
+  expect(e1.flashing).toBe(true)
+  expect(e1.art).toBe(spriteFor('enemy', 'goblin_scout').full)
+})
+
+test('at rest the second half-second shows idle B at 1.5 and the 1-pixel bob at 1; still shows idle A', () => {
+  const later = NOW + 700
+  const hi = actor(at(wave(), [], later, BOX, HI).actors, 'h1')
+  const hiRest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
+  expect(hi.pose).toBe('idle_b')
+  expect(hi.art).toBe(squash(knight.hires))
+  expect(hi.y).toBe(hiRest.y)
+  const lo = actor(at(wave(), [], later, BOX, LO).actors, 'h1')
+  const loRest = actor(at(wave(), [], NOW, BOX, LO).actors, 'h1')
+  expect(lo.art).toBe(knight.full)
+  expect(loRest.y - lo.y).toBe(IDLE_BOB_PX)
+  const still = actor(at(wave(), [], later, BOX, { ...HI, motion: 'still' }).actors, 'h1')
+  expect(still.pose).toBe('idle')
+  expect(still.art).toBe(knight.hires)
+})
+
+test("a black mage's fireball is halfway from its front edge to the target's centre at 220 ms", () => {
+  const effects: Effect[] = [{ k: 'act', actor: 'h2', action: 'attack', at: 0 }, hit('h2', 'e1')]
+  const m = at(wave(), effects, NOW + 220, BOX, HI)
+  expect(m.effects).toHaveLength(1)
+  const fb = m.effects[0]
+  if (!fb) throw new Error('no effect')
+  expect(fb.spriteId).toBe('effect:fireball')
+  expect(fb.flipX).toBe(true)
+  const box = opaqueBox(fb.art)
+  if (!box) throw new Error('empty fireball')
+  const cx = fb.x + fb.art.width - (box.x0 + box.x1 + 1) / 2
+  const cy = fb.y + (box.y0 + box.y1 + 1) / 2
+  const mage = actor(m.actors, 'h2')
+  const e1 = actor(m.actors, 'e1')
+  const tx = e1.x + e1.poses.idle.art.width / 2
+  const ty = e1.y + e1.poses.idle.art.height / 2
+  const fy = mage.y + mage.poses.idle.art.height / 2
+  expect(Math.abs(cx - (mage.x + tx) / 2)).toBeLessThanOrEqual(0.5)
+  expect(Math.abs(cy - (fy + ty) / 2)).toBeLessThanOrEqual(0.5)
+  expect(at(wave(), effects, NOW + 100, BOX, HI).effects).toEqual([])
+  expect(at(wave(), effects, NOW + 330, BOX, HI).effects).toEqual([])
+})
+
+test('the compact stage draws every pose and effect from compact art, its frame still 52 x 8', () => {
+  const COMPACT: Opts = { compact: true, motion: 'full' }
+  const box = { columns: 52, rows: 4 }
+  const lunging = at(wave(), knightHits, NOW + 60, box, COMPACT)
+  expect(actor(lunging.actors, 'h1').art).toBe(knightAttack.compact)
+  const struck = at(wave(), knightHits, NOW + 150, box, COMPACT)
+  expect(actor(struck.actors, 'e1').art).toBe(spriteFor('enemy', 'goblin_scout').compact)
+  for (const a of struck.actors) {
+    for (const p of Object.values(a.poses)) expect(p.art.height).toBeLessThanOrEqual(8)
+  }
+  const bolt = at(
+    wave(),
+    [{ k: 'act', actor: 'h2', action: 'attack', at: 0 }, hit('h2', 'e1')],
+    NOW + 220,
+    box,
+    COMPACT,
+  )
+  expect(bolt.effects[0]?.art).toBe(spriteFor('effect', 'fireball').compact)
+  const f = composeFrame(bolt, { numbers: false })
+  expect([f.width, f.height]).toEqual([52, 8])
 })

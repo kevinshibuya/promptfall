@@ -1,13 +1,15 @@
 // Contact sheets for art review: each built sprite at ship size (its 1x art at 6x, its 1.5x art at
 // 4x as `-hires`), its native cut beside it, and a zone's monsters and bosses on the real stage at
-// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). One PNG per picture so the review page can caption
-// each with its id.
+// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). Each actor with drawn frames also gets its frame
+// strip (`-frames`: idle A, idle B, wind-up, strike, follow-through when set, hit, at 4x). One PNG
+// per picture so the review page can caption each with its id.
 //
 // tsx scripts/contact.ts --zone <n> | --heroes | --items <name,name,…> | --world-bosses
 //   [--out <dir>] [--native <dir>]
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { content } from '@promptfall/sim'
+import { lighten, shear, squash } from '../plugins/promptfall/hooks/sprites/derive'
 import { SPRITES } from '../plugins/promptfall/hooks/sprites/generated'
 import type { Sprite } from '../plugins/promptfall/hooks/sprites/types'
 import { artFrame, composeFrame, type Frame } from '../plugins/promptfall/hooks/stage/compose'
@@ -55,6 +57,46 @@ const rgbaOf = (f: Frame): Rgba => ({
   data: new Uint8Array(f.rgba),
 })
 
+/** Pictures side by side, bottom-aligned, `gap` screen pixels of ground between. */
+function row(images: readonly Rgba[], gap: number): Rgba {
+  const width = images.reduce((w, i) => w + i.width, 0) + gap * (images.length - 1)
+  const height = Math.max(...images.map((i) => i.height))
+  const data = new Uint8Array(width * height * 4)
+  for (let p = 0; p < width * height; p++)
+    data.set([BG >> 16, (BG >> 8) & 0xff, BG & 0xff, 255], p * 4)
+  let ox = 0
+  for (const img of images) {
+    const oy = height - img.height
+    for (let y = 0; y < img.height; y++) {
+      data.set(
+        img.data.subarray(y * img.width * 4, (y + 1) * img.width * 4),
+        ((oy + y) * width + ox) * 4,
+      )
+    }
+    ox += img.width + gap
+  }
+  return { width, height, data }
+}
+
+/** The frame strip of a sprite with drawn frames, at 4x; null without frames. */
+function frameStrip(s: Sprite): Rgba | null {
+  if (!s.frames) return null
+  const { windup, strike, follow } = s.frames
+  const hit = shear(s.hires).art
+  const arts = [
+    artFrame(s.hires, s.hires.palette),
+    artFrame(squash(s.hires), s.hires.palette),
+    artFrame(windup.art, windup.art.palette),
+    artFrame(strike.art, strike.art.palette),
+    ...(follow ? [artFrame(follow.art, follow.art.palette)] : []),
+    artFrame(hit, hit.palette.map(lighten)),
+  ]
+  return row(
+    arts.map((f) => scaled(rgbaOf(f), 4)),
+    4,
+  )
+}
+
 function sprite(id: string): Sprite {
   const s = SPRITES[id]
   if (!s) throw new Error(`no sprite ${id}`)
@@ -84,6 +126,23 @@ function staged(view: GameView, scale: 1 | 1.5): Frame {
   return composeFrame(stageAt(view, t, NOW, box, { compact: false, motion: 'full', scale }), {
     numbers: false,
   })
+}
+
+/** The view at 1.5 `ms` after `actor` struck `target`, at 4x. */
+function acting(view: GameView, actor: string, target: string, ms: number): Rgba {
+  const t = new StageTimeline()
+  t.observe(view, NOW - SETTLED)
+  t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target, amount: 9 },
+    ],
+    NOW - ms,
+  )
+  t.observe(view, NOW)
+  const box = { columns: 120, rows: t.rowsAt(view, NOW) }
+  const model = stageAt(view, t, NOW, box, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  return scaled(rgbaOf(composeFrame(model, { numbers: false })), 4)
 }
 
 export function contact(target: ContactTarget, opts: { out: string; native: string }): string[] {
@@ -122,6 +181,11 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
   const both = (id: string) => {
     shipped(id)
     nativeOf(id)
+    const strip = frameStrip(sprite(id))
+    if (strip) {
+      const [kind, name] = id.split(':') as [string, string]
+      put(`${kind}-${name}-frames`, strip)
+    }
   }
 
   switch (target.kind) {
@@ -132,6 +196,12 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
       views('stage-rest', inZone(wave(), target.zone, zone.enemies.slice(0, 3)))
       views('stage-boss', inZone(boss(), target.zone, [zone.boss]))
       views('stage-turn', inZone(turnBoss(), target.zone, [zone.turnBoss]))
+      // The front enemy strikes the knight: 150 ms in (strike frame, lunge returning, the knight's
+      // hit frame and blink), then 240 ms in (the hit frame, the blink over).
+      const rest = inZone(wave(), target.zone, zone.enemies.slice(0, 3))
+      const front = rest.enemies[0]?.id ?? ''
+      put('stage-strike', acting(rest, front, 'h1', 150))
+      put('stage-hit', acting(rest, front, 'h1', 240))
       break
     }
     case 'heroes': {
@@ -150,6 +220,9 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
           }
         }
       }
+      // The black mage's fireball halfway, the white mage's burst on its target, 220 ms in.
+      put('stage-bolt', acting(wave(), 'h2', 'e1', 220))
+      put('stage-burst', acting(wave(), 'h3', 'e1', 220))
       break
     }
     case 'items':

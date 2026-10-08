@@ -1,5 +1,9 @@
 // Hand-built game views for the stage tests and scripts/stage-goldens.ts.
 import type { EnemyView, GameView, HeroView } from '../../types'
+import { encode } from '../sprites/base64'
+import type { SpriteArt } from '../sprites/types'
+import { type Pose, type StageActor, type StageModel, samePoses } from './model'
+import type { Motion } from './timeline'
 
 function hero(
   id: string,
@@ -116,4 +120,146 @@ export function fallen(): GameView {
     h.id === 'h3' ? { ...h, hp: 0, alive: false, gauge: 0, queued: false } : h,
   )
   return v
+}
+
+/** 16 distinct colours from a seed, index 0 transparent. */
+function dithered(width: number, height: number, seed: number): SpriteArt {
+  const px = new Uint8Array(width * height).map((_, i) => {
+    const x = i % width
+    const y = Math.floor(i / width)
+    return ((x + 3 * y) % 16) + 1
+  })
+  const palette = [
+    0,
+    ...Array.from({ length: 16 }, (_, c) => (seed * 0x0b1d3f + c * 0x0f0f0f) & 0xffffff),
+  ]
+  return { width, height, palette, pixels: encode(px) }
+}
+
+function checkered(width: number, height: number, a: number, b: number): SpriteArt {
+  const px = new Uint8Array(width * height).map(
+    (_, i) => 1 + (((i % width) + Math.floor(i / width)) % 2),
+  )
+  return { width, height, palette: [0, a, b], pixels: encode(px) }
+}
+
+function placed(
+  key: string,
+  art: SpriteArt,
+  x: number,
+  y: number,
+  flipX: boolean,
+  alpha = 1,
+  poses: Partial<Record<Pose, SpriteArt>> = {},
+  pose: Pose = 'idle',
+): StageActor {
+  const all = samePoses(art)
+  for (const [p, a] of Object.entries(poses) as [Pose, SpriteArt][]) {
+    all[p] = { art: a, palette: a.palette, raritySlot: null, dx: 0 }
+  }
+  return {
+    key,
+    spriteId: `adversarial:${key}`,
+    art: all[pose].art,
+    palette: all[pose].palette,
+    x,
+    y,
+    flipX,
+    alpha,
+    fallen: false,
+    flashing: false,
+    raritySlot: null,
+    pose,
+    poses: all,
+  }
+}
+
+/**
+ * ADR 0006's fuller legal frame at `scale`: a 48 × 34 (72 × 51) boss and four 16 × 16 (24 × 24)
+ * enemies dithered with index (x + 3y) % 16 + 1, two of the enemies dissolving, three checker
+ * heroes with distinct palettes, a drop. `acting`: the boss 60 ms into a lunge action with its
+ * wind-up and strike as dithered frames of its own, the first hero taking the hit.
+ */
+export function fullerFrame(
+  scale: 1 | 1.5,
+  acting: boolean,
+  now: number,
+): { model: StageModel; motions: Motion[] } {
+  const k = (v: number) => Math.round(v * scale)
+  const boss = dithered(k(48), k(34), 1)
+  const frames = acting && scale !== 1
+  const actors = [
+    placed(
+      'e0',
+      boss,
+      k(4),
+      0,
+      false,
+      1,
+      frames ? { windup: dithered(k(48), k(34), 7), strike: dithered(k(48), k(34), 8) } : {},
+      frames ? 'windup' : 'idle',
+    ),
+    ...[0, 1, 2, 3].map((i) =>
+      placed(
+        `e${i + 1}`,
+        dithered(k(16), k(16), i + 2),
+        k(56) + i * k(18),
+        k(34) - k(16),
+        false,
+        i < 2 ? 0.5 : 1,
+      ),
+    ),
+    ...[0, 1, 2].map((i) =>
+      placed(
+        `h${i + 1}`,
+        checkered(k(16), k(16), 0x400000 + i * 0x101010, 0x00c000 + i * 0x000a0a),
+        k(140) - i * k(18),
+        k(34) - k(16),
+        true,
+      ),
+    ),
+  ]
+  const motions: Motion[] = [
+    { kind: 'dissolve', actor: 'e1', from: now - 100, until: now + 320 },
+    { kind: 'dissolve', actor: 'e2', from: now - 100, until: now + 320 },
+    { kind: 'drop', actor: 'e1', item: 'item:iron_sword', from: now - 100, until: now + 500 },
+  ]
+  if (acting) {
+    motions.push(
+      { kind: 'lunge', actor: 'e0', from: now - 60, until: now + 180, dir: 1 },
+      { kind: 'windup', actor: 'e0', from: now - 60, until: now + 60 },
+      { kind: 'strike', actor: 'e0', from: now + 60, until: now + 180, shape: 'lunge' },
+      { kind: 'hit', actor: 'h1', from: now + 60, until: now + 220 },
+      { kind: 'flash', actor: 'h1', from: now + 60, until: now + 220 },
+      {
+        kind: 'number',
+        actor: 'h1',
+        text: '-999',
+        rgb: 0xff5050,
+        from: now + 60,
+        until: now + 760,
+      },
+    )
+  }
+  return {
+    model: {
+      box: { columns: 160, rows: 17 },
+      ground: 0x5a8c3a,
+      actors,
+      numbers: [],
+      drops: [
+        {
+          spriteId: 'adversarial:drop',
+          art: checkered(k(16), k(16), 0x808080, 0x0000ff),
+          x: k(60),
+          y: k(10),
+          alpha: 1,
+        },
+      ],
+      effects: [],
+      alt: 'fuller',
+      scale,
+    },
+    motions,
+  }
 }

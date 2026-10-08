@@ -11,7 +11,8 @@ import { worldBossKey } from '../plugins/promptfall/hooks/sprites/keys'
 import { hex, medianCut, nearest, parseHex, type Rgba, readPng, rgbOf } from './png'
 
 export type Style = 'nes' | 'snes'
-export type Kind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'
+export type Kind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'
+export type FrameName = 'windup' | 'strike' | 'follow'
 
 export type ManifestEntry = {
   id: string
@@ -27,6 +28,10 @@ export type ManifestEntry = {
   /** As `rarityColor`, for `fileHires`. */
   rarityColorHires?: string
   fit?: { height: number }
+  /** PNGs under art/ holding the drawn 1.5x frames; a hero's strike defaults to its hero_attack. */
+  frames?: { windup: string; strike?: string; follow?: string }
+  /** A hero's rarity colour per drawn frame, as `rarityColorHires`. */
+  frameRarityColors?: { windup: string; follow?: string }
 }
 export type Manifest = {
   palettes: { nes: string; snes: string; hires?: string }
@@ -36,6 +41,8 @@ export type Manifest = {
 /** Palette indices: index 0 is transparent, `palette[0]` is 0 and never drawn. */
 export type Indexed = { width: number; height: number; palette: number[]; idx: Uint8Array }
 export type Variants = { full: Indexed; hires: Indexed; compact: Indexed; small: Indexed }
+export type BuiltFrame = { art: Indexed; raritySlot: number | null }
+export type BuiltFrames = { windup: BuiltFrame; strike: BuiltFrame; follow: BuiltFrame | null }
 export type BuiltSprite = {
   id: string
   kind: Kind
@@ -44,6 +51,8 @@ export type BuiltSprite = {
   raritySlot: number | null
   raritySlotHires: number | null
   isPlaceholder: boolean
+  /** The drawn 1.5x frames on the idle 1.5x canvas; null without `frames`. */
+  frames: BuiltFrames | null
 }
 export type BuildInput = {
   manifest: Manifest
@@ -58,6 +67,11 @@ export type BuildResult = {
   errors: string[]
   sprites: BuiltSprite[]
   art: Map<string, Variants>
+  /**
+   * Frames whose native's long side is over 20% off its idle native's, or that the fit to the idle
+   * canvas shrinks by more than 20%: a report, not an error.
+   */
+  drift: string[]
 }
 
 export const LIMITS: Record<Style, { colours: number; width: number; height: number }> = {
@@ -66,7 +80,10 @@ export const LIMITS: Record<Style, { colours: number; width: number; height: num
 }
 const COMPACT_HEIGHT = 8
 const SMALL = { width: 8, height: 4 }
-const KINDS: readonly Kind[] = ['hero', 'hero_attack', 'enemy', 'world_boss', 'item']
+const KINDS: readonly Kind[] = ['hero', 'hero_attack', 'enemy', 'world_boss', 'item', 'effect']
+/** The effect sprites the stage moves during a hero's action; not content, so listed here. */
+export const EFFECT_IDS = ['effect:fireball', 'effect:light_burst', 'effect:arrow'] as const
+const FRAME_DRIFT = 0.2
 const ALPHA_MIN = 128
 /** The 1.5x art: its scale over the 1x canvases and its colour limit. */
 const HIRES_SCALE = 1.5
@@ -155,6 +172,9 @@ export function buildSprites(input: BuildInput): BuildResult {
   const hiresPaths = new Map<string, string>()
   const seen = new Set<string>()
   const expected = new Set(input.expected)
+  const drift: string[] = []
+  /** Heroes with frames and no strike: resolved to their hero_attack after the loop. */
+  const pendingStrike: { sprite: BuiltSprite; windup: BuiltFrame; follow: BuiltFrame | null }[] = []
 
   for (const entry of input.manifest.sprites) {
     const { id } = entry
@@ -236,7 +256,7 @@ export function buildSprites(input: BuildInput): BuildResult {
           : raritySlotHiresOf(id, entry, hiresSource, variants.hires, input.palettes.hires, errors)
       if (raritySlotHires === null) continue
     }
-    sprites.push({
+    const sprite: BuiltSprite = {
       id,
       kind,
       style,
@@ -244,12 +264,137 @@ export function buildSprites(input: BuildInput): BuildResult {
       raritySlot,
       raritySlotHires,
       isPlaceholder: entry.alias !== undefined,
-    })
+      frames: null,
+    }
+    if (entry.frames !== undefined) {
+      const hero = kind === 'hero'
+      const f = entry.frames
+      if (!hero && f.strike === undefined) {
+        errors.push(`${id}: frames.strike is required for a non-hero`)
+        continue
+      }
+      if (hero && f.strike !== undefined) {
+        errors.push(`${id}: frames.strike: a hero strikes in its hero_attack art`)
+        continue
+      }
+      const ctx = { id, entry, idle: variants.hires, master: input.palettes.hires, hero, input }
+      const windup = buildFrame(ctx, 'windup', f.windup, errors, drift)
+      const strike =
+        f.strike === undefined ? null : buildFrame(ctx, 'strike', f.strike, errors, drift)
+      const follow =
+        f.follow === undefined ? null : buildFrame(ctx, 'follow', f.follow, errors, drift)
+      if (windup === null || (f.strike !== undefined && strike === null)) continue
+      if (f.follow !== undefined && follow === null) continue
+      if (strike !== null) sprite.frames = { windup, strike, follow }
+      else pendingStrike.push({ sprite, windup, follow })
+    }
+    sprites.push(sprite)
+  }
+  for (const { sprite, windup, follow } of pendingStrike) {
+    const attackId = sprite.id.replace(/^hero:/, 'hero_attack:')
+    const attack = sprites.find((s) => s.id === attackId)
+    const hires = attack ? art.get(attack.stem)?.hires : undefined
+    if (!attack || !hires) {
+      errors.push(`${sprite.id}: frames.strike needs ${attackId}`)
+      continue
+    }
+    sprite.frames = { windup, strike: { art: hires, raritySlot: attack.raritySlotHires }, follow }
   }
   for (const id of input.expected) {
     if (!seen.has(id)) errors.push(`${id}: no manifest entry`)
   }
-  return { errors, sprites, art }
+  return { errors, sprites, art, drift }
+}
+
+type FrameContext = {
+  id: string
+  entry: ManifestEntry
+  /** The idle 1.5x art: every frame lands on its canvas. */
+  idle: Indexed
+  master: readonly number[]
+  hero: boolean
+  input: BuildInput
+}
+
+/** `art/sheets/native/<kind>/<name>.png` for a PNG at `<dir>/<kind>/<name>.png` under art/. */
+const nativeOf = (path: string): string => `sheets/native/${path.split('/').slice(1).join('/')}`
+
+/**
+ * A drawn frame: snapped to the 1.5x master (16 colours at most), shrunk to fit the idle 1.5x art
+ * if larger, then padded bottom-centred to exactly its width and height.
+ */
+function buildFrame(
+  ctx: FrameContext,
+  name: FrameName,
+  path: string,
+  errors: string[],
+  drift: string[],
+): BuiltFrame | null {
+  const { id, entry, idle, master, input } = ctx
+  const source = input.load(path)
+  if (source === null) {
+    errors.push(`${id}: frames.${name}: missing file art/${path}`)
+    return null
+  }
+  const snapped = snap(source, master, HIRES_COLOURS)
+  if ('count' in snapped) {
+    errors.push(
+      `${id}: frames.${name} has ${snapped.count} colours, the 1.5x art allows ${HIRES_COLOURS}`,
+    )
+    return null
+  }
+  let art = snapped.art
+  const s = Math.min(1, idle.width / art.width, idle.height / art.height)
+  if (s < 1) {
+    art = downsample(
+      art,
+      Math.max(1, Math.round(art.width * s)),
+      Math.max(1, Math.round(art.height * s)),
+    )
+  }
+  art = pad(art, idle.width, idle.height)
+  if (s < 1 - FRAME_DRIFT) {
+    drift.push(`${id} frames.${name}: the fit shrinks it to ${Math.round(s * 100)}%`)
+  }
+
+  const idleFile = entry.file
+  const frameNative = input.load(nativeOf(path))
+  const idleNative = idleFile === undefined ? null : input.load(nativeOf(idleFile))
+  if (frameNative !== null && idleNative !== null) {
+    const a = Math.max(frameNative.width, frameNative.height)
+    const b = Math.max(idleNative.width, idleNative.height)
+    const off = a / b - 1
+    if (Math.abs(off) > FRAME_DRIFT) {
+      const pct = `${off > 0 ? '+' : ''}${Math.round(off * 100)}%`
+      drift.push(`${id} frames.${name}: native ${a} against idle ${b} (${pct})`)
+    }
+  }
+
+  let raritySlot: number | null = null
+  if (ctx.hero) {
+    if (name === 'strike') return { art, raritySlot }
+    const colourHex = entry.frameRarityColors?.[name]
+    if (colourHex === undefined) {
+      errors.push(`${id}: a hero with frames.${name} needs frameRarityColors.${name}`)
+      return null
+    }
+    const colour = parseHex(colourHex)
+    let found = false
+    for (let i = 0; i < source.data.length && !found; i += 4) {
+      found = (source.data[i + 3] ?? 0) >= ALPHA_MIN && rgbOf(source.data, i) === colour
+    }
+    const slot = art.palette.indexOf(nearest(colour, master), 1)
+    if (!found || slot <= 0) {
+      errors.push(`${id}: frameRarityColors.${name} ${colourHex} is not in its PNG`)
+      return null
+    }
+    if (!oneRegion(art, slot)) {
+      errors.push(`${id}: frameRarityColors.${name} is not one region`)
+      return null
+    }
+    raritySlot = slot
+  }
+  return { art, raritySlot }
 }
 
 function buildArt(
@@ -423,11 +568,19 @@ export function emitModule(result: BuildResult): string {
   const name = new Map(stems.map((stem, i) => [stem, `a${i}`]))
   const sprites = [...result.sprites].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const items = new Set(sprites.filter((s) => s.kind === 'item').map((s) => s.stem))
+  /** A frame that is a stem's 1.5x art (a hero's strike) is emitted as a reference to it. */
+  const hiresRef = new Map<Indexed, string>()
+  for (const stem of stems) {
+    const v = result.art.get(stem)
+    if (v) hiresRef.set(v.hires, `${name.get(stem)}.hires`)
+  }
   const lines = [
     '// Generated by scripts/sprites.ts from art/manifest.json. Do not edit: run `pnpm sprites`.',
     '',
     'type Art = { width: number; height: number; palette: readonly number[]; pixels: string }',
     'type Variants = { full: Art; hires: Art; compact: Art; small: Art | null }',
+    'type Frame = { art: Art; raritySlot: number | null }',
+    'type Frames = { windup: Frame; strike: Frame; follow: Frame | null }',
     '',
   ]
   for (const stem of stems) {
@@ -439,19 +592,39 @@ export function emitModule(result: BuildResult): string {
       `const ${name.get(stem)}: Variants = {\n  full: ${artLiteral(v.full)},\n  hires: ${artLiteral(v.hires)},\n  compact: ${artLiteral(v.compact)},\n  small: ${small},\n}`,
     )
   }
+  /** Each drawn frame once, as a module-level object: the Svg dedupes defs by identity. */
+  const frameNames = new Map<Indexed, string>()
+  for (const s of sprites) {
+    if (!s.frames) continue
+    for (const [key, frame] of Object.entries(s.frames) as [FrameName, BuiltFrame | null][]) {
+      if (!frame || hiresRef.has(frame.art) || frameNames.has(frame.art)) continue
+      const f = `f${frameNames.size}`
+      frameNames.set(frame.art, f)
+      lines.push(`// ${s.id} ${key}`)
+      lines.push(`const ${f}: Art = ${artLiteral(frame.art)}`)
+    }
+  }
+  const frameLiteral = (frame: BuiltFrame | null): string =>
+    frame === null
+      ? 'null'
+      : `{ art: ${hiresRef.get(frame.art) ?? frameNames.get(frame.art)}, raritySlot: ${frame.raritySlot} }`
+  const framesLiteral = (f: BuiltFrames | null): string =>
+    f === null
+      ? 'null'
+      : `{ windup: ${frameLiteral(f.windup)}, strike: ${frameLiteral(f.strike)}, follow: ${frameLiteral(f.follow)} }`
   lines.push('')
   lines.push('export const ART: Readonly<Record<string, Variants>> = {')
   for (const stem of stems) lines.push(`  '${stem}': ${name.get(stem)},`)
   lines.push('}')
   lines.push('')
   lines.push(
-    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'; style: 'nes' | 'snes'; raritySlot: number | null; raritySlotHires: number | null; isPlaceholder: boolean } & Variants>> = {",
+    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'; style: 'nes' | 'snes'; raritySlot: number | null; raritySlotHires: number | null; isPlaceholder: boolean; frames: Frames | null } & Variants>> = {",
   )
   for (const s of sprites) {
     const v = name.get(s.stem)
     const small = s.kind === 'item' ? `${v}.small` : 'null'
     lines.push(
-      `  '${s.id}': { id: '${s.id}', kind: '${s.kind}', style: '${s.style}', raritySlot: ${s.raritySlot}, raritySlotHires: ${s.raritySlotHires}, isPlaceholder: ${s.isPlaceholder}, full: ${v}.full, hires: ${v}.hires, compact: ${v}.compact, small: ${small} },`,
+      `  '${s.id}': { id: '${s.id}', kind: '${s.kind}', style: '${s.style}', raritySlot: ${s.raritySlot}, raritySlotHires: ${s.raritySlotHires}, isPlaceholder: ${s.isPlaceholder}, full: ${v}.full, hires: ${v}.hires, compact: ${v}.compact, small: ${small}, frames: ${framesLiteral(s.frames)} },`,
     )
   }
   lines.push('}')
@@ -502,7 +675,8 @@ const ROOT = join(import.meta.dirname, '..')
 const ART_DIR = join(ROOT, 'art')
 const OUT = join(ROOT, 'plugins/promptfall/hooks/sprites/generated.ts')
 
-async function expectedIds(): Promise<string[]> {
+/** Every sprite id the build expects: the content's, the effects and the fallback. */
+export async function expectedIds(): Promise<string[]> {
   const { content } = await import('@promptfall/sim')
   const { WORLD_BOSSES } = await import('@promptfall/ledger')
   const classes = [...new Set(Object.values(content.heroTemplates).map((t) => t.cls))]
@@ -511,6 +685,7 @@ async function expectedIds(): Promise<string[]> {
     ...Object.keys(content.enemies).map((id) => `enemy:${id}`),
     ...WORLD_BOSSES.map((b) => `world_boss:${worldBossKey(b.name)}`),
     ...Object.keys(content.itemBases).map((id) => `item:${id}`),
+    ...EFFECT_IDS,
     'fallback',
   ]
 }
@@ -582,6 +757,10 @@ async function main(): Promise<void> {
     process.exit(1)
   }
   writeFileSync(OUT, emitModule(result))
+  if (result.drift.length > 0) {
+    console.log('frame size drift:')
+    for (const d of result.drift) console.log(`  ${d}`)
+  }
   const placeholders = result.sprites.filter((s) => s.isPlaceholder).length
   console.log(
     `${OUT}: ${result.sprites.length} sprites, ${result.art.size} art stems, ${placeholders} placeholders`,

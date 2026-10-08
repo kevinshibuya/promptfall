@@ -8,9 +8,10 @@ import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
+import { fullerFrame } from './fixtures'
 import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes } from './image'
-import type { StageActor, StageModel } from './model'
+import { type StageActor, type StageModel, samePoses } from './model'
 import { encodeRaster, rasterPairs } from './raster'
 import {
   goldenOf,
@@ -86,6 +87,8 @@ function actor(
     fallen: false,
     flashing: false,
     raritySlot: null,
+    pose: 'idle',
+    poses: samePoses(art),
   }
 }
 
@@ -132,6 +135,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
     drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
+    effects: [],
     alt: 'worst',
     scale: 1,
   }
@@ -166,6 +170,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
         alpha: 1,
       },
     ],
+    effects: [],
     alt: 'worst',
     scale: 1.5,
   }
@@ -198,6 +203,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
     ],
     numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
     drops: [{ spriteId: 'adversarial:drop', art: drop, x: 20, y: 6, alpha: 0.5 }],
+    effects: [],
     alt: 'adversarial',
     scale: 1,
   }
@@ -315,6 +321,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
         alpha: 0.5,
       },
     ],
+    effects: [],
     alt: 'adversarial',
     scale,
   }
@@ -344,4 +351,30 @@ test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
     expect(svg).toBe(renderSvg(lo, motions, opts))
     expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
   }
+})
+
+test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg, 113,047 characters", () => {
+  const hi = fullerFrame(1.5, false, NOW)
+  const lo = fullerFrame(1, false, NOW)
+  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
+  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
+  expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
+  expect(svg.length).toBe(113_047)
+})
+
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,353 characters at 1.5x, so the 1x Svg (51,341)', () => {
+  const hi = fullerFrame(1.5, true, NOW)
+  const lo = fullerFrame(1, true, NOW)
+  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_353)
+  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
+  expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
+  expect(svg.length).toBe(51_341)
+})
+
+test('the bandit captain 60 ms into its attack, on its drawn frames: a 1.5x SMIL Svg of 32,734 characters, under the cap', () => {
+  const s = stage('boss-strike')
+  const svg = renderSvg(s.hires, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  expect(svg.length).toBe(32_734)
+  expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
 })

@@ -5,7 +5,7 @@
 // Task 1.
 //
 // tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>]
-//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]
+//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>] [--gutters <x,…>]
 //
 // Each sprite also gets its 1.5× cut: the same native fitted to 1.5 times the target and
 // quantised to 16 colours (docs/plans/2026-10-07-promptfall-phase-4-pr2-hires.md, Task H1).
@@ -22,6 +22,8 @@ export type SliceOptions = {
   colours: number
   size: number | null
   fit: { width: number; height: number } | null
+  /** Sheet columns read as ground when finding the gutters between sprites: a forced split. */
+  gutters?: readonly number[]
 }
 
 export type SliceResult =
@@ -323,9 +325,61 @@ function median(values: readonly number[]): number {
   return s.length % 2 ? (s[mid] ?? 0) : ((s[mid - 1] ?? 0) + (s[mid] ?? 0)) / 2
 }
 
+/**
+ * Beside a forced gutter, a box keeps its largest 8-connected component and every component
+ * clear of the forced edge: a neighbour's tip reaching across the cut is dropped (made key).
+ */
+function dropAcross(sheet: Rgba, box: Box, left: boolean, right: boolean): void {
+  const w = box.x1 - box.x0 + 1
+  const h = box.y1 - box.y0 + 1
+  const comp = new Int32Array(w * h).fill(-1)
+  const sizes: number[] = []
+  const touches: boolean[] = []
+  for (let i = 0; i < w * h; i++) {
+    if (comp[i] !== -1 || px(sheet, box.x0 + (i % w), box.y0 + Math.floor(i / w)) === T) continue
+    const id = sizes.length
+    let n = 0
+    let edge = false
+    const stack = [i]
+    comp[i] = id
+    while (stack.length > 0) {
+      const q = stack.pop() ?? 0
+      n++
+      const x = q % w
+      const y = Math.floor(q / w)
+      if ((left && x === 0) || (right && x === w - 1)) edge = true
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+          const r = ny * w + nx
+          if (comp[r] !== -1 || px(sheet, box.x0 + nx, box.y0 + ny) === T) continue
+          comp[r] = id
+          stack.push(r)
+        }
+      }
+    }
+    sizes.push(n)
+    touches.push(edge)
+  }
+  const largest = sizes.indexOf(Math.max(...sizes))
+  for (let i = 0; i < w * h; i++) {
+    const id = comp[i] ?? -1
+    if (id < 0 || id === largest || !touches[id]) continue
+    sheet.data[((box.y0 + Math.floor(i / w)) * sheet.width + box.x0 + (i % w)) * 4 + 3] = 0
+  }
+}
+
 /** One result per sprite in reading order, `--row` keeping a single row. */
-export function sliceSheet(sheet: Rgba, options: SliceOptions): SliceResult[] {
+export function sliceSheet(source: Rgba, options: SliceOptions): SliceResult[] {
   const { cols, rows } = options
+  const forced = new Set(options.gutters ?? [])
+  // A forced split edits a copy: fragments across it become key.
+  const sheet =
+    forced.size > 0
+      ? { width: source.width, height: source.height, data: new Uint8Array(source.data) }
+      : source
   const keep = (r: number) => options.row === null || options.row === r
   const occupiedRows = Array.from({ length: sheet.height }, (_, y) => {
     for (let x = 0; x < sheet.width; x++) if (px(sheet, x, y) !== T) return true
@@ -340,12 +394,17 @@ export function sliceSheet(sheet: Rgba, options: SliceOptions): SliceResult[] {
       continue
     }
     const occupiedCols = Array.from({ length: sheet.width }, (_, x) => {
+      if (forced.has(x)) return false
       for (let y = band[0]; y <= band[1]; y++) if (px(sheet, x, y) !== T) return true
       return false
     })
     const runs = gutterRuns(occupiedCols, cols)
     for (let c = 0; c < cols; c++) {
       const run = runs?.[c]
+      if (run && (forced.has(run[0] - 1) || forced.has(run[1] + 1))) {
+        const whole = { x0: run[0], y0: band[0], x1: run[1], y1: band[1] }
+        dropAcross(sheet, whole, forced.has(run[0] - 1), forced.has(run[1] + 1))
+      }
       const box = run && trim(sheet, { x0: run[0], y0: band[0], x1: run[1], y1: band[1] })
       slots.push(box ? { row: r, box } : { error: `row ${r}: sprites touch, no gutter` })
     }
@@ -400,7 +459,7 @@ function parseArgs(argv: string[]): {
   const colours = Number(flag('colours'))
   if (!sheet || !out || !grid || !colours || (size === undefined) === (fit === null)) {
     throw new Error(
-      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]',
+      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>] [--gutters <x,…>]',
     )
   }
   const names = flag('names')?.split(',') ?? []
@@ -420,6 +479,7 @@ function parseArgs(argv: string[]): {
       colours,
       size: size === undefined ? null : Number(size),
       fit: fit ? { width: fit.a, height: fit.b } : null,
+      gutters: (flag('gutters') ?? '').split(',').filter(Boolean).map(Number),
     },
   }
 }
