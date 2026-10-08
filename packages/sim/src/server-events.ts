@@ -1,7 +1,9 @@
 import { SPAWN_GAUGE_MAX } from './battle'
+import { content } from './content'
 import { clone, draft, reject } from './draft'
-import { pushLog } from './heroes'
-import { draw, findHero, newId } from './progression'
+import { generateHero, pushLog, recruitHero } from './heroes'
+import { rollItemOf, takeDrop } from './loot'
+import { changeZone, checkWipe, draw, findHero, grantXp, newId, partyHeroes } from './progression'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -182,5 +184,85 @@ export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
       pushLog(s, { k: 'reward', base, rarity, gold: event.gold })
     }
     effects.push({ k: 'rewarded', bossId: event.bossId, goods: clone(goods), gold: event.gold })
+  })
+}
+
+// Sandbox grants: each hands out what play would earn, through the path play takes.
+
+function noSuchZone(zone: number): boolean {
+  return !Number.isInteger(zone) || content.zones[zone - 1] === undefined
+}
+
+function noSuchRarity(rarity: string): boolean {
+  return !Object.hasOwn(content.rarity, rarity)
+}
+
+/** The encounter goes with no drops and no XP, and the battle resets as a wipe resets it. */
+function endEncounter(s: GameState): void {
+  s.encounter = null
+  s.battle = { gauges: [], queue: [], busy: 0 }
+}
+
+export function sandboxBoss(state: GameState, event: Of<'sandbox_boss'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
+  return draft(state, (s) => {
+    if (s.zone !== event.zone) changeZone(s, event.zone)
+    endEncounter(s)
+    // The next empty tick spawns it: the zone boss at the boss wave, the turn boss when pending.
+    if (event.boss === 'zone_boss') {
+      s.wave = 11
+      s.pendingTurnBoss = false
+    } else s.pendingTurnBoss = true
+  })
+}
+
+export function sandboxItem(state: GameState, event: Of<'sandbox_item'>): StepResult {
+  if (!Object.hasOwn(content.itemBases, event.base)) {
+    return unapplicable(state, event, 'unknown_base')
+  }
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, 'unknown_rarity')
+  return draft(state, (s, effects) => {
+    takeDrop(s, rollItemOf(s, event.base, event.rarity), effects)
+  })
+}
+
+export function sandboxLevel(state: GameState, event: Of<'sandbox_level'>): StepResult {
+  const hero = findHero(state, event.heroId)
+  if (!hero) return unapplicable(state, event, 'unknown_hero')
+  if (event.level <= hero.level) return unapplicable(state, event, 'level_not_above')
+  const cap = content.rarity[hero.rarity].levelCap
+  if (hero.level >= cap) return unapplicable(state, event, 'level_cap')
+  return draft(state, (s, effects) => {
+    const h = findHero(s, event.heroId)
+    // One grant per level, each exactly what the level still needs, so each pushes its level_up.
+    while (h && h.level < event.level && h.level < cap) {
+      grantXp(s, h, content.xpToNext(h.level) - h.xp, effects)
+    }
+  })
+}
+
+export function sandboxZone(state: GameState, event: Of<'sandbox_zone'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
+  return draft(state, (s) => {
+    changeZone(s, event.zone)
+    endEncounter(s)
+  })
+}
+
+export function sandboxRecruit(state: GameState, event: Of<'sandbox_recruit'>): StepResult {
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, 'unknown_rarity')
+  if (state.roster.length >= state.rosterCap) return unapplicable(state, event, 'roster_full')
+  return draft(state, (s, effects) => {
+    recruitHero(s, generateHero(s, event.rarity), 'sandbox', effects)
+  })
+}
+
+export function sandboxWipe(state: GameState, event: Of<'sandbox_wipe'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  return draft(state, (s, effects) => {
+    for (const hero of partyHeroes(s)) hero.hp = 0
+    checkWipe(s, effects)
   })
 }

@@ -4059,6 +4059,7 @@ var id = external_exports.string().min(1).max(64);
 var at = external_exports.number().int().nonnegative();
 var int = external_exports.number().int();
 var count = external_exports.number().int().nonnegative();
+var positive = external_exports.number().int().positive();
 var slot = external_exports.enum(["weapon", "armour", "accessory"]);
 var RaritySchema = external_exports.enum([
   "common",
@@ -4179,7 +4180,18 @@ var ServerEventSchema = external_exports.discriminatedUnion("t", [
     bossId: id,
     goods: GoodsSchema.nullable(),
     gold: count
-  })
+  }),
+  // Sandbox grants: only a host with the sandbox on authors them.
+  external_exports.object({
+    t: external_exports.literal("sandbox_boss"),
+    zone: positive,
+    boss: external_exports.enum(["zone_boss", "turn_boss"])
+  }),
+  external_exports.object({ t: external_exports.literal("sandbox_item"), base: id, rarity: RaritySchema }),
+  external_exports.object({ t: external_exports.literal("sandbox_level"), heroId: id, level: positive }),
+  external_exports.object({ t: external_exports.literal("sandbox_zone"), zone: positive }),
+  external_exports.object({ t: external_exports.literal("sandbox_recruit"), rarity: RaritySchema }),
+  external_exports.object({ t: external_exports.literal("sandbox_wipe") })
 ]);
 var GameStateSchema = external_exports.object({
   v: count,

@@ -53,9 +53,11 @@ export type ActionId = 'attack' | 'attack_all' | 'heal'
 export type TradeKind = 'item' | 'hero'
 export type Goods = { kind: 'item'; item: Item } | { kind: 'hero'; hero: Hero }
 
+export type RecruitVia = 'contract' | 'tavern' | 'sandbox'
+
 export type LootEntry =
   | { k: 'item'; itemId: string; base: string; rarity: Rarity; vendoredFor: number | null }
-  | { k: 'hero'; heroId: string; template: string; rarity: Rarity; via: 'contract' | 'tavern' }
+  | { k: 'hero'; heroId: string; template: string; rarity: Rarity; via: RecruitVia }
   | {
       k: 'trade'
       what: 'sold' | 'bought' | 'returned'
@@ -114,11 +116,31 @@ export type ServerEvent =
   | { t: 'boss_disengaged'; bossId: string }
   /** One reward roll; `goods` null when the item waited in returns. */
   | { t: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
+  | SandboxEvent
+
+/** Authored only by a host with the sandbox on. Each hands out what play would earn, through play's own path. */
+export type SandboxEvent =
+  /** Moves the party to the zone, ends the encounter, and has the next empty tick spawn that boss. */
+  | { t: 'sandbox_boss'; zone: number; boss: 'zone_boss' | 'turn_boss' }
+  | { t: 'sandbox_item'; base: string; rarity: Rarity }
+  | { t: 'sandbox_level'; heroId: string; level: number }
+  | { t: 'sandbox_zone'; zone: number }
+  | { t: 'sandbox_recruit'; rarity: Rarity }
+  | { t: 'sandbox_wipe' }
 
 export type Event = PlayerEvent | ServerEvent
 export type EventKind = Event['t']
 export type PlayerEventKind = PlayerEvent['t']
 export type ServerEventKind = ServerEvent['t']
+export type SandboxEventKind = SandboxEvent['t']
+export const SANDBOX_EVENT_KINDS: readonly SandboxEventKind[] = [
+  'sandbox_boss',
+  'sandbox_item',
+  'sandbox_level',
+  'sandbox_zone',
+  'sandbox_recruit',
+  'sandbox_wipe',
+]
 export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
   'listed',
   'returned',
@@ -132,6 +154,7 @@ export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
   'boss_engaged',
   'boss_disengaged',
   'rewarded',
+  ...SANDBOX_EVENT_KINDS,
 ]
 
 export type Effect =
@@ -145,7 +168,7 @@ export type Effect =
   | { k: 'hero_fell'; heroId: string }
   | { k: 'wipe'; retreatedTo: number }
   | { k: 'party_applied'; heroIds: [string, string, string] }
-  | { k: 'hero_recruited'; hero: Hero; via: 'contract' | 'tavern' }
+  | { k: 'hero_recruited'; hero: Hero; via: RecruitVia }
   | { k: 'rejected'; event: Event; reason: string }
   | { k: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
   | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }

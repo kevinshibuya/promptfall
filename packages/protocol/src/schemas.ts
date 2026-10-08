@@ -19,6 +19,8 @@ const id = z.string().min(1).max(64)
 const at = z.number().int().nonnegative()
 const int = z.number().int()
 const count = z.number().int().nonnegative()
+/** A zone number or a hero level. */
+const positive = z.number().int().positive()
 const slot = z.enum(['weapon', 'armour', 'accessory'])
 
 export const RaritySchema: z.ZodType<Rarity> = z.enum([
@@ -149,6 +151,17 @@ export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t
     goods: GoodsSchema.nullable(),
     gold: count,
   }),
+  // Sandbox grants: only a host with the sandbox on authors them.
+  z.object({
+    t: z.literal('sandbox_boss'),
+    zone: positive,
+    boss: z.enum(['zone_boss', 'turn_boss']),
+  }),
+  z.object({ t: z.literal('sandbox_item'), base: id, rarity: RaritySchema }),
+  z.object({ t: z.literal('sandbox_level'), heroId: id, level: positive }),
+  z.object({ t: z.literal('sandbox_zone'), zone: positive }),
+  z.object({ t: z.literal('sandbox_recruit'), rarity: RaritySchema }),
+  z.object({ t: z.literal('sandbox_wipe') }),
 ])
 
 /** Structural check of a sim state: the fields every version has; the rest passes through. */

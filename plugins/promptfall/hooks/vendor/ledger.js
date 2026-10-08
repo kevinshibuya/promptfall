@@ -69,11 +69,13 @@ function settle(record) {
   record.log = [];
 }
 function author(record, event) {
+  const refused = tryAuthor(record, event);
+  if (refused !== null) throw new Error(`ledger authored an unapplicable event: ${refused}`);
+}
+function tryAuthor(record, event) {
   const r = step(record.state, event);
   const refused = r.effects.find((e) => e.k === "rejected");
-  if (refused?.k === "rejected") {
-    throw new Error(`ledger authored an unapplicable event: ${refused.reason}`);
-  }
+  if (refused?.k === "rejected") return refused.reason;
   record.state = r.state;
   record.cursor += 1;
   record.log.push({ n: record.cursor, event });
@@ -84,6 +86,7 @@ function author(record, event) {
     record.committedCursor = oldest.n;
     record.committedHash = hashState(record.committedState);
   }
+  return null;
 }
 function hasRoom(state, goods) {
   return goods.kind === "item" ? state.inventory.length < state.inventoryCap : state.roster.length < state.rosterCap;
@@ -245,12 +248,14 @@ import {
   BatchSchema,
   BUDGETS as BUDGETS2,
   compareSemver,
-  PRESENCE_TTL_MS
+  PRESENCE_TTL_MS,
+  ServerEventSchema
 } from './protocol.js';
 import {
   createInitialState,
   hashState as hashState2,
   replay as replay2,
+  SANDBOX_EVENT_KINDS,
   SIM_VERSION as SIM_VERSION2
 } from './sim.js';
 
@@ -479,7 +484,7 @@ async function settleBoss(ctx, boss, options) {
   for (const [id, contribution] of Object.entries(boss.contributions)) {
     const record = options.inHand?.account.accountId === id ? options.inHand : await ctx.books.load(id);
     if (!record || !isCurrent(record)) continue;
-    const rolls = (contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0);
+    const rolls = (options.allPaid || contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0);
     for (let i = 0; i < rolls; i++) {
       const zone = record.state.zone;
       const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
@@ -509,21 +514,17 @@ async function settleBoss(ctx, boss, options) {
   boss.closed = true;
   await saveBoss(kv, boss);
 }
-async function advanceBoss(ctx) {
-  const kv = ctx.books.kv;
+async function settleIfOver(ctx, stored) {
   const on = ctx.flags["worldboss.enabled"] !== false;
-  const stored = await loadBoss(kv);
   if (stored && !stored.closed && (ctx.now >= stored.endsAt || !on)) {
     await settleBoss(ctx, stored, { expired: true, inHand: null });
   }
-  const gridIndex = Math.floor(ctx.now / BOSS_GRID_MS);
-  const spawnAt = gridIndex * BOSS_GRID_MS;
-  const bossId = `wb${gridIndex.toString(36)}`;
-  if (!on || ctx.now >= spawnAt + BOSS_WINDOW_MS || stored?.bossId === bossId) return;
-  const online = [...ctx.presence.entries()].filter(([, entry]) => ctx.now - entry.at < ctx.ttl).map(([id]) => id);
+}
+function newBoss(bossId, spawnAt, online) {
+  const gridIndex = Math.floor(spawnAt / BOSS_GRID_MS);
   const def = WORLD_BOSSES[gridIndex % WORLD_BOSSES.length] ?? { name: "World Boss", glyph: "\u2620" };
   const hp = BOSS_BASE_HP * Math.max(1, online.length);
-  const boss = {
+  return {
     bossId,
     name: def.name,
     glyph: def.glyph,
@@ -534,13 +535,44 @@ async function advanceBoss(ctx) {
     contributions: {},
     closed: false
   };
+}
+function onlineIds(ctx) {
+  return [...ctx.presence.entries()].filter(([, entry]) => ctx.now - entry.at < ctx.ttl).map(([id]) => id);
+}
+async function openBoss(ctx, boss, online) {
   for (const id of online) {
     const record = await ctx.books.load(id);
     if (!record) continue;
     engage(record, boss);
     await ctx.books.save(record);
   }
-  await saveBoss(kv, boss);
+  await saveBoss(ctx.books.kv, boss);
+}
+async function advanceBoss(ctx) {
+  const stored = await loadBoss(ctx.books.kv);
+  await settleIfOver(ctx, stored);
+  const gridIndex = Math.floor(ctx.now / BOSS_GRID_MS);
+  const spawnAt = gridIndex * BOSS_GRID_MS;
+  if (ctx.flags["worldboss.enabled"] === false || ctx.now >= spawnAt + BOSS_WINDOW_MS) return;
+  if (stored && ctx.now < stored.endsAt) return;
+  const online = onlineIds(ctx);
+  await openBoss(ctx, newBoss(`wb${gridIndex.toString(36)}`, spawnAt, online), online);
+}
+async function spawnNow(ctx) {
+  const stored = await loadBoss(ctx.books.kv);
+  await settleIfOver(ctx, stored);
+  if (stored && !stored.closed) return false;
+  const online = onlineIds(ctx);
+  const bossId = await nextLedgerId(ctx.books.kv, "sb");
+  await openBoss(ctx, newBoss(bossId, ctx.now, online), online);
+  return true;
+}
+async function settleNow(ctx) {
+  const stored = await loadBoss(ctx.books.kv);
+  if (!stored || stored.closed) return false;
+  stored.hp = 0;
+  await settleBoss(ctx, stored, { expired: true, inHand: null, allPaid: true });
+  return true;
 }
 function dealtBefore(before, after) {
   if (!before.boss || !after.boss || before.boss.bossId !== after.boss.bossId) return null;
@@ -857,6 +889,7 @@ var LINK_INTERVAL_MS = 5e3;
 var unauthorized = { reason: "unauthorized" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
+var sandboxOff = { ok: false, reason: "sandbox_off" };
 var Ledger = class {
   constructor(options) {
     this.options = options;
@@ -866,7 +899,10 @@ var Ledger = class {
       mint: (input) => this.run(() => this.mint(input)),
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
       settle: (accountId) => this.run(() => this.settleAccount(accountId)),
-      sweep: () => this.run(() => this.sweep())
+      sweep: () => this.run(() => this.sweep()),
+      sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
+      spawnBoss: () => this.run(() => this.spawnBoss()),
+      settleBoss: () => this.run(() => this.settleBoss())
     };
   }
   options;
@@ -898,6 +934,7 @@ var Ledger = class {
       "presence.enabled": true,
       "leaderboards.enabled": true,
       maintenance: false,
+      "sandbox.enabled": false,
       ...this.options.flags
     };
   }
@@ -1269,6 +1306,32 @@ var Ledger = class {
     const record = await this.currentRecord(accountId);
     author(record, { t: "credited", gold, reason });
     await this.books.save(record);
+  }
+  async sandbox(accountId, input) {
+    const event = ServerEventSchema.parse(input);
+    if (!SANDBOX_EVENT_KINDS.includes(event.t)) {
+      throw new Error(`sandbox: not a sandbox event: ${event.t}`);
+    }
+    const record = await this.currentRecord(accountId);
+    if (!this.flags()["sandbox.enabled"]) return sandboxOff;
+    const refused = tryAuthor(record, event);
+    if (refused !== null) {
+      return {
+        ok: false,
+        reason: "unapplicable",
+        detail: refused.replace(/^server_event_unapplicable:/, "")
+      };
+    }
+    await this.books.save(record);
+    return { ok: true };
+  }
+  async spawnBoss() {
+    if (!this.flags()["sandbox.enabled"]) return sandboxOff;
+    return await spawnNow(await this.worldContext()) ? { ok: true } : { ok: false, reason: "boss_live" };
+  }
+  async settleBoss() {
+    if (!this.flags()["sandbox.enabled"]) return sandboxOff;
+    return await settleNow(await this.worldContext()) ? { ok: true } : { ok: false, reason: "no_boss" };
   }
   async settleAccount(accountId) {
     const record = await this.currentRecord(accountId);

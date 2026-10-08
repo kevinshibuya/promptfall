@@ -113,7 +113,8 @@ export function accountPane(input: PaneInput): PaneBuild {
     }),
     setting(inner, 'off', [{ text: 'Band off' }], '', { t: 'off' }),
   ]
-  if (!view.account.linked && !dialog.link && !input.readOnly)
+  // The sandbox save never links.
+  if (!view.account.linked && !view.account.sandbox && !dialog.link && !input.readOnly)
     rows.push(setting(inner, 'link', [{ text: 'Link GitHub' }], '', { t: 'link' }))
   rows.push(setting(inner, 'reset', [{ text: RESET }], '', RESET_ACTION))
 
