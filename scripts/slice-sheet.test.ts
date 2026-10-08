@@ -237,6 +237,17 @@ describe('sliceSheet', () => {
     expect(ok(out[1]).native.height).toBe(16)
   })
 
+  it("drops a neighbour's tip that reaches across a forced gutter", () => {
+    const sheet = magenta(400, 140)
+    draw(sheet, blob(16, 16), 20, 20, 6)
+    draw(sheet, blob(16, 16), 230, 20, 6)
+    // An arm from the left sprite crossing x = 180 into the right one's side, short of its body.
+    fill(sheet, 116, 66, 90, 6, TOP)
+    const out = sliceSheet(sheet, opts({ cols: 2, rows: 1, gutters: [180] }))
+    // The right sprite comes back as drawn, the arm's tip dropped.
+    expect(toArt(ok(out[1]).native)).toEqual(blob(16, 16))
+  })
+
   it('keeps one row with --row', () => {
     const sheet = magenta(400, 260)
     draw(sheet, blob(16, 16), 20, 10, 6)

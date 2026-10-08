@@ -779,6 +779,21 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-4.png.
 ```
 
+Picks: row 1 for every wind-up. The strikes reach across the cell lines in both takes, so each
+creature takes the row it touches least in: row 4 for the frost wolf, ice troll, rime golem and
+snow shaman, row 2 for the drowned monk, abbey gargoyle, bell wraith and eel serpent. Forced
+gutters split the touching cells; beside each, the slicer drops a neighbour's tip that reaches
+across.
+
+```sh
+D=art/sheets/frames-monsters-4.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/frost_wolf-windup,enemy/ice_troll-windup,enemy/rime_golem-windup,enemy/snow_shaman-windup,enemy/drowned_monk-windup,enemy/abbey_gargoyle-windup,enemy/bell_wraith-windup,enemy/eel_serpent-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names x/s0,x/s1,x/s2,x/s3,enemy/drowned_monk-strike,enemy/abbey_gargoyle-strike,enemy/bell_wraith-strike,enemy/eel_serpent-strike --gutters 206,364,598,732,1348
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/frost_wolf-strike,enemy/ice_troll-strike,enemy/rime_golem-strike,enemy/snow_shaman-strike,x/s4,x/s5,x/s6,x/s7 --gutters 745,986,1370
+rm -rf art/sprites-frames/x art/sheets/native/x
+```
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -804,3 +819,11 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:drowned_sailor` | strike | frames-monsters-3 | frame size drift: native 32 against idle 24 (+33%) |
 | `enemy:ember_imp` | windup | frames-monsters-3 | frame size drift: native 31 against idle 25 (+24%) |
 | `enemy:ember_imp` | strike | frames-monsters-3 | frame size drift: native 37 against idle 25 (+48%) |
+| `enemy:ice_troll` | windup | frames-monsters-4 | frame size drift: native 35 against idle 27 (+30%) |
+| `enemy:ice_troll` | strike | frames-monsters-4 | frame size drift: native 33 against idle 27 (+22%) |
+| `enemy:rime_golem` | windup | frames-monsters-4 | frame size drift: native 31 against idle 25 (+24%) |
+| `enemy:rime_golem` | strike | frames-monsters-4 | frame size drift: native 33 against idle 25 (+32%) |
+| `enemy:snow_shaman` | windup | frames-monsters-4 | frame size drift: native 40 against idle 28 (+43%) |
+| `enemy:drowned_monk` | windup | frames-monsters-4 | frame size drift: native 32 against idle 25 (+28%) |
+| `enemy:abbey_gargoyle` | windup | frames-monsters-4 | frame size drift: native 34 against idle 24 (+42%) |
+| `enemy:abbey_gargoyle` | strike | frames-monsters-4 | frame size drift: native 31 against idle 24 (+29%) |

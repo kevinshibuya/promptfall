@@ -417,25 +417,41 @@
       "id": "enemy:frost_wolf",
       "file": "sprites/enemy/frost_wolf.png",
       "fileHires": "sprites-hires/enemy/frost_wolf.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/frost_wolf-windup.png",
+        "strike": "sprites-frames/enemy/frost_wolf-strike.png"
+      }
     },
     {
       "id": "enemy:ice_troll",
       "file": "sprites/enemy/ice_troll.png",
       "fileHires": "sprites-hires/enemy/ice_troll.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/ice_troll-windup.png",
+        "strike": "sprites-frames/enemy/ice_troll-strike.png"
+      }
     },
     {
       "id": "enemy:rime_golem",
       "file": "sprites/enemy/rime_golem.png",
       "fileHires": "sprites-hires/enemy/rime_golem.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/rime_golem-windup.png",
+        "strike": "sprites-frames/enemy/rime_golem-strike.png"
+      }
     },
     {
       "id": "enemy:snow_shaman",
       "file": "sprites/enemy/snow_shaman.png",
       "fileHires": "sprites-hires/enemy/snow_shaman.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/snow_shaman-windup.png",
+        "strike": "sprites-frames/enemy/snow_shaman-strike.png"
+      }
     },
     {
       "id": "enemy:frostvein_yeti",
@@ -454,25 +470,41 @@
       "id": "enemy:drowned_monk",
       "file": "sprites/enemy/drowned_monk.png",
       "fileHires": "sprites-hires/enemy/drowned_monk.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/drowned_monk-windup.png",
+        "strike": "sprites-frames/enemy/drowned_monk-strike.png"
+      }
     },
     {
       "id": "enemy:abbey_gargoyle",
       "file": "sprites/enemy/abbey_gargoyle.png",
       "fileHires": "sprites-hires/enemy/abbey_gargoyle.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/abbey_gargoyle-windup.png",
+        "strike": "sprites-frames/enemy/abbey_gargoyle-strike.png"
+      }
     },
     {
       "id": "enemy:bell_wraith",
       "file": "sprites/enemy/bell_wraith.png",
       "fileHires": "sprites-hires/enemy/bell_wraith.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/bell_wraith-windup.png",
+        "strike": "sprites-frames/enemy/bell_wraith-strike.png"
+      }
     },
     {
       "id": "enemy:eel_serpent",
       "file": "sprites/enemy/eel_serpent.png",
       "fileHires": "sprites-hires/enemy/eel_serpent.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/eel_serpent-windup.png",
+        "strike": "sprites-frames/enemy/eel_serpent-strike.png"
+      }
     },
     {
       "id": "enemy:sunken_abbot",
