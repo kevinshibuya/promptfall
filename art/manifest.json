@@ -749,14 +749,22 @@
       "id": "enemy:hollow_king",
       "file": "sprites/enemy/hollow_king.png",
       "fileHires": "sprites-hires/enemy/hollow_king.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/hollow_king-windup.png",
+        "strike": "sprites-frames/enemy/hollow_king-strike.png"
+      }
     },
     {
       "id": "enemy:royal_chimera",
       "file": "sprites/enemy/royal_chimera.png",
       "fileHires": "sprites-hires/enemy/royal_chimera.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/royal_chimera-windup.png",
+        "strike": "sprites-frames/enemy/royal_chimera-strike.png"
+      }
     },
     {
       "id": "enemy:ink_horror",

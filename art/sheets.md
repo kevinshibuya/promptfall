@@ -1274,6 +1274,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-11.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-11.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/hollow_king-windup,enemy/royal_chimera-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/hollow_king-strike,enemy/royal_chimera-strike
+```
+
 ## frames-bosses-12.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-12.png` (`pnpm refsheet art/sheets/ref-frames-bosses-12.png
@@ -1479,3 +1488,9 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: native 97 against idle 67 (+45%) |
 | `enemy:margin_beast` | windup | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 75% |
 | `enemy:margin_beast` | strike | frames-bosses-12 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:hollow_king` | strike | frames-bosses-11 | frame size drift: native 96 against idle 56 (+71%) |
+| `enemy:royal_chimera` | windup | frames-bosses-11 | frame size drift: native 82 against idle 54 (+52%) |
+| `enemy:royal_chimera` | strike | frames-bosses-11 | frame size drift: native 90 against idle 54 (+67%) |
+| `enemy:hollow_king` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:royal_chimera` | windup | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
+| `enemy:royal_chimera` | strike | frames-bosses-11 | frame size drift: the fit to the idle canvas shrinks it to 71% |
