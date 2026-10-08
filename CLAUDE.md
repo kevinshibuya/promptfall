@@ -12,3 +12,5 @@ Where things live. Open one when the task touches it.
 ## Rule
 
 A PR that adds, removes or changes a feature updates `docs/features.md` in the same PR.
+
+A ticket that touches `plugins/` carries `pnpm typecheck:plugin` in its Verify gate.
