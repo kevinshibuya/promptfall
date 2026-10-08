@@ -221,3 +221,255 @@ test('a revoked item is named while its name is known, else counted', () => {
   )
   expect(revokedToast([])).toBeNull()
 })
+
+// ---------------------------------------------------------------------------
+// Folding: one burst, grouped by row
+
+/** A view whose first three roster heroes are Aldric, Morwen and Selene, no epithets. */
+function partyView(): { view: GameView; ids: [string, string, string] } {
+  const s0 = createInitialState(1)
+  const templates = ['knight_1', 'black_mage_1', 'white_mage_1']
+  const roster = s0.roster.map((h, i) => ({
+    ...h,
+    template: templates[i] ?? h.template,
+    epithet: '',
+  }))
+  const state = { ...s0, roster }
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  const [a, b, c] = roster.map((h) => h.id)
+  if (!a || !b || !c) throw new Error('the initial roster holds fewer than three heroes')
+  return { view, ids: [a, b, c] }
+}
+
+function drop(base: string, rarity: Rarity): Effect {
+  return { k: 'drop', item: { ...oakStaff(rarity), base } }
+}
+
+const texts = (effects: Effect[], view: GameView | null = null) =>
+  toastsFor(effects, view, BOSSES).map((t) => t.text)
+
+test('rare drops fold into a count and their names', () => {
+  const effects = [
+    drop('oak_staff', 'rare'),
+    drop('willow_staff', 'rare'),
+    drop('rune_staff', 'rare'),
+  ]
+  expect(toastsFor(effects, null, BOSSES)).toEqual([
+    {
+      row: 'rare_drop',
+      text: '3 rare drops: Oak Staff, Willow Staff, Rune Staff',
+      timeoutMs: SHORT,
+      cue: 'drop',
+    },
+  ])
+})
+
+test('epic drops fold the same way', () => {
+  const effects = [drop('oak_staff', 'epic'), drop('willow_staff', 'epic')]
+  expect(texts(effects)).toEqual(['2 epic drops: Oak Staff, Willow Staff'])
+})
+
+test('past three names the fold counts the rest, with no comma before the "and"', () => {
+  const bases = ['oak_staff', 'willow_staff', 'rune_staff', 'ember_rod', 'storm_rod']
+  expect(texts(bases.map((b) => drop(b, 'rare')))).toEqual([
+    '5 rare drops: Oak Staff, Willow Staff, Rune Staff and 2 more',
+  ])
+})
+
+test('rare and epic drops in one burst fold separately, epic first', () => {
+  const effects = [
+    drop('oak_staff', 'rare'),
+    drop('willow_staff', 'epic'),
+    drop('rune_staff', 'rare'),
+    drop('ember_rod', 'epic'),
+  ]
+  expect(toastsFor(effects, null, BOSSES)).toEqual([
+    {
+      row: 'rare_drop',
+      text: '2 epic drops: Willow Staff, Ember Rod',
+      timeoutMs: SHORT,
+      cue: 'drop',
+    },
+    {
+      row: 'rare_drop',
+      text: '2 rare drops: Oak Staff, Rune Staff',
+      timeoutMs: SHORT,
+      cue: 'drop',
+    },
+  ])
+})
+
+test('one epic and two rare drops: the epic in its single form, then the rare fold', () => {
+  const effects = [
+    drop('oak_staff', 'rare'),
+    drop('willow_staff', 'epic'),
+    drop('rune_staff', 'rare'),
+  ]
+  expect(texts(effects)).toEqual(['Epic drop: Willow Staff', '2 rare drops: Oak Staff, Rune Staff'])
+})
+
+test('Rare or better items vendored fold into a count and the gold', () => {
+  const effects: Effect[] = [
+    { k: 'drop_vendored', item: oakStaff('rare'), gold: 40 },
+    { k: 'drop_vendored', item: oakStaff('epic'), gold: 30 },
+    { k: 'drop_vendored', item: oakStaff('common'), gold: 5 },
+    { k: 'drop_vendored', item: oakStaff('legendary'), gold: 25 },
+  ]
+  expect(toastsFor(effects, null, BOSSES)).toEqual([
+    {
+      row: 'vendored',
+      text: 'Inventory full: 3 items vendored for 95 gold',
+      timeoutMs: SHORT,
+      cue: null,
+    },
+  ])
+})
+
+test('sales fold into a count and the gold', () => {
+  const effects = [
+    trade('sold', 'item', 'oak_staff', 120),
+    trade('sold', 'hero', 'black_mage_1', 200),
+    trade('sold', 'item', 'rune_staff', 90),
+  ]
+  expect(toastsFor(effects, null, BOSSES)).toEqual([
+    { row: 'sold', text: '3 items sold for 410 gold', timeoutMs: SHORT, cue: null },
+  ])
+})
+
+test('purchases fold into a count and the gold', () => {
+  const effects = [
+    trade('bought', 'item', 'oak_staff', 120),
+    trade('bought', 'item', 'rune_staff', 180),
+  ]
+  expect(texts(effects)).toEqual(['2 items bought for 300 gold'])
+})
+
+test('returns fold into a count', () => {
+  const effects = [
+    trade('returned', 'item', 'oak_staff', 0),
+    trade('returned', 'item', 'rune_staff', 0),
+    trade('returned', 'hero', 'black_mage_1', 0),
+  ]
+  expect(texts(effects)).toEqual(['3 items returned, unsold'])
+})
+
+test('two heroes reaching the same level fold into one sentence', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    { k: 'level_up', heroId: ids[1], level: 6 },
+  ]
+  expect(toastsFor(effects, view, BOSSES)).toEqual([
+    {
+      row: 'level_up',
+      text: 'Aldric and Morwen reached level 6',
+      timeoutMs: SHORT,
+      cue: 'level_up',
+    },
+  ])
+})
+
+test('three heroes reaching the same level are listed with commas, "and" before the last', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = ids.map((heroId) => ({ k: 'level_up', heroId, level: 6 }))
+  expect(texts(effects, view)).toEqual(['Aldric, Morwen and Selene reached level 6'])
+})
+
+test('heroes reaching different levels get one clause each, in effect order', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    { k: 'level_up', heroId: ids[1], level: 4 },
+    { k: 'level_up', heroId: ids[2], level: 3 },
+  ]
+  expect(texts(effects, view)).toEqual(['Aldric reached level 6, Morwen level 4, Selene level 3'])
+})
+
+test('one hero levelling twice in a burst toasts once, at the highest level', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    { k: 'level_up', heroId: ids[0], level: 7 },
+  ]
+  expect(toastsFor(effects, view, BOSSES)).toEqual([
+    { row: 'level_up', text: 'Aldric reached level 7', timeoutMs: SHORT, cue: 'level_up' },
+  ])
+})
+
+test('a hero levelling twice beside another counts once in the fold', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    { k: 'level_up', heroId: ids[1], level: 7 },
+    { k: 'level_up', heroId: ids[0], level: 7 },
+  ]
+  expect(texts(effects, view)).toEqual(['Aldric and Morwen reached level 7'])
+})
+
+test('a burst with one effect of a folding row gives the single form, not a count of one', () => {
+  expect(texts([trade('sold', 'item', 'oak_staff', 120)])).toEqual(['Oak Staff sold for 120 gold'])
+  expect(texts([drop('oak_staff', 'rare')])).toEqual(['Rare drop: Oak Staff'])
+})
+
+test('two legendary drops give two toasts', () => {
+  const effects = [drop('oak_staff', 'legendary'), drop('rune_staff', 'legendary')]
+  expect(texts(effects)).toEqual(['Legendary drop: Oak Staff', 'Legendary drop: Rune Staff'])
+})
+
+test('rows that never fold give one toast per effect', () => {
+  const effects: Effect[] = [
+    { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
+    { k: 'hero_recruited', hero: { ...MORWEN, id: 'h-2', epithet: 'the Wise' }, via: 'tavern' },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80 },
+    { k: 'wipe', retreatedTo: 2 },
+    { k: 'wipe', retreatedTo: 1 },
+    { k: 'zone_cleared', zone: 3, advancedTo: 4 },
+    { k: 'zone_cleared', zone: 4, advancedTo: 5 },
+  ]
+  expect(toastsFor(effects, null, BOSSES).map((t) => t.row)).toEqual([
+    'recruit',
+    'recruit',
+    'reward',
+    'reward',
+    'wipe',
+    'wipe',
+    'zone_arrival',
+    'zone_arrival',
+  ])
+})
+
+test("a burst mixing kinds raises one toast per row's group, in the table's order", () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    trade('sold', 'item', 'oak_staff', 120),
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    drop('willow_staff', 'rare'),
+    trade('sold', 'item', 'rune_staff', 90),
+    { k: 'zone_cleared', zone: 3, advancedTo: 4 },
+    { k: 'level_up', heroId: ids[1], level: 6 },
+    drop('rune_staff', 'legendary'),
+    { k: 'wipe', retreatedTo: 2 },
+    drop('ember_rod', 'epic'),
+    trade('returned', 'item', 'storm_rod', 0),
+  ]
+  expect(toastsFor(effects, view, BOSSES).map((t) => [t.text, t.timeoutMs])).toEqual([
+    ['Legendary drop: Rune Staff', LONG],
+    ['The party fell, retreating to zone 2', LONG],
+    ['The party reached zone 4, Old Barrow Hills', SHORT],
+    ['Epic drop: Ember Rod', SHORT],
+    ['Rare drop: Willow Staff', SHORT],
+    ['Aldric and Morwen reached level 6', SHORT],
+    ['2 items sold for 210 gold', SHORT],
+    ['Storm Rod returned, unsold', SHORT],
+  ])
+})
+
+test('two bursts with one sale each give two single forms, never a fold', () => {
+  const first = texts([trade('sold', 'item', 'oak_staff', 120)])
+  const second = texts([trade('sold', 'item', 'rune_staff', 90)])
+  expect([...first, ...second]).toEqual([
+    'Oak Staff sold for 120 gold',
+    'Rune Staff sold for 90 gold',
+  ])
+})

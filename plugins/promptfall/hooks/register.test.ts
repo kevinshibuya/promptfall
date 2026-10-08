@@ -15,6 +15,7 @@ import {
 import {
   content,
   createInitialState,
+  type Event,
   GAUGE_FULL,
   type GameState,
   hashState,
@@ -1294,7 +1295,7 @@ function twoRareDropsAndALevel(): GameState {
   throw new Error('no burst with two rare drops and a level-up')
 }
 
-test('a level-up toasts its hero by name for 4 s; two rare drops and it cue once each, after the toasts', async ($, on) => {
+test('a level-up toasts its hero by name for 4 s; two rare drops fold, and each cues once after the toasts', async ($, on) => {
   const state = twoRareDropsAndALevel()
   const { time, last, raised, order } = sounding(on, { ...record(state), ...SOUND_ON })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1305,8 +1306,8 @@ test('a level-up toasts its hero by name for 4 s; two rare drops and it cue once
   expect(raised.filter((t) => t.text.includes(' reached level '))).toEqual([
     { text: `${lead?.name} reached level ${lead?.level ?? 0}`, timeoutMs: 4000 },
   ])
-  const drops = raised.filter((t) => t.text.startsWith('Rare drop: '))
-  expect(drops.map((t) => t.timeoutMs)).toEqual([4000, 4000])
+  const drops = raised.filter((t) => t.text.includes(' rare drop'))
+  expect(drops.map((t) => [t.text.split(':')[0], t.timeoutMs])).toEqual([['2 rare drops', 4000]])
   const cues = order.filter((o) => o.startsWith('cue '))
   expect([...cues].sort()).toEqual(['cue cues/drop.wav', 'cue cues/level_up.wav'])
   const lastToast = order.findLastIndex((o) => o.startsWith('toast '))
@@ -1320,6 +1321,68 @@ test('a legendary drop toasts for 8 s and plays the legendary cue once', async (
   const legendary = raised.filter((t) => t.text.startsWith('Legendary drop: '))
   expect(legendary.map((t) => t.timeoutMs)).toEqual([8000])
   expect(plays.map((p) => p.asset)).toEqual(['cues/legendary.wav'])
+})
+
+/** `record(state)` with `events` waiting in the ledger's log: the boot delivers them as one burst. */
+function delivering(state: GameState, events: Event[]): Record<string, unknown> {
+  const seed = record(state)
+  const key = 'promptfall:pf:acct:acct-1:record'
+  const rec = seed[key] as Record<string, unknown>
+  seed[key] = {
+    ...rec,
+    cursor: events.length,
+    log: events.map((event, i) => ({ n: i + 1, event })),
+  }
+  return seed
+}
+
+function sale(listingId: string, base: string, net: number): Event {
+  return { t: 'sold', listingId, kind: 'item', base, rarity: 'rare', price: net, net }
+}
+
+test('a delivery of three sales raises one folded toast with the sum of their gold', async ($, on) => {
+  const state = createInitialState(1)
+  const events = [
+    sale('L1', 'oak_staff', 120),
+    sale('L2', 'rune_staff', 200),
+    sale('L3', 'ember_rod', 90),
+  ]
+  const { time, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' sold for '))).toEqual([
+    { text: '3 items sold for 410 gold', timeoutMs: 4000 },
+  ])
+})
+
+test('three level-ups in one burst raise one toast and play the level-up cue once', async ($, on) => {
+  const state = createInitialState(1)
+  const events: Event[] = state.party.map((heroId) => ({ t: 'sandbox_level', heroId, level: 2 }))
+  expect(events).toHaveLength(3)
+  const { time, raised, plays } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' reached level '))).toHaveLength(1)
+  expect(plays.filter((p) => p.asset === 'cues/level_up.wav')).toHaveLength(1)
+})
+
+test('a burst with a sale, a level-up and a legendary drop toasts legendary, level-up, sale', async ($, on) => {
+  const state = createInitialState(1)
+  const lead = state.party[0] ?? ''
+  const events: Event[] = [
+    sale('L1', 'rune_staff', 200),
+    { t: 'sandbox_level', heroId: lead, level: 2 },
+    { t: 'sandbox_item', base: 'oak_staff', rarity: 'legendary' },
+  ]
+  const { time, last, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  const name = (last.get('view') as GameView).roster.find((h) => h.id === lead)?.name
+  expect(raised).toEqual([
+    { text: 'Legendary drop: Oak Staff', timeoutMs: 8000 },
+    { text: `${name} reached level 2`, timeoutMs: 4000 },
+    { text: 'Rune Staff sold for 200 gold', timeoutMs: 4000 },
+  ])
 })
 
 test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
