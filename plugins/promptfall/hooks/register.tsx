@@ -2,7 +2,7 @@ import type { Register, RenderSurface, UiBlitArgs, UiBlitResult } from 'claude-c
 import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
 import { commandSpec, registerCommand } from './command'
-import { CUE_ASSET, type Cue, cueFor } from './cues'
+import { CUE_ASSET, type Cue } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
@@ -23,7 +23,7 @@ import {
   WORLD_DEFAULT,
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
-import { effectToast } from './toasts'
+import { toastsFor, worldToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -52,7 +52,8 @@ type Io = {
   after: (ms: number, fn: () => void) => Timer
   store: StoreCalls
   publish: EnginePublish
-  toast: (text: string) => void
+  /** Shows a toast; `timeoutMs` left out is the host's default. */
+  toast: (text: string, timeoutMs?: number) => void
   leaseOwner: () => Promise<string | null>
   mode: () => Promise<Mode>
   paneNotice: (text: string | null) => Promise<void>
@@ -140,6 +141,11 @@ class GameSession implements GameHandle {
   private readonly loops = new Map<RenderSurface, StageLoop>()
   /** The last applied event's time: the stage's `now` for effects a delivery brought. */
   private lastAt = 0
+  /**
+   * World boss names by id, from the view's boss and the world snapshot: a reward carries only
+   * the boss id, and arrives after boss mode has ended.
+   */
+  private readonly bossNames = new Map<string, string>()
 
   readonly stage: GameHandle['stage'] = {
     timeline: new StageTimeline(),
@@ -180,13 +186,22 @@ class GameSession implements GameHandle {
       now: io.now,
       every: io.every,
       after: io.after,
-      publish: (world) => io.publish({ world }),
+      publish: (world) => {
+        const boss = world.snapshot?.boss
+        if (boss) this.bossNames.set(boss.bossId, boss.name)
+        return io.publish({ world })
+      },
       load: io.readWorld,
       fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
-      toast: io.toast,
-      cue: (cue) => void this.playCue(cue),
+      // Only the primary toasts, the world boss included: two terminals never show the news twice.
+      transition: ({ kind, name, cue }) => {
+        if (this.role !== 'primary') return
+        const toast = worldToast(kind, name)
+        io.toast(toast.text, toast.timeoutMs)
+        if (cue && toast.cue) void this.playCue(toast.cue)
+      },
     })
   }
 
@@ -604,6 +619,7 @@ class GameSession implements GameHandle {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
     if (at !== undefined) this.lastAt = at
+    if (view?.boss) this.bossNames.set(view.boss.bossId, view.boss.name)
     // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
     const now = at ?? this.lastAt
     const cadence = this.cadence || TURN_CADENCE_MS
@@ -621,13 +637,12 @@ class GameSession implements GameHandle {
         this.io.after(5000, () => {
           if (gen === this.paneNoticeGen) void this.io.paneNotice(null)
         })
-        continue
       }
-      const text = effectToast(effect)
-      if (text) this.io.toast(text)
     }
-    // After the toasts: each cue the batch earned, once.
-    for (const cue of new Set(effects.map(cueFor))) if (cue) void this.playCue(cue)
+    const toasts = toastsFor(effects, view, { bossName: (id) => this.bossNames.get(id) ?? null })
+    for (const toast of toasts) this.io.toast(toast.text, toast.timeoutMs)
+    // After the toasts: each cue the burst earned, once.
+    for (const cue of new Set(toasts.map((t) => t.cue))) if (cue) void this.playCue(cue)
   }
 }
 
@@ -704,7 +719,8 @@ export const register: Register = (on) => {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
-        toast: (text) => $.ui.toast(text),
+        toast: (text, timeoutMs) =>
+          timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
@@ -781,7 +797,8 @@ export const register: Register = (on) => {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
-        toast: (text) => $.ui.toast(text),
+        toast: (text, timeoutMs) =>
+          timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {

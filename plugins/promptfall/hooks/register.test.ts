@@ -4,7 +4,7 @@ import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
-import { effectToast } from './toasts'
+import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
 import {
@@ -13,7 +13,15 @@ import {
   MemoryKeyValue,
   type WorldSnapshot,
 } from './vendor/protocol.js'
-import { createInitialState, GAUGE_FULL, type GameState, hashState, step } from './vendor/sim.js'
+import {
+  content,
+  createInitialState,
+  type Event,
+  GAUGE_FULL,
+  type GameState,
+  hashState,
+  step,
+} from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
@@ -86,7 +94,15 @@ function clock(on: On) {
   }
 }
 
-function engineBottom(on: On, toasts: string[] = [], env: Record<string, string> = {}) {
+/** A toast as the host received it: its text and the timeout it was raised with. */
+type Raised = { text: string; timeoutMs: number | undefined }
+
+function engineBottom(
+  on: On,
+  toasts: string[] = [],
+  env: Record<string, string> = {},
+  onToast: (toast: Raised) => void = () => undefined,
+) {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   // The sandbox switch reads the environment: unset unless a test turns the sandbox on.
   mock.env(on, env)
@@ -94,6 +110,7 @@ function engineBottom(on: On, toasts: string[] = [], env: Record<string, string>
   on('turn.complete', () => ({ text: '' }))
   on('ui.toast', (_$, e) => {
     toasts.push(e.text)
+    onToast({ text: e.text, timeoutMs: e.timeoutMs })
     return { value: undefined }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -910,12 +927,12 @@ test('/promptfall server local resets the world to the in-process snapshot, chat
 // ---------------------------------------------------------------------------
 // The world boss
 
-test('the boss appearing and going down toast once each', async ($, on) => {
+test('the boss appearing toasts once for 8 s and going down once for 4 s', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   store(on)
   states(on)
-  const toasts: string[] = []
-  engineBottom(on, toasts)
+  const raised: Raised[] = []
+  engineBottom(on, [], {}, (toast) => raised.push(toast))
   const net = worldNet(on)
   let boss: WorldSnapshot['boss'] = null
   net.world = () => snap({ boss })
@@ -928,25 +945,14 @@ test('the boss appearing and going down toast once each', async ($, on) => {
   boss = { ...LIVE_BOSS, hp: 0 }
   await time.advance(5_000)
   await time.advance(15_000)
-  expect(toasts.filter((t) => t === 'World boss The Promptwyrm has appeared')).toHaveLength(1)
-  expect(toasts.filter((t) => t === 'The Promptwyrm is down')).toHaveLength(1)
+  const world = raised.filter((t) => t.text.startsWith('World boss '))
+  expect(world).toEqual([
+    { text: 'World boss The Promptwyrm has appeared', timeoutMs: 8000 },
+    { text: 'World boss The Promptwyrm is down', timeoutMs: 4000 },
+  ])
 })
 
-test('a reward toasts the item or the gold, and the loot log names it', () => {
-  const item = {
-    id: 'r0',
-    base: 'steel_longsword',
-    rarity: 'rare' as const,
-    affixes: [],
-    equippedBy: null,
-    tradeableAt: null,
-  }
-  expect(
-    effectToast({ k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item }, gold: 45 }),
-  ).toBe('Boss reward: Steel Longsword (rare)')
-  expect(effectToast({ k: 'rewarded', bossId: 'wb1', goods: null, gold: 45 })).toBe(
-    'Boss reward: 45 gold',
-  )
+test("a reward's loot log line names the item", () => {
   const state = {
     ...createInitialState(1),
     lootLog: [{ k: 'reward' as const, base: 'steel_longsword', rarity: 'rare' as const, gold: 45 }],
@@ -1003,7 +1009,7 @@ test('a boss seen in the snapshot reaches the primary through its next flush, wi
 })
 
 test('a reload during a live boss keeps the held snapshot, so the boss is not announced again', async () => {
-  const toasts: string[] = []
+  const transitions: unknown[] = []
   const held: WorldState = {
     snapshot: snap({ boss: LIVE_BOSS }),
     fetchedAt: 1,
@@ -1020,10 +1026,10 @@ test('a reload during a live boss keeps the held snapshot, so the boss is not an
     publish: async () => undefined,
     load: async () => held,
     fetch: async () => snap({ boss: LIVE_BOSS }),
-    toast: (text) => toasts.push(text),
+    transition: (t) => transitions.push(t),
   })
   await poller.start()
-  expect(toasts).toEqual([])
+  expect(transitions).toEqual([])
 })
 
 // ---------------------------------------------------------------------------
@@ -1227,13 +1233,20 @@ function sounding(on: On, seed: Record<string, unknown>) {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, seed)
   const last = states(on)
-  engineBottom(on)
+  const raised: Raised[] = []
+  /** Toasts and cues in the order the host received them. */
+  const order: string[] = []
+  engineBottom(on, [], {}, (toast) => {
+    raised.push(toast)
+    order.push(`toast ${toast.text}`)
+  })
   const plays: { asset: string; gain: number | undefined }[] = []
   on('audio.play', (_$, e) => {
     plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
+    order.push(`cue ${e.clip.asset ?? ''}`)
     return { value: undefined }
   })
-  return { time, data, last, plays }
+  return { time, data, last, plays, raised, order }
 }
 
 for (const [rarity, asset] of [
@@ -1248,6 +1261,133 @@ for (const [rarity, asset] of [
     expect(plays).toEqual([{ asset, gain: CUE_GAIN }])
   })
 }
+
+/**
+ * A state whose next tick kills two 1 hp Goblin Scouts, each dropping a rare item, and levels
+ * the party's lead: one burst with two rare drops and one level-up.
+ */
+function twoRareDropsAndALevel(): GameState {
+  for (let seed = 1; seed < 50_000; seed++) {
+    const s0 = createInitialState(seed)
+    const lead = s0.party[0]
+    const s: GameState = {
+      ...s0,
+      roster: s0.roster.map((h) =>
+        h.id === lead ? { ...h, xp: content.xpToNext(h.level) - 1 } : h,
+      ),
+      encounter: {
+        enemies: [
+          { id: 'e-a', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
+          { id: 'e-b', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
+        ],
+        queue: [],
+        waveSize: 3,
+        spawnedInWave: 3,
+      },
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drops = effects.flatMap((e) => (e.k === 'drop' ? [e.item.rarity] : []))
+    if (
+      drops.filter((r) => r === 'rare').length === 2 &&
+      !drops.some((r) => r === 'epic' || r === 'legendary') &&
+      effects.filter((e) => e.k === 'level_up').length === 1
+    ) {
+      return s
+    }
+  }
+  throw new Error('no burst with two rare drops and a level-up')
+}
+
+test('a level-up toasts its hero by name for 4 s; two rare drops fold, and each cues once after the toasts', async ($, on) => {
+  const state = twoRareDropsAndALevel()
+  const { time, last, raised, order } = sounding(on, { ...record(state), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  const lead = (last.get('view') as GameView).roster.find((h) => h.id === state.party[0])
+  // The roster's name carries the epithet: "Aldric the Steadfast", never "Aldric".
+  expect(lead?.name.split(' ').length).toBeGreaterThan(1)
+  expect(raised.filter((t) => t.text.includes(' reached level '))).toEqual([
+    { text: `${lead?.name} reached level ${lead?.level ?? 0}`, timeoutMs: 4000 },
+  ])
+  const drops = raised.filter((t) => t.text.includes(' rare drop'))
+  expect(drops.map((t) => [t.text.split(':')[0], t.timeoutMs])).toEqual([['2 rare drops', 4000]])
+  const cues = order.filter((o) => o.startsWith('cue '))
+  expect([...cues].sort()).toEqual(['cue cues/drop.wav', 'cue cues/level_up.wav'])
+  const lastToast = order.findLastIndex((o) => o.startsWith('toast '))
+  expect(order.findIndex((o) => o.startsWith('cue '))).toBeGreaterThan(lastToast)
+})
+
+test('a legendary drop toasts for 8 s and plays the legendary cue once', async ($, on) => {
+  const { time, plays, raised } = sounding(on, { ...record(dropping('legendary')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  const legendary = raised.filter((t) => t.text.startsWith('Legendary drop: '))
+  expect(legendary.map((t) => t.timeoutMs)).toEqual([8000])
+  expect(plays.map((p) => p.asset)).toEqual(['cues/legendary.wav'])
+})
+
+/** `record(state)` with `events` waiting in the ledger's log: the boot delivers them as one burst. */
+function delivering(state: GameState, events: Event[]): Record<string, unknown> {
+  const seed = record(state)
+  const key = 'promptfall:pf:acct:acct-1:record'
+  const rec = seed[key] as Record<string, unknown>
+  seed[key] = {
+    ...rec,
+    cursor: events.length,
+    log: events.map((event, i) => ({ n: i + 1, event })),
+  }
+  return seed
+}
+
+function sale(listingId: string, base: string, net: number): Event {
+  return { t: 'sold', listingId, kind: 'item', base, rarity: 'rare', price: net, net }
+}
+
+test('a delivery of three sales raises one folded toast with the sum of their gold', async ($, on) => {
+  const state = createInitialState(1)
+  const events = [
+    sale('L1', 'oak_staff', 120),
+    sale('L2', 'rune_staff', 200),
+    sale('L3', 'ember_rod', 90),
+  ]
+  const { time, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' sold for '))).toEqual([
+    { text: '3 items sold for 410 gold', timeoutMs: 4000 },
+  ])
+})
+
+test('three level-ups in one burst raise one toast and play the level-up cue once', async ($, on) => {
+  const state = createInitialState(1)
+  const events: Event[] = state.party.map((heroId) => ({ t: 'sandbox_level', heroId, level: 2 }))
+  expect(events).toHaveLength(3)
+  const { time, raised, plays } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' reached level '))).toHaveLength(1)
+  expect(plays.filter((p) => p.asset === 'cues/level_up.wav')).toHaveLength(1)
+})
+
+test('a burst with a sale, a level-up and a legendary drop toasts legendary, level-up, sale', async ($, on) => {
+  const state = createInitialState(1)
+  const lead = state.party[0] ?? ''
+  const events: Event[] = [
+    sale('L1', 'rune_staff', 200),
+    { t: 'sandbox_level', heroId: lead, level: 2 },
+    { t: 'sandbox_item', base: 'oak_staff', rarity: 'legendary' },
+  ]
+  const { time, last, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  const name = (last.get('view') as GameView).roster.find((h) => h.id === lead)?.name
+  expect(raised).toEqual([
+    { text: 'Legendary drop: Oak Staff', timeoutMs: 8000 },
+    { text: `${name} reached level 2`, timeoutMs: 4000 },
+    { text: 'Rune Staff sold for 200 gold', timeoutMs: 4000 },
+  ])
+})
 
 test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
   const { time, plays } = sounding(on, { ...record(dropping('common')), ...SOUND_ON })
@@ -1327,38 +1467,43 @@ test('the world boss appearing plays the boss cue; going down plays none', async
 /** Past the sandbox grid's first window, so no grid boss is open when a test starts. */
 const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
 const APPEARED = 'World boss The Promptwyrm has appeared'
-const DOWN = 'The Promptwyrm is down'
+const DOWN = 'World boss The Promptwyrm is down'
 
 function sandboxSounding(on: On, seed: Record<string, unknown> = {}) {
   const time = mock.clock(on, { now: PAST_GRID_BOSS })
   const { data } = store(on, { ...SOUND_ON, ...seed })
   const last = states(on)
   const toasts: string[] = []
-  engineBottom(on, toasts, { PROMPTFALL_SANDBOX: '1' })
+  const raised: Raised[] = []
+  engineBottom(on, toasts, { PROMPTFALL_SANDBOX: '1' }, (toast) => raised.push(toast))
   const plays: string[] = []
   on('audio.play', (_$, e) => {
     plays.push(e.clip.asset ?? '')
     return { value: undefined }
   })
-  return { time, data, last, toasts, plays }
+  return { time, data, last, toasts, plays, raised }
 }
 
 test('sandbox worldboss has toasted and cued when it returns; worldboss end has toasted down', async ($, on) => {
-  const { toasts, plays } = sandboxSounding(on)
+  const { toasts, plays, raised } = sandboxSounding(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const run = async (args: string) =>
     (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
   // The clock never moves in this test: no timer poll runs, only the verbs' own.
   expect(await run('worldboss')).toBe(`Sandbox: world boss The Promptwyrm has appeared`)
-  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(raised.filter((t) => t.text === APPEARED)).toEqual([{ text: APPEARED, timeoutMs: 8000 }])
   expect(plays).toEqual(['cues/boss.wav'])
   expect(await run('worldboss end')).toBe('Sandbox: The Promptwyrm is down, rewards delivered')
-  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(raised.filter((t) => t.text === DOWN)).toEqual([{ text: DOWN, timeoutMs: 4000 }])
   expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
   expect(plays).toEqual(['cues/boss.wav'])
+  // The reward carries only the boss id, after boss mode ended: the session kept the name.
+  const shares = raised.filter((t) => t.text.startsWith('Your share of '))
+  expect(shares.map((t) => t.timeoutMs)).toEqual([8000])
+  expect(shares[0]?.text).toMatch(/^Your share of The Promptwyrm: \d+ gold/)
 })
 
-test('a secondary sandbox session toasts the world boss appearing and going down, with no cue', async ($, on) => {
+test('a read-only sandbox session raises no world boss toast and no cue; its band still shows the boss', async ($, on) => {
   const { time, data, last, toasts, plays } = sandboxSounding(on, {
     [`${SANDBOX_PREFIX}lease`]: { owner: 'someone-else', until: 9_999_999_999_999 },
   })
@@ -1390,9 +1535,11 @@ test('a secondary sandbox session toasts the world boss appearing and going down
   expect(last.get('mode')).toBe('secondary')
   expect(await ledger.host.spawnBoss()).toEqual({ ok: true })
   await time.advance(WORLD_POLL_MS)
-  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(worldRows(last.get('view') as GameView, worldOf(last))[1]?.text).toMatch(
+    /^World boss The Promptwyrm /,
+  )
   expect(await ledger.host.settleBoss()).toEqual({ ok: true })
   await time.advance(WORLD_POLL_FAST_MS)
-  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(toasts.filter((t) => t.startsWith('World boss '))).toEqual([])
   expect(plays).toEqual([])
 })

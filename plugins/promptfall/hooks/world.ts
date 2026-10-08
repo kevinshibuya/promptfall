@@ -1,5 +1,4 @@
 import type { WorldState } from '../types'
-import type { Cue } from './cues'
 import { WORLD_DEFAULT } from './state'
 import {
   CHAT_KEEP,
@@ -31,24 +30,23 @@ export type PollerDeps = {
   fetch: (since: number) => Promise<WorldSnapshot | Unauthorized>
   /** The committed boss tally on a primary; null on a secondary. */
   committedDealt?: () => WorldState['committedDealt']
-  /** Shows a toast: the boss transitions. */
-  toast?: (text: string) => void
-  /** Plays a cue beside a toast: the boss appearing. */
-  cue?: (cue: Cue) => void
+  /**
+   * A boss transition, for the session to toast from the table. `cue`: false for a boss
+   * already up at the first poll, which is news for the toast, not a fight starting.
+   */
+  transition?: (t: { kind: BossTransition; name: string; cue: boolean }) => void
 }
 
-/** The toast a snapshot transition earns: a boss appearing, or the same boss going down. */
+export type BossTransition = 'appeared' | 'down'
+
+/** What a snapshot transition is: a boss appearing, or the same boss going down. */
 export function bossTransition(
   before: WorldSnapshot['boss'] | undefined,
   after: WorldSnapshot['boss'],
-): { kind: 'appeared' | 'down'; text: string } | null {
+): BossTransition | null {
   if (!after) return null
-  if (after.hp > 0 && before?.bossId !== after.bossId) {
-    return { kind: 'appeared', text: `World boss ${after.name} has appeared` }
-  }
-  if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) {
-    return { kind: 'down', text: `${after.name} is down` }
-  }
+  if (after.hp > 0 && before?.bossId !== after.bossId) return 'appeared'
+  if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) return 'down'
   return null
 }
 
@@ -185,7 +183,6 @@ export class WorldPoller {
     if (epoch !== this.epoch) return
     const last = answer.chat.at(-1)
     const transition = bossTransition(this.state.snapshot?.boss, answer.boss)
-    // A boss already up at the first poll is news for the toast, not a fight starting: no cue.
     const polledBefore = this.state.snapshot !== null
     this.state = {
       snapshot: answer,
@@ -203,9 +200,8 @@ export class WorldPoller {
       void this.deps.publish(this.state)
     })
     await this.deps.publish(this.state)
-    if (transition) {
-      this.deps.toast?.(transition.text)
-      if (transition.kind === 'appeared' && polledBefore) this.deps.cue?.('boss')
+    if (transition && answer.boss) {
+      this.deps.transition?.({ kind: transition, name: answer.boss.name, cue: polledBefore })
     }
     this.rearm(this.cadence(now))
   }

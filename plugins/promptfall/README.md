@@ -111,8 +111,8 @@ seconds.
 
 Rewards land when the boss dies, or when its window ends: a guaranteed boss-rarity item for 200
 damage or more (5% of the base), and on a kill one bonus roll each for the top 3. Each reward
-toasts `Boss reward: <item> (<rarity>)` and shows as `boss reward <item> (+<gold>g)` in the loot
-log. An item with no free slot toasts `Boss reward: <gold> gold` instead, waits in the returns
+toasts `Your share of <boss>: <gold> gold and <item>` and shows as `boss reward <item> (+<gold>g)`
+in the loot log. An item with no free slot toasts `Your share of <boss>: <gold> gold` instead, waits in the returns
 queue, and arrives as a `returned` loot line when a slot frees. The boss
 board counts every hit, past the boss's remaining HP too.
 

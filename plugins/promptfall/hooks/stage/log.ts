@@ -2,7 +2,8 @@
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
 // queue behind each other, and hit lines are dropped only when the queue falls a tick behind.
 import type { GameView, Settings } from '../../types'
-import type { Effect } from '../vendor/sim.js'
+import { heroNameById } from '../toasts'
+import { content, type Effect, type Rarity } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
 import { groups, type StageTimeline } from './timeline'
@@ -34,6 +35,12 @@ function list(amounts: readonly number[]): string {
 
 function itemName(base: string): string {
   return base === 'contract' ? 'Hero contract' : tradeName('item', base)
+}
+
+/** "Rare drop", "Epic drop": the rarity leads when it is the news, as in the toast table. */
+function dropWord(rarity: Rarity): string {
+  if (rarity !== 'rare' && rarity !== 'epic' && rarity !== 'legendary') return 'Drop'
+  return `${rarity.charAt(0).toUpperCase()}${rarity.slice(1)} drop`
 }
 
 export class MessageLog {
@@ -115,36 +122,51 @@ export class MessageLog {
     switch (e.k) {
       case 'drop':
         return {
-          text: `Found a ${itemName(e.item.base)}!`,
+          text: `${dropWord(e.item.rarity)}: ${itemName(e.item.base)}.`,
           key: true,
           rgb: RARITY_RGB[e.item.rarity],
         }
       case 'drop_vendored':
-        return { text: `Found a ${itemName(e.item.base)}, sold for ${e.gold}G.`, key: true }
+        return {
+          text: `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`,
+          key: true,
+        }
       case 'level_up':
-        return { text: `${name(e.heroId)} reached level ${e.level}!`, key: true }
+        // The toast's lookup, so the log and the toast name one hero the same way.
+        return {
+          text: `${heroNameById(view, e.heroId) ?? 'A hero'} reached level ${e.level}.`,
+          key: true,
+        }
       case 'hero_fell':
         return { text: `${name(e.heroId)} falls!`, key: true }
       case 'boss_spawned': {
         const boss = view.enemies.find((x) => x.def === e.def)
         return { text: `${boss?.name ?? e.def} appears!`, key: true }
       }
-      case 'zone_cleared':
-        return { text: `Zone ${e.zone} cleared!`, key: true }
+      case 'zone_cleared': {
+        if (e.advancedTo <= e.zone) return { text: `Zone ${e.zone} cleared.`, key: true }
+        const zone = content.zones[e.advancedTo - 1]?.name
+        return {
+          text: `The party reached zone ${e.advancedTo}${zone ? `, ${zone}` : ''}.`,
+          key: true,
+        }
+      }
       case 'wipe':
-        return { text: `The party retreats to zone ${e.retreatedTo}.`, key: true }
+        return { text: `The party fell, retreating to zone ${e.retreatedTo}.`, key: true }
       case 'traded': {
         const t = e.entry
-        const what = tradeName(t.kind, t.base)
         // Grill 1.16's table has the sale only; purchases and returns print nothing.
-        return t.what === 'sold' ? { text: `Sold ${what} for ${t.gold}G.`, key: true } : null
+        return t.what === 'sold'
+          ? { text: `${tradeName(t.kind, t.base)} sold for ${t.gold}G.`, key: true }
+          : null
       }
       case 'rewarded': {
+        // The log does not name the boss: the sim has left boss mode by the time the reward lands.
         const goods = e.goods
-        if (!goods) return { text: `Boss reward: ${e.gold}G.`, key: true }
-        const what =
-          goods.kind === 'item' ? itemName(goods.item.base) : tradeName('hero', goods.hero.template)
-        return { text: `Boss reward: ${what} and ${e.gold}G.`, key: true }
+        const what = !goods
+          ? ''
+          : ` and ${goods.kind === 'item' ? itemName(goods.item.base) : tradeName('hero', goods.hero.template)}`
+        return { text: `Your share of the boss: ${e.gold}G${what}.`, key: true }
       }
       default:
         return null
