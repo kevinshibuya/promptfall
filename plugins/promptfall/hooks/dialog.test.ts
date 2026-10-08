@@ -53,6 +53,8 @@ function harness(on: On, state: GameState) {
     return next(e)
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset here.
+  mock.env(on, {})
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   mock.clock(on, { now: 1_000_000 })
@@ -393,6 +395,8 @@ async function startOnTest(
     return next(e)
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset here.
+  mock.env(on, {})
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const clock = mock.clock(on, { now: 1_000_000 })

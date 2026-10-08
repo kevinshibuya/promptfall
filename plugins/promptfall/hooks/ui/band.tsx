@@ -126,6 +126,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
       extra,
+      minRows: party ? timeline.minRowsAt(view, now) : undefined,
       scalable: rendererNow === 'image',
     })
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
@@ -275,6 +276,18 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // is never blank; the loop blits every frame after it.
     const box = layout.box
     if (box && !terminal && 'Svg' in els) {
+      // At the band's width the stage is taller than the band the desktop shows whole, and the
+      // desktop scrolls the rest away: scale the whole stage down to the rows left under it
+      // (ADR 0004), the zoomed-out view of ADR 0010; under two rows left the desktop scrolls.
+      const stripPx =
+        (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
+      const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
+      const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
+      const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
+      const fit =
+        natural > cap && cap >= DESKTOP_ROW_PX * 2
+          ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
+          : {}
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
       const source = stageSvg(view, timeline, now, box, {
         smil: SVG_SMIL,
@@ -283,18 +296,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         motion: settings.motion,
       })
       const { Svg } = els
-      // At the band's width a boss stage is taller than the band the desktop shows whole, and
-      // the desktop scrolls the rest away: scale it down to the rows left under it (ADR 0004).
-      const stripPx =
-        (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
-      const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
-      const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
-      const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
-      const fit =
-        // Under two rows left there is nothing to fit to: the desktop scrolls the band instead.
-        natural > cap && cap >= DESKTOP_ROW_PX * 2
-          ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
-          : {}
       stage = (
         <Svg
           key="stage"
@@ -309,7 +310,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       if (renderer === 'unknown') {
         stage = (
           <Box key="stage-empty" flexDirection="column">
-            {Array.from({ length: box.rows }, (_, i) => (
+            {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
               <Text key={`stage-empty-${i}`}> </Text>
             ))}
           </Box>
@@ -333,7 +334,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
                 settings.motion,
               )
         if ('cells' in frame) {
-          stage = <Raster key="stage" columns={box.columns} rows={box.rows} cells={frame.cells} />
+          // The cells the stage shows: the box, or its bottom rows on a short band (ADR 0010).
+          stage = (
+            <Raster key="stage" columns={cells.columns} rows={cells.rows} cells={frame.cells} />
+          )
         } else {
           stage = (
             <Image

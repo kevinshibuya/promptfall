@@ -93,6 +93,7 @@ type Goods = {
     kind: 'hero';
     hero: Hero;
 };
+type RecruitVia = 'contract' | 'tavern' | 'sandbox';
 type LootEntry = {
     k: 'item';
     itemId: string;
@@ -104,7 +105,7 @@ type LootEntry = {
     heroId: string;
     template: string;
     rarity: Rarity;
-    via: 'contract' | 'tavern';
+    via: RecruitVia;
 } | {
     k: 'trade';
     what: 'sold' | 'bought' | 'returned';
@@ -224,11 +225,37 @@ type ServerEvent = {
     bossId: string;
     goods: Goods | null;
     gold: number;
+} | SandboxEvent;
+/** Authored only by a host with the sandbox on. Each hands out what play would earn, through play's own path. */
+type SandboxEvent = 
+/** Moves the party to the zone, ends the encounter, and has the next empty tick spawn that boss. */
+{
+    t: 'sandbox_boss';
+    zone: number;
+    boss: 'zone_boss' | 'turn_boss';
+} | {
+    t: 'sandbox_item';
+    base: string;
+    rarity: Rarity;
+} | {
+    t: 'sandbox_level';
+    heroId: string;
+    level: number;
+} | {
+    t: 'sandbox_zone';
+    zone: number;
+} | {
+    t: 'sandbox_recruit';
+    rarity: Rarity;
+} | {
+    t: 'sandbox_wipe';
 };
 type Event = PlayerEvent | ServerEvent;
 type EventKind = Event['t'];
 type PlayerEventKind = PlayerEvent['t'];
 type ServerEventKind = ServerEvent['t'];
+type SandboxEventKind = SandboxEvent['t'];
+declare const SANDBOX_EVENT_KINDS: readonly SandboxEventKind[];
 declare const SERVER_EVENT_KINDS: readonly ServerEventKind[];
 type Effect = {
     k: 'drop';
@@ -268,7 +295,7 @@ type Effect = {
 } | {
     k: 'hero_recruited';
     hero: Hero;
-    via: 'contract' | 'tavern';
+    via: RecruitVia;
 } | {
     k: 'rejected';
     event: Event;
@@ -514,4 +541,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };

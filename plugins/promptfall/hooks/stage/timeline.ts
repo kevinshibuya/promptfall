@@ -4,6 +4,7 @@ import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
   BACKLOG_ROUNDS,
   BOLT_MS,
+  BOSS_MIN_ROWS,
   BURST_MS,
   DISSOLVE_MS,
   DROP_MS,
@@ -17,9 +18,9 @@ import {
   NUMBER_RGB_HERO,
   SLIDE_MS,
   SPAWN_MS,
-  STAGE_BOSS_ROWS,
-  STAGE_REST_ROWS,
-  STAGE_TURN_BOSS_ROWS,
+  STAGE_MIN_ROWS,
+  STAGE_ROWS,
+  TURN_BOSS_MIN_ROWS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -531,15 +532,25 @@ export class StageTimeline {
     return this.departed.has(id)
   }
 
-  rowsAt(view: GameView, now: number): number {
+  /** The stage's rows for what is on it: the boss height, every time (ADR 0010). */
+  rowsAt(_view: GameView, _now: number): number {
+    return STAGE_ROWS
+  }
+
+  /**
+   * The rows the stage keeps whole when the band is short: the tallest actor on it, a departed
+   * one included while its motions hold. Under this the Image zooms out and the Raster goes
+   * compact, so no actor is ever cut (ADR 0010).
+   */
+  minRowsAt(view: GameView, now: number): number {
     const kinds = new Set(view.enemies.map((e) => e.kind))
     for (const id of this.departed) {
       const known = this.entries.get(id)
       if (known && this.holds(id, now)) kinds.add(known.kind)
     }
-    if (kinds.has('zone_boss') || kinds.has('world_boss')) return STAGE_BOSS_ROWS
-    if (kinds.has('turn_boss')) return STAGE_TURN_BOSS_ROWS
-    return STAGE_REST_ROWS
+    if (kinds.has('zone_boss') || kinds.has('world_boss')) return BOSS_MIN_ROWS
+    if (kinds.has('turn_boss')) return TURN_BOSS_MIN_ROWS
+    return STAGE_MIN_ROWS
   }
 
   isBusy(now: number): boolean {

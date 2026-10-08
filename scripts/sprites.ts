@@ -8,6 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { worldBossKey } from '../plugins/promptfall/hooks/sprites/keys'
+import { STAGE_MAX_COLUMNS, STAGE_ROWS } from '../plugins/promptfall/hooks/stage/tuning'
 import { hex, medianCut, nearest, parseHex, type Rgba, readPng, rgbOf } from './png'
 
 export type Style = 'nes' | 'snes'
@@ -33,9 +34,18 @@ export type ManifestEntry = {
   /** A hero's rarity colour per drawn frame, as `rarityColorHires`. */
   frameRarityColors?: { windup: string; follow?: string }
 }
+/** One zone's stage backdrop: the 1x painting and its 1.5x twin, each at the full stage's size. */
+export type BackdropEntry = {
+  zone: number
+  /** A PNG under art/, exactly BACKDROP wide and tall, opaque, at most BACKDROP_COLOURS colours. */
+  file: string
+  /** As `file`, at 1.5x: exactly BACKDROP_HIRES. */
+  fileHires: string
+}
 export type Manifest = {
   palettes: { nes: string; snes: string; hires?: string }
   sprites: ManifestEntry[]
+  backdrops?: BackdropEntry[]
 }
 
 /** Palette indices: index 0 is transparent, `palette[0]` is 0 and never drawn. */
@@ -62,11 +72,16 @@ export type BuildInput = {
   load: (path: string) => Rgba | null
   /** Every sprite id the content needs. */
   expected: readonly string[]
+  /** The content's zone count: a backdrop past it is an error. Unbounded when absent. */
+  zones?: number
 }
+export type BuiltBackdrop = { zone: number; full: Indexed; hires: Indexed }
 export type BuildResult = {
   errors: string[]
   sprites: BuiltSprite[]
   art: Map<string, Variants>
+  /** One per manifest backdrop, in zone order. */
+  backdrops: BuiltBackdrop[]
   /**
    * Frames whose native's long side is over 20% off its idle native's, or that the fit to the idle
    * canvas shrinks by more than 20%: a report, not an error.
@@ -89,6 +104,90 @@ const ALPHA_MIN = 128
 const HIRES_SCALE = 1.5
 const HIRES_COLOURS = 16
 const HIRES_MASTER_SIZE = 128
+/**
+ * A zone backdrop's canvas: the widest, tallest full stage (160 columns, the boss rows), at 1x and
+ * at 1.5x (compose.ts frameSize). The stage bottom-anchors it and centre-crops narrower boxes.
+ */
+export const BACKDROP = { width: STAGE_MAX_COLUMNS, height: STAGE_ROWS * 2 }
+export const BACKDROP_HIRES = {
+  width: Math.ceil(BACKDROP.width * HIRES_SCALE),
+  height: Math.ceil(BACKDROP.height * HIRES_SCALE),
+}
+export const BACKDROP_COLOURS = 16
+
+/**
+ * An opaque painting indexed by its own colours (no master): null with the count over `limit`, or
+ * with the number of transparent pixels, which a backdrop may not have.
+ */
+export function indexOwn(
+  image: Rgba,
+  limit: number,
+): { art: Indexed } | { count: number } | { transparent: number } {
+  const colours = new Set<number>()
+  let transparent = 0
+  for (let p = 0; p < image.width * image.height; p++) {
+    if ((image.data[p * 4 + 3] ?? 0) < ALPHA_MIN) transparent++
+    else colours.add(rgbOf(image.data, p * 4))
+  }
+  if (transparent > 0) return { transparent }
+  if (colours.size > limit) return { count: colours.size }
+  const palette = [0, ...[...colours].sort((a, b) => a - b)]
+  const idx = new Uint8Array(image.width * image.height)
+  for (let p = 0; p < idx.length; p++) idx[p] = palette.indexOf(rgbOf(image.data, p * 4), 1)
+  return { art: { width: image.width, height: image.height, palette, idx } }
+}
+
+/** The manifest's backdrops, each PNG checked for size, opacity and colours. */
+export function buildBackdrops(input: BuildInput, errors: string[]): BuiltBackdrop[] {
+  const built: BuiltBackdrop[] = []
+  const zones = new Set<number>()
+  for (const entry of input.manifest.backdrops ?? []) {
+    const label = `backdrop zone ${entry.zone}`
+    if (!Number.isInteger(entry.zone) || entry.zone < 1) {
+      errors.push(`${label}: zone must be a positive integer`)
+      continue
+    }
+    if (input.zones !== undefined && entry.zone > input.zones) {
+      errors.push(`${label}: the content has ${input.zones} zones`)
+      continue
+    }
+    if (zones.has(entry.zone)) {
+      errors.push(`${label}: duplicate zone`)
+      continue
+    }
+    zones.add(entry.zone)
+    const one = (path: string, size: { width: number; height: number }): Indexed | null => {
+      const source = input.load(path)
+      if (source === null) {
+        errors.push(`${label}: missing file art/${path}`)
+        return null
+      }
+      if (source.width !== size.width || source.height !== size.height) {
+        errors.push(
+          `${label}: art/${path} is ${source.width} x ${source.height}, not ${size.width} x ${size.height}`,
+        )
+        return null
+      }
+      const indexed = indexOwn(source, BACKDROP_COLOURS)
+      if ('transparent' in indexed) {
+        errors.push(`${label}: art/${path} has ${indexed.transparent} transparent pixels`)
+        return null
+      }
+      if ('count' in indexed) {
+        errors.push(
+          `${label}: art/${path} has ${indexed.count} colours, a backdrop allows ${BACKDROP_COLOURS}`,
+        )
+        return null
+      }
+      return indexed.art
+    }
+    const full = one(entry.file, BACKDROP)
+    const hires = one(entry.fileHires, BACKDROP_HIRES)
+    if (full === null || hires === null) continue
+    built.push({ zone: entry.zone, full, hires })
+  }
+  return built.sort((a, b) => a.zone - b.zone)
+}
 
 /**
  * Downsamples to `W × H`: output pixel (i, j) takes the most frequent opaque index of its source
@@ -303,7 +402,8 @@ export function buildSprites(input: BuildInput): BuildResult {
   for (const id of input.expected) {
     if (!seen.has(id)) errors.push(`${id}: no manifest entry`)
   }
-  return { errors, sprites, art, drift }
+  const backdrops = buildBackdrops(input, errors)
+  return { errors, sprites, art, backdrops, drift }
 }
 
 type FrameContext = {
@@ -629,6 +729,16 @@ export function emitModule(result: BuildResult): string {
   }
   lines.push('}')
   lines.push('')
+  lines.push(
+    '/** The zone backdrops by zone number: the 1x painting and its 1.5x twin, each the full stage. */',
+  )
+  lines.push('export const BACKDROPS: Readonly<Record<string, { full: Art; hires: Art }>> = {')
+  for (const b of result.backdrops) {
+    lines.push(`  // backdrop zone ${b.zone}`)
+    lines.push(`  '${b.zone}': { full: ${artLiteral(b.full)}, hires: ${artLiteral(b.hires)} },`)
+  }
+  lines.push('}')
+  lines.push('')
   lines.push(`export const SPRITE_COUNT = ${sprites.length}`)
   lines.push(`export const PLACEHOLDER_COUNT = ${sprites.filter((s) => s.isPlaceholder).length}`)
   lines.push('')
@@ -751,6 +861,7 @@ async function main(): Promise<void> {
     },
     load: loadArt,
     expected: await expectedIds(),
+    zones: (await import('@promptfall/sim')).content.zones.length,
   })
   if (result.errors.length > 0) {
     for (const e of result.errors) console.error(e)
@@ -763,7 +874,7 @@ async function main(): Promise<void> {
   }
   const placeholders = result.sprites.filter((s) => s.isPlaceholder).length
   console.log(
-    `${OUT}: ${result.sprites.length} sprites, ${result.art.size} art stems, ${placeholders} placeholders`,
+    `${OUT}: ${result.sprites.length} sprites, ${result.art.size} art stems, ${placeholders} placeholders, ${result.backdrops.length} backdrops`,
   )
 }
 

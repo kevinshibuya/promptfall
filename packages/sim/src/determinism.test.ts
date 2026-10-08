@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { hashState } from './hash'
 import { createInitialState } from './state'
 import { replay, step } from './step'
-import type { Event, GameState, Rarity, ServerEvent, Slot } from './types'
-import { RARITIES } from './types'
+import type { Event, GameState, Rarity, SandboxEvent, ServerEvent, Slot } from './types'
+import { RARITIES, SANDBOX_EVENT_KINDS } from './types'
 
 // An xorshift32 independent of the sim's PRNG.
 function makeRandom(seed: number): (n: number) => number {
@@ -24,10 +24,41 @@ function pick<T>(r: (n: number) => number, list: readonly T[], fallback: T): T {
   return list.length > 0 ? (list[r(list.length)] ?? fallback) : fallback
 }
 
-// Server events the ledger could author: a credit, a purchase of a fresh item, a listing.
+// A sandbox grant, with junk ids, out-of-range zones and levels so its refusals run too.
+function randomSandboxEvent(r: (n: number) => number, s: GameState): SandboxEvent {
+  const zone = r(14)
+  const rarity: Rarity = pick(r, RARITIES, 'rare')
+  switch (pick(r, SANDBOX_EVENT_KINDS, 'sandbox_wipe')) {
+    case 'sandbox_boss':
+      return { t: 'sandbox_boss', zone, boss: r(2) === 0 ? 'zone_boss' : 'turn_boss' }
+    case 'sandbox_item':
+      return { t: 'sandbox_item', base: r(10) === 0 ? 'junk' : 'oak_staff', rarity }
+    case 'sandbox_level': {
+      const heroId =
+        r(10) === 0
+          ? 'hjunk'
+          : pick(
+              r,
+              s.roster.map((h) => h.id),
+              'h0',
+            )
+      return { t: 'sandbox_level', heroId, level: r(55) }
+    }
+    case 'sandbox_zone':
+      return { t: 'sandbox_zone', zone }
+    case 'sandbox_recruit':
+      return { t: 'sandbox_recruit', rarity }
+    case 'sandbox_wipe':
+      return { t: 'sandbox_wipe' }
+  }
+}
+
+// Server events the ledger could author: a credit, a purchase of a fresh item, a listing,
+// boss mode, a sandbox grant.
 function randomServerEvent(r: (n: number) => number, s: GameState): ServerEvent {
-  const roll = r(6)
+  const roll = r(7)
   if (roll === 0) return { t: 'credited', gold: 1 + r(500), reason: 'test' }
+  if (roll === 6) return randomSandboxEvent(r, s)
   // While engaged, a second boss_engaged exercises already_engaged.
   if (roll === 3) {
     return {

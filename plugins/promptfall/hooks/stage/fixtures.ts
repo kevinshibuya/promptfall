@@ -80,6 +80,7 @@ function view(enemies: EnemyView[], zone = 1, wave = 2): GameView {
       leaderboardsOpen: false,
       bossOpen: false,
       returns: 0,
+      sandbox: false,
     },
     boss: null,
   }
@@ -245,6 +246,7 @@ export function fullerFrame(
     model: {
       box: { columns: 160, rows: 17 },
       ground: 0x5a8c3a,
+      backdrop: null,
       actors,
       numbers: [],
       drops: [

@@ -9,12 +9,17 @@ import {
   IMAGE_SCALE,
   MIN_COLUMNS,
   STAGE_MAX_COLUMNS,
+  STAGE_MIN_ROWS,
 } from './tuning'
 
 /** The stage in cells; pixels are columns × (rows * 2). */
 export type Box = { columns: number; rows: number }
 export type Layout =
-  /** `cells`, when present, is the smaller box an Image stage too tall for the band draws into. */
+  /**
+   * `cells`, when present, is the smaller box a full stage too tall for the band draws into.
+   * With `box`'s columns it shows the box's bottom rows, the sky above them cropped; with other
+   * columns it is the Image zoom-out, the whole (widened) scene scaled into it.
+   */
   | { kind: 'full'; box: Box; cells?: Box; bandRows: number }
   | { kind: 'compact'; box: Box; bandRows: number }
   | { kind: 'bare'; box: null; bandRows: number }
@@ -24,14 +29,18 @@ export type Layout =
  * `rows` is timeline.rowsAt(view, now): the stage's height for what is on it. The window strip
  * goes under the stage (full), beside the compact stage (compact, COMPACT_WINDOW_ROWS), or alone
  * on Loot and World (bare). `extra` is the hotkey row of rung (c) where the renderer needs one.
+ * A `scalable` renderer (the Image) draws the whole stage zoomed out into a short band; the
+ * Raster crops the sky down to `minRows` (timeline.minRowsAt, the tallest actor), then goes
+ * compact (ADR 0010).
  * Terminals fit the band in cells; the Svg surfaces scale it, so they never collapse (ADR 0004).
  */
 export function layoutFor(
   rows: number,
   props: { bodyColumns: number; maxRows: number },
   surface: RenderSurface,
-  opts: { tab: BandTab; extra: 0 | 1; scalable?: boolean },
+  opts: { tab: BandTab; extra: 0 | 1; minRows?: number; scalable?: boolean },
 ): Layout {
+  const minRows = opts.minRows ?? STAGE_MIN_ROWS
   const party = opts.tab === 'party'
   if (surface !== 'terminal') {
     if (!party) return { kind: 'bare', box: null, bandRows: STRIP_ROWS + opts.extra }
@@ -47,10 +56,22 @@ export function layoutFor(
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STRIP_ROWS + opts.extra }
   }
-  // An Image scales to its box: a stage too tall for the band (a boss, a long prompt) zooms out
-  // rather than flipping the band to compact. The scene widens so that, scaled into the rows left,
-  // it still spans the band; as far as its picture stays within IMAGE_MAX_BYTES.
+  // A stage too tall for the band (a long prompt): the band cannot take more rows than the
+  // engine gives it (`maxRows`), so the stage fits what is left. An Image zooms the whole scene
+  // out, the zoomed-out view Kevin wants in every fight (ADR 0010): the scene widens so that,
+  // scaled into the rows left, it still spans the band; as far as its picture stays within
+  // IMAGE_MAX_BYTES. The Raster cannot scale: it keeps its art size and shows the stage's bottom
+  // `room` rows, the sky cropped, down to the tallest actor's height, then goes compact.
   const room = props.maxRows - STRIP_ROWS - opts.extra
+  if (!opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= minRows) {
+    const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
+    return {
+      kind: 'full',
+      box: { columns, rows },
+      cells: { columns, rows: room },
+      bandRows: props.maxRows,
+    }
+  }
   if (opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= COMPACT_STAGE_ROWS) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     // The Image's bytes: columns × rows cells at IMAGE_SCALE × 2·IMAGE_SCALE pixels, 4 a pixel.

@@ -44,40 +44,124 @@ function run(
 
 const names = (v: GameView) => ({ hero: v.heroes[0]?.shortName, enemy: v.enemies[0]?.name })
 
-test('each row of the wording table prints as written', () => {
+/** The wave with its party in the roster, where the log looks a hero's full name up. */
+function rostered(names: Record<string, string> = {}): GameView {
   const v = wave()
+  const roster = v.heroes.map((h) => ({
+    id: h.id,
+    name: names[h.id] ?? h.name,
+    cls: h.cls,
+    glyph: h.glyph,
+    rarity: h.rarity,
+    level: h.level,
+    traits: [],
+    inParty: true,
+    inPendingParty: true,
+    tradeableAt: null,
+    equipment: { weapon: null, armour: null, accessory: null },
+  }))
+  return { ...v, roster }
+}
+
+const traded = (what: 'sold' | 'bought' | 'returned', gold = 120) =>
+  ({
+    k: 'traded',
+    entry: { k: 'trade', what, kind: 'item', base: 'oak_staff', rarity: 'rare', gold },
+  }) as unknown as Effect
+
+test('each row of the wording table prints as written', () => {
+  const v = rostered()
   const { hero, enemy } = names(v)
   const e1 = v.enemies[0]?.id ?? ''
   const h1 = v.heroes[0]?.id ?? ''
   const h3 = v.heroes[2]?.id ?? ''
-  const { texts } = run([
-    act(h1, 0),
-    hit(h1, e1, 12),
-    act(e1, 500),
-    hit(e1, h1, 5),
-    act(h3, 1000),
-    { k: 'heal', by: h3, target: h1, amount: 14 },
-    { k: 'drop', item: item('silk_robe') },
-    { k: 'drop_vendored', item: item('rusty_sword', 'common'), gold: 3 },
-    { k: 'level_up', heroId: h1, level: 5 },
-    { k: 'hero_fell', heroId: h1 },
-    { k: 'zone_cleared', zone: 3, advancedTo: 4 },
-    { k: 'wipe', retreatedTo: 2 },
-    { k: 'rewarded', bossId: 'b', goods: null, gold: 50 },
-    { k: 'gold', amount: 9 },
-    { k: 'wave_cleared', zone: 1, wave: 2 },
-  ])
+  const { texts } = run(
+    [
+      act(h1, 0),
+      hit(h1, e1, 12),
+      act(e1, 500),
+      hit(e1, h1, 5),
+      act(h3, 1000),
+      { k: 'heal', by: h3, target: h1, amount: 14 },
+      { k: 'drop', item: item('oak_staff', 'common') },
+      { k: 'drop', item: item('oak_staff', 'rare') },
+      { k: 'drop_vendored', item: item('oak_staff', 'common'), gold: 12 },
+      { k: 'level_up', heroId: h1, level: 5 },
+      { k: 'hero_fell', heroId: h1 },
+      { k: 'boss_spawned', kind: 'zone_boss', def: 'goblin_scout' },
+      { k: 'zone_cleared', zone: 3, advancedTo: 4 },
+      { k: 'zone_cleared', zone: 3, advancedTo: 3 },
+      { k: 'wipe', retreatedTo: 2 },
+      traded('sold'),
+      {
+        k: 'rewarded',
+        bossId: 'wb1',
+        goods: { kind: 'item', item: item('oak_staff', 'epic') },
+        gold: 120,
+      } as unknown as Effect,
+      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+      { k: 'gold', amount: 9 },
+      { k: 'wave_cleared', zone: 1, wave: 2 },
+    ],
+    { before: v },
+  )
   expect(texts).toEqual([
     `${hero} hits ${enemy} for 12.`,
     `${enemy} hits ${hero} for 5.`,
     `${v.heroes[2]?.shortName} heals ${hero} for 14.`,
-    expect.stringMatching(/^Found a .+!$/),
-    expect.stringMatching(/^Found a .+, sold for 3G\.$/),
-    `${hero} reached level 5!`,
-    `${hero} falls!`,
-    'Zone 3 cleared!',
-    'The party retreats to zone 2.',
-    'Boss reward: 50G.',
+    'Drop: Oak Staff.',
+    'Rare drop: Oak Staff.',
+    'Inventory full: Oak Staff vendored for 12G.',
+    'Aldric reached level 5.',
+    'Aldric falls!',
+    'Goblin Scout appears!',
+    'The party reached zone 4, Old Barrow Hills.',
+    'Zone 3 cleared.',
+    'The party fell, retreating to zone 2.',
+    'Oak Staff sold for 120G.',
+    'Your share of the boss: 120G and Oak Staff.',
+    'Your share of the boss: 120G.',
+  ])
+})
+
+test('a level-up names the hero the way its toast does, from the roster', () => {
+  const v = rostered({ h1: 'Aldric the Steadfast' })
+  const { texts } = run(
+    [
+      { k: 'level_up', heroId: 'h1', level: 6 },
+      { k: 'level_up', heroId: 'h9', level: 2 },
+    ],
+    { before: v },
+  )
+  expect(texts).toEqual(['Aldric the Steadfast reached level 6.', 'A hero reached level 2.'])
+})
+
+test('a hero won from the boss is named by its template', () => {
+  const { texts } = run([
+    {
+      k: 'rewarded',
+      bossId: 'wb1',
+      goods: { kind: 'hero', hero: { template: 'knight_1', epithet: 'the Steadfast' } },
+      gold: 40,
+    } as unknown as Effect,
+  ])
+  expect(texts).toEqual(['Your share of the boss: 40G and Aldric.'])
+})
+
+test('a drop names its rarity when the rarity is the news', () => {
+  const { texts } = run([
+    { k: 'drop', item: item('oak_staff', 'common') },
+    { k: 'drop', item: item('oak_staff', 'uncommon') },
+    { k: 'drop', item: item('oak_staff', 'rare') },
+    { k: 'drop', item: item('oak_staff', 'epic') },
+    { k: 'drop', item: item('oak_staff', 'legendary') },
+  ])
+  expect(texts).toEqual([
+    'Drop: Oak Staff.',
+    'Drop: Oak Staff.',
+    'Rare drop: Oak Staff.',
+    'Epic drop: Oak Staff.',
+    'Legendary drop: Oak Staff.',
   ])
 })
 
@@ -107,7 +191,7 @@ test('a kill prints after the killing action; a world boss leaving prints none',
     `${v.heroes[0]?.shortName} hits ${target?.name} for 30.`,
     `${target?.name} is defeated!`,
   ])
-  expect(texts[2]).toMatch(/^Found a /)
+  expect(texts[2]).toBe('Rare drop: Silk Robe.')
 
   const boss: GameView = {
     ...v,
@@ -183,7 +267,7 @@ test('a line types CHAR_MS per character; motion still shows it whole', () => {
 })
 
 test('a burst more than a tick behind drops hit lines, never a drop or a level-up', () => {
-  const v = wave()
+  const v = rostered()
   const h1 = v.heroes[0]?.id ?? ''
   const e1 = v.enemies[0]?.id ?? ''
   const effects: Effect[] = []
@@ -191,10 +275,10 @@ test('a burst more than a tick behind drops hit lines, never a drop or a level-u
   for (let i = 0; i < 12; i++)
     effects.push(act(h1, i * 10), hit(h1, e1, 100 + i), { k: 'drop', item: item('silk_robe') })
   effects.push({ k: 'level_up', heroId: h1, level: 9 })
-  const { log, texts } = run(effects)
+  const { log, texts } = run(effects, { before: v })
   expect(texts.filter((t) => t.includes(' hits ')).length).toBeLessThan(12)
-  expect(texts.some((t) => t.startsWith('Found a '))).toBe(true)
-  expect(texts).toContain(`${v.heroes[0]?.shortName} reached level 9!`)
+  expect(texts).toContain('Rare drop: Silk Robe.')
+  expect(texts).toContain('Aldric reached level 9.')
   // Lines never overlap: each starts after the one before has typed, at least LINE_MIN_MS later.
   const lines = log.upcoming(NOW - 1, 1e9)
   for (let i = 1; i < lines.length; i++)
@@ -221,7 +305,7 @@ test('a wipe after a hit that did not kill prints no defeated line', () => {
     { before: v, after },
   )
   expect(texts.some((t) => t.includes('defeated'))).toBe(false)
-  expect(texts).toContain('The party retreats to zone 1.')
+  expect(texts).toContain('The party fell, retreating to zone 1.')
 })
 
 test('an enemy no view ever held is a Foe, and its kill still prints', () => {
@@ -232,12 +316,6 @@ test('an enemy no view ever held is a Foe, and its kill still prints', () => {
 })
 
 test('a purchase or a return prints nothing; a sale prints', () => {
-  const entry = (what: 'sold' | 'bought' | 'returned') =>
-    ({
-      k: 'traded',
-      entry: { k: 'trade', what, kind: 'item', base: 'silk_robe', rarity: 'rare', gold: 120 },
-    }) as unknown as Effect
-  const { texts } = run([entry('bought'), entry('returned'), entry('sold')])
-  expect(texts).toHaveLength(1)
-  expect(texts[0]).toMatch(/^Sold .+ for 120G\.$/)
+  const { texts } = run([traded('bought'), traded('returned'), traded('sold')])
+  expect(texts).toEqual(['Oak Staff sold for 120G.'])
 })

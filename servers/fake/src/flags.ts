@@ -7,9 +7,10 @@ export const LEDGER_FLAGS: readonly LedgerFlag[] = [
   'presence.enabled',
   'leaderboards.enabled',
   'maintenance',
+  'sandbox.enabled',
 ]
 
-/** `--flag <name>=<value>` values; throws naming the six flags on anything else. */
+/** `--flag <name>=<value>` values; throws naming the flags on anything else. */
 export function parseFlags(values: string[]): Partial<Record<LedgerFlag, boolean>> {
   const out: Partial<Record<LedgerFlag, boolean>> = {}
   for (const raw of values) {

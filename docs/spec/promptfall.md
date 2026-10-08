@@ -390,6 +390,39 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `/promptfall server local` back at the in-process fake. One device token per
   server; switching re-bootstraps and adopts that server's state. Nothing moves
   between servers, ever.
+- The sandbox (ADR `sandbox-grants-are-server-events`, "The sandbox hands things
+  out as server events"). The ledger flag `sandbox.enabled`, default off, gates
+  three host calls that answer a typed outcome, never a throw:
+  `sandbox(accountId, event)` authors a sandbox server event into the account's
+  log in cursor position, `spawnBoss()` opens a world boss whose window starts
+  now and engages every online account, and `settleBoss()` settles the open boss
+  as if its window had passed, paying every engaged account as if each had
+  reached the reward threshold. With the flag off each answers `sandbox_off`.
+  The switch is `PROMPTFALL_SANDBOX=1` in Claude Code's environment, read at session
+  start: the plugin then plays the in-process fake with `sandbox.enabled`
+  and `worldboss.enabled` on and chat off, ignores a stored server URL
+  (`/promptfall server` answers that the sandbox pins the server), and registers
+  `/promptfall sandbox <verb>`. Without it the verb is not registered, and typing
+  it answers that the sandbox is off and how to turn it on. The verbs: `boss
+  <name>` (`sandbox_boss`: the party moves to the boss's zone, the encounter ends,
+  the next empty tick spawns the zone or turn boss), `worldboss` and `worldboss
+  end` (`spawnBoss` and `settleBoss`, then one world poll so the "appeared" or
+  "down" toast fires inside the command), `item <base> [rarity]`
+  (`sandbox_item`: the sim's roll through the drop intake, vendored when the
+  inventory is full), `level <hero> <n>` (`sandbox_level`: XP level by level, up
+  to the rarity cap), `gold <n>` (`credited` with reason `sandbox`), `zone <n>`
+  (`sandbox_zone`: wave 1), `recruit [rarity]` (`sandbox_recruit`, refused on a
+  full roster), `wipe` (`sandbox_wipe`: the wipe path) and `reset` (the account
+  reset). Rarity defaults to common; names match by case-insensitive prefix of
+  the display name, a word in it or the id. `boss`, `zone` and `wipe` are
+  unapplicable in boss mode. Each verb syncs after the host call, so the grant is
+  in the view before the reply. The sandbox save is separate: its books, device
+  token and lease live under the store prefix `promptfall-sandbox:`, the settings
+  stay shared, and its link approver always answers no. The grid keeps running
+  beside the sandbox bosses, which take their own id space. The HTTP fake
+  accepts `--flag sandbox.enabled=true` by name and has no sandbox route, so
+  nothing over HTTP can author a grant. The real server never sets the flag and
+  refuses every sandbox call.
 - Until the event stream exists (phase 5), server events ride on responses: the
   batch ack and the market responses carry what is pending past the client's
   cursor, and the dialog refreshes when opened. The cursor is explicit in the
@@ -520,9 +553,69 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
   toggles the farm flag. `/promptfall server <url>|local` picks the server.
-- Toasts: Rare or better drop, level up, zone cleared, wipe, hero recruited,
-  listing sold, purchase complete, order filled, item returned, world boss
-  appeared, world boss down, boss reward. Chat messages never toast.
+- Toasts: one sentence in the game's voice for an event worth a glance away
+  from Claude's work: rare good news, a state that wants a decision, or money
+  that moved. The table below says which events toast and how each reads, and
+  `hooks/toasts.ts` mirrors it row for row, in its order, which is also the
+  stacking order within a burst. The short tier lasts 4 000 ms (the host's
+  default, passed explicitly), the long tier 8 000 ms.
+
+| event | purpose | tier | toast | folded (same kind, one burst) | cue |
+|---|---|---|---|---|---|
+| legendary drop | rare good news | long | `Legendary drop: Ironwood Staff` | never folds | legendary |
+| recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | none |
+| boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
+| wipe | wants a decision | long | `The party fell, retreating to zone 2` | never folds | none |
+| world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
+| revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
+| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills` | never folds | none |
+| rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …` | `3 rare drops: Ironwood Staff, Oak Bow, Iron Helm`, past three names `…, Rune Staff and 2 more`; rare and epic fold separately, epic first | drop |
+| vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold` | `Inventory full: 3 items vendored for 95 gold` | none |
+| level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
+| sold | money moved | short | `Ironwood Staff sold for 120 gold` | `3 items sold for 410 gold` | none |
+| bought | money moved | short | `Ironwood Staff bought for 120 gold` | `2 items bought for 300 gold` | none |
+| returned | money moved | short | `Ironwood Staff returned, unsold` | `3 items returned, unsold` | none |
+| world boss down | rare good news | short | `World boss Gorvax is down` | n/a | none |
+
+  Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
+  turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
+  and the log show it), a party change the player made, a farming clear, a
+  common or uncommon drop, a common item vendored, chat.
+
+  Rules behind the rows:
+
+  - Subject first. The rarity word leads when the rarity is the news (drops,
+    recruits). No glyphs, no parentheticals, no exclamation marks, no
+    plugin-name prefix in the text (the host adds its own).
+  - "gold" is spelled out in toasts. A hero is named by its full name with the
+    epithet, looked up in the roster by id; a hero the roster does not hold
+    reads "A hero". A traded hero reads its template name, since a trade entry
+    carries no epithet. A reward whose boss name is not known reads
+    "Your share of the world boss: …".
+  - Items are named by their base name.
+  - A zone arrival toasts only when the party advances to a higher zone; the
+    zone's name follows its number with no article ("zone 4, Old Barrow
+    Hills", since zone 12 is "The Unwritten Reach"), and a zone with no name
+    reads "The party reached zone N".
+  - The vendored row fires only for Rare or better: a full inventory vendors
+    every drop, and the loss of something worth keeping is the signal.
+  - The combat log uses the same nouns and verbs for the same events, with "G"
+    for gold and its own punctuation, and does not name the boss in a reward.
+
+  Bursts. A burst is what the engine's effects callback receives in one call: a
+  tick's effects, or one delivery's. Folding is computed per call and nothing
+  is held across calls; there is no timer. Toasts of one burst are raised in
+  the table's order, so the long tier lands on top of the stack. Cues keep
+  their rule: the burst's distinct cues, each played once, after the toasts.
+  Only the primary session toasts, the world boss included.
+
+  Folding. Within a burst, effects are grouped by row. A row that folds yields
+  one toast carrying the count and, where the row has one, the sum; a row that
+  never folds yields one toast per effect. A folded name list shows up to three
+  names, then "and N more". A folded level-up joins its heroes with "and" only
+  when every hero reached the same level; otherwise it has one clause per hero,
+  in effect order.
+
 - Sound (phase 4): off by default, a per-machine toggle in Account and
   `/promptfall sound on|off`, fixed gain. Four cues, each with a toast: drop
   (Rare, Epic), legendary drop, level up, world boss appeared. Only the primary
@@ -584,6 +677,10 @@ Each phase gets its own implementation plan when its turn comes.
   installs from git without a build; CI fails when they are stale), vitest for
   packages and servers, the official plugin test runner for the mod, Biome for
   lint and format.
+- Generated files are committed and CI regenerates each one, failing on a
+  diff: the vendored bundles (`vendor:check`), the sprites (`sprites:check`),
+  the font glyphs (`font:check`) and the content skill's reference
+  (`content:check`).
 - Determinism property test on the sim runs in CI on every change to the sim
   package.
 - Verification bar per phase: typecheck, lint, package tests, plugin tests on

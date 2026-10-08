@@ -4,6 +4,8 @@ import type { GaugeTrack } from './stage/gauges'
 import type { MessageLog } from './stage/log'
 import type { StageLoop } from './stage/loop'
 import type { StageTimeline } from './stage/timeline'
+import { revokedToast } from './toasts'
+import type { LedgerHost } from './vendor/ledger.js'
 import type {
   Account,
   Auth,
@@ -22,6 +24,7 @@ import type {
   ServerConfig,
   TimedEvent,
   Unauthorized,
+  WorldSnapshot,
 } from './vendor/protocol.js'
 import {
   type Effect,
@@ -34,7 +37,7 @@ import {
   step,
 } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
-import { toAccountView, toGameView } from './view'
+import { toAccountView, toGameView, tradeName } from './view'
 
 export type EnginePublish = (patch: Partial<PluginState['promptfall']>) => Promise<void>
 
@@ -46,6 +49,8 @@ export type EngineDeps = {
   tokenKey?: string
   /** The server's label in the view; `in-process` by default. */
   label?: string
+  /** The sandbox save: the view says so. */
+  sandbox?: boolean
   now: () => Promise<number>
   newBatchId: () => string
   /** Writes atoms; a closure over the session's `$`. */
@@ -56,8 +61,8 @@ export type EngineDeps = {
    * so a listener needs no read of the async atom (null when the state has no view).
    */
   onEffects: (effects: Effect[], at: number | undefined, view: GameView | null) => void
-  /** Shows a toast. Optional: tests leave it out. */
-  toast?: (text: string) => void
+  /** Shows a toast; `timeoutMs` left out is the host's default. Optional: tests leave it out. */
+  toast?: (text: string, timeoutMs?: number) => void
   /** Runs `fn` once after `ms`: notices that clear themselves and outage retries. */
   after: (ms: number, fn: () => void) => void
   /** In [0, 1): the jitter of outage retries. */
@@ -103,6 +108,14 @@ export type GameHandle = {
   chat: (text: string) => Promise<ChatResult>
   /** The boards, with the stored token. Throws `unreachable` or `not_started`. */
   leaderboards: () => Promise<Boards | Unauthorized>
+  /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
+  host: () => LedgerHost | null
+  /** The account the engine plays, once bootstrapped. */
+  accountId: () => string | null
+  /** The view as last published: what the band and the dialog draw. */
+  view: () => Promise<GameView | null>
+  /** One world poll now, its toasts and cue fired; the snapshot it holds, null before any. */
+  pollWorld: () => Promise<WorldSnapshot | null>
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>
@@ -350,10 +363,13 @@ export class GameEngine {
         this.adopt(ack)
         this.notice('Promptfall: progress capped, resynced', 10_000)
         return
-      case 'hash_mismatch':
+      case 'hash_mismatch': {
+        // Named before adopting: the ack's state no longer holds what it revoked.
+        const revoked = revokedToast((ack.revokedItemIds ?? []).map((id) => this.itemName(id)))
         this.adopt(ack)
-        if ((ack.revokedItemIds ?? []).length > 0) this.deps.toast?.('An item was revoked')
+        if (revoked) this.deps.toast?.(revoked.text, revoked.timeoutMs)
         return
+      }
       case 'version_gate':
       case 'sim_version':
         this.setPaused(UPDATE_NOTICE)
@@ -362,6 +378,14 @@ export class GameEngine {
         this.setPaused(MISMATCH_NOTICE)
         return
     }
+  }
+
+  /** An item's base name as the local state holds it, else the committed one; null when neither does. */
+  private itemName(id: string): string | null {
+    const item = [this.local, this.committed]
+      .map((s) => s?.inventory.find((i) => i.id === id))
+      .find((i) => i !== undefined)
+    return item ? tradeName('item', item.base) : null
   }
 
   /**
@@ -629,6 +653,7 @@ export class GameEngine {
       this.config,
       this.deps.label ?? 'in-process',
       this.returns,
+      this.deps.sandbox ?? false,
     )
     return toGameView(this.local, this.account, this.firstRun, account)
   }

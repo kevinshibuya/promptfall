@@ -1,7 +1,7 @@
 import { content } from './content'
 import { draw, drawWeighted, heroStats, newId } from './progression'
 import { compareCodeUnits } from './rng'
-import type { Effect, GameState, Hero, Rarity, Trait } from './types'
+import type { Effect, GameState, Hero, Rarity, RecruitVia, Trait } from './types'
 
 /** Rolls a hero on a draft state. Draw order: template, traits, epithet; then the id. */
 export function generateHero(s: GameState, rarity: Rarity, templateId?: string): Hero {
@@ -39,12 +39,7 @@ export function generateHero(s: GameState, rarity: Rarity, templateId?: string):
 }
 
 /** Adds a rolled hero to the roster on a draft state. */
-export function recruitHero(
-  s: GameState,
-  hero: Hero,
-  via: 'contract' | 'tavern',
-  effects: Effect[],
-): void {
+export function recruitHero(s: GameState, hero: Hero, via: RecruitVia, effects: Effect[]): void {
   s.roster.push(hero)
   effects.push({ k: 'hero_recruited', hero, via })
   pushLog(s, { k: 'hero', heroId: hero.id, template: hero.template, rarity: hero.rarity, via })

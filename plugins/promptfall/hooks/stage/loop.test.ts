@@ -152,7 +152,7 @@ test('a mounted raster site blits on wake, at the event rate while busy, at the 
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
   expect(h.blits.length).toBeGreaterThanOrEqual(1)
-  expect(h.blits[0]).toMatchObject({ requestId: 'band-1', key: 'stage', columns: 120, rows: 8 })
+  expect(h.blits[0]).toMatchObject({ requestId: 'band-1', key: 'stage', columns: 120, rows: 17 })
   const before = h.blits.length
   await clock.advance(EVENT_FRAME_MS * 4)
   expect(h.blits.length - before).toBeGreaterThanOrEqual(3)
@@ -255,17 +255,33 @@ test('mount(null) stops the blits', async () => {
   expect(h.blits.length).toBe(n)
 })
 
-test('a layout change invalidates once and blits nothing until a new mount', async () => {
+test('a boss arriving changes no layout (ADR 0010): no invalidation, the blits go on at 17 rows', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.loop.mount(site())
   h.state.view = boss()
   await clock.advance(2_000)
-  expect(h.invalidations).toHaveLength(1)
-  expect(h.blits).toHaveLength(0)
-  h.loop.mount(site('raster', boss()))
-  await clock.advance(EVENT_FRAME_MS)
+  expect(h.invalidations).toHaveLength(0)
+  expect(h.blits.length).toBeGreaterThan(0)
   expect(h.blits.at(-1)).toMatchObject({ rows: 17 })
+})
+
+test('a short band blits the cells it shows: the stage cropped to its bottom rows', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.loop.mount(site('raster', wave(), { bodyColumns: 120, maxRows: 16 }))
+  await clock.advance(IDLE_FRAME_MS)
+  expect(h.blits.at(-1)).toMatchObject({ key: 'stage', columns: 120, rows: 11 })
+  const t = new StageTimeline()
+  t.observe(wave(), 0)
+  const layout = layoutFor(17, { bodyColumns: 120, maxRows: 16 }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+  })
+  const image = stageFrame(wave(), t, 0, layout, 'image', 'full')
+  if (!('source' in image)) throw new Error('expected an Image source')
+  // 11 rows at 1.5 are 33 pixels, upscaled 4 times.
+  expect(pngSize(image.source)).toEqual([720, 132])
 })
 
 test('a deny stops the blits until the next mount', async () => {
@@ -502,7 +518,7 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
   const image = stageFrame(wave(), t, 0, full, 'image', 'full')
   if (!('source' in image)) throw new Error('expected an Image source')
-  expect(pngSize(image.source)).toEqual([720, 96])
+  expect(pngSize(image.source)).toEqual([720, 204])
   const narrow = layoutFor(t.rowsAt(wave(), 0), { bodyColumns: 105, maxRows: 30 }, 'terminal', {
     tab: 'party',
     extra: 0,

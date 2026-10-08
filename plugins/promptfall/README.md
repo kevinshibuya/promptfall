@@ -111,8 +111,8 @@ seconds.
 
 Rewards land when the boss dies, or when its window ends: a guaranteed boss-rarity item for 200
 damage or more (5% of the base), and on a kill one bonus roll each for the top 3. Each reward
-toasts `Boss reward: <item> (<rarity>)` and shows as `boss reward <item> (+<gold>g)` in the loot
-log. An item with no free slot toasts `Boss reward: <gold> gold` instead, waits in the returns
+toasts `Your share of <boss>: <gold> gold and <item>` and shows as `boss reward <item> (+<gold>g)`
+in the loot log. An item with no free slot toasts `Your share of <boss>: <gold> gold` instead, waits in the returns
 queue, and arrives as a `returned` loot line when a slot frees. The boss
 board counts every hit, past the boss's remaining HP too.
 
@@ -225,11 +225,14 @@ it drops loot.
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
   Until the answer lands the stage rows stay empty, so the band does not change height.
-- **Heights.** At rest the Party tab is 10 rows (8 for the stage, a party line, the status row).
-  A turn boss grows it to 14 and a zone or world boss to 19; it shrinks back once the boss's
-  dissolve and drop have played.
-- **Compact and collapsed.** On terminals, the full stage needs 116 columns and room for its rows. With 100 to
-  115 columns, or too few rows, the band keeps the three hero rows and the status row and draws a
+- **Heights.** The Party tab is 22 rows in every fight: 17 for the stage, the boss height, so the
+  party stands small on the zone's painting and a boss lands at its full size (ADR 0010), and the
+  5-row window strip. A band too short for that shows the whole scene smaller: an `Image` zooms
+  it out into the rows left. A `Raster` cannot scale, so it keeps the art size and shows the
+  stage's bottom rows, the sky cut, down to the tallest actor on it (8 rows for the party, 12
+  with a turn boss, 17 with a boss), then goes compact.
+- **Compact and collapsed.** On terminals, the full stage needs 116 columns and 8 rows above the
+  strip. With 100 to 115 columns, or fewer rows, the band keeps the three hero rows and the status row and draws a
   52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
   four rows and draw no stage.
 - **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and

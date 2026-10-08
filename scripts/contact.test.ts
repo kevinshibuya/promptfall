@@ -107,7 +107,7 @@ describe('contact', () => {
       'heroes/stage-burst',
     ]) {
       const img = readPng(join(out, `${shot}.png`))
-      expect([img.width, img.height], shot).toEqual([720, 96])
+      expect([img.width, img.height], shot).toEqual([720, 204])
     }
     const strike = readFileSync(join(out, 'zone-1/stage-strike.png'))
     expect(strike.equals(readFileSync(join(out, 'zone-1/stage-hit.png')))).toBe(false)

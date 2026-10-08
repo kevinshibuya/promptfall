@@ -1,5 +1,4 @@
 import type { WorldState } from '../types'
-import type { Cue } from './cues'
 import { WORLD_DEFAULT } from './state'
 import {
   CHAT_KEEP,
@@ -31,24 +30,23 @@ export type PollerDeps = {
   fetch: (since: number) => Promise<WorldSnapshot | Unauthorized>
   /** The committed boss tally on a primary; null on a secondary. */
   committedDealt?: () => WorldState['committedDealt']
-  /** Shows a toast: the boss transitions. */
-  toast?: (text: string) => void
-  /** Plays a cue beside a toast: the boss appearing. */
-  cue?: (cue: Cue) => void
+  /**
+   * A boss transition, for the session to toast from the table. `cue`: false for a boss
+   * already up at the first poll, which is news for the toast, not a fight starting.
+   */
+  transition?: (t: { kind: BossTransition; name: string; cue: boolean }) => void
 }
 
-/** The toast a snapshot transition earns: a boss appearing, or the same boss going down. */
+export type BossTransition = 'appeared' | 'down'
+
+/** What a snapshot transition is: a boss appearing, or the same boss going down. */
 export function bossTransition(
   before: WorldSnapshot['boss'] | undefined,
   after: WorldSnapshot['boss'],
-): { kind: 'appeared' | 'down'; text: string } | null {
+): BossTransition | null {
   if (!after) return null
-  if (after.hp > 0 && before?.bossId !== after.bossId) {
-    return { kind: 'appeared', text: `World boss ${after.name} has appeared` }
-  }
-  if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) {
-    return { kind: 'down', text: `${after.name} is down` }
-  }
+  if (after.hp > 0 && before?.bossId !== after.bossId) return 'appeared'
+  if (after.hp === 0 && before?.bossId === after.bossId && before.hp > 0) return 'down'
   return null
 }
 
@@ -71,6 +69,8 @@ export class WorldPoller {
   private period = 0
   private started = false
   private inFlight = false
+  /** The poll in flight, for a caller that must see the answer of a poll it starts itself. */
+  private flight: Promise<void> = Promise.resolve()
   /** Bumped by a reset: an answer from before it is dropped. */
   private epoch = 0
   /** Bumped by each fresh snapshot: a stale timer from before it does nothing. */
@@ -129,6 +129,21 @@ export class WorldPoller {
     await this.deps.publish(this.state)
   }
 
+  /**
+   * One poll now, after any in flight, so its transitions (toasts and cue) have fired when it
+   * resolves. The snapshot it holds then; null before the first answer or while stopped.
+   */
+  async pollNow(): Promise<WorldSnapshot | null> {
+    // Each flight awaited once: a flight dropped by a stop never clears the flag.
+    let awaited: Promise<void> | null = null
+    while (this.started && this.inFlight && this.flight !== awaited) {
+      awaited = this.flight
+      await awaited
+    }
+    await this.poll()
+    return this.state.snapshot
+  }
+
   periodMs(): number {
     return this.period
   }
@@ -146,18 +161,19 @@ export class WorldPoller {
     this.timer = this.deps.every(ms, () => void this.poll())
   }
 
-  private async poll(): Promise<void> {
-    if (this.inFlight || !this.started) return
+  private poll(): Promise<void> {
+    if (this.inFlight || !this.started) return Promise.resolve()
     this.inFlight = true
     const epoch = this.epoch
-    try {
-      await this.pollOnce(epoch)
-    } catch {
-      // A thrown poll is ignored: the next one runs on the same cadence.
-    } finally {
-      // Held until the answer is applied, so a newer poll can never be overtaken by this one.
-      if (epoch === this.epoch) this.inFlight = false
-    }
+    this.flight = this.pollOnce(epoch)
+      .catch(() => {
+        // A thrown poll is ignored: the next one runs on the same cadence.
+      })
+      .finally(() => {
+        // Held until the answer is applied, so a newer poll can never be overtaken by this one.
+        if (epoch === this.epoch) this.inFlight = false
+      })
+    return this.flight
   }
 
   private async pollOnce(epoch: number): Promise<void> {
@@ -167,7 +183,6 @@ export class WorldPoller {
     if (epoch !== this.epoch) return
     const last = answer.chat.at(-1)
     const transition = bossTransition(this.state.snapshot?.boss, answer.boss)
-    // A boss already up at the first poll is news for the toast, not a fight starting: no cue.
     const polledBefore = this.state.snapshot !== null
     this.state = {
       snapshot: answer,
@@ -185,9 +200,8 @@ export class WorldPoller {
       void this.deps.publish(this.state)
     })
     await this.deps.publish(this.state)
-    if (transition) {
-      this.deps.toast?.(transition.text)
-      if (transition.kind === 'appeared' && polledBefore) this.deps.cue?.('boss')
+    if (transition && answer.boss) {
+      this.deps.transition?.({ kind: transition, name: answer.boss.name, cue: polledBefore })
     }
     this.rearm(this.cadence(now))
   }

@@ -200,7 +200,7 @@ export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
 // ---------------------------------------------------------------------------
 // Kills, xp, waves, zones, wipes
 
-function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void {
+export function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void {
   const cap = content.rarity[hero.rarity].levelCap
   if (hero.level >= cap) {
     hero.xp = 0
@@ -218,7 +218,7 @@ function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void 
   if (hero.level >= cap) hero.xp = 0
 }
 
-function changeZone(s: GameState, zone: number): void {
+export function changeZone(s: GameState, zone: number): void {
   s.zone = zone
   s.wave = 1
   if (zone > s.highestZone) s.highestZone = zone

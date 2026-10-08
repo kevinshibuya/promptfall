@@ -1,8 +1,8 @@
 import type { Register, RenderSurface, UiBlitArgs, UiBlitResult } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
-import { COMMAND, registerCommand } from './command'
-import { CUE_ASSET, type Cue, cueFor } from './cues'
+import { commandSpec, registerCommand } from './command'
+import { CUE_ASSET, type Cue } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
@@ -22,8 +22,8 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from './state'
-import { type StoreCalls, StoreKeyValue } from './storage'
-import { effectToast } from './toasts'
+import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
+import { toastsFor, worldToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -36,6 +36,7 @@ import type {
   MarketResult,
   ServerClient,
   Unauthorized,
+  WorldSnapshot,
 } from './vendor/protocol.js'
 import { type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
@@ -51,7 +52,8 @@ type Io = {
   after: (ms: number, fn: () => void) => Timer
   store: StoreCalls
   publish: EnginePublish
-  toast: (text: string) => void
+  /** Shows a toast; `timeoutMs` left out is the host's default. */
+  toast: (text: string, timeoutMs?: number) => void
   leaseOwner: () => Promise<string | null>
   mode: () => Promise<Mode>
   paneNotice: (text: string | null) => Promise<void>
@@ -71,6 +73,8 @@ type Io = {
   settings: () => Promise<Settings>
   /** Plays a file of the plugin's; resolves or rejects with nothing played off macOS. */
   play: (asset: string, gain: number) => Promise<void>
+  /** The sandbox switch, read once for the session: its own save on the in-process ledger. */
+  sandbox: boolean
 }
 
 /** The store key of the machine's server setting: a URL, or absent for the in-process ledger. */
@@ -137,6 +141,11 @@ class GameSession implements GameHandle {
   private readonly loops = new Map<RenderSurface, StageLoop>()
   /** The last applied event's time: the stage's `now` for effects a delivery brought. */
   private lastAt = 0
+  /**
+   * World boss names by id, from the view's boss and the world snapshot: a reward carries only
+   * the boss id, and arrives after boss mode has ended.
+   */
+  private readonly bossNames = new Map<string, string>()
 
   readonly stage: GameHandle['stage'] = {
     timeline: new StageTimeline(),
@@ -170,20 +179,29 @@ class GameSession implements GameHandle {
   }
 
   constructor(private readonly io: Io) {
-    this.kv = new StoreKeyValue(io.store)
+    this.kv = new StoreKeyValue(io.store, io.sandbox ? SANDBOX_PREFIX : PREFIX)
     this.server = this.resolve(null)
     this.engine = this.makeEngine()
     this.poller = new WorldPoller({
       now: io.now,
       every: io.every,
       after: io.after,
-      publish: (world) => io.publish({ world }),
+      publish: (world) => {
+        const boss = world.snapshot?.boss
+        if (boss) this.bossNames.set(boss.bossId, boss.name)
+        return io.publish({ world })
+      },
       load: io.readWorld,
       fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
-      toast: io.toast,
-      cue: (cue) => void this.playCue(cue),
+      // Only the primary toasts, the world boss included: two terminals never show the news twice.
+      transition: ({ kind, name, cue }) => {
+        if (this.role !== 'primary') return
+        const toast = worldToast(kind, name)
+        io.toast(toast.text, toast.timeoutMs)
+        if (cue && toast.cue) void this.playCue(toast.cue)
+      },
     })
   }
 
@@ -206,7 +224,11 @@ class GameSession implements GameHandle {
   }
 
   private resolve(setting: string | null): ResolvedServer {
-    return resolveClient(setting, { kv: this.kv, now: this.io.now, fetch: this.io.fetch })
+    return resolveClient(
+      setting,
+      { kv: this.kv, now: this.io.now, fetch: this.io.fetch },
+      this.io.sandbox,
+    )
   }
 
   private makeEngine(): GameEngine {
@@ -216,6 +238,7 @@ class GameSession implements GameHandle {
       kv: this.kv,
       tokenKey: this.server.tokenKey,
       label: this.server.label,
+      sandbox: this.server.sandbox,
       now: io.now,
       newBatchId: () => crypto.randomUUID(),
       publish: (patch) => {
@@ -245,6 +268,8 @@ class GameSession implements GameHandle {
   }
 
   private async readSetting(): Promise<string | null> {
+    // The sandbox pins the in-process ledger: a stored URL is ignored.
+    if (this.io.sandbox) return null
     const raw = await this.kv.get(SERVER_KEY)
     return typeof raw === 'string' && raw !== '' ? raw : null
   }
@@ -337,6 +362,8 @@ class GameSession implements GameHandle {
   /** Starts the device flow; polling is the session's, so it outlives a closed dialog. */
   async link(): Promise<void> {
     if (this.role !== 'primary') throw new Error('not_primary')
+    // The sandbox save never links: nothing granted may reach the market or chat.
+    if (this.server.sandbox) return
     const engine = this.engine
     let start: LinkStart | Unauthorized
     try {
@@ -412,6 +439,22 @@ class GameSession implements GameHandle {
     }
     if (result.ok) await this.poller.insert(result.message)
     return result
+  }
+
+  host(): ReturnType<GameHandle['host']> {
+    return this.server.host
+  }
+
+  accountId(): string | null {
+    return this.engine.accountId()
+  }
+
+  view(): Promise<GameView | null> {
+    return this.io.view()
+  }
+
+  pollWorld(): Promise<WorldSnapshot | null> {
+    return this.poller.pollNow()
   }
 
   async leaderboards(): Promise<Boards | Unauthorized> {
@@ -562,7 +605,13 @@ class GameSession implements GameHandle {
       boot.state,
       boot.delivery.events.map((e) => e.event),
     ).state
-    const account = toAccountView(boot.account, boot.config, this.server.label, 0)
+    const account = toAccountView(
+      boot.account,
+      boot.config,
+      this.server.label,
+      0,
+      this.server.sandbox,
+    )
     await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
@@ -570,6 +619,7 @@ class GameSession implements GameHandle {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
     if (at !== undefined) this.lastAt = at
+    if (view?.boss) this.bossNames.set(view.boss.bossId, view.boss.name)
     // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
     const now = at ?? this.lastAt
     const cadence = this.cadence || TURN_CADENCE_MS
@@ -587,13 +637,12 @@ class GameSession implements GameHandle {
         this.io.after(5000, () => {
           if (gen === this.paneNoticeGen) void this.io.paneNotice(null)
         })
-        continue
       }
-      const text = effectToast(effect)
-      if (text) this.io.toast(text)
     }
-    // After the toasts: each cue the batch earned, once.
-    for (const cue of new Set(effects.map(cueFor))) if (cue) void this.playCue(cue)
+    const toasts = toastsFor(effects, view, { bossName: (id) => this.bossNames.get(id) ?? null })
+    for (const toast of toasts) this.io.toast(toast.text, toast.timeoutMs)
+    // After the toasts: each cue the burst earned, once.
+    for (const cue of new Set(toasts.map((t) => t.cue))) if (cue) void this.playCue(cue)
   }
 }
 
@@ -613,15 +662,22 @@ const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'u
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 let game: GameSession | null = null
+/** PROMPTFALL_SANDBOX=1, read at session start and at the desktop attach. */
+let sandbox = false
 
 export const register: Register = (on) => {
   registerBand(on, () => game)
   registerDialog(on, () => game)
-  registerCommand(on, () => game)
+  registerCommand(
+    on,
+    () => game,
+    () => sandbox,
+  )
 
   on('session.start', async ($, e, next) => {
     game = null
-    await $.command.register(COMMAND)
+    sandbox = (await $.env.get('PROMPTFALL_SANDBOX')) === '1'
+    await $.command.register(commandSpec(sandbox))
     // A set lease owner means this session ran a game before a hot reload, on any surface.
     const hadGame = (await read($, leaseOwnerAtom)) !== null
     const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
@@ -663,7 +719,8 @@ export const register: Register = (on) => {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
-        toast: (text) => $.ui.toast(text),
+        toast: (text, timeoutMs) =>
+          timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
@@ -693,6 +750,7 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        sandbox,
       })
       game = session
       await session.start()
@@ -702,6 +760,7 @@ export const register: Register = (on) => {
 
   on('session.attach', async ($, e, next) => {
     if (e.surface === 'desktop') {
+      sandbox = (await $.env.get('PROMPTFALL_SANDBOX')) === '1'
       const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       await update($, settingsAtom, () => settings)
     }
@@ -738,7 +797,8 @@ export const register: Register = (on) => {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
         },
-        toast: (text) => $.ui.toast(text),
+        toast: (text, timeoutMs) =>
+          timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
@@ -768,6 +828,7 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        sandbox,
       })
       game = session
       await session.start()
