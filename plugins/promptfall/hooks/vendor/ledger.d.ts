@@ -1,5 +1,5 @@
 import { Account, BudgetKind, KeyValue, ServerClient, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkStart, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
-import { GameState, ServerEvent, Goods, TradeKind } from './sim.js';
+import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
 declare const BLOCKED_WORDS: readonly string[];
@@ -71,10 +71,18 @@ declare function validPrice(price: number): boolean;
  */
 declare function transfer(goods: Goods, now: number, nextId: () => Promise<string>, receiver: GameState): Promise<Goods>;
 
-/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods, `r` boss rewards), base 36 over one global counter. */
-declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r'): Promise<string>;
+/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods, `r` boss rewards, `sb` sandbox bosses), base 36 over one global counter. */
+declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r' | 'sb'): Promise<string>;
 
-type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance';
+type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance' | 'sandbox.enabled';
+/** What a sandbox host call answers: the refusal is an answer, not a throw. */
+type SandboxOutcome = {
+    ok: true;
+} | {
+    ok: false;
+    reason: 'sandbox_off' | 'boss_live' | 'no_boss' | 'unapplicable';
+    detail?: string;
+};
 type LedgerOptions = {
     kv: KeyValue;
     now: () => Promise<number>;
@@ -110,6 +118,12 @@ type LedgerHost = {
     settle(accountId: string): Promise<void>;
     /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
     sweep(): Promise<void>;
+    /** Authors a sandbox grant in cursor position. Throws on an unknown account or a non-sandbox event. */
+    sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>;
+    /** Spawns a world boss whose window starts now and engages the online accounts. */
+    spawnBoss(): Promise<SandboxOutcome>;
+    /** Settles the open world boss now, paying every engaged account. */
+    settleBoss(): Promise<SandboxOutcome>;
 };
 declare const LINK_URL = "https://github.com/login/device";
 declare const LINK_INTERVAL_MS = 5000;
@@ -175,8 +189,11 @@ declare class Ledger implements ServerClient {
     private mint;
     private currentRecord;
     private credit;
+    private sandbox;
+    private spawnBoss;
+    private settleBoss;
     private settleAccount;
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

@@ -118,11 +118,15 @@ export function settle(record: AccountRecord): void {
  * once. Throws, before anything is written, if the sim refuses it.
  */
 export function author(record: AccountRecord, event: ServerEvent): void {
+  const refused = tryAuthor(record, event)
+  if (refused !== null) throw new Error(`ledger authored an unapplicable event: ${refused}`)
+}
+
+/** `author` for an event the sim may refuse: the refusal's reason, with the record untouched, or null once authored. */
+export function tryAuthor(record: AccountRecord, event: ServerEvent): string | null {
   const r = step(record.state, event)
   const refused = r.effects.find((e) => e.k === 'rejected')
-  if (refused?.k === 'rejected') {
-    throw new Error(`ledger authored an unapplicable event: ${refused.reason}`)
-  }
+  if (refused?.k === 'rejected') return refused.reason
   record.state = r.state
   record.cursor += 1
   record.log.push({ n: record.cursor, event })
@@ -135,6 +139,7 @@ export function author(record: AccountRecord, event: ServerEvent): void {
     record.committedCursor = oldest.n
     record.committedHash = hashState(record.committedState)
   }
+  return null
 }
 
 /** Whether goods of this kind fit in the effective state. */
