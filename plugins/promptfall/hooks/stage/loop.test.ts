@@ -161,6 +161,29 @@ test('a mounted raster site blits on wake, at the event rate while busy, at the 
   expect(h.blits.length - rest).toBe(4)
 })
 
+test('busy frames keep a fixed beat: a 30 ms frame does not push the next one back', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, 30)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 6)
+  const gaps = h.times.slice(1, 5).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS, EVENT_FRAME_MS, EVENT_FRAME_MS, EVENT_FRAME_MS])
+})
+
+test('a frame that overruns its slot runs the next at once, then the beat starts over', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, EVENT_FRAME_MS + 20)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 4)
+  // Each frame takes 103 ms: the next starts as it ends, never two at once to catch up.
+  const gaps = h.times.slice(1, 3).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS + 20, EVENT_FRAME_MS + 20])
+})
+
 test('mount(null) stops the blits', async () => {
   const clock = fakeClock()
   const h = harness(clock)

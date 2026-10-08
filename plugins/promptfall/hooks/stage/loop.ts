@@ -130,6 +130,8 @@ export class StageLoop {
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
   private due = 0
+  /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
+  private beat: number | null = null
 
   constructor(
     private readonly io: LoopIo,
@@ -169,6 +171,7 @@ export class StageLoop {
   /** New effects landed: draw the next frame now. */
   wake(): void {
     if (this.site === null || this.stopped) return
+    this.beat = null
     if (this.inFlight) this.rerun = true
     else this.arm(0)
   }
@@ -223,6 +226,10 @@ export class StageLoop {
   private async frame(gen: number): Promise<number | null> {
     const now = await this.io.now()
     if (gen !== this.gen) return null
+    // Busy frames keep a fixed beat: this frame's slot is the one it was due in, so its own cost
+    // and a late timer do not push the next one back.
+    const slot = this.beat ?? now
+    this.beat = null
     const view = await this.io.view()
     if (gen !== this.gen) return null
     const settings = await this.io.settings()
@@ -354,7 +361,14 @@ export class StageLoop {
         }
       }
     }
-    if (busy) return EVENT_FRAME_MS
+    if (busy) {
+      // Overrun: the next frame runs at once and the beat starts over from it, never a burst.
+      const next = slot + EVENT_FRAME_MS
+      const end = await this.io.now()
+      if (next <= end) return 0
+      this.beat = next
+      return next - end
+    }
     return filling ? Math.min(GAUGE_FRAME_MS, restDelay(now)) : restDelay(now)
   }
 }
