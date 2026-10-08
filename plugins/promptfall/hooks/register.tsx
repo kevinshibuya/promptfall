@@ -23,7 +23,7 @@ import {
   WORLD_DEFAULT,
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
-import { toastsFor } from './toasts'
+import { toastsFor, worldToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -195,8 +195,13 @@ class GameSession implements GameHandle {
       fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
-      toast: io.toast,
-      cue: (cue) => void this.playCue(cue),
+      // Only the primary toasts, the world boss included: two terminals never show the news twice.
+      transition: ({ kind, name, cue }) => {
+        if (this.role !== 'primary') return
+        const toast = worldToast(kind, name)
+        io.toast(toast.text, toast.timeoutMs)
+        if (cue && toast.cue) void this.playCue(toast.cue)
+      },
     })
   }
 

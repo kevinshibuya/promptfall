@@ -131,7 +131,8 @@ class Recorder implements ServerClient {
   }
 }
 
-function setup(kv = new MemoryKeyValue()) {
+/** `flags`: the ledger's, e.g. the sandbox switch for item grants. */
+function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
   let t = 1_000_000
   const now = async () => t
   const timers: Timer[] = []
@@ -142,11 +143,13 @@ function setup(kv = new MemoryKeyValue()) {
     seedSource: () => 4242,
     tokenSource: () => crypto.randomUUID(),
     linkApprover: async () => ({ login: 'player' }),
+    ...(flags ? { flags } : {}),
   })
   const client = new Recorder(ledger)
   const patches: Patch[] = []
   const effects: string[] = []
   const calls: { count: number; view: boolean }[] = []
+  const toasts: { text: string; timeoutMs: number | undefined }[] = []
   const engine = new GameEngine({
     client,
     kv,
@@ -158,6 +161,9 @@ function setup(kv = new MemoryKeyValue()) {
     onEffects: (list, _at, view) => {
       for (const e of list) effects.push(e.k)
       calls.push({ count: list.length, view: view !== null })
+    },
+    toast: (text, timeoutMs) => {
+      toasts.push({ text, timeoutMs })
     },
     after: (ms, fn) => {
       timers.push({ ms, fn, done: false })
@@ -182,6 +188,7 @@ function setup(kv = new MemoryKeyValue()) {
     patches,
     effects,
     calls,
+    toasts,
     timers,
     fire,
     notices,
@@ -579,4 +586,84 @@ test('the effects dep fires on every applied tick, an effect-less one too, with 
   a.engine.apply({ t: 'tick' }, a.at())
   expect(a.calls).toHaveLength(1)
   expect(a.calls[0]).toEqual({ count: 0, view: true })
+})
+
+// ---------------------------------------------------------------------------
+// The revoked toast: a hash-mismatch ack names what it took, from the state held before adopting it
+
+/** An engine on a sandbox ledger that holds an Oak Staff, a Rune Staff and an Iron Sword, granted and synced. */
+async function holding() {
+  const s = setup(new MemoryKeyValue(), { 'sandbox.enabled': true })
+  await s.engine.start()
+  const accountId = s.engine.accountId() ?? ''
+  for (const base of ['oak_staff', 'rune_staff', 'iron_sword']) {
+    expect(
+      await s.ledger.host.sandbox(accountId, { t: 'sandbox_item', base, rarity: 'rare' }),
+    ).toEqual({
+      ok: true,
+    })
+  }
+  await s.engine.sync()
+  const ids = (s.engine.state()?.inventory ?? []).map((i) => i.id)
+  expect(ids).toHaveLength(3)
+  return { ...s, ids }
+}
+
+/** The next submit answers a hash mismatch that revokes `ids` and hands back the initial state. */
+function revoking(client: Recorder, ids: string[]): void {
+  const state = createInitialState(4242)
+  client.fakeNextAck = {
+    ok: false,
+    reason: 'hash_mismatch',
+    seq: 1,
+    state,
+    hash: hashState(state),
+    cursor: 3,
+    revokedItemIds: ids,
+  }
+}
+
+test('a hash-mismatch ack that revokes one committed item toasts it by name for 8 s', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  expect(client.acks.at(-1)).toMatchObject({ ok: true })
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [ids[0] ?? ''])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked Oak Staff', timeoutMs: 8000 }])
+  expect(engine.state()?.inventory).toEqual([])
+})
+
+test('a hash-mismatch ack that revokes three items folds them into one toast', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, ids)
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked 3 items', timeoutMs: 8000 }])
+})
+
+test('a revoked id in neither state toasts the unnamed form', async () => {
+  const { engine, client, toasts, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, ['no-such-item'])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked an item', timeoutMs: 8000 }])
+})
+
+test('an item only in the local, unflushed state is still named when revoked', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  // Granted and synced, never flushed: the committed state has no Rune Staff yet.
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [ids[1] ?? ''])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked Rune Staff', timeoutMs: 8000 }])
+})
+
+test('a hash-mismatch ack that revokes nothing raises no toast', async () => {
+  const { engine, client, toasts, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [])
+  await engine.flush()
+  expect(toasts).toEqual([])
 })
