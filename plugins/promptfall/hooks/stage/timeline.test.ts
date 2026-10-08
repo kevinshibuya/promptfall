@@ -15,10 +15,13 @@ import {
   SPAWN_MS,
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
+  WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
 
 const NOW = 1_000_000
+/** Every attack holds its wind-up this long before it moves. */
+const H = WINDUP_HOLD_MS
 const hit = (by: string, target: string, amount = 5): Effect => ({ k: 'hit', by, target, amount })
 const act = (
   actor: string,
@@ -73,13 +76,13 @@ test('one action at a time: each act lunges once at its offset, its hits flash a
   )
   const lunges = of(t.active(NOW), 'lunge')
   expect(lunges.map((m) => [m.actor, m.from])).toEqual([
-    ['h1', NOW],
-    ['e2', NOW + 500],
-    ['e3', NOW + 1000],
+    ['h1', NOW + WINDUP_HOLD_MS],
+    ['e2', NOW + 500 + WINDUP_HOLD_MS],
+    ['e3', NOW + 1000 + WINDUP_HOLD_MS],
   ])
   expect(lunges.map((m) => (m.kind === 'lunge' ? m.dir : 0))).toEqual([-1, 1, 1])
   expect(of(t.active(NOW), 'flash').map((m) => m.from)).toEqual(
-    [0, 500, 1000].map((at) => NOW + at + LUNGE_MS / 2),
+    [0, 500, 1000].map((at) => NOW + at + WINDUP_HOLD_MS + LUNGE_MS / 2),
   )
   expect(of(t.active(NOW), 'number').map((m) => m.actor)).toEqual(['e1', 'h2', 'h3'])
 })
@@ -92,7 +95,7 @@ test('the cadence stretches the gaps between actions, not the actions', () => {
     const t = observed()
     t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e2', 500), hit('e2', 'h3')], NOW, cadence)
     const lunges = of(t.active(NOW), 'lunge')
-    expect(lunges.map((m) => m.from)).toEqual([NOW, NOW + gap])
+    expect(lunges.map((m) => m.from)).toEqual([NOW, NOW + gap].map((at) => at + WINDUP_HOLD_MS))
     for (const m of lunges) expect(m.until - m.from).toBe(LUNGE_MS)
   }
 })
@@ -103,7 +106,9 @@ test("a black mage's three hits number three enemies at one impact", () => {
   expect(of(t.active(NOW), 'strike')).toHaveLength(1)
   const numbers = of(t.active(NOW), 'number')
   expect(numbers.map((m) => m.actor)).toEqual(['e1', 'e2', 'e3'])
-  expect(new Set(numbers.map((m) => m.from))).toEqual(new Set([NOW + WINDUP_MS + BOLT_MS]))
+  expect(new Set(numbers.map((m) => m.from))).toEqual(
+    new Set([NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS]),
+  )
 })
 
 test('a heal shows a green number on the healed hero and no flash', () => {
@@ -116,8 +121,8 @@ test('a heal shows a green number on the healed hero and no flash', () => {
       actor: 'h1',
       text: '14',
       rgb: NUMBER_RGB_HEAL,
-      from: NOW + WINDUP_MS + BURST_MS / 2,
-      until: NOW + WINDUP_MS + BURST_MS / 2 + NUMBER_MS,
+      from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BURST_MS / 2,
+      until: NOW + WINDUP_HOLD_MS + WINDUP_MS + BURST_MS / 2 + NUMBER_MS,
     },
   ])
 })
@@ -146,7 +151,7 @@ test("a black mage's kill of the first of two targets drops from the first", () 
   )
   expect(of(t.active(NOW), 'drop')[0]).toMatchObject({
     actor: 'e1',
-    from: NOW + WINDUP_MS + BOLT_MS + FLASH_MS,
+    from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + FLASH_MS,
   })
 })
 
@@ -193,7 +198,7 @@ test('a newcomer waits while every departed enemy still has a hit to show', () =
   expect(t.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
   expect(of(t.active(NOW + 2000), 'flash').map((m) => m.actor)).toEqual(['e1', 'e2', 'e3'])
   // Once the numbers have risen, the newcomer takes the first slot to free, with a spawn.
-  const later = NOW + 1900 + WINDUP_MS + BOLT_MS + NUMBER_MS
+  const later = NOW + 1900 + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + NUMBER_MS
   t.observe(next, later)
   const e4 = t.known().find((k) => k.id === 'e4')
   expect(e4).toBeDefined()
@@ -355,22 +360,22 @@ test('motions that ended are pruned as effects land, even while nothing observes
   expect(motions.length).toBeLessThan(20)
 })
 
-test('onEffects answers each group’s start, the lunge’s own start', () => {
+test('onEffects answers each group’s start, the wind-up’s own start', () => {
   const t = observed()
   const starts = t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e1', 500), hit('e1', 'h1')], NOW)
-  const lunges = of(t.active(NOW), 'lunge')
-  expect(starts).toEqual(lunges.map((m) => m.from))
+  const windups = of(t.active(NOW), 'windup')
+  expect(starts).toEqual(windups.map((m) => m.from))
   expect(starts).toEqual([NOW, NOW + 500])
 })
 
 test('acting names the actor during its action and the next actor once that one starts', () => {
   const t = observed()
-  t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e1', 400), hit('e1', 'h1')], NOW)
+  t.onEffects([act('h1', 0), hit('h1', 'e1'), act('e1', 500), hit('e1', 'h1')], NOW)
   expect(t.acting(NOW - 1)).toBe(null)
   expect(t.acting(NOW + 100)).toBe('h1')
-  expect(t.acting(NOW + 400)).toBe('e1')
-  expect(t.acting(NOW + 400 + ACTION_STEPS * STEP_MS)).toBe(null)
-  expect(t.actionStarts('e1')).toEqual([NOW + 400])
+  expect(t.acting(NOW + 500)).toBe('e1')
+  expect(t.acting(NOW + 500 + ACTION_STEPS * STEP_MS)).toBe(null)
+  expect(t.actionStarts('e1')).toEqual([NOW + 500])
   expect(t.actions().map((a) => a.actor)).toEqual(['h1', 'e1'])
 })
 
@@ -388,30 +393,30 @@ test('an act whose actor is not on the stage still gets a start and an action', 
   expect(t.acting(NOW + 250)).toBe('ghost')
 })
 
-test('an enemy attack winds up over the lunge out, strikes from the apex, and its target takes the hit', () => {
+test('an enemy attack winds up through its hold and the lunge out, strikes from the apex, and its target takes the hit', () => {
   const t = observed()
   t.onEffects([act('e1', 0), hit('e1', 'h1')], NOW)
   const m = t.active(NOW)
   const span = (kind: Motion['kind']) =>
     of(m, kind).map((x) => [x.actor, x.from - NOW, x.until - NOW])
-  expect(span('windup')).toEqual([['e1', 0, 120]])
-  expect(span('strike')).toEqual([['e1', 120, 240]])
+  expect(span('windup')).toEqual([['e1', 0, H + 120]])
+  expect(span('strike')).toEqual([['e1', H + 120, H + 240]])
   expect(of(m, 'strike').map((x) => (x.kind === 'strike' ? x.shape : null))).toEqual(['lunge'])
-  expect(span('lunge')).toEqual([['e1', 0, 240]])
-  expect(span('hit')).toEqual([['h1', 120, 280]])
-  expect(span('flash')).toEqual([['h1', 120, 280]])
-  expect(of(m, 'number').map((x) => x.from - NOW)).toEqual([120])
+  expect(span('lunge')).toEqual([['e1', H, H + 240]])
+  expect(span('hit')).toEqual([['h1', H + 120, H + 280]])
+  expect(span('flash')).toEqual([['h1', H + 120, H + 280]])
+  expect(of(m, 'number').map((x) => x.from - NOW)).toEqual([H + 120])
   expect(span('follow')).toEqual([])
   expect(span('effect')).toEqual([])
 })
 
-test("a black mage's attack strikes in place while a fireball flies, and the hit lands at 320", () => {
+test("a black mage's attack strikes in place while a fireball flies, and the hit lands 320 after the hold", () => {
   const t = observed()
   t.onEffects([act('h2', 0), hit('h2', 'e1')], NOW)
   const m = t.active(NOW)
   expect(of(m, 'lunge')).toEqual([])
   expect(of(m, 'strike')).toEqual([
-    { kind: 'strike', actor: 'h2', from: NOW + 120, until: NOW + 320, shape: 'bolt' },
+    { kind: 'strike', actor: 'h2', from: NOW + H + 120, until: NOW + H + 320, shape: 'bolt' },
   ])
   expect(of(m, 'effect')).toEqual([
     {
@@ -419,12 +424,12 @@ test("a black mage's attack strikes in place while a fireball flies, and the hit
       actor: 'h2',
       target: 'e1',
       effect: 'fireball',
-      from: NOW + 120,
-      until: NOW + 320,
+      from: NOW + H + 120,
+      until: NOW + H + 320,
       shape: 'bolt',
     },
   ])
-  expect(of(m, 'hit').map((x) => [x.actor, x.from - NOW])).toEqual([['e1', 320]])
+  expect(of(m, 'hit').map((x) => [x.actor, x.from - NOW])).toEqual([['e1', H + 320]])
 })
 
 test("a black mage's attack_all throws one fireball per target", () => {
@@ -438,12 +443,12 @@ test("a black mage's attack_all throws one fireball per target", () => {
   ])
 })
 
-test('the knight lunges and follows through from 240 to 360', () => {
+test('the knight lunges and follows through from 240 to 360 after the hold', () => {
   const t = observed()
   t.onEffects([act('h1', 0), hit('h1', 'e1')], NOW)
   const m = t.active(NOW)
   expect(of(m, 'follow')).toEqual([
-    { kind: 'follow', actor: 'h1', from: NOW + 240, until: NOW + 360 },
+    { kind: 'follow', actor: 'h1', from: NOW + H + 240, until: NOW + H + 360 },
   ])
   expect(of(m, 'strike').map((x) => (x.kind === 'strike' ? x.shape : null))).toEqual([
     'lunge_follow',
@@ -463,18 +468,18 @@ test("a white mage's heal bursts on the healed ally, with no hit and no flash", 
       actor: 'h3',
       target: 'h1',
       effect: 'light_burst',
-      from: NOW + 120,
-      until: NOW + 320,
+      from: NOW + H + 120,
+      until: NOW + H + 320,
       shape: 'burst',
     },
   ])
   expect(of(m, 'hit')).toEqual([])
   expect(of(m, 'flash')).toEqual([])
-  expect(of(m, 'number').map((x) => x.from - NOW)).toEqual([220])
+  expect(of(m, 'number').map((x) => x.from - NOW)).toEqual([H + 220])
 })
 
-test('ACTION_MS is 360, and the wind-up is the lunge out', () => {
-  expect(ACTION_MS).toBe(360)
+test('ACTION_MS is 500, the hold plus the knight; the wind-up past the hold is the lunge out', () => {
+  expect(ACTION_MS).toBe(500)
   expect(WINDUP_MS).toBe(LUNGE_MS / 2)
 })
 
@@ -483,4 +488,26 @@ test('a hit with no act takes its hit frame at the lunge apex', () => {
   t.onEffects([hit('e2', 'h2')], NOW)
   expect(of(t.active(NOW), 'hit').map((x) => [x.actor, x.from - NOW])).toEqual([['h2', 120]])
   expect(of(t.active(NOW), 'windup')).toEqual([])
+})
+
+test('an attack holds its wind-up before it moves, so the blow reads', () => {
+  const t = observed()
+  t.onEffects([act('e1', 0), hit('e1', 'h1')], NOW)
+  const m = t.active(NOW)
+  expect(of(m, 'windup')).toEqual([
+    { kind: 'windup', actor: 'e1', from: NOW, until: NOW + WINDUP_HOLD_MS + WINDUP_MS },
+  ])
+  expect(of(m, 'lunge').map((x) => x.from - NOW)).toEqual([WINDUP_HOLD_MS])
+  expect(of(m, 'hit').map((x) => x.from - NOW)).toEqual([WINDUP_HOLD_MS + LUNGE_MS / 2])
+})
+
+test('a stage two rounds behind drops the attacks that have not started', () => {
+  const t = observed()
+  // Twelve attacks at once at the turn cadence: six seconds of playback for one 2 s round.
+  const effects = Array.from({ length: 12 }, () => [act('e1', 0), hit('e1', 'h1')]).flat()
+  t.onEffects(effects, NOW, 2000)
+  const starts = of(t.active(NOW), 'lunge').map((x) => x.from - NOW)
+  expect(Math.max(...starts)).toBeLessThanOrEqual(2 * 2000 + ACTION_MS)
+  // The attack under way when the cap drops the queue still plays out.
+  expect(starts).toContain(0 + WINDUP_HOLD_MS)
 })

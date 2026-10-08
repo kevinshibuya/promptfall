@@ -2,6 +2,7 @@ import type { GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
 import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
+  BACKLOG_ROUNDS,
   BOLT_MS,
   BURST_MS,
   DISSOLVE_MS,
@@ -19,6 +20,7 @@ import {
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
   STAGE_TURN_BOSS_ROWS,
+  WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
 
@@ -53,14 +55,23 @@ export type Known = { id: string; spriteId: string; kind: string; slot: number; 
 const SLOTS = 3
 
 /**
- * The attacker's longest busy span: the knight's lunge and follow-through, a bolt's wind-up and
- * flight, or a lunge's impact flash. The next action starts once it is over.
+ * The attacker's longest busy span after its held wind-up: the knight's lunge and follow-through,
+ * a bolt's wind-up and flight, or a lunge's impact flash. The next action starts once it is over.
  */
-export const ACTION_MS = Math.max(
-  LUNGE_MS + FOLLOW_MS,
-  WINDUP_MS + BOLT_MS,
-  LUNGE_MS / 2 + FLASH_MS,
-)
+export const ACTION_MS =
+  WINDUP_HOLD_MS + Math.max(LUNGE_MS + FOLLOW_MS, WINDUP_MS + BOLT_MS, LUNGE_MS / 2 + FLASH_MS)
+
+/** The motions an action starts; dropping a queued action drops these and nothing else. */
+const ACTION_KINDS: ReadonlySet<Motion['kind']> = new Set([
+  'lunge',
+  'windup',
+  'strike',
+  'follow',
+  'hit',
+  'flash',
+  'effect',
+  'number',
+])
 
 const SHAPE_OF_CLASS: Readonly<Record<string, AttackShape>> = {
   knight: 'lunge_follow',
@@ -196,6 +207,19 @@ export class StageTimeline {
     this.settlePlaces(now)
   }
 
+  /**
+   * Drops every queued action (one not started by `now`) and what it would show; the action under
+   * way plays out, and the next one may start where the first queued one would have.
+   */
+  private dropQueued(now: number): void {
+    const queued = this.actions_.filter((a) => a.start > now)
+    if (queued.length === 0) return
+    const cut = Math.min(...queued.map((a) => a.start))
+    this.motions = this.motions.filter((m) => m.from < cut || !ACTION_KINDS.has(m.kind))
+    this.actions_ = this.actions_.filter((a) => a.start < cut)
+    this.actionEnd = Math.min(this.actionEnd, cut)
+  }
+
   /** Enemies stand side by side: a gap closes with a slide, a newcomer starts in its place. */
   private settlePlaces(now: number): void {
     const order = this.known()
@@ -286,6 +310,7 @@ export class StageTimeline {
     const starts: number[] = []
     for (const group of groups(effects)) {
       const offset = group.act ? Math.floor((group.act.at * cadenceMs) / TICK_MS) : 0
+      if (this.actionEnd - (now + offset) > BACKLOG_ROUNDS * cadenceMs) this.dropQueued(now)
       const start = Math.max(now + offset, this.actionEnd)
       starts.push(start)
       if (group.act) {
@@ -300,36 +325,38 @@ export class StageTimeline {
       }
       const act = group.act
       const shape = act ? this.shapeOf(act.actor) : 'lunge'
-      const impact = start + impactOf(shape)
       let shown = false
       const attacker = act && this.isActor(act.actor) ? act.actor : null
+      // An attack holds its wind-up in place first; an effect with no attacker lands unheralded.
+      const begin = attacker !== null ? start + WINDUP_HOLD_MS : start
+      const impact = begin + impactOf(shape)
       const effectId =
         attacker !== null ? EFFECT_OF_CLASS[this.heroes.get(attacker) ?? ''] : undefined
       if (attacker !== null) {
-        const strikeFrom = start + WINDUP_MS
+        const strikeFrom = begin + WINDUP_MS
         this.motions.push({ kind: 'windup', actor: attacker, from: start, until: strikeFrom })
         if (shape === 'lunge' || shape === 'lunge_follow') {
           const dir = this.heroes.has(attacker) ? -1 : 1
           this.motions.push({
             kind: 'lunge',
             actor: attacker,
-            from: start,
-            until: start + LUNGE_MS,
+            from: begin,
+            until: begin + LUNGE_MS,
             dir,
           })
           this.motions.push({
             kind: 'strike',
             actor: attacker,
             from: strikeFrom,
-            until: start + LUNGE_MS,
+            until: begin + LUNGE_MS,
             shape,
           })
           if (shape === 'lunge_follow') {
             this.motions.push({
               kind: 'follow',
               actor: attacker,
-              from: start + LUNGE_MS,
-              until: start + LUNGE_MS + FOLLOW_MS,
+              from: begin + LUNGE_MS,
+              until: begin + LUNGE_MS + FOLLOW_MS,
             })
           }
         } else {
@@ -348,7 +375,7 @@ export class StageTimeline {
       const effectOn = (target: string): void => {
         if (attacker === null || effectId === undefined) return
         if (shape !== 'bolt' && shape !== 'burst') return
-        const from = start + WINDUP_MS
+        const from = begin + WINDUP_MS
         this.motions.push({
           kind: 'effect',
           actor: attacker,

@@ -17,6 +17,7 @@ import {
   LUNGE_MS,
   LUNGE_PX,
   RARITY_RGB,
+  WINDUP_HOLD_MS,
 } from './tuning'
 
 const NOW = 1_000_000 // bobbing(NOW) is 0
@@ -28,7 +29,8 @@ const hit = (by: string, target: string): Effect => ({ k: 'hit', by, target, amo
 function at(view = wave(), effects: Effect[] = [], now = NOW, box = BOX, opts: Opts = STILL) {
   const t = new StageTimeline()
   t.observe(view, NOW)
-  t.onEffects(effects, NOW)
+  // An attack holds its wind-up before it moves: start it a hold early, so it moves at NOW.
+  t.onEffects(effects, effects.some((e) => e.k === 'act') ? NOW - WINDUP_HOLD_MS : NOW)
   return stageAt(view, t, now, box, opts)
 }
 

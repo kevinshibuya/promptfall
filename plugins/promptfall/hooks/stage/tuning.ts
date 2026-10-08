@@ -23,6 +23,13 @@ export const LUNGE_MS = 240
 export const LUNGE_PX = 4
 /** The wind-up frame covers the lunge's outward half; the strike shows from the apex (reading 1). */
 export const WINDUP_MS = 120
+/**
+ * The wind-up held in place before an attack moves, so the blow reads. It brings the knight's
+ * action to 500 ms, one action's battle time at the turn cadence: any longer and playback drifts.
+ */
+export const WINDUP_HOLD_MS = 140
+/** A stage this many rounds behind the sim drops the attacks that have not started. */
+export const BACKLOG_ROUNDS = 2
 /** The knight's follow-through, in place after the lunge. */
 export const FOLLOW_MS = 120
 /** A bolt's flight, from the strike to the impact. */

@@ -36,7 +36,15 @@ import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
 import { renderSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
-import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
+import {
+  DISSOLVE_MS,
+  DROP_MS,
+  FLASH_MS,
+  HIRES_SCALE,
+  LUNGE_MS,
+  SPAWN_MS,
+  WINDUP_HOLD_MS,
+} from './tuning'
 
 export const GOLDEN_NOW = 1_000_000
 export const SCENARIOS = [
@@ -129,30 +137,31 @@ function attacking(actor: string, ms: number, target = 'e1'): Staged {
 export function stage(name: Scenario): Staged {
   const t = new StageTimeline()
   switch (name) {
-    // The knight 60 ms into its action (winding up), at 180 (striking, the enemy hit), at 300
-    // (following through); the black mage's fireball and the white mage's burst at 220.
+    // Each attack holds its wind-up WINDUP_HOLD_MS before it moves; past the hold, the knight
+    // 60 ms into its lunge (winding up), at 180 (striking, the enemy hit), at 300 (following
+    // through); the black mage's fireball and the white mage's burst at 220.
     case 'windup':
-      return attacking('h1', 60)
+      return attacking('h1', WINDUP_HOLD_MS + 60)
     case 'strike':
-      return attacking('h1', 180)
+      return attacking('h1', WINDUP_HOLD_MS + 180)
     case 'follow':
-      return attacking('h1', 300)
+      return attacking('h1', WINDUP_HOLD_MS + 300)
     case 'bolt':
-      return attacking('h2', 220)
+      return attacking('h2', WINDUP_HOLD_MS + 220)
     case 'burst':
-      return attacking('h3', 220)
-    // The goblin scout 150 ms into its action: its strike frame, the knight's hit frame.
+      return attacking('h3', WINDUP_HOLD_MS + 220)
+    // The goblin scout 150 ms into its lunge: its strike frame, the knight's hit frame.
     case 'enemy-strike':
-      return attacking('e1', 150, 'h1')
+      return attacking('e1', WINDUP_HOLD_MS + 150, 'h1')
     // The bandit captain 60 ms into its attack on the knight: its wind-up frame, the lunge out.
     case 'boss-strike': {
-      t.observe(boss(), NOW - 60)
+      t.observe(boss(), NOW - WINDUP_HOLD_MS - 60)
       t.onEffects(
         [
           { k: 'act', actor: 'e9', action: 'attack', at: 0 },
           { k: 'hit', by: 'e9', target: 'h1', amount: 31 },
         ],
-        NOW - 60,
+        NOW - WINDUP_HOLD_MS - 60,
       )
       t.observe(boss(), NOW)
       return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
@@ -176,7 +185,7 @@ export function stage(name: Scenario): Staged {
     }
     case 'dissolve': {
       // The dissolve starts when the kill's flash ends; at NOW it is half done.
-      const t1 = NOW - (LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS / 2)
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS / 2)
       return killed(
         t1,
         [
@@ -190,7 +199,7 @@ export function stage(name: Scenario): Staged {
     }
     case 'drop': {
       // The drop pops when the kill's flash ends; at NOW it is half done.
-      const t1 = NOW - (LUNGE_MS / 2 + FLASH_MS + DROP_MS / 2)
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DROP_MS / 2)
       return killed(
         t1,
         [
