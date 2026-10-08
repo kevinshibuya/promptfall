@@ -123,14 +123,15 @@ function rewardGold(rarity: keyof typeof content.rarity, zone: number): number {
 
 /**
  * Pays every contributor and disengages them, then closes the boss. The
- * threshold gates the guaranteed drop; the top contributors of a killed boss
- * get one bonus roll each, with no threshold. Skips rather than throws, so
- * `closed` is always written.
+ * threshold gates the guaranteed drop (`allPaid`, the sandbox's settle, lifts
+ * it for every engaged account); the top contributors of a killed boss get one
+ * bonus roll each, with no threshold. Skips rather than throws, so `closed` is
+ * always written.
  */
 export async function settleBoss(
   ctx: WorldContext,
   boss: BossRecord,
-  options: { expired: boolean; inHand: AccountRecord | null },
+  options: { expired: boolean; inHand: AccountRecord | null; allPaid?: boolean },
 ): Promise<void> {
   const kv = ctx.books.kv
   const threshold = Math.floor((BOSS_BASE_HP * BOSS_THRESHOLD_BP) / 10000)
@@ -144,7 +145,8 @@ export async function settleBoss(
       options.inHand?.account.accountId === id ? options.inHand : await ctx.books.load(id)
     if (!record || !isCurrent(record)) continue
     const rolls =
-      (contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0)
+      (options.allPaid || contribution >= threshold ? 1 : 0) +
+      (!options.expired && top.includes(id) ? 1 : 0)
     for (let i = 0; i < rolls; i++) {
       const zone = record.state.zone
       const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state))
@@ -176,28 +178,20 @@ export async function settleBoss(
   await saveBoss(kv, boss)
 }
 
-/**
- * Settles an open boss whose window passed (or whose flag went off), then
- * spawns this grid point's boss if its window is open and it is not stored
- * yet. Runs first in the world poll and the sweep, before any record loads.
- */
-export async function advanceBoss(ctx: WorldContext): Promise<void> {
-  const kv = ctx.books.kv
+/** Settles an open boss whose window passed, or whose flag went off, as expired. */
+async function settleIfOver(ctx: WorldContext, stored: BossRecord | null): Promise<void> {
   const on = ctx.flags['worldboss.enabled'] !== false
-  const stored = await loadBoss(kv)
   if (stored && !stored.closed && (ctx.now >= stored.endsAt || !on)) {
     await settleBoss(ctx, stored, { expired: true, inHand: null })
   }
-  const gridIndex = Math.floor(ctx.now / BOSS_GRID_MS)
-  const spawnAt = gridIndex * BOSS_GRID_MS
-  const bossId = `wb${gridIndex.toString(36)}`
-  if (!on || ctx.now >= spawnAt + BOSS_WINDOW_MS || stored?.bossId === bossId) return
-  const online = [...ctx.presence.entries()]
-    .filter(([, entry]) => ctx.now - entry.at < ctx.ttl)
-    .map(([id]) => id)
+}
+
+/** A new boss record whose window starts at `spawnAt`, sized by who is online, at least one. */
+function newBoss(bossId: string, spawnAt: number, online: string[]): BossRecord {
+  const gridIndex = Math.floor(spawnAt / BOSS_GRID_MS)
   const def = WORLD_BOSSES[gridIndex % WORLD_BOSSES.length] ?? { name: 'World Boss', glyph: '☠' }
   const hp = BOSS_BASE_HP * Math.max(1, online.length)
-  const boss: BossRecord = {
+  return {
     bossId,
     name: def.name,
     glyph: def.glyph,
@@ -208,13 +202,67 @@ export async function advanceBoss(ctx: WorldContext): Promise<void> {
     contributions: {},
     closed: false,
   }
+}
+
+function onlineIds(ctx: WorldContext): string[] {
+  return [...ctx.presence.entries()]
+    .filter(([, entry]) => ctx.now - entry.at < ctx.ttl)
+    .map(([id]) => id)
+}
+
+/** Engages the online accounts with a new boss, then stores it in place of the last one. */
+async function openBoss(ctx: WorldContext, boss: BossRecord, online: string[]): Promise<void> {
   for (const id of online) {
     const record = await ctx.books.load(id)
     if (!record) continue
     engage(record, boss)
     await ctx.books.save(record)
   }
-  await saveBoss(kv, boss)
+  await saveBoss(ctx.books.kv, boss)
+}
+
+/**
+ * Settles an open boss whose window passed (or whose flag went off), then
+ * spawns this grid point's boss if its window is open and no stored boss is
+ * still showing. Runs first in the world poll and the sweep, before any
+ * record loads.
+ */
+export async function advanceBoss(ctx: WorldContext): Promise<void> {
+  const stored = await loadBoss(ctx.books.kv)
+  await settleIfOver(ctx, stored)
+  const gridIndex = Math.floor(ctx.now / BOSS_GRID_MS)
+  const spawnAt = gridIndex * BOSS_GRID_MS
+  if (ctx.flags['worldboss.enabled'] === false || ctx.now >= spawnAt + BOSS_WINDOW_MS) return
+  // The stored boss shows until its `endsAt`, settled or not, so a poller sees it go down;
+  // the grid waits for it. A grid point's own boss ends with its window, so a served point
+  // never spawns again, even after a sandbox boss replaced it.
+  if (stored && ctx.now < stored.endsAt) return
+  const online = onlineIds(ctx)
+  await openBoss(ctx, newBoss(`wb${gridIndex.toString(36)}`, spawnAt, online), online)
+}
+
+/** The sandbox's spawn: a boss whose window starts now, off the grid. False while one is open. */
+export async function spawnNow(ctx: WorldContext): Promise<boolean> {
+  const stored = await loadBoss(ctx.books.kv)
+  await settleIfOver(ctx, stored)
+  if (stored && !stored.closed) return false
+  const online = onlineIds(ctx)
+  const bossId = await nextLedgerId(ctx.books.kv, 'sb')
+  await openBoss(ctx, newBoss(bossId, ctx.now, online), online)
+  return true
+}
+
+/**
+ * The sandbox's settle: the open boss ends now as if its window had passed,
+ * every engaged account paid, and shows at zero HP until its `endsAt`. False
+ * with none open.
+ */
+export async function settleNow(ctx: WorldContext): Promise<boolean> {
+  const stored = await loadBoss(ctx.books.kv)
+  if (!stored || stored.closed) return false
+  stored.hp = 0
+  await settleBoss(ctx, stored, { expired: true, inHand: null, allPaid: true })
+  return true
 }
 
 /** What the replayed batch dealt to the stored boss before the commit; null when it counts for nothing. */

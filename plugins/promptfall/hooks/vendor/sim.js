@@ -975,6 +975,14 @@ function rollContract(s, effects) {
 // packages/sim/src/types.ts
 var SIM_VERSION = 4;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
+var SANDBOX_EVENT_KINDS = [
+  "sandbox_boss",
+  "sandbox_item",
+  "sandbox_level",
+  "sandbox_zone",
+  "sandbox_recruit",
+  "sandbox_wipe"
+];
 var SERVER_EVENT_KINDS = [
   "listed",
   "returned",
@@ -987,7 +995,8 @@ var SERVER_EVENT_KINDS = [
   "credited",
   "boss_engaged",
   "boss_disengaged",
-  "rewarded"
+  "rewarded",
+  ...SANDBOX_EVENT_KINDS
 ];
 
 // packages/sim/src/state.ts
@@ -1049,6 +1058,13 @@ function rollItemFor(s, boss, classes) {
   });
   if (bases.length === 0) return null;
   const baseId = bases[draw(s, bases.length)] ?? "";
+  return rollItemOf(s, baseId, rarity2);
+}
+function rollItemOf(s, baseId, rarity2) {
+  const affixes2 = rollAffixes(s, baseId, rarity2);
+  return { id: newId(s, "i"), base: baseId, rarity: rarity2, affixes: affixes2, equippedBy: null, tradeableAt: null };
+}
+function rollAffixes(s, baseId, rarity2) {
   const slot = content.itemBases[baseId]?.slot;
   const pool = Object.keys(content.affixes).sort(compareCodeUnits).filter((id) => slot !== void 0 && content.affixes[id]?.slots.includes(slot));
   const affixes2 = [];
@@ -1059,12 +1075,29 @@ function rollItemFor(s, boss, classes) {
     const [min, max] = def.range;
     affixes2.push({ id, value: min + draw(s, max - min + 1) });
   }
-  return { id: newId(s, "i"), base: baseId, rarity: rarity2, affixes: affixes2, equippedBy: null, tradeableAt: null };
+  return affixes2;
 }
 function rollRewardItem(seed, zone, classes) {
   const scratch = { ...createInitialState(seed), zone };
   const item = rollItemFor(scratch, true, classes);
   return item ? { ...item, id: "" } : null;
+}
+function takeDrop(s, item, effects) {
+  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item);
+  if (gold === null) {
+    s.inventory.push(item);
+    effects.push({ k: "drop", item });
+  } else {
+    s.gold += gold;
+    effects.push({ k: "drop_vendored", item, gold });
+  }
+  pushLog(s, {
+    k: "item",
+    itemId: item.id,
+    base: item.base,
+    rarity: item.rarity,
+    vendoredFor: gold
+  });
 }
 function rollDrops(state, def) {
   const s = state;
@@ -1072,30 +1105,7 @@ function rollDrops(state, def) {
   const boss = def.kind !== "wave";
   if (drawBp(s) < def.dropBp) {
     const item = rollItem(s, boss);
-    if (item) {
-      if (s.inventory.length < s.inventoryCap) {
-        s.inventory.push(item);
-        effects.push({ k: "drop", item });
-        pushLog(s, {
-          k: "item",
-          itemId: item.id,
-          base: item.base,
-          rarity: item.rarity,
-          vendoredFor: null
-        });
-      } else {
-        const gold = vendorValue(item);
-        s.gold += gold;
-        effects.push({ k: "drop_vendored", item, gold });
-        pushLog(s, {
-          k: "item",
-          itemId: item.id,
-          base: item.base,
-          rarity: item.rarity,
-          vendoredFor: gold
-        });
-      }
-    }
+    if (item) takeDrop(s, item, effects);
   }
   if (boss && def.contractBp > 0 && drawBp(s) < def.contractBp) rollContract(s, effects);
   return { state: s, effects };
@@ -1651,6 +1661,72 @@ function rewarded(state, event) {
     effects.push({ k: "rewarded", bossId: event.bossId, goods: clone(goods), gold: event.gold });
   });
 }
+function noSuchZone(zone) {
+  return !Number.isInteger(zone) || content.zones[zone - 1] === void 0;
+}
+function noSuchRarity(rarity2) {
+  return !Object.hasOwn(content.rarity, rarity2);
+}
+function endEncounter(s) {
+  s.encounter = null;
+  s.battle = { gauges: [], queue: [], busy: 0 };
+}
+function sandboxBoss(state, event) {
+  if (state.boss) return unapplicable(state, event, "boss_mode");
+  if (noSuchZone(event.zone)) return unapplicable(state, event, "no_such_zone");
+  return draft(state, (s) => {
+    if (s.zone !== event.zone) changeZone(s, event.zone);
+    endEncounter(s);
+    if (event.boss === "zone_boss") {
+      s.wave = 11;
+      s.pendingTurnBoss = false;
+    } else s.pendingTurnBoss = true;
+  });
+}
+function sandboxItem(state, event) {
+  if (!Object.hasOwn(content.itemBases, event.base)) {
+    return unapplicable(state, event, "unknown_base");
+  }
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, "unknown_rarity");
+  return draft(state, (s, effects) => {
+    takeDrop(s, rollItemOf(s, event.base, event.rarity), effects);
+  });
+}
+function sandboxLevel(state, event) {
+  const hero = findHero(state, event.heroId);
+  if (!hero) return unapplicable(state, event, "unknown_hero");
+  if (event.level <= hero.level) return unapplicable(state, event, "level_not_above");
+  const cap = content.rarity[hero.rarity].levelCap;
+  if (hero.level >= cap) return unapplicable(state, event, "level_cap");
+  return draft(state, (s, effects) => {
+    const h = findHero(s, event.heroId);
+    while (h && h.level < event.level && h.level < cap) {
+      grantXp(s, h, content.xpToNext(h.level) - h.xp, effects);
+    }
+  });
+}
+function sandboxZone(state, event) {
+  if (state.boss) return unapplicable(state, event, "boss_mode");
+  if (noSuchZone(event.zone)) return unapplicable(state, event, "no_such_zone");
+  return draft(state, (s) => {
+    changeZone(s, event.zone);
+    endEncounter(s);
+  });
+}
+function sandboxRecruit(state, event) {
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, "unknown_rarity");
+  if (state.roster.length >= state.rosterCap) return unapplicable(state, event, "roster_full");
+  return draft(state, (s, effects) => {
+    recruitHero(s, generateHero(s, event.rarity), "sandbox", effects);
+  });
+}
+function sandboxWipe(state, event) {
+  if (state.boss) return unapplicable(state, event, "boss_mode");
+  return draft(state, (s, effects) => {
+    for (const hero of partyHeroes(s)) hero.hp = 0;
+    checkWipe(s, effects);
+  });
+}
 
 // packages/sim/src/step.ts
 var handlers = {
@@ -1686,7 +1762,13 @@ var handlers = {
   credited,
   boss_engaged: bossEngaged,
   boss_disengaged: bossDisengaged,
-  rewarded
+  rewarded,
+  sandbox_boss: sandboxBoss,
+  sandbox_item: sandboxItem,
+  sandbox_level: sandboxLevel,
+  sandbox_zone: sandboxZone,
+  sandbox_recruit: sandboxRecruit,
+  sandbox_wipe: sandboxWipe
 };
 function step(state, event) {
   const handler = handlers[event.t];
@@ -1712,6 +1794,7 @@ export {
   GOLDEN_SEED,
   POWER_BP,
   RARITIES,
+  SANDBOX_EVENT_KINDS,
   SERVER_EVENT_KINDS,
   SIM_VERSION,
   SPAWN_GAUGE_MAX,
