@@ -21,3 +21,4 @@ jobs:
       - run: pnpm vendor:check
       - run: pnpm sprites:check
       - run: pnpm font:check
+      - run: pnpm content:check
