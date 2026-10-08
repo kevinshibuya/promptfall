@@ -223,7 +223,7 @@ export function stageAt(
   for (const known of timeline.known()) {
     const sprite = SPRITES[known.spriteId] ?? FALLBACK
     const art = variant(sprite, opts.compact, scale)
-    const slotX = edge + known.slot * pitch
+    const slotX = edge + Math.round(timeline.placeAt(known.id, now) * pitch)
     const roomLeft = heroLeft - gap - art.width
     const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
     nextFree = Math.max(nextFree, baseX + art.width + gap)

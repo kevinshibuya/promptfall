@@ -1,7 +1,9 @@
 // The image encoder: one window as an RGBA picture at CELL_W × CELL_H pixels per cell, for the
-// terminals that draw pictures. `encodeImage(windowFrame(win), WINDOW_SCALE)` makes its source.
+// terminals that draw pictures. `windowSource(win)` makes its source, once per content.
 import { decodePixels } from '../sprites/index'
 import type { Frame } from '../stage/compose'
+import { fnv1a64 } from '../stage/hash'
+import { pngImage } from '../stage/image'
 import {
   barPixels,
   chars,
@@ -24,6 +26,7 @@ import {
   CELL_W,
   FIELD_RGB,
   MARGIN_PX,
+  WINDOW_SCALE,
 } from './tuning'
 
 /** The window's Image key, one per size: a keyed Image that changes size keeps its first placement. */
@@ -108,4 +111,24 @@ export function windowFrame(win: Win): Frame {
     }
   }
   return f
+}
+
+// Image sources by window key and content, shared by the band, the loop and the pane: a window
+// is encoded once per content, and a redraw of an unchanged one costs a JSON.stringify.
+const SOURCE_CACHE_MAX = 64
+const sources = new Map<string, { png: string }>()
+
+/** The window's Image source, from the cache when its content was encoded before. */
+export function windowSource(win: Win): { png: string } {
+  const key = `${windowKey(win)}:${fnv1a64(JSON.stringify(win))}`
+  const hit = sources.get(key)
+  if (hit) {
+    sources.delete(key)
+    sources.set(key, hit)
+    return hit
+  }
+  const made = pngImage(windowFrame(win), WINDOW_SCALE)
+  sources.set(key, made)
+  if (sources.size > SOURCE_CACHE_MAX) sources.delete(sources.keys().next().value as string)
+  return made
 }

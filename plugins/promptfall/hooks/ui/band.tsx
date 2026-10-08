@@ -2,11 +2,10 @@ import { atom, type On, read, update } from 'claude-code'
 import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
-import { encodeImage } from '../stage/image'
-import { layoutFor } from '../stage/layout'
+import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
-import { altText, stageAt } from '../stage/model'
+import { altText } from '../stage/model'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
@@ -26,10 +25,10 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
-import { windowFrame, windowKey } from '../windows/image'
+import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
-import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
+import { CELL_H, CELL_W, STRIP_MAX_COLUMNS } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { type StripInput, stripScene, stripTracks } from './strip'
@@ -123,9 +122,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const hiddenKeys = terminal || e.surface === 'desktop'
     const extra: 0 | 1 = hiddenKeys ? 0 : 1
     if (party) timeline.observe(view, now)
+    const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
       extra,
+      scalable: rendererNow === 'image',
     })
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
@@ -245,7 +246,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             {scene.windows.map((w) => (
               <Image
                 key={windowKey(w)}
-                source={encodeImage(windowFrame(w), WINDOW_SCALE)}
+                source={windowSource(w)}
                 columns={w.columns}
                 rows={w.rows}
                 alt={w.alt}
@@ -314,28 +315,33 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           </Box>
         )
       } else {
-        const frame = stageFrame(
-          view,
-          timeline,
-          now,
-          layout,
-          renderer === 'raster' ? 'raster' : 'image',
-          settings.motion,
-        )
+        const cells = cellsOf(layout) ?? box
+        // A redraw of the site the loop is drawing reuses the picture it last sent: the engine
+        // sends nothing for a source it already drew, and the loop's next frame is at most a beat
+        // away. A new size or layout, a stage drawn again, or no loop yet, composes once.
+        const reused =
+          renderer === 'image' ? (loop?.stageSource(stageKey(cells), layout) ?? null) : null
+        const frame =
+          reused !== null
+            ? { source: reused }
+            : stageFrame(
+                view,
+                timeline,
+                now,
+                layout,
+                renderer === 'raster' ? 'raster' : 'image',
+                settings.motion,
+              )
         if ('cells' in frame) {
           stage = <Raster key="stage" columns={box.columns} rows={box.rows} cells={frame.cells} />
         } else {
-          const model = stageAt(view, timeline, now, box, {
-            compact: layout.kind === 'compact',
-            motion: settings.motion,
-          })
           stage = (
             <Image
-              key={stageKey(box)}
+              key={stageKey(cells)}
               source={frame.source}
-              columns={box.columns}
-              rows={box.rows}
-              alt={model.alt}
+              columns={cells.columns}
+              rows={cells.rows}
+              alt={altText(view)}
             />
           )
         }
@@ -346,7 +352,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     if (terminal && (renderer === 'raster' || renderer === 'image')) {
       loop?.mount({
         requestId: e.requestId,
-        key: box ? (renderer === 'image' ? stageKey(box) : 'stage') : '',
+        key: box ? (renderer === 'image' ? stageKey(cellsOf(layout) ?? box) : 'stage') : '',
         layout,
         renderer,
         props: e.props,
@@ -401,7 +407,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       <Box key="band" flexDirection="column">
         {stage ? (
           // On the desktop a row would leave the stage's frame at its default 300 points.
-          <Box key="row-stage" flexDirection={terminal ? 'row' : 'column'}>
+          <Box
+            key="row-stage"
+            flexDirection={terminal ? 'row' : 'column'}
+            {...(terminal ? { justifyContent: 'center' as const } : {})}
+          >
             {stage}
           </Box>
         ) : null}

@@ -5,13 +5,13 @@
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
 import { stripScene } from '../ui/strip'
-import { windowFrame, windowKey } from '../windows/image'
+import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
-import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
+import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import type { GaugeTrack } from './gauges'
-import { encodeImage } from './image'
-import { type Layout, layoutFor, sameLayout } from './layout'
+import { pngImage } from './image'
+import { cellsOf, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
@@ -98,7 +98,7 @@ export function stageFrame(
   layout: Layout,
   renderer: 'raster' | 'image',
   motion: Settings['motion'],
-): { cells: string } | { source: { rgba: string; width: number; height: number } } {
+): { cells: string } | { source: { png: string } } {
   if (!layout.box) throw new Error('no stage in a collapsed layout')
   // The full stage draws the 1.5x art on Image; Raster and the compact stage stay at 1.
   const model = stageAt(view, timeline, now, layout.box, {
@@ -110,7 +110,7 @@ export function stageFrame(
     return { cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers) }
   }
   return {
-    source: encodeImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
+    source: pngImage(composeFrame(model, { numbers: true }), IMAGE_SCALE / model.scale),
   }
 }
 
@@ -128,6 +128,13 @@ export class StageLoop {
   private fresh = false
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
+  /**
+   * The stage picture last sent, by element key and layout, for a redraw of the same site to
+   * reuse; dropped once the stage goes away, so a stage drawn again never shows an old picture.
+   */
+  private lastStage: { key: string; layout: Layout; source: { png: string } } | null = null
+  /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
+  private beat: number | null = null
 
   constructor(
     private readonly io: LoopIo,
@@ -142,6 +149,7 @@ export class StageLoop {
     if (site === null) {
       if (this.site !== null) this.gen += 1
       this.site = null
+      this.lastStage = null
       this.cancel()
       return
     }
@@ -164,9 +172,16 @@ export class StageLoop {
     }
   }
 
+  /** The picture the loop last sent to the stage Image keyed `key` in `layout`, or null. */
+  stageSource(key: string, layout: Layout): { png: string } | null {
+    const last = this.lastStage
+    return last?.key === key && sameLayout(last.layout, layout) ? last.source : null
+  }
+
   /** New effects landed: draw the next frame now. */
   wake(): void {
     if (this.site === null || this.stopped) return
+    this.beat = null
     if (this.inFlight) this.rerun = true
     else this.arm(0)
   }
@@ -210,16 +225,24 @@ export class StageLoop {
       return
     }
     if (next === null) return
+    // A wake during the frame runs the next at once, and the beat starts over from it.
+    if (this.rerun) this.beat = null
     this.arm(this.rerun ? 0 : next)
   }
 
   /** One frame; answers the delay to the next, or null to stop until the next mount. */
   private async frame(gen: number): Promise<number | null> {
-    const now = await this.io.now()
-    if (gen !== this.gen) return null
-    const view = await this.io.view()
-    if (gen !== this.gen) return null
-    const settings = await this.io.settings()
+    // One round of reads through `$`, not four in a row.
+    const [now, view, settings, extras] = await Promise.all([
+      this.io.now(),
+      this.io.view(),
+      this.io.settings(),
+      this.io.strip(),
+    ])
+    // Busy frames keep a fixed beat: this frame's slot is the one it was due in, so its own cost
+    // and a late timer do not push the next one back.
+    const slot = this.beat ?? now
+    this.beat = null
     const site = this.site
     if (gen !== this.gen || site === null || view === null) return null
 
@@ -227,6 +250,7 @@ export class StageLoop {
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
       tab: site.strip.tab,
       extra: site.strip.extra,
+      scalable: site.renderer === 'image',
     })
     if (!sameLayout(site.layout, layout)) {
       // Grow or shrink is a redraw: the next render mounts the new site.
@@ -234,8 +258,6 @@ export class StageLoop {
       this.io.invalidate()
       return null
     }
-    const extras = await this.io.strip()
-    if (gen !== this.gen) return null
     // On Loot and World neither the stage nor the log shows: only the gauges set the pace.
     const busy =
       site.strip.kind !== 'bare' &&
@@ -248,7 +270,8 @@ export class StageLoop {
     }
 
     const box = layout.box
-    if (box) {
+    const cells = cellsOf(layout)
+    if (box && cells) {
       const actors = [
         ...this.timeline.known().map((k) => k.id),
         ...view.heroes.map((h) => `${h.id}:${h.alive}`),
@@ -265,8 +288,8 @@ export class StageLoop {
         const at = {
           requestId: site.requestId,
           key: site.key,
-          columns: box.columns,
-          rows: box.rows,
+          columns: cells.columns,
+          rows: cells.rows,
         }
         const result = await this.io.blit(
           'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },
@@ -276,7 +299,11 @@ export class StageLoop {
         if (gen !== this.gen) return null
         if (result.deny !== undefined) {
           this.stopped = true
+          this.lastStage = null
           return null
+        }
+        if ('source' in frame) {
+          this.lastStage = { key: site.key, layout: site.layout, source: frame.source }
         }
       }
     }
@@ -314,7 +341,7 @@ export class StageLoop {
           const json = JSON.stringify(win)
           if (this.sent.get(key) === json) continue
           this.sent.set(key, json)
-          const source = encodeImage(windowFrame(win), WINDOW_SCALE)
+          const source = windowSource(win)
           sends.push({
             requestId: site.requestId,
             key,
@@ -334,7 +361,14 @@ export class StageLoop {
         }
       }
     }
-    if (busy) return EVENT_FRAME_MS
+    if (busy) {
+      // Overrun: the next frame runs at once and the beat starts over from it, never a burst.
+      const next = slot + EVENT_FRAME_MS
+      const end = await this.io.now()
+      if (next <= end) return 0
+      this.beat = next
+      return next - end
+    }
     return filling ? Math.min(GAUGE_FRAME_MS, restDelay(now)) : restDelay(now)
   }
 }
