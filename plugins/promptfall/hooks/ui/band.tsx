@@ -53,7 +53,6 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
 
 export { type ShownBoss, shownBoss } from './boss'
 
-import { payloadBytes, trace } from '../diag'
 import { worldRows } from './world-rows'
 
 export { worldRows }
@@ -76,7 +75,6 @@ const HOTKEYS = [
 
 export function registerBand(on: On, game: () => GameHandle | null): void {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const renderStart = Date.now()
     const view = await read($, viewAtom)
     const mode = await read($, modeAtom)
     const handle = game()
@@ -276,7 +274,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // The stage: an element sized to the layout's box, its first frame drawn here so a redraw
     // is never blank; the loop blits every frame after it.
     const box = layout.box
-    let stageBytes = 0
     if (box && !terminal && 'Svg' in els) {
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
       const source = stageSvg(view, timeline, now, box, {
@@ -334,7 +331,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
                 renderer === 'raster' ? 'raster' : 'image',
                 settings.motion,
               )
-        stageBytes = reused !== null ? 0 : payloadBytes(frame)
         if ('cells' in frame) {
           stage = <Raster key="stage" columns={box.columns} rows={box.rows} cells={frame.cells} />
         } else {
@@ -351,17 +347,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       }
     }
 
-    trace('render', {
-      ms: Date.now() - renderStart,
-      layout: layout.kind,
-      rows: box?.rows ?? 0,
-      cellRows: cellsOf(layout)?.rows ?? 0,
-      cols: e.props.bodyColumns,
-      maxRows: e.props.maxRows,
-      working: e.props.isWorking,
-      renderer,
-      bytes: stageBytes,
-    })
     // The loop: terminals blit the stage and the strip; the desktop runs on SMIL.
     if (terminal && (renderer === 'raster' || renderer === 'image')) {
       loop?.mount({
