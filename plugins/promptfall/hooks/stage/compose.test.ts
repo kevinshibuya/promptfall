@@ -3,7 +3,7 @@ import { spriteFor } from '../sprites/index'
 import { artFrame, composeFrame } from './compose'
 import { DIGITS } from './font'
 import { fnv1a64 } from './hash'
-import type { StageModel } from './model'
+import { type StageModel, samePoses } from './model'
 import { ZONE_GROUND } from './tuning'
 
 const slime = spriteFor('enemy', 'road_slime').full
@@ -15,6 +15,7 @@ function model(overrides: Partial<StageModel> = {}): StageModel {
     actors: [],
     numbers: [],
     drops: [],
+    effects: [],
     alt: '',
     scale: 1,
     ...overrides,
@@ -33,6 +34,8 @@ const actorAt = (alpha: number) => ({
   fallen: false,
   flashing: false,
   raritySlot: null,
+  pose: 'idle' as const,
+  poses: samePoses(slime),
 })
 
 const opaqueIn = (f: { width: number; rgba: Uint8ClampedArray }, w: number, h: number) => {

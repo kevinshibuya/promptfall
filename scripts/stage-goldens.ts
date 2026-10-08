@@ -41,7 +41,7 @@ for (const name of SCENARIOS) {
   const s = stage(name)
   const g = goldenOf(s)
   lines.push(
-    `  ${name}: ${JSON.stringify(g)
+    `  ${/^\w+$/.test(name) ? name : `'${name}'`}: ${JSON.stringify(g)
       .replace(/"(\w+)":/g, '$1: ')
       .replace(/,/g, ', ')},`,
   )

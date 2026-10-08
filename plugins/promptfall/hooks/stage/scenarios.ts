@@ -39,7 +39,20 @@ import { type Motion, StageTimeline } from './timeline'
 import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
 
 export const GOLDEN_NOW = 1_000_000
-export const SCENARIOS = ['rest', 'boss', 'compact', 'dissolve', 'drop'] as const
+export const SCENARIOS = [
+  'rest',
+  'boss',
+  'compact',
+  'dissolve',
+  'drop',
+  'windup',
+  'strike',
+  'follow',
+  'bolt',
+  'burst',
+  'enemy-strike',
+  'boss-strike',
+] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
   rasterHash: string
@@ -98,9 +111,52 @@ function killed(t1: number, effects: Effect[], box: Box): Staged {
   return staged(after, t, box)
 }
 
+/** `actor` attacked `target` (the slot-0 enemy by default) `ms` before NOW. */
+function attacking(actor: string, ms: number, target = 'e1'): Staged {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - ms)
+  t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target, amount: 9 },
+    ],
+    NOW - ms,
+  )
+  t.observe(wave(), NOW)
+  return staged(wave(), t, FULL)
+}
+
 export function stage(name: Scenario): Staged {
   const t = new StageTimeline()
   switch (name) {
+    // The knight 60 ms into its action (winding up), at 180 (striking, the enemy hit), at 300
+    // (following through); the black mage's fireball and the white mage's burst at 220.
+    case 'windup':
+      return attacking('h1', 60)
+    case 'strike':
+      return attacking('h1', 180)
+    case 'follow':
+      return attacking('h1', 300)
+    case 'bolt':
+      return attacking('h2', 220)
+    case 'burst':
+      return attacking('h3', 220)
+    // The goblin scout 150 ms into its action: its strike frame, the knight's hit frame.
+    case 'enemy-strike':
+      return attacking('e1', 150, 'h1')
+    // The bandit captain 60 ms into its attack on the knight: its wind-up frame, the lunge out.
+    case 'boss-strike': {
+      t.observe(boss(), NOW - 60)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e9', action: 'attack', at: 0 },
+          { k: 'hit', by: 'e9', target: 'h1', amount: 31 },
+        ],
+        NOW - 60,
+      )
+      t.observe(boss(), NOW)
+      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+    }
     case 'rest': {
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)

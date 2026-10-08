@@ -179,6 +179,35 @@ The band's Party tab draws the battle as pixel art: enemies on the left, the par
 lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a pop when
 it drops loot.
 
+- **Choreography.** One action, from its start, in ms. Every actor winds up for 120 and strikes
+  from there; at impact the target shows its hit frame for 160 (`FLASH_MS`), and the number rises
+  from it.
+
+  | Shape | Who | Frames and motion |
+  | --- | --- | --- |
+  | `lunge` | every enemy | the lunge out and back over 240: wind-up frame 0–120, strike frame 120–240; impact 120 |
+  | `lunge_follow` | knight | as `lunge`, then the follow-through frame in place 240–360 |
+  | `bolt` | black mage (fireball), archer (arrow) | wind-up in place 0–120, strike 120–320 while the effect flies from the attacker's front edge to the target's centre; impact 320 |
+  | `burst` | white mage, attack and heal | wind-up 0–120, strike 120–320 while the light burst sits on the target; impact 220 |
+
+  `ACTION_MS` is 360, the longest of these; an `attack_all` plays one effect per target. A hit
+  that comes without an action (a resync, a delivery) lands at 120 and shows the hit frame.
+- **Poses.** At 1.5× each actor has six drawings: idle A (its 1.5× art), idle B, the wind-up,
+  the strike and the follow-through (drawn frames, from the manifest; a hero's strike is its
+  `hero_attack` art), and the hit. At rest it alternates idle A and idle B on the bob's clock
+  (B in the second half of each second), with no vertical bob. Idle B and the hit are derived
+  from idle A at draw time (`hooks/sprites/derive.ts`): idle B drops the figure's middle row and
+  moves the rows above it down one; the hit leans the figure back from its facing side by one
+  column per 12 rows, in a palette lightened by gamma 0.6, and the white flash blinks for 100 ms
+  (`BLINK_MS`). At 1×, on the `Raster`, the compact stage and the 1× `Svg`, an actor keeps one
+  drawing (a hero shows its attack art through the wind-up and strike) with the 1-pixel bob and
+  the 160 ms flash, as before. A fallen hero shows idle A and never takes a hit frame.
+- **The `Svg` frames.** At 1.5× under SMIL each actor carries idle A and idle B on the bob's
+  clock and the frames in use, one visible at any instant: the frames of motions live at the
+  redraw or starting before the next one (167 ms), with the rest of the same action. Idle B is
+  two uses of idle A's def under row clips; the hit is idle A's def under one row clip per
+  column of lean and a gamma filter; the drawn frames are defs of their own while in use.
+
 - **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
   Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
   numbers as text. The desktop app draws it as an `Svg`, always the full stage: 116 to 160
@@ -218,8 +247,9 @@ it drops loot.
   secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
   sound on macOS only. The cues in `cues/` come from Juhani Junkala's CC0 pack "512 Sound Effects
   (8-bit style)".
-- **Motion**: `/promptfall motion still` (or `n`) stops the idle bob; hits, dissolves and drops
-  still play. `/promptfall motion full` brings the bob back.
+- **Motion**: `/promptfall motion still` (or `n`) stops the idle bob, and at 1.5× the idle pair:
+  each actor shows idle A at rest. Attacks, hits, dissolves and drops still play.
+  `/promptfall motion full` brings the bob back.
 - **Renderer**: `/promptfall renderer auto|image|raster` (or `x` to cycle), see Stage.
 
 All three are per machine, kept in the plugin store under `promptfall:settings`; a reset keeps
@@ -298,7 +328,7 @@ fails when it is stale (`pnpm sprites:check`).
   one 8-connected region after the snap, or the build fails. An entry without `fileHires` gets
   its 1× art upscaled 1.5 times.
 - `pnpm slice <sheet.png> <out-dir> --grid <cols>x<rows> [--row r] --colours n (--size 16 | --fit
-  48x34) [--names kind/a,kind/b] [--native <dir>] [--hires <dir>]` cuts a magenta-keyed sheet. It finds each
+  48x34) [--names kind/a,kind/b] [--native <dir>] [--hires <dir>] [--gutters <x,…>]` cuts a magenta-keyed sheet. It finds each
   sprite by the magenta gutters around it (`--grid` counts sprites per row and rows), reads the
   sprite's art-pixel size from its black outline, samples one value per art pixel, then shrinks
   to the canvas by a majority vote that keeps the outline black. `--native` also writes each
@@ -311,6 +341,30 @@ fails when it is stale (`pnpm sprites:check`).
   at 6× and its 1.5× art at 4× (`-hires`), its native cut at 4× and, for a zone, the stage at
   rest, with its zone boss and with its turn boss, at 1.5× (`stage-*.png`) and at 1×
   (`stage-*-1x.png`), into `.promptfall/contact/<label>/`, for review.
+- **Frames.** An entry may name its drawn 1.5× frames with `frames: { windup, strike?, follow? }`
+  (PNGs in `art/sprites-frames/<kind>/<name>-<frame>.png`). A frame snaps to the 1.5× master (16
+  colours at most) and lands on its idle 1.5× art's canvas: shrunk to fit if larger, then padded
+  bottom-centred to exactly that size, so every pose draws at the idle's place. A hero gives
+  `windup` (and the knight `follow`) with `frameRarityColors`, one 8-connected region each after
+  the snap; its strike is its `hero_attack` sprite's 1.5× art, by identity. Any other entry with
+  `frames` gives `windup` and `strike`. The frames are 1.5× art only and do not feed the 1.5×
+  master. The build lists every frame whose native's long side is more than 20% off its idle
+  native's, or that the fit to the idle canvas shrinks by more than 20%, under `frame size
+  drift:`: a report for the redo list in `art/sheets.md`, not an error.
+- **Effect sprites.** `effect:fireball`, `effect:light_burst` and `effect:arrow` are ordinary
+  `nes` sprites of kind `effect`, with 1× and 1.5× art; the stage moves them during a hero's
+  action. They are not content, so `scripts/sprites.ts` lists them in `EFFECT_IDS`.
+- `pnpm refsheet <out.png> --columns <n> --cell <w>x<h> --scale <k> <kind/name|blank>,…` lays out
+  a frames sheet's reference: each sprite's 1.5× art scaled `k` times on magenta, bottom-centred
+  in its cell 24 pixels above the floor, so the image model reads column n of the reference as
+  column n of the sheet.
+- `pnpm slice … --gutters <x,…>` reads those sheet columns as ground when finding the gaps in a
+  row, for sprites that touch; beside a forced gutter, a box drops every component touching that
+  edge but its largest (a neighbour's tip reaching across).
+- The contact folders also write `<kind>-<name>-frames.png` per actor with frames (idle A, idle B,
+  wind-up, strike, follow-through, hit, at 4×), `stage-strike.png` and `stage-hit.png` per zone
+  (the front enemy 150 and 240 ms into its attack) and, for the heroes, `stage-bolt.png` and
+  `stage-burst.png`.
 - The Inventory and Heroes list windows lead each row with its sprite, fitted into 16 × 16 px,
   where pictures draw (an Image terminal, the desktop); the raster windows leave the two cells
   blank. The Market list keeps its sprite as before.

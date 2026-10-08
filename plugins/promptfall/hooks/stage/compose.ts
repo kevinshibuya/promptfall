@@ -65,7 +65,7 @@ function blit(
 
 /**
  * The stage as pixels: the ground strip on the bottom two rows (three at scale 1.5), the actors in slot order, the
- * drops, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
+ * drops, the effect sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
   const { width, height } = frameSize(model)
@@ -74,8 +74,11 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   for (let y = Math.max(0, frame.height - ground); y < frame.height; y++) {
     for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
   }
-  for (const a of model.actors) blit(frame, a.art, a.palette, a.x, a.y, a.flipX, a.alpha)
+  for (const a of model.actors) {
+    blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
+  }
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)
+  for (const e of model.effects) blit(frame, e.art, e.art.palette, e.x, e.y, e.flipX, 1)
   const block = glyphBlock(model.scale)
   if (opts.numbers) {
     for (const n of model.numbers) drawText(frame, n.text, n.x, n.y, n.rgb, block)
