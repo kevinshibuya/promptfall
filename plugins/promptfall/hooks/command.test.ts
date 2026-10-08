@@ -198,7 +198,7 @@ test('sandbox item drops the item through the drop path, with its toast', async 
   expect(await run('item oak_staff legendary')).toBe('Sandbox: Oak Staff (legendary) dropped')
   expect(view().inventory.map((i) => [i.base, i.rarity])).toContainEqual(['oak_staff', 'legendary'])
   expect(view().lastDrop?.text).toContain('Oak Staff')
-  expect(toasts.some((t) => t.includes('Oak Staff (legendary)'))).toBe(true)
+  expect(toasts).toContain('Legendary drop: Oak Staff')
   // No rarity: common, and the display name's words match too.
   expect(await run('item copper')).toBe('Sandbox: Copper Ring (common) dropped')
   expect(await run('item copper mythic')).toMatch(/^No rarity named 'mythic'\n.*legendary/s)
@@ -222,6 +222,7 @@ test(
       content.rarity.legendary.vendorGoldPerZone * (content.itemBases.oak_staff?.minZone ?? 1)
     expect(view().gold).toBe(gold + value)
     expect(view().inventory.map((i) => i.id)).toEqual(ids)
+    expect(toasts).toEqual([`Inventory full: Oak Staff vendored for ${value} gold`])
   },
 )
 
@@ -234,10 +235,13 @@ test('sandbox level raises a hero level by level, refuses its own level and stop
   expect(aldric()?.level).toBe(5)
   toasts.length = 0
   expect(await run('level ald 5')).toBe(`Sandbox: ${name} is already level 5`)
-  expect(toasts.filter((t) => t.startsWith('Level '))).toEqual([])
+  expect(toasts.filter((t) => t.includes(' reached level '))).toEqual([])
   expect(await run('level ald 7')).toBe(`Sandbox: ${name} is level 7`)
   expect(aldric()?.level).toBe(7)
-  expect(toasts.filter((t) => t.startsWith('Level '))).toEqual(['Level 6', 'Level 7'])
+  expect(toasts.filter((t) => t.includes(' reached level '))).toEqual([
+    `${name} reached level 6`,
+    `${name} reached level 7`,
+  ])
   expect(await run('level ald 99')).toBe(`Sandbox: ${name} is level 20, the common cap`)
   expect(aldric()?.level).toBe(20)
   expect(await run('level ald 30')).toBe(`Sandbox: ${name} is level 20, the common cap`)
@@ -261,7 +265,7 @@ test('sandbox recruit adds a hero of that rarity through the recruit path', asyn
   const added = view().roster.filter((h) => !before.includes(h.id))
   expect(added.map((h) => h.rarity)).toEqual(['epic'])
   expect(reply).toBe(`Sandbox: ${added[0]?.name} (epic) recruited`)
-  expect(toasts).toContain(`${added[0]?.name} joined (epic)`)
+  expect(toasts).toContain(`Epic recruit: ${added[0]?.name}`)
 })
 
 test(
@@ -283,7 +287,7 @@ test('sandbox wipe makes the party fall and retreat one zone', async ($, on) => 
   expect(await run('wipe')).toBe('Sandbox: the party fell, retreating to zone 2')
   expect(view().zone).toBe(2)
   expect(view().wipes).toBe(wipes + 1)
-  expect(toasts).toContain('Party wiped, retreating to zone 2')
+  expect(toasts).toContain('The party fell, retreating to zone 2')
 })
 
 test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
@@ -373,7 +377,7 @@ test('sandbox worldboss engages the party in boss mode; worldboss end pays it an
   expect(view().boss).toBeNull()
   expect(view().enemies.every((e) => e.kind !== 'world_boss')).toBe(true)
   // The reward came with nothing dealt: the settle pays every engaged party.
-  expect(toasts.filter((t) => t.startsWith('Boss reward: '))).toHaveLength(1)
+  expect(toasts.filter((t) => t.startsWith('Your share of The Promptwyrm: '))).toHaveLength(1)
   const world = states.get('world') as WorldState
   expect(world.snapshot?.boss).toMatchObject({ name: 'The Promptwyrm', hp: 0 })
 })
