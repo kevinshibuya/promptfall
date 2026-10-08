@@ -1,6 +1,7 @@
 import type { UiBlitArgs, UiBlitResult } from 'claude-code'
 import { expect, test } from 'claude-code/testing'
 import type { GameView, Settings } from '../../types'
+import { decode } from '../sprites/base64'
 import { SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { boss, wave } from './fixtures'
@@ -159,6 +160,87 @@ test('a mounted raster site blits on wake, at the event rate while busy, at the 
   const rest = h.blits.length
   await clock.advance(IDLE_FRAME_MS * 4)
   expect(h.blits.length - rest).toBe(4)
+})
+
+test('busy frames keep a fixed beat: a 30 ms frame does not push the next one back', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, 30)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 6)
+  const gaps = h.times.slice(1, 5).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS, EVENT_FRAME_MS, EVENT_FRAME_MS, EVENT_FRAME_MS])
+})
+
+test('a frame that overruns its slot runs the next at once, then the beat starts over', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, EVENT_FRAME_MS + 20)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 4)
+  // Each frame takes 103 ms: the next starts as it ends, never two at once to catch up.
+  const gaps = h.times.slice(1, 3).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS + 20, EVENT_FRAME_MS + 20])
+})
+
+test('the last stage picture the loop sent is there for a redraw of the same site to reuse', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  const s = { ...site('image'), key: 'stage-120x8' }
+  h.loop.mount(s)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS)
+  const sent = h.blits.filter((b) => b.key === 'stage-120x8').at(-1)
+  expect(sent && 'source' in sent ? sent.source : null).not.toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(
+    sent && 'source' in sent ? sent.source : null,
+  )
+  expect(h.loop.stageSource('stage-130x8', s.layout)).toBe(null)
+})
+
+test('a stage picture is not reused once the stage went away, after a deny, or for another layout', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  const s = { ...site('image'), key: 'stage-120x8' }
+  const draw = async () => {
+    h.loop.mount(s)
+    h.timeline.onEffects(hit, await clock.now())
+    h.loop.wake()
+    await clock.advance(EVENT_FRAME_MS)
+    expect(h.loop.stageSource('stage-120x8', s.layout)).not.toBe(null)
+  }
+  await draw()
+  // The same cells under another layout (a scaled boss stage) is another picture.
+  const box = s.layout.box ?? { columns: 120, rows: 8 }
+  const scaled = { kind: 'full' as const, box: { ...box, rows: 13 }, cells: box, bandRows: 18 }
+  expect(h.loop.stageSource('stage-120x8', scaled)).toBe(null)
+  h.loop.mount(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  await draw()
+  h.state.answer = { deny: 'not mounted' }
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS)
+  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+})
+
+test('a wake during a frame runs the next at once, and the beat starts over from it', async () => {
+  const clock = fakeClock()
+  const h = harness(clock, 30)
+  h.loop.mount(site())
+  h.timeline.onEffects(hit, 1_000_000)
+  let views = 0
+  h.state.onView = () => {
+    views += 1
+    if (views === 2) h.loop.wake()
+  }
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS * 5)
+  const gaps = h.times.slice(1, 4).map((t, i) => t - (h.times[i] ?? 0))
+  expect(gaps).toEqual([EVENT_FRAME_MS, 30, EVENT_FRAME_MS])
 })
 
 test('mount(null) stops the blits', async () => {
@@ -407,13 +489,20 @@ test('a bare site (World) blits the strip and no stage; a boss arriving is not a
   expect(h.invalidations).toHaveLength(0)
 })
 
+/** A PNG source's width and height, from its IHDR. */
+function pngSize(source: { png: string }): [number, number] {
+  const bytes = decode(source.png)
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  return [view.getUint32(16), view.getUint32(20)]
+}
+
 test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled 6 times', () => {
   const t = new StageTimeline()
   t.observe(wave(), 0)
   const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
   const image = stageFrame(wave(), t, 0, full, 'image', 'full')
   if (!('source' in image)) throw new Error('expected an Image source')
-  expect([image.source.width, image.source.height]).toEqual([720, 96])
+  expect(pngSize(image.source)).toEqual([720, 96])
   const narrow = layoutFor(t.rowsAt(wave(), 0), { bodyColumns: 105, maxRows: 30 }, 'terminal', {
     tab: 'party',
     extra: 0,
@@ -421,5 +510,5 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   expect(narrow.kind).toBe('compact')
   const compact = stageFrame(wave(), t, 0, narrow, 'image', 'full')
   if (!('source' in compact)) throw new Error('expected an Image source')
-  expect([compact.source.width, compact.source.height]).toEqual([312, 48])
+  expect(pngSize(compact.source)).toEqual([312, 48])
 })

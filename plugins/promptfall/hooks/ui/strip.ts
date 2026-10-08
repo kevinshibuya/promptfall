@@ -129,10 +129,10 @@ function enemyLabel(input: StripInput): { title: string; boss: boolean } {
   return { title: `Zone ${view.zone} · Wave ${view.wave}`, boss: false }
 }
 
-/** The live enemies in slot order, each with the HP it shows (the world boss's predicted bar). */
+/** The live enemies in line order, each with the HP it shows (the world boss's predicted bar). */
 function enemies(input: StripInput): { name: string; hp: number; maxHp: number; boss: boolean }[] {
   const { view, world, timeline } = input
-  const slot = new Map(timeline.known().map((k) => [k.id, k.slot]))
+  const slot = new Map(timeline.known().map((k, place) => [k.id, place]))
   const shown = shownBoss(view, world)
   return [...view.enemies]
     .sort((a, b) => (slot.get(a.id) ?? 9) - (slot.get(b.id) ?? 9))

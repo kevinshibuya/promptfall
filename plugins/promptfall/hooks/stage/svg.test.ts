@@ -6,7 +6,15 @@ import { effectAt, stageAt } from './model'
 import { stage } from './scenarios'
 import { artPaths, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
-import { DROP_MS, HIRES_SCALE, IDLE_BOB_PX, LUNGE_MS, RARITY_RGB } from './tuning'
+import {
+  DROP_MS,
+  HIRES_SCALE,
+  IDLE_BOB_PX,
+  LUNGE_MS,
+  RARITY_RGB,
+  WINDUP_HOLD_MS,
+  WINDUP_MS,
+} from './tuning'
 
 const NOW = 1_000_000
 const BOX = { columns: 120, rows: 8 }
@@ -178,7 +186,7 @@ test('at 1.5 the rest scenario defines each art once, two row clips per art, and
   expect(svg).toContain('attributeName="visibility" values="visible;hidden" calcMode="discrete"')
 })
 
-test("60 ms into the knight's action the Svg carries its wind-up, strike and follow-through and the enemy's hit clips", () => {
+test("60 ms into the knight's lunge the Svg carries its wind-up, strike and follow-through and the enemy's hit clips", () => {
   const svg = hiSvg('windup')
   const f = knightHi.frames
   if (!f?.follow) throw new Error('the knight has no frames')
@@ -186,8 +194,13 @@ test("60 ms into the knight's action the Svg carries its wind-up, strike and fol
   expect(svg).toContain(defOf(f.strike.art, f.strike.raritySlot))
   expect(svg).toContain(defOf(f.follow.art, f.follow.raritySlot))
   expect(svg).toMatch(/<clipPath id="a\d+h0">/)
+  // The wind-up, from the action's start through the hold and the lunge out, is 60 ms from over.
+  const begin = String(-(WINDUP_HOLD_MS + 60) / 1000).replace('.', '\\.')
+  const dur = String((WINDUP_HOLD_MS + WINDUP_MS) / 1000).replace('.', '\\.')
   expect(svg).toMatch(
-    /<g visibility="hidden"><set attributeName="visibility" to="visible" begin="-0\.06s" dur="0\.12s"\/>/,
+    new RegExp(
+      `<g visibility="hidden"><set attributeName="visibility" to="visible" begin="${begin}s" dur="${dur}s"/>`,
+    ),
   )
   expect(svg).toContain('filter="url(#hit)"')
 })
@@ -202,7 +215,8 @@ test('an action that starts after the next redraw carries none of its frames', (
   const t = new StageTimeline()
   const v = wave()
   t.observe(v, NOW)
-  // The goblin's action at NOW, the knight's at NOW + 360 (after the goblin's ACTION_MS).
+  // The goblin's action at NOW, moving from the end of its hold; the knight's at NOW + 500 (after
+  // the goblin's ACTION_MS). Drawn as the goblin starts to move.
   t.onEffects(
     [
       { k: 'act', actor: 'e1', action: 'attack', at: 0 },
@@ -212,8 +226,9 @@ test('an action that starts after the next redraw carries none of its frames', (
     ],
     NOW,
   )
-  const model = stageAt(v, t, NOW, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
-  const svg = renderSvg(model, t.active(NOW), { ...SMIL, now: NOW })
+  const moving = NOW + WINDUP_HOLD_MS
+  const model = stageAt(v, t, moving, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const svg = renderSvg(model, t.active(moving), { ...SMIL, now: moving })
   const f = knightHi.frames
   if (!f) throw new Error('the knight has no frames')
   expect(svg).not.toContain(defOf(f.windup.art, f.windup.raritySlot))

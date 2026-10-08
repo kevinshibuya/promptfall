@@ -19,16 +19,14 @@ import type {
   Settings,
 } from '../../../types'
 import type { GameHandle } from '../../engine'
-import { fnv1a64 } from '../../stage/hash'
-import { encodeImage } from '../../stage/image'
 import { DESKTOP_COLUMN_PX, SVG_INTERACTIVE } from '../../stage/tuning'
 import { DIALOG_DEFAULT } from '../../state'
 import type { PlayerEvent } from '../../vendor/sim.js'
-import { windowFrame, windowKey } from '../../windows/image'
-import type { Tile, Win } from '../../windows/kit'
+import { windowKey, windowSource } from '../../windows/image'
+import type { Tile } from '../../windows/kit'
 import { sceneCells } from '../../windows/raster'
 import { sceneSvg } from '../../windows/svg'
-import { CELL_H, CELL_W, WINDOW_SCALE } from '../../windows/tuning'
+import { CELL_H, CELL_W } from '../../windows/tuning'
 import { confirmBuy, loadMarket } from '../market'
 import { ordersTrade, placeOrder } from '../orders'
 import { openSell, sellTrade } from '../sell'
@@ -133,23 +131,6 @@ export function placed(requestId: string, signature: string): void {
   lastStops.set(requestId, signature)
 }
 
-// Image sources by window key and content, so a cursor move re-encodes only what changed.
-const IMAGE_CACHE_MAX = 64
-const images = new Map<string, { rgba: string; width: number; height: number }>()
-function imageOf(win: Win) {
-  const key = `${windowKey(win)}:${fnv1a64(JSON.stringify(win))}`
-  const hit = images.get(key)
-  if (hit) {
-    images.delete(key)
-    images.set(key, hit)
-    return hit
-  }
-  const made = encodeImage(windowFrame(win), WINDOW_SCALE)
-  images.set(key, made)
-  if (images.size > IMAGE_CACHE_MAX) images.delete(images.keys().next().value as string)
-  return made
-}
-
 /** What a field's typing and Enter do, by the field's key. */
 export type FieldCallbacks = {
   onInput: (key: PaneFieldKey, text: string) => void
@@ -212,7 +193,7 @@ export function paneElement(d: PaneDraw): RenderElement {
         return (
           <Image
             key={windowKey(w)}
-            source={imageOf(w)}
+            source={windowSource(w)}
             columns={w.columns}
             rows={w.rows}
             alt={w.alt}
