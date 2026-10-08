@@ -581,3 +581,49 @@ for g in hero-knight hero-black_mage hero-white_mage hero-archer hero_attack-kni
 done
 rm -rf art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-hero-cuts
 ```
+
+## frames-heroes.png
+
+2026-10-07, phase 4 PR 3 (Task F2): the heroes' wind-up and follow-through frames and the three
+effect sprites. References: `art/sheets/ref-frames-heroes.png` (`pnpm refsheet art/sheets/ref-frames-heroes.png
+--columns 8 --cell 192x256 --scale 7 hero/knight,hero_attack/knight,hero/black_mage,hero/white_mage,hero/archer,hero_attack/black_mage,hero_attack/white_mage,hero_attack/archer`),
+`art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows, left to right: column 1 the knight idle, column 2 the knight attacking, column 3 the black mage, column 4 the white mage, column 5 the archer, and columns 6 to 8 the black mage casting, the white mage casting and the archer shooting (for their staffs and bow only).
+Row 1, one per column: 1 the knight winding up (sword raised high behind the head, weight back); 2 the knight's follow-through (sword swung down past the front foot, cape flying); 3 the black mage gathering fire (staff raised, a small flame at its tip, robe billowing); 4 the white mage raising the staff overhead with both hands; 5 the archer drawing the bow (string pulled to the cheek, arrow nocked); 6 a fireball (a round orange and yellow ball of fire with a short trailing flame, flying right, no figure); 7 a burst of holy light (a white and gold eight-rayed star, no figure); 8 a wooden arrow with a steel head and feather fletching, flying right, drawn horizontally, no figure.
+Rows 2, 3 and 4: three more different takes of the same eight, in the same columns.
+The hero sprites keep the exact designs of the reference (same armour, hats, capes, colours, same size), only in these poses. Characters face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-heroes.png.
+```
+
+Picks, by eye: row 1 (the first take) for the knight's wind-up and follow-through, the black mage,
+the archer and the three effects; row 2 for the white mage (the staff overhead in both hands).
+
+```sh
+D=art/sheets/frames-heroes.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 0 --names hero/knight-windup,hero/knight-follow,hero/black_mage-windup,x/w,hero/archer-windup,x/a,x/b,x/c
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 1 --names x/a,x/b,x/c,hero/white_mage-windup,x/d,x/e,x/f,x/g
+pnpm slice $D art/sprites $=C --hires art/sprites-hires --row 0 --names x/d,x/e,x/f,x/g,x/h,effect/fireball,effect/light_burst,effect/arrow
+rm -rf art/sprites-frames/x art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-frame-cuts
+```
+
+## Redos (frames)
+
+| Id | Frame | From | Note |
+| --- | --- | --- | --- |
