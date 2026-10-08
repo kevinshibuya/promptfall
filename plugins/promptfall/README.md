@@ -225,11 +225,12 @@ it drops loot.
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
   Until the answer lands the stage rows stay empty, so the band does not change height.
-- **Heights.** At rest the Party tab is 10 rows (8 for the stage, a party line, the status row).
-  A turn boss grows it to 14 and a zone or world boss to 19; it shrinks back once the boss's
-  dissolve and drop have played.
-- **Compact and collapsed.** On terminals, the full stage needs 116 columns and room for its rows. With 100 to
-  115 columns, or too few rows, the band keeps the three hero rows and the status row and draws a
+- **Heights.** The Party tab is 22 rows in every fight: 17 for the stage, the boss height, so the
+  party stands small on the zone's painting and a boss lands at its full size (ADR 0010), and the
+  5-row window strip. A band too short for that keeps the art at its size and shows the stage's
+  bottom rows, the sky cut, down to the actors' 8 rows.
+- **Compact and collapsed.** On terminals, the full stage needs 116 columns and 8 rows above the
+  strip. With 100 to 115 columns, or fewer rows, the band keeps the three hero rows and the status row and draws a
   52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
   four rows and draw no stage.
 - **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and
