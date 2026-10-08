@@ -1603,7 +1603,7 @@ candidates for a later pass that refines the sprites and frames, not a redo orde
 ## Backdrops (2026-10-08)
 
 One painting per zone under the stage (ADR 0008). Review: the same artifact, one section per zone
-under the frames. Each run attached one reference, the zone's boss stage view from
+under the frames. Kevin gave every zone GREEN on 2026-10-08 (version 20), after the zone 1 pilot. Each run attached one reference, the zone's boss stage view from
 `pnpm contact --zone <n>` (`.promptfall/contact/zone-<n>/stage-boss.png`), and used the common
 prompt `art/sheets/backdrop-common.txt` plus the zone brief `art/sheets/backdrop-briefs/z<n>.txt`,
 then the save line. The sheet is `art/sheets/backdrop-z<n>.png`.
