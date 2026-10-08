@@ -584,6 +584,10 @@ Each phase gets its own implementation plan when its turn comes.
   installs from git without a build; CI fails when they are stale), vitest for
   packages and servers, the official plugin test runner for the mod, Biome for
   lint and format.
+- Generated files are committed and CI regenerates each one, failing on a
+  diff: the vendored bundles (`vendor:check`), the sprites (`sprites:check`),
+  the font glyphs (`font:check`) and the content skill's reference
+  (`content:check`).
 - Determinism property test on the sim runs in CI on every change to the sim
   package.
 - Verification bar per phase: typecheck, lint, package tests, plugin tests on
