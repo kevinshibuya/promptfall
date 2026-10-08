@@ -224,15 +224,17 @@ export class StageLoop {
 
   /** One frame; answers the delay to the next, or null to stop until the next mount. */
   private async frame(gen: number): Promise<number | null> {
-    const now = await this.io.now()
-    if (gen !== this.gen) return null
+    // One round of reads through `$`, not four in a row.
+    const [now, view, settings, extras] = await Promise.all([
+      this.io.now(),
+      this.io.view(),
+      this.io.settings(),
+      this.io.strip(),
+    ])
     // Busy frames keep a fixed beat: this frame's slot is the one it was due in, so its own cost
     // and a late timer do not push the next one back.
     const slot = this.beat ?? now
     this.beat = null
-    const view = await this.io.view()
-    if (gen !== this.gen) return null
-    const settings = await this.io.settings()
     const site = this.site
     if (gen !== this.gen || site === null || view === null) return null
 
@@ -248,8 +250,6 @@ export class StageLoop {
       this.io.invalidate()
       return null
     }
-    const extras = await this.io.strip()
-    if (gen !== this.gen) return null
     // On Loot and World neither the stage nor the log shows: only the gauges set the pace.
     const busy =
       site.strip.kind !== 'bare' &&
