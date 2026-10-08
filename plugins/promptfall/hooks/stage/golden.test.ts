@@ -8,6 +8,7 @@ import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
+import { fullerFrame } from './fixtures'
 import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes } from './image'
 import { type StageActor, type StageModel, samePoses } from './model'
@@ -350,4 +351,23 @@ test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
     expect(svg).toBe(renderSvg(lo, motions, opts))
     expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
   }
+})
+
+test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg, 113,047 characters", () => {
+  const hi = fullerFrame(1.5, false, NOW)
+  const lo = fullerFrame(1, false, NOW)
+  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
+  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
+  expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
+  expect(svg.length).toBe(113_047)
+})
+
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,353 characters at 1.5x, so the 1x Svg (51,341)', () => {
+  const hi = fullerFrame(1.5, true, NOW)
+  const lo = fullerFrame(1, true, NOW)
+  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_353)
+  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
+  expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
+  expect(svg.length).toBe(51_341)
 })

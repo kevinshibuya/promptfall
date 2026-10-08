@@ -107,7 +107,7 @@ function halve(rgb: number): number {
 }
 
 /** The art an actor carries and its rarity slot: compact, 1x full or 1.5x. */
-function variant(sprite: Sprite, compact: boolean, scale: number): SpriteArt {
+export function variant(sprite: Sprite, compact: boolean, scale: number): SpriteArt {
   return compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
 }
 
@@ -340,31 +340,12 @@ export function stageAt(
       if (!from || !to) continue
       const sprite = SPRITES[`effect:${m.effect}`] ?? FALLBACK
       const art = variant(sprite, opts.compact, scale)
-      const box = opaqueBox(art)
-      if (!box) continue
       const flipX = actor.flipX
-      // The opaque box's centre is what moves, mirrored with the art.
-      const bx = (box.x0 + box.x1 + 1) / 2
-      const ox = flipX ? art.width - bx : bx
-      const oy = (box.y0 + box.y1 + 1) / 2
-      const tx = to.x + to.width / 2
-      const ty = to.y + to.height / 2
-      let cx = tx
-      let cy = ty
-      if (m.shape === 'bolt') {
-        const p = progress(m, now)
-        const fx = flipX ? from.x : from.x + from.width
-        const fy = from.y + from.height / 2
-        cx = fx + (tx - fx) * p
-        cy = fy + (ty - fy) * p
-      }
-      effects.push({
-        spriteId: sprite.id,
-        art,
-        x: Math.round(cx - ox),
-        y: Math.round(cy - oy),
-        flipX,
-      })
+      const p = m.shape === 'bolt' ? progress(m, now) : 1
+      const placed = effectAt(art, flipX, from, to, p)
+      if (!placed) continue
+      const { x: ex, y: ey } = placed
+      effects.push({ spriteId: sprite.id, art, x: ex, y: ey, flipX })
     }
   }
 
@@ -378,6 +359,32 @@ export function stageAt(
     alt: altText(view),
     scale,
   }
+}
+
+type Place = { x: number; y: number; width: number; height: number }
+
+/**
+ * An effect sprite's top-left at progress `p`: its opaque box's centre (mirrored with the art)
+ * moves from the attacker's front edge at its vertical middle (p = 0) to the target's centre
+ * (p = 1); a burst sits at p = 1. Null for an empty art.
+ */
+export function effectAt(
+  art: SpriteArt,
+  flipX: boolean,
+  from: Place,
+  to: Place,
+  p: number,
+): { x: number; y: number } | null {
+  const box = opaqueBox(art)
+  if (!box) return null
+  const bx = (box.x0 + box.x1 + 1) / 2
+  const ox = flipX ? art.width - bx : bx
+  const oy = (box.y0 + box.y1 + 1) / 2
+  const tx = to.x + to.width / 2
+  const ty = to.y + to.height / 2
+  const fx = flipX ? from.x : from.x + from.width
+  const fy = from.y + from.height / 2
+  return { x: Math.round(fx + (tx - fx) * p - ox), y: Math.round(fy + (ty - fy) * p - oy) }
 }
 
 export function altText(view: GameView): string {
