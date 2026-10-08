@@ -25,6 +25,12 @@ import {
   orderSold,
   returned,
   rewarded,
+  sandboxBoss,
+  sandboxItem,
+  sandboxLevel,
+  sandboxRecruit,
+  sandboxWipe,
+  sandboxZone,
   sold,
 } from './server-events'
 import type { Effect, Event, EventKind, GameState, StepResult } from './types'
@@ -72,6 +78,12 @@ const handlers: Handlers = {
   boss_engaged: bossEngaged,
   boss_disengaged: bossDisengaged,
   rewarded,
+  sandbox_boss: sandboxBoss,
+  sandbox_item: sandboxItem,
+  sandbox_level: sandboxLevel,
+  sandbox_zone: sandboxZone,
+  sandbox_recruit: sandboxRecruit,
+  sandbox_wipe: sandboxWipe,
 }
 
 export function step(state: GameState, event: Event): StepResult {

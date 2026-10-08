@@ -45,6 +45,9 @@ export type {
   PlayerEvent,
   PlayerEventKind,
   Rarity,
+  RecruitVia,
+  SandboxEvent,
+  SandboxEventKind,
   ServerEvent,
   ServerEventKind,
   Slot,
@@ -54,4 +57,4 @@ export type {
   TradeKind,
   Trait,
 } from './types'
-export { RARITIES, SERVER_EVENT_KINDS, SIM_VERSION } from './types'
+export { RARITIES, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION } from './types'

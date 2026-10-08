@@ -1,6 +1,14 @@
+import { SANDBOX_EVENT_KINDS, type SandboxEvent } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { DeliverySchema } from './market'
-import { BatchSchema, compareSemver, HEX16, ServerEventSchema, TimedEventSchema } from './schemas'
+import {
+  BatchSchema,
+  compareSemver,
+  HEX16,
+  PLAYER_EVENT_KINDS,
+  ServerEventSchema,
+  TimedEventSchema,
+} from './schemas'
 
 const valid = {
   batchId: crypto.randomUUID(),
@@ -123,5 +131,46 @@ describe('boss events', () => {
   it('a batch carrying boss_engaged fails', () => {
     const batch = { ...valid, events: [{ ...engaged, at: 1 }] }
     expect(BatchSchema.safeParse(batch).success).toBe(false)
+  })
+})
+
+describe('sandbox events', () => {
+  const grants: SandboxEvent[] = [
+    { t: 'sandbox_boss', zone: 3, boss: 'zone_boss' },
+    { t: 'sandbox_boss', zone: 4, boss: 'turn_boss' },
+    { t: 'sandbox_item', base: 'oak_staff', rarity: 'legendary' },
+    { t: 'sandbox_level', heroId: 'h1', level: 10 },
+    { t: 'sandbox_zone', zone: 4 },
+    { t: 'sandbox_recruit', rarity: 'epic' },
+    { t: 'sandbox_wipe' },
+  ]
+
+  it('a delivery carrying every sandbox kind parses', () => {
+    expect(new Set(grants.map((g) => g.t))).toEqual(new Set(SANDBOX_EVENT_KINDS))
+    const delivery = {
+      cursor: grants.length,
+      events: grants.map((event, i) => ({ n: i + 1, event })),
+    }
+    expect(DeliverySchema.parse(delivery)).toEqual(delivery)
+  })
+
+  it.each([
+    { t: 'sandbox_boss', zone: 0, boss: 'zone_boss' },
+    { t: 'sandbox_boss', zone: 3, boss: 'world_boss' },
+    { t: 'sandbox_item', base: 'oak_staff', rarity: 'mythic' },
+    { t: 'sandbox_level', heroId: 'h1', level: 2.5 },
+    { t: 'sandbox_zone', zone: -1 },
+    { t: 'sandbox_recruit' },
+  ])('rejects %o', (bad) => {
+    expect(ServerEventSchema.safeParse(bad).success).toBe(false)
+  })
+
+  it('a batch carrying a sandbox event fails, and the player kinds are unchanged', () => {
+    for (const grant of grants) {
+      const batch = { ...valid, events: [{ ...grant, at: 1 }] }
+      expect(BatchSchema.safeParse(batch).success).toBe(false)
+    }
+    expect(PLAYER_EVENT_KINDS).toHaveLength(14)
+    for (const kind of SANDBOX_EVENT_KINDS) expect(PLAYER_EVENT_KINDS).not.toContain(kind)
   })
 })
