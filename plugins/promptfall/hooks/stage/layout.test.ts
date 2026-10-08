@@ -38,7 +38,7 @@ test('too short or too narrow falls back to a 6-row compact band, then one row',
   expect(layoutFor(8, { bodyColumns: 120, maxRows: 6 }, 'terminal', PARTY).kind).toBe('compact')
 })
 
-test('a stage too tall for the band keeps its size and shows its bottom rows, down to 8 (ADR 0010)', () => {
+test('a Raster stage too tall for the band keeps its size and shows its bottom rows, down to 8 (ADR 0010)', () => {
   // A 17-row stage on a 16-row band: 11 rows left above the strip, the sky's 6 rows cropped.
   expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', PARTY)).toEqual({
     kind: 'full',
@@ -71,10 +71,22 @@ test('a stage too tall for the band keeps its size and shows its bottom rows, do
   expect(layoutFor(17, { bodyColumns: 115, maxRows: 20 }, 'terminal', PARTY).kind).toBe('compact')
 })
 
-test('the crop stops at the tallest actor: under it an Image zooms out, a Raster goes compact', () => {
+test('an Image stage too tall for the band zooms the whole scene out; the Raster crop stops at the tallest actor', () => {
   const boss = { tab: 'party', extra: 0, minRows: 17 } as const
   // A boss on a 16-row band: 11 rows left, under the boss's 17. The Raster cannot scale.
   expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', boss).kind).toBe('compact')
+  // The Image never crops: at rest on the same band it zooms out just the same.
+  expect(
+    layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', {
+      ...boss,
+      minRows: 8,
+      scalable: true,
+    }),
+  ).toMatchObject({
+    kind: 'full',
+    box: { columns: 214, rows: 17 },
+    cells: { columns: 138, rows: 11 },
+  })
   // The Image widens the scene until its picture meets IMAGE_MAX_BYTES (214 columns at 17 rows)
   // and draws it into the 11 rows, so nothing is cropped and the boss stays whole.
   expect(
@@ -85,13 +97,9 @@ test('the crop stops at the tallest actor: under it an Image zooms out, a Raster
     cells: { columns: 138, rows: 11 },
     bandRows: 16,
   })
-  // A turn boss (12 rows) on a 17-row band: 12 rows left meet its floor, so it is cropped, not zoomed.
+  // A turn boss (12 rows) on a 17-row Raster band: 12 rows left meet its floor, so it is cropped.
   expect(
-    layoutFor(17, { bodyColumns: 144, maxRows: 17 }, 'terminal', {
-      ...boss,
-      minRows: 12,
-      scalable: true,
-    }),
+    layoutFor(17, { bodyColumns: 144, maxRows: 17 }, 'terminal', { ...boss, minRows: 12 }),
   ).toEqual({
     kind: 'full',
     box: { columns: 144, rows: 17 },

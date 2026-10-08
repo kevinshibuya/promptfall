@@ -156,20 +156,13 @@ test('a hero flashing at a redraw keeps its rarity colour under the flash', () =
   expect(s).toContain(`color="${rare}"`)
 })
 
-test('the rest scenario at 1.5: viewBox 0 0 180 51 at the same rendered width; a crop shows the bottom rows', () => {
+test('the rest scenario at 1.5: viewBox 0 0 180 51 at the same rendered width', () => {
   const s = stage('rest')
   const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
   const hi = svgWithFallback(s.hires, s.model, s.motions, opts)
   const lo = renderSvg(s.model, s.motions, opts)
   expect(hi).toContain('viewBox="0 0 180 51" width="960" height="272"')
   expect(lo).toContain('viewBox="0 0 120 34" width="960" height="272"')
-  // 11 of the 17 rows: 33 pixels at 1.5 from y 18, 22 pixels at 1 from y 12 (ADR 0010).
-  expect(svgWithFallback(s.hires, s.model, s.motions, { ...opts, crop: 11 })).toContain(
-    'viewBox="0 18 180 33" width="960" height="176"',
-  )
-  expect(renderSvg(s.model, s.motions, { ...opts, crop: 11 })).toContain(
-    'viewBox="0 12 120 22" width="960" height="176"',
-  )
   // The hero art carries its 1.5x rarity slot as currentColor.
   expect(hi).toContain('fill="currentColor"')
 })

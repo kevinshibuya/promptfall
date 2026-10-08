@@ -277,19 +277,15 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const box = layout.box
     if (box && !terminal && 'Svg' in els) {
       // At the band's width the stage is taller than the band the desktop shows whole, and the
-      // desktop scrolls the rest away: keep the art size and show the bottom rows that fit, down
-      // to the tallest actor's height (ADR 0010); under that scale the stage down to the rows
-      // left (ADR 0004), so a boss is never cut; under two rows left the desktop scrolls the band.
+      // desktop scrolls the rest away: scale the whole stage down to the rows left under it
+      // (ADR 0004), the zoomed-out view of ADR 0010; under two rows left the desktop scrolls.
       const stripPx =
         (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
       const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
       const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
       const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
-      const minRows = timeline.minRowsAt(view, now)
-      const shownRows = natural > cap ? Math.floor((box.rows * cap) / natural) : box.rows
-      const crop = shownRows < box.rows && shownRows >= minRows ? shownRows : undefined
       const fit =
-        shownRows < minRows && cap >= DESKTOP_ROW_PX * 2
+        natural > cap && cap >= DESKTOP_ROW_PX * 2
           ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
           : {}
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
@@ -298,7 +294,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
         motion: settings.motion,
-        ...(crop !== undefined && crop < box.rows ? { crop } : {}),
       })
       const { Svg } = els
       stage = (

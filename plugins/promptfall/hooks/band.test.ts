@@ -869,38 +869,24 @@ test('on the desktop the stage sits in a column, so its frame takes the band wid
   await ui.unmount()
 })
 
-test('on a short desktop band the stage keeps its size and shows its bottom rows; a boss scales instead', async ($, on) => {
+test('on a short desktop band the whole stage scales down to the rows the strip leaves; a tall one shows it whole', async ($, on) => {
   const { shown } = harness(on)
   shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
   const { stage } = await svgs(ui)
-  // 12 rows of 19 points, less the strip at the band's width (no hotkey row on the desktop):
-  // 8 rows of 19 points for a stage whose natural height is 17 rows at 34 points per 116
-  // columns, so 11 of its 17 rows show (ADR 0010): the viewBox starts 18 pixels down.
+  // 12 rows of 19 points, less the strip at the band's width (no hotkey row on the desktop).
   const stripPx = (95 * DESKTOP_COLUMN_PX * STRIP_ROWS * CELL_H) / (116 * CELL_W)
   const cap = (12 - Math.ceil(stripPx / DESKTOP_ROW_PX)) * DESKTOP_ROW_PX
-  const natural = (95 * DESKTOP_COLUMN_PX * 34) / 116
-  const shown17 = Math.max(8, Math.floor((17 * cap) / natural))
-  expect(shown17).toBe(11)
-  expect(String(stage?.props.source)).toContain(
-    `viewBox="0 ${51 - shown17 * 3} 174 ${shown17 * 3}"`,
-  )
-  // No width or height prop: the markup is wider than the band and the desktop scales it down.
-  expect(stage?.props.height).toBeUndefined()
-  expect(stage?.props.width).toBeUndefined()
+  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
+  expect(stage?.props.height).toBe(Math.round(cap))
+  expect(stage?.props.width).toBe(Math.floor((cap * 116) / 34))
   await ui.unmount()
-  // A boss needs all 17 rows: the stage scales down to the rows left instead (ADR 0004).
-  shown.view = boss()
-  const withBoss = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
-  const scaled = (await svgs(withBoss)).stage
-  expect(String(scaled?.props.source)).toContain('viewBox="0 0 174 51"')
-  expect(scaled?.props.height).toBe(Math.round(cap))
-  expect(scaled?.props.width).toBe(Math.floor((cap * 116) / 34))
-  await withBoss.unmount()
-  shown.view = wave()
   const tall = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
-  expect(String((await svgs(tall)).stage?.props.source)).toContain('viewBox="0 0 174 51"')
+  const whole = (await svgs(tall)).stage
+  expect(String(whole?.props.source)).toContain('viewBox="0 0 174 51"')
+  expect(whole?.props.height).toBeUndefined()
+  expect(whole?.props.width).toBeUndefined()
   await tall.unmount()
 })
 

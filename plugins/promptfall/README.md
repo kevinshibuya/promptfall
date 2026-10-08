@@ -227,9 +227,10 @@ it drops loot.
   Until the answer lands the stage rows stay empty, so the band does not change height.
 - **Heights.** The Party tab is 22 rows in every fight: 17 for the stage, the boss height, so the
   party stands small on the zone's painting and a boss lands at its full size (ADR 0010), and the
-  5-row window strip. A band too short for that keeps the art at its size and shows the stage's
-  bottom rows, the sky cut, down to the tallest actor on it (8 rows for the party, 12 with a turn
-  boss, 17 with a boss); under that an `Image` zooms the whole scene out and a `Raster` goes compact.
+  5-row window strip. A band too short for that shows the whole scene smaller: an `Image` zooms
+  it out into the rows left. A `Raster` cannot scale, so it keeps the art size and shows the
+  stage's bottom rows, the sky cut, down to the tallest actor on it (8 rows for the party, 12
+  with a turn boss, 17 with a boss), then goes compact.
 - **Compact and collapsed.** On terminals, the full stage needs 116 columns and 8 rows above the
   strip. With 100 to 115 columns, or fewer rows, the band keeps the three hero rows and the status row and draws a
   52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
