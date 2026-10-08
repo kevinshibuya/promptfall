@@ -261,14 +261,22 @@
       "id": "enemy:sigh_hag",
       "file": "sprites/enemy/sigh_hag.png",
       "fileHires": "sprites-hires/enemy/sigh_hag.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/sigh_hag-windup.png",
+        "strike": "sprites-frames/enemy/sigh_hag-strike.png"
+      }
     },
     {
       "id": "enemy:giant_heron",
       "file": "sprites/enemy/giant_heron.png",
       "fileHires": "sprites-hires/enemy/giant_heron.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/giant_heron-windup.png",
+        "strike": "sprites-frames/enemy/giant_heron-strike.png"
+      }
     },
     {
       "id": "enemy:barrow_wight",
