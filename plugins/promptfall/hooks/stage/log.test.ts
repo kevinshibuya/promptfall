@@ -88,7 +88,7 @@ test('each row of the wording table prints as written', () => {
       { k: 'drop_vendored', item: item('oak_staff', 'common'), gold: 12 },
       { k: 'level_up', heroId: h1, level: 5 },
       { k: 'hero_fell', heroId: h1 },
-      { k: 'boss_spawned', def: 'goblin_scout' },
+      { k: 'boss_spawned', kind: 'zone_boss', def: 'goblin_scout' },
       { k: 'zone_cleared', zone: 3, advancedTo: 4 },
       { k: 'zone_cleared', zone: 3, advancedTo: 3 },
       { k: 'wipe', retreatedTo: 2 },

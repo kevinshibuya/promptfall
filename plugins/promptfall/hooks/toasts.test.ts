@@ -98,7 +98,7 @@ const SINGLE: [string, Effect, Toast][] = [
     { k: 'rewarded', bossId: 'wb1', goods: { kind: 'hero', hero: MORWEN }, gold: 120 },
     {
       row: 'reward',
-      text: 'Your share of The Promptwyrm: 120 gold and Morwen',
+      text: 'Your share of The Promptwyrm: 120 gold and Morwen the Bold',
       timeoutMs: LONG,
       cue: null,
     },

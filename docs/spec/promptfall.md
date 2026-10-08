@@ -589,8 +589,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
     plugin-name prefix in the text (the host adds its own).
   - "gold" is spelled out in toasts. A hero is named by its full name with the
     epithet, looked up in the roster by id; a hero the roster does not hold
-    reads "A hero". A traded or rewarded hero reads its template name, since a
-    trade entry carries no epithet. A reward whose boss name is not known reads
+    reads "A hero". A traded hero reads its template name, since a trade entry
+    carries no epithet. A reward whose boss name is not known reads
     "Your share of the world boss: …".
   - Items are named by their base name.
   - A zone arrival toasts only when the party advances to a higher zone; the

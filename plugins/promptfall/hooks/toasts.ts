@@ -109,10 +109,10 @@ function foldLevels(inputs: EffectInput[]): string {
     .join(', ')
 }
 
-/** Reward goods by name: an item by its base, a hero by its template (as a trade names it). */
+/** Reward goods by name: an item by its base, a hero by its full name with the epithet. */
 function goodsName(goods: Goods): string {
   return goods.kind === 'hero'
-    ? tradeName('hero', goods.hero.template)
+    ? heroName(goods.hero.template, goods.hero.epithet)
     : tradeName('item', goods.item.base)
 }
 
@@ -258,7 +258,7 @@ const TABLE = {
     cue: null,
     single: (name: string) => `World boss ${name} is down`,
   },
-} satisfies Record<ToastRow, Row<never>>
+} satisfies Record<ToastRow, Row<EffectInput> | Row<string> | Row<(string | null)[]>>
 
 /** The rows an effect raises, in the table's order. */
 const EFFECT_ROWS = [
