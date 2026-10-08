@@ -12,7 +12,8 @@ import {
 /** The stage in cells; pixels are columns × (rows * 2). */
 export type Box = { columns: number; rows: number }
 export type Layout =
-  | { kind: 'full'; box: Box; bandRows: number }
+  /** `cells`, when present, is the smaller box an Image stage too tall for the band draws into. */
+  | { kind: 'full'; box: Box; cells?: Box; bandRows: number }
   | { kind: 'compact'; box: Box; bandRows: number }
   | { kind: 'bare'; box: null; bandRows: number }
   | { kind: 'collapsed'; box: null; bandRows: 1 }
@@ -27,7 +28,7 @@ export function layoutFor(
   rows: number,
   props: { bodyColumns: number; maxRows: number },
   surface: RenderSurface,
-  opts: { tab: BandTab; extra: 0 | 1 },
+  opts: { tab: BandTab; extra: 0 | 1; scalable?: boolean },
 ): Layout {
   const party = opts.tab === 'party'
   if (surface !== 'terminal') {
@@ -44,6 +45,18 @@ export function layoutFor(
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STRIP_ROWS + opts.extra }
   }
+  // An Image scales to its box: a stage too tall for the band (a boss, a long prompt) shrinks into
+  // the rows left, keeping its proportions, rather than flipping the band to compact.
+  const room = props.maxRows - STRIP_ROWS - opts.extra
+  if (opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= COMPACT_STAGE_ROWS) {
+    const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
+    return {
+      kind: 'full',
+      box: { columns, rows },
+      cells: { columns: Math.round((columns * room) / rows), rows: room },
+      bandRows: props.maxRows,
+    }
+  }
   // Grill 1.17: compact needs its whole 6 rows, or the band collapses.
   if (props.bodyColumns >= MIN_COLUMNS && props.maxRows >= COMPACT_WINDOW_ROWS + opts.extra) {
     return {
@@ -55,6 +68,19 @@ export function layoutFor(
   return { kind: 'collapsed', box: null, bandRows: 1 }
 }
 
+/** The cells the stage takes on screen: its box, or the smaller box it shrank into. */
+export function cellsOf(layout: Layout): Box | null {
+  return layout.kind === 'full' ? (layout.cells ?? layout.box) : layout.box
+}
+
 export function sameLayout(a: Layout, b: Layout): boolean {
-  return a.kind === b.kind && a.box?.columns === b.box?.columns && a.box?.rows === b.box?.rows
+  const ac = cellsOf(a)
+  const bc = cellsOf(b)
+  return (
+    a.kind === b.kind &&
+    a.box?.columns === b.box?.columns &&
+    a.box?.rows === b.box?.rows &&
+    ac?.columns === bc?.columns &&
+    ac?.rows === bc?.rows
+  )
 }

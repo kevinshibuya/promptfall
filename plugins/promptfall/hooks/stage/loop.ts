@@ -12,7 +12,7 @@ import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame } from './compose'
 import type { GaugeTrack } from './gauges'
 import { encodeImage } from './image'
-import { type Layout, layoutFor, sameLayout } from './layout'
+import { cellsOf, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
@@ -233,6 +233,7 @@ export class StageLoop {
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
       tab: site.strip.tab,
       extra: site.strip.extra,
+      scalable: site.renderer === 'image',
     })
     if (!sameLayout(site.layout, layout)) {
       // Grow or shrink is a redraw: the next render mounts the new site.
@@ -254,7 +255,8 @@ export class StageLoop {
     }
 
     const box = layout.box
-    if (box) {
+    const cells = cellsOf(layout)
+    if (box && cells) {
       const actors = [
         ...this.timeline.known().map((k) => k.id),
         ...view.heroes.map((h) => `${h.id}:${h.alive}`),
@@ -273,8 +275,8 @@ export class StageLoop {
         const at = {
           requestId: site.requestId,
           key: site.key,
-          columns: box.columns,
-          rows: box.rows,
+          columns: cells.columns,
+          rows: cells.rows,
         }
         const blitStart = Date.now()
         const result = await this.io.blit(

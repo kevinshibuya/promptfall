@@ -3,7 +3,7 @@ import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { encodeImage } from '../stage/image'
-import { layoutFor } from '../stage/layout'
+import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
 import { altText, stageAt } from '../stage/model'
@@ -125,9 +125,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const hiddenKeys = terminal || e.surface === 'desktop'
     const extra: 0 | 1 = hiddenKeys ? 0 : 1
     if (party) timeline.observe(view, now)
+    const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
       extra,
+      scalable: rendererNow === 'image',
     })
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
@@ -333,12 +335,13 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             compact: layout.kind === 'compact',
             motion: settings.motion,
           })
+          const cells = cellsOf(layout) ?? box
           stage = (
             <Image
-              key={stageKey(box)}
+              key={stageKey(cells)}
               source={frame.source}
-              columns={box.columns}
-              rows={box.rows}
+              columns={cells.columns}
+              rows={cells.rows}
               alt={model.alt}
             />
           )
@@ -350,6 +353,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       ms: Date.now() - renderStart,
       layout: layout.kind,
       rows: box?.rows ?? 0,
+      cellRows: cellsOf(layout)?.rows ?? 0,
       cols: e.props.bodyColumns,
       maxRows: e.props.maxRows,
       working: e.props.isWorking,
@@ -360,7 +364,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     if (terminal && (renderer === 'raster' || renderer === 'image')) {
       loop?.mount({
         requestId: e.requestId,
-        key: box ? (renderer === 'image' ? stageKey(box) : 'stage') : '',
+        key: box ? (renderer === 'image' ? stageKey(cellsOf(layout) ?? box) : 'stage') : '',
         layout,
         renderer,
         props: e.props,
@@ -415,7 +419,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       <Box key="band" flexDirection="column">
         {stage ? (
           // On the desktop a row would leave the stage's frame at its default 300 points.
-          <Box key="row-stage" flexDirection={terminal ? 'row' : 'column'}>
+          <Box
+            key="row-stage"
+            flexDirection={terminal ? 'row' : 'column'}
+            {...(terminal ? { justifyContent: 'center' as const } : {})}
+          >
             {stage}
           </Box>
         ) : null}

@@ -38,6 +38,35 @@ test('too short or too narrow falls back to a 6-row compact band, then one row',
   expect(layoutFor(8, { bodyColumns: 120, maxRows: 6 }, 'terminal', PARTY).kind).toBe('compact')
 })
 
+test('an Image stage too tall for the band shrinks to fit, keeping its proportions', () => {
+  const image = { tab: 'party', extra: 0, scalable: true } as const
+  // A zone boss on a 16-row band: the 17-row scene draws into the 11 rows left above the strip.
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', image)).toEqual({
+    kind: 'full',
+    box: { columns: 144, rows: 17 },
+    cells: { columns: 93, rows: 11 },
+    bandRows: 16,
+  })
+  // A taller prompt squeezes the rest stage too; it stays full.
+  expect(layoutFor(8, { bodyColumns: 144, maxRows: 12 }, 'terminal', image)).toEqual({
+    kind: 'full',
+    box: { columns: 144, rows: 8 },
+    cells: { columns: 126, rows: 7 },
+    bandRows: 12,
+  })
+  // Room for the whole stage: no cells, as before.
+  expect(layoutFor(8, { bodyColumns: 144, maxRows: 16 }, 'terminal', image)).toEqual({
+    kind: 'full',
+    box: { columns: 144, rows: 8 },
+    bandRows: 13,
+  })
+  // Under the compact stage's 4 rows, or too narrow, it is compact as before.
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 8 }, 'terminal', image).kind).toBe('compact')
+  expect(layoutFor(8, { bodyColumns: 115, maxRows: 20 }, 'terminal', image).kind).toBe('compact')
+  // A Raster cannot scale: it falls back to compact.
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', PARTY).kind).toBe('compact')
+})
+
 test('Loot and World are the strip alone: 5 rows, collapsed under 5 rows or 100 columns', () => {
   for (const tab of ['loot', 'world'] as const) {
     expect(layoutFor(17, { bodyColumns: 120, maxRows: 20 }, 'terminal', { tab, extra: 0 })).toEqual(
