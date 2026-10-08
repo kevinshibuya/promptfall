@@ -831,13 +831,21 @@
       "id": "world_boss:the_promptwyrm",
       "file": "sprites/world_boss/the_promptwyrm.png",
       "fileHires": "sprites-hires/world_boss/the_promptwyrm.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/world_boss/the_promptwyrm-windup.png",
+        "strike": "sprites-frames/world_boss/the_promptwyrm-strike.png"
+      }
     },
     {
       "id": "world_boss:hallucinox",
       "file": "sprites/world_boss/hallucinox.png",
       "fileHires": "sprites-hires/world_boss/hallucinox.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/world_boss/hallucinox-windup.png",
+        "strike": "sprites-frames/world_boss/hallucinox-strike.png"
+      }
     },
     {
       "id": "world_boss:the_context_leviathan",

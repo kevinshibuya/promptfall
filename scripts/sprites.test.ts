@@ -523,6 +523,17 @@ describe('sprites build', () => {
     expect(missing.map((s) => s.id)).toEqual([])
   })
 
+  it('gives every snes entry of the real manifest a wind-up and a strike, and every hero a wind-up', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),
+    ) as Manifest
+    const bosses = manifest.sprites.filter((s) => s.style === 'snes')
+    expect(bosses).toHaveLength(28)
+    expect(bosses.filter((s) => !s.frames?.windup || !s.frames.strike).map((s) => s.id)).toEqual([])
+    const heroes = manifest.sprites.filter((s) => s.id.startsWith('hero:'))
+    expect(heroes.filter((s) => !s.frames?.windup).map((s) => s.id)).toEqual([])
+  })
+
   it('gives every file entry of the real manifest but the fallback a fileHires', () => {
     const manifest = JSON.parse(
       readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),

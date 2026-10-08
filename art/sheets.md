@@ -1348,6 +1348,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-13.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-13.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names world_boss/the_promptwyrm-windup,world_boss/hallucinox-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_promptwyrm-strike,world_boss/hallucinox-strike
+```
+
 ## frames-bosses-14.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-14.png` (`pnpm refsheet art/sheets/ref-frames-bosses-14.png
@@ -1507,3 +1516,7 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_cont
 | `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: native 89 against idle 73 (+22%) |
 | `world_boss:the_context_leviathan` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 75% |
 | `world_boss:tokenmaw` | strike | frames-bosses-14 | frame size drift: the fit to the idle canvas shrinks it to 72% |
+| `world_boss:the_promptwyrm` | strike | frames-bosses-13 | frame size drift: native 80 against idle 53 (+51%) |
+| `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: native 76 against idle 55 (+38%) |
+| `world_boss:the_promptwyrm` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 58% |
