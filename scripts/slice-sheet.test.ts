@@ -221,6 +221,22 @@ describe('sliceSheet', () => {
     expect(toArt(ok(sliceSheet(sheet, opts({ cols: 1, rows: 1 }))[0]).native)).toEqual(art)
   })
 
+  it('splits two sprites that touch at a forced gutter column', () => {
+    const sheet = magenta(400, 140)
+    draw(sheet, blob(16, 16), 20, 20, 6)
+    draw(sheet, blob(16, 16), 230, 20, 6)
+    // A one-pixel bridge between them across x = 116..229.
+    fill(sheet, 116, 60, 114, 1, TOP)
+    expect(sliceSheet(sheet, opts({ cols: 2, rows: 1 }))[0]).toEqual({
+      error: expect.stringContaining('sprites touch'),
+    })
+    const out = sliceSheet(sheet, opts({ cols: 2, rows: 1, gutters: [180] }))
+    expect(out).toHaveLength(2)
+    // Each side keeps its sprite and the stretch of bridge on its side of the cut.
+    expect(toArt(ok(out[0]).native)[0]?.slice(0, 16)).toEqual(blob(16, 16)[0])
+    expect(ok(out[1]).native.height).toBe(16)
+  })
+
   it('keeps one row with --row', () => {
     const sheet = magenta(400, 260)
     draw(sheet, blob(16, 16), 20, 10, 6)

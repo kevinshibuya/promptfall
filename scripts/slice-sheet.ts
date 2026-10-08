@@ -5,7 +5,7 @@
 // Task 1.
 //
 // tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>]
-//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]
+//   --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>] [--gutters <x,…>]
 //
 // Each sprite also gets its 1.5× cut: the same native fitted to 1.5 times the target and
 // quantised to 16 colours (docs/plans/2026-10-07-promptfall-phase-4-pr2-hires.md, Task H1).
@@ -22,6 +22,8 @@ export type SliceOptions = {
   colours: number
   size: number | null
   fit: { width: number; height: number } | null
+  /** Sheet columns read as ground when finding the gutters between sprites: a forced split. */
+  gutters?: readonly number[]
 }
 
 export type SliceResult =
@@ -339,7 +341,9 @@ export function sliceSheet(sheet: Rgba, options: SliceOptions): SliceResult[] {
       for (let c = 0; c < cols; c++) slots.push({ error: `row ${r}: sprites touch, no gutter` })
       continue
     }
+    const forced = new Set(options.gutters ?? [])
     const occupiedCols = Array.from({ length: sheet.width }, (_, x) => {
+      if (forced.has(x)) return false
       for (let y = band[0]; y <= band[1]; y++) if (px(sheet, x, y) !== T) return true
       return false
     })
@@ -400,7 +404,7 @@ function parseArgs(argv: string[]): {
   const colours = Number(flag('colours'))
   if (!sheet || !out || !grid || !colours || (size === undefined) === (fit === null)) {
     throw new Error(
-      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>]',
+      'usage: tsx scripts/slice-sheet.ts <sheet.png> <out-dir> --grid <cols>x<rows> [--row <r>] --colours <n> (--size <n> | --fit <w>x<h>) [--names a,kind/b,…] [--native <dir>] [--hires <dir>] [--gutters <x,…>]',
     )
   }
   const names = flag('names')?.split(',') ?? []
@@ -420,6 +424,7 @@ function parseArgs(argv: string[]): {
       colours,
       size: size === undefined ? null : Number(size),
       fit: fit ? { width: fit.a, height: fit.b } : null,
+      gutters: (flag('gutters') ?? '').split(',').filter(Boolean).map(Number),
     },
   }
 }

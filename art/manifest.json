@@ -311,25 +311,41 @@
       "id": "enemy:salt_crab",
       "file": "sprites/enemy/salt_crab.png",
       "fileHires": "sprites-hires/enemy/salt_crab.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/salt_crab-windup.png",
+        "strike": "sprites-frames/enemy/salt_crab-strike.png"
+      }
     },
     {
       "id": "enemy:gull_harpy",
       "file": "sprites/enemy/gull_harpy.png",
       "fileHires": "sprites-hires/enemy/gull_harpy.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/gull_harpy-windup.png",
+        "strike": "sprites-frames/enemy/gull_harpy-strike.png"
+      }
     },
     {
       "id": "enemy:drowned_sailor",
       "file": "sprites/enemy/drowned_sailor.png",
       "fileHires": "sprites-hires/enemy/drowned_sailor.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/drowned_sailor-windup.png",
+        "strike": "sprites-frames/enemy/drowned_sailor-strike.png"
+      }
     },
     {
       "id": "enemy:tide_witch",
       "file": "sprites/enemy/tide_witch.png",
       "fileHires": "sprites-hires/enemy/tide_witch.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/tide_witch-windup.png",
+        "strike": "sprites-frames/enemy/tide_witch-strike.png"
+      }
     },
     {
       "id": "enemy:glass_leviathan",
@@ -348,25 +364,41 @@
       "id": "enemy:ember_imp",
       "file": "sprites/enemy/ember_imp.png",
       "fileHires": "sprites-hires/enemy/ember_imp.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/ember_imp-windup.png",
+        "strike": "sprites-frames/enemy/ember_imp-strike.png"
+      }
     },
     {
       "id": "enemy:magma_beetle",
       "file": "sprites/enemy/magma_beetle.png",
       "fileHires": "sprites-hires/enemy/magma_beetle.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/magma_beetle-windup.png",
+        "strike": "sprites-frames/enemy/magma_beetle-strike.png"
+      }
     },
     {
       "id": "enemy:cinder_orc",
       "file": "sprites/enemy/cinder_orc.png",
       "fileHires": "sprites-hires/enemy/cinder_orc.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/cinder_orc-windup.png",
+        "strike": "sprites-frames/enemy/cinder_orc-strike.png"
+      }
     },
     {
       "id": "enemy:flame_adept",
       "file": "sprites/enemy/flame_adept.png",
       "fileHires": "sprites-hires/enemy/flame_adept.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/flame_adept-windup.png",
+        "strike": "sprites-frames/enemy/flame_adept-strike.png"
+      }
     },
     {
       "id": "enemy:emberfall_wyrm",

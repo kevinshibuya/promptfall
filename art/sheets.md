@@ -712,6 +712,73 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/bog_lurker-wi
 pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/bog_lurker-strike,enemy/marsh_leech-strike,enemy/mire_toad-strike,enemy/will_o_wisp-strike,enemy/barrow_wight-strike,enemy/grave_hound-strike,enemy/bone_soldier-strike,enemy/cairn_crawler-strike
 ```
 
+## frames-monsters-3.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-3.png` (`pnpm refsheet art/sheets/ref-frames-monsters-3.png
+--columns 8 --cell 192x256 --scale 7 enemy/salt_crab,enemy/gull_harpy,enemy/drowned_sailor,enemy/tide_witch,enemy/ember_imp,enemy/magma_beetle,enemy/cinder_orc,enemy/flame_adept`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. salt crab, 2. gull harpy, 3. drowned sailor, 4. tide witch, 5. ember imp, 6. magma beetle, 7. cinder orc, 8. flame adept.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-3.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the salt crab's claw touches the gull harpy's wing over one sheet column; `--gutters 214` splits them there (a sixth of a native pixel).
+
+```sh
+D=art/sheets/frames-monsters-3.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/salt_crab-windup,enemy/gull_harpy-windup,enemy/drowned_sailor-windup,enemy/tide_witch-windup,enemy/ember_imp-windup,enemy/magma_beetle-windup,enemy/cinder_orc-windup,enemy/flame_adept-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/salt_crab-strike,enemy/gull_harpy-strike,enemy/drowned_sailor-strike,enemy/tide_witch-strike,enemy/ember_imp-strike,enemy/magma_beetle-strike,enemy/cinder_orc-strike,enemy/flame_adept-strike --gutters 214
+```
+
+## frames-monsters-4.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-4.png` (`pnpm refsheet art/sheets/ref-frames-monsters-4.png
+--columns 8 --cell 192x256 --scale 7 enemy/frost_wolf,enemy/ice_troll,enemy/rime_golem,enemy/snow_shaman,enemy/drowned_monk,enemy/abbey_gargoyle,enemy/bell_wraith,enemy/eel_serpent`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. frost wolf, 2. ice troll, 3. rime golem, 4. snow shaman, 5. drowned monk, 6. abbey gargoyle, 7. bell wraith, 8. eel serpent.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-4.png.
+```
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -734,3 +801,6 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/bog_lurker-st
 | `enemy:bog_lurker` | strike | frames-monsters-2 | frame size drift: native 30 against idle 20 (+50%) |
 | `enemy:marsh_leech` | strike | frames-monsters-2 | frame size drift: native 28 against idle 20 (+40%) |
 | `enemy:bone_soldier` | strike | frames-monsters-2 | frame size drift: native 30 against idle 23 (+30%) |
+| `enemy:drowned_sailor` | strike | frames-monsters-3 | frame size drift: native 32 against idle 24 (+33%) |
+| `enemy:ember_imp` | windup | frames-monsters-3 | frame size drift: native 31 against idle 25 (+24%) |
+| `enemy:ember_imp` | strike | frames-monsters-3 | frame size drift: native 37 against idle 25 (+48%) |
