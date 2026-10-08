@@ -10,7 +10,7 @@ import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes } from './image'
-import type { StageActor, StageModel } from './model'
+import { type StageActor, type StageModel, samePoses } from './model'
 import { encodeRaster, rasterPairs } from './raster'
 import {
   goldenOf,
@@ -86,6 +86,8 @@ function actor(
     fallen: false,
     flashing: false,
     raritySlot: null,
+    pose: 'idle',
+    poses: samePoses(art),
   }
 }
 
@@ -132,6 +134,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
     drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
+    effects: [],
     alt: 'worst',
     scale: 1,
   }
@@ -166,6 +169,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
         alpha: 1,
       },
     ],
+    effects: [],
     alt: 'worst',
     scale: 1.5,
   }
@@ -198,6 +202,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
     ],
     numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
     drops: [{ spriteId: 'adversarial:drop', art: drop, x: 20, y: 6, alpha: 0.5 }],
+    effects: [],
     alt: 'adversarial',
     scale: 1,
   }
@@ -315,6 +320,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
         alpha: 0.5,
       },
     ],
+    effects: [],
     alt: 'adversarial',
     scale,
   }

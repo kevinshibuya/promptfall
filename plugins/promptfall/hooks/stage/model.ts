@@ -1,13 +1,15 @@
 import type { GameView } from '../../types'
+import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
-import type { Motion, StageTimeline } from './timeline'
+import { bobbingAt, type Motion, type StageTimeline } from './timeline'
 import {
   ACTOR_EDGE,
   ACTOR_PITCH,
+  BLINK_MS,
   COMPACT_PITCH,
   DROP_RISE_PX,
   FLASH_RGB,
@@ -19,14 +21,43 @@ import {
   ZONE_GROUND,
 } from './tuning'
 
+/** The drawing an actor shows: idle A and B, the three drawn frames, and the hit frame. */
+export type Pose = 'idle' | 'idle_b' | 'windup' | 'strike' | 'follow' | 'hit'
+/** One pose's art, palette (rarity swap and fallen dim, no flash) and its offset from `x`. */
+export type PoseArt = {
+  art: SpriteArt
+  palette: readonly number[]
+  raritySlot: number | null
+  dx: number
+}
+/** An effect sprite in flight or bursting; `x`, `y` the art's top-left in stage pixels. */
+export type StageEffect = { spriteId: string; art: SpriteArt; x: number; y: number; flipX: boolean }
+
+export const POSES: readonly Pose[] = ['idle', 'idle_b', 'windup', 'strike', 'follow', 'hit']
+
+/** Every pose the same art, for hand-built actors (tests and fixtures). */
+export function samePoses(
+  art: SpriteArt,
+  palette: readonly number[] = art.palette,
+  raritySlot: number | null = null,
+): Record<Pose, PoseArt> {
+  const one: PoseArt = { art, palette, raritySlot, dx: 0 }
+  return { idle: one, idle_b: one, windup: one, strike: one, follow: one, hit: one }
+}
+
 export type StageActor = {
   /** Hero or enemy id; a departed enemy keeps its id until its motions end. */
   key: string
+  /** The idle sprite's id, in every pose. */
   spriteId: string
+  /** `poses[pose]`'s art, palette (with the flash) and slot, kept for compose and the Raster. */
   art: SpriteArt
   /** The art's palette after the rarity swap, the fallen-hero dim and the flash. */
   palette: readonly number[]
-  /** Top-left in stage pixels, after lunge, bob and spawn offsets. */
+  /**
+   * The idle art's top-left in stage pixels, after lunge and bob: the anchor numbers and drops
+   * measure from. A pose draws at `x + poses[pose].dx`.
+   */
   x: number
   y: number
   /** Source art faces right; heroes (on the right) are flipped to face left. */
@@ -40,6 +71,9 @@ export type StageActor = {
   accent?: number | null
   /** The palette index of `art` that takes the hero's rarity colour; null for enemies. */
   raritySlot: number | null
+  pose: Pose
+  /** The art of every pose, so a renderer can schedule poses other than `now`'s. */
+  poses: Record<Pose, PoseArt>
 }
 /** The text's top-left in stage pixels, already clamped inside the frame. */
 export type StageNumber = { text: string; x: number; y: number; rgb: number }
@@ -50,6 +84,8 @@ export type StageModel = {
   actors: StageActor[]
   numbers: StageNumber[]
   drops: StageDrop[]
+  /** Drawn after the drops, before the numbers. */
+  effects: StageEffect[]
   alt: string
   /** Stage pixels per half-block cell: 1, or HIRES_SCALE for the full stage on Image and Svg. */
   scale: 1 | 1.5
@@ -80,6 +116,53 @@ function slotOf(sprite: Sprite, compact: boolean, scale: number): number | null 
 }
 
 /**
+ * The art of each pose. At 1.5 the drawn frames, the squash and the hit lean; at 1 and on the
+ * compact stage one drawing, the hero's attack art through the wind-up and strike (as the lunge
+ * span showed it before the frames), the idle art otherwise.
+ */
+function posesOf(
+  sprite: Sprite,
+  attack: Sprite | null,
+  compact: boolean,
+  scale: number,
+  flipX: boolean,
+  recolour: (palette: readonly number[], slot: number | null) => readonly number[],
+): Record<Pose, PoseArt> {
+  const pose = (art: SpriteArt, raritySlot: number | null, dx = 0, lit = false): PoseArt => {
+    const palette = recolour(art.palette, raritySlot)
+    return {
+      art,
+      palette: lit ? palette.map((c, i) => (i === 0 ? c : lighten(c))) : palette,
+      raritySlot,
+      dx,
+    }
+  }
+  const idleArt = variant(sprite, compact, scale)
+  const idle = pose(idleArt, slotOf(sprite, compact, scale))
+  if (compact || scale === 1) {
+    const act = attack
+      ? pose(variant(attack, compact, scale), slotOf(attack, compact, scale))
+      : idle
+    return { idle, idle_b: idle, windup: act, strike: act, follow: idle, hit: idle }
+  }
+  const f = sprite.frames
+  const strike = f
+    ? pose(f.strike.art, f.strike.raritySlot)
+    : attack
+      ? pose(attack.hires, attack.raritySlotHires)
+      : idle
+  const leaned = shear(idleArt)
+  return {
+    idle,
+    idle_b: pose(squash(idleArt), idle.raritySlot),
+    windup: f ? pose(f.windup.art, f.windup.raritySlot) : idle,
+    strike,
+    follow: f?.follow ? pose(f.follow.art, f.follow.raritySlot) : strike,
+    hit: pose(leaned.art, idle.raritySlot, flipX ? 0 : -leaned.grow, true),
+  }
+}
+
+/**
  * The stage at `now`: where every actor, number and drop is and how it looks. The caller has
  * observed `view` on `timeline` first, so the enemies it knows are the view's plus the departed.
  */
@@ -102,6 +185,22 @@ export function stageAt(
   const bob = opts.motion === 'full' ? timeline.bobbing(now) * px(IDLE_BOB_PX) : 0
   const motionOf = (actor: string, kind: Motion['kind']) =>
     started.find((m) => m.actor === actor && m.kind === kind)
+  /** Hit wins, then the follow-through, the strike and the wind-up; at rest the idle pair. */
+  const poseOf = (actor: string, fallen: boolean): Pose => {
+    if (fallen) return 'idle'
+    for (const kind of ['hit', 'follow', 'strike', 'windup'] as const) {
+      if (motionOf(actor, kind)) return kind
+    }
+    return opts.motion === 'full' && bobbingAt(now) === 1 ? 'idle_b' : 'idle'
+  }
+  /** At 1.5 the white is a blink at the flash's start; at 1 it holds for the whole flash. */
+  const isFlashing = (actor: string): boolean => {
+    const flash = motionOf(actor, 'flash')
+    return flash !== undefined && (scale === 1 || now < flash.from + BLINK_MS)
+  }
+  const white = (palette: readonly number[]) => palette.map((c, i) => (i === 0 ? c : FLASH_RGB))
+  // The bob: at 1 the 1-pixel lift; at 1.5 the idle pair replaces it.
+  const lift = scale === 1 ? bob : 0
 
   const actors: StageActor[] = []
   const bosses: StageActor[] = []
@@ -119,6 +218,8 @@ export function stageAt(
   let nextFree = edge
   const gap = opts.compact ? 0 : px(ACTOR_PITCH) - px(SPRITE_PX)
 
+  /** Each actor's top-left without the bob: effects never bob. */
+  const grounded = new Map<string, { x: number; y: number; width: number; height: number }>()
   for (const known of timeline.known()) {
     const sprite = SPRITES[known.spriteId] ?? FALLBACK
     const art = variant(sprite, opts.compact, scale)
@@ -135,21 +236,28 @@ export function stageAt(
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
     const lunge = motionOf(known.id, 'lunge')
-    const flashing = motionOf(known.id, 'flash') !== undefined
+    const flashing = isFlashing(known.id)
     const boss = known.kind !== 'wave'
+    const poses = posesOf(sprite, null, opts.compact, scale, false, (p) => p)
+    const pose = poseOf(known.id, false)
+    const shown = poses[pose]
+    const x = baseX + lungeOffset(lunge, now, scale)
+    grounded.set(known.id, { x, y: height - art.height, width: art.width, height: art.height })
     ;(boss ? bosses : actors).push({
       key: known.id,
       spriteId: sprite.id,
-      art,
-      palette: flashing ? art.palette.map((c, i) => (i === 0 ? c : FLASH_RGB)) : art.palette,
-      x: baseX + lungeOffset(lunge, now, scale),
-      y: height - art.height - bob,
+      art: shown.art,
+      palette: flashing ? white(shown.palette) : shown.palette,
+      x,
+      y: height - art.height - lift,
       flipX: false,
       alpha,
       fallen: false,
       flashing,
       accent: null,
       raritySlot: null,
+      pose,
+      poses,
     })
   }
 
@@ -159,51 +267,62 @@ export function stageAt(
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
-    const sprite = spriteFor(lunge ? 'hero_attack' : 'hero', hero.cls)
+    const sprite = spriteFor('hero', hero.cls)
+    const attack = spriteFor('hero_attack', hero.cls)
     const art = variant(sprite, opts.compact, scale)
-    const raritySlot = slotOf(sprite, opts.compact, scale)
-    const flashing = !fallen && motionOf(hero.id, 'flash') !== undefined
-    let palette = [...art.palette]
-    if (raritySlot !== null) {
-      palette[raritySlot] = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
+    const rarity = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
+    const recolour = (base: readonly number[], slot: number | null): readonly number[] => {
+      let palette = [...base]
+      if (slot !== null) palette[slot] = rarity
+      if (fallen) palette = palette.map((c, i) => (i === 0 ? c : halve(c)))
+      return palette
     }
-    if (fallen) palette = palette.map((c, i) => (i === 0 ? c : halve(c)))
-    const accent = raritySlot === null ? null : (palette[raritySlot] ?? null)
-    if (flashing) palette = palette.map((c, i) => (i === 0 ? c : FLASH_RGB))
+    const poses = posesOf(sprite, attack, opts.compact, scale, true, recolour)
+    const pose = poseOf(hero.id, fallen)
+    const shown = poses[pose]
+    const flashing = !fallen && isFlashing(hero.id)
+    const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
+    const x = width - edge - art.width - index * pitch + lungeOffset(lunge, now, scale)
+    grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
     actors.push({
       key: hero.id,
       spriteId: sprite.id,
-      art,
-      palette,
-      x: width - edge - art.width - index * pitch + lungeOffset(lunge, now, scale),
-      y: height - art.height - (fallen ? 0 : bob),
+      art: shown.art,
+      palette: flashing ? white(shown.palette) : shown.palette,
+      x,
+      y: height - art.height - (fallen ? 0 : lift),
       flipX: true,
       alpha: 1,
       fallen,
       flashing,
       accent,
-      raritySlot,
+      raritySlot: shown.raritySlot,
+      pose,
+      poses,
     })
   })
 
   const at = new Map(actors.map((a) => [a.key, a]))
   const numbers: StageNumber[] = []
   const drops: StageDrop[] = []
+  const effects: StageEffect[] = []
   const block = glyphBlock(scale)
   for (const m of started) {
     const actor = at.get(m.actor)
     if (!actor) continue
+    // Numbers and drops measure from the idle art, whatever the pose.
+    const anchor = actor.poses.idle.art
     if (m.kind === 'number') {
       const w = textWidth(m.text, block)
-      const x = clamp(Math.round(actor.x + (actor.art.width - w) / 2), 0, Math.max(0, width - w))
+      const x = clamp(Math.round(actor.x + (anchor.width - w) / 2), 0, Math.max(0, width - w))
       const rise = progress(m, now) * px(NUMBER_RISE_PX)
       const y = clamp(Math.round(actor.y + px(2) - rise), 0, height - GLYPH_HEIGHT * block)
       numbers.push({ text: m.text, x, y, rgb: m.rgb })
     } else if (m.kind === 'drop') {
       const item = variant(SPRITES[m.item] ?? FALLBACK, opts.compact, scale)
       const p = progress(m, now)
-      const cx = actor.x + actor.art.width / 2
-      const cy = actor.y + actor.art.height / 2
+      const cx = actor.x + anchor.width / 2
+      const cy = actor.y + anchor.height / 2
       drops.push({
         spriteId: m.item,
         art: item,
@@ -215,6 +334,37 @@ export function stageAt(
         ),
         alpha: p < 2 / 3 ? 1 : (1 - p) * 3,
       })
+    } else if (m.kind === 'effect') {
+      const from = grounded.get(m.actor)
+      const to = grounded.get(m.target)
+      if (!from || !to) continue
+      const sprite = SPRITES[`effect:${m.effect}`] ?? FALLBACK
+      const art = variant(sprite, opts.compact, scale)
+      const box = opaqueBox(art)
+      if (!box) continue
+      const flipX = actor.flipX
+      // The opaque box's centre is what moves, mirrored with the art.
+      const bx = (box.x0 + box.x1 + 1) / 2
+      const ox = flipX ? art.width - bx : bx
+      const oy = (box.y0 + box.y1 + 1) / 2
+      const tx = to.x + to.width / 2
+      const ty = to.y + to.height / 2
+      let cx = tx
+      let cy = ty
+      if (m.shape === 'bolt') {
+        const p = progress(m, now)
+        const fx = flipX ? from.x : from.x + from.width
+        const fy = from.y + from.height / 2
+        cx = fx + (tx - fx) * p
+        cy = fy + (ty - fy) * p
+      }
+      effects.push({
+        spriteId: sprite.id,
+        art,
+        x: Math.round(cx - ox),
+        y: Math.round(cy - oy),
+        flipX,
+      })
     }
   }
 
@@ -224,6 +374,7 @@ export function stageAt(
     actors,
     numbers,
     drops,
+    effects,
     alt: altText(view),
     scale,
   }

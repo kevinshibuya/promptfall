@@ -39,7 +39,18 @@ import { type Motion, StageTimeline } from './timeline'
 import { DISSOLVE_MS, DROP_MS, FLASH_MS, HIRES_SCALE, LUNGE_MS, SPAWN_MS } from './tuning'
 
 export const GOLDEN_NOW = 1_000_000
-export const SCENARIOS = ['rest', 'boss', 'compact', 'dissolve', 'drop'] as const
+export const SCENARIOS = [
+  'rest',
+  'boss',
+  'compact',
+  'dissolve',
+  'drop',
+  'windup',
+  'strike',
+  'follow',
+  'bolt',
+  'burst',
+] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
   rasterHash: string
@@ -98,9 +109,36 @@ function killed(t1: number, effects: Effect[], box: Box): Staged {
   return staged(after, t, box)
 }
 
+/** `actor` attacked the slot-0 enemy `ms` before NOW. */
+function attacking(actor: string, ms: number): Staged {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - ms)
+  t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target: 'e1', amount: 9 },
+    ],
+    NOW - ms,
+  )
+  t.observe(wave(), NOW)
+  return staged(wave(), t, FULL)
+}
+
 export function stage(name: Scenario): Staged {
   const t = new StageTimeline()
   switch (name) {
+    // The knight 60 ms into its action (winding up), at 180 (striking, the enemy hit), at 300
+    // (following through); the black mage's fireball and the white mage's burst at 220.
+    case 'windup':
+      return attacking('h1', 60)
+    case 'strike':
+      return attacking('h1', 180)
+    case 'follow':
+      return attacking('h1', 300)
+    case 'bolt':
+      return attacking('h2', 220)
+    case 'burst':
+      return attacking('h3', 220)
     case 'rest': {
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)
