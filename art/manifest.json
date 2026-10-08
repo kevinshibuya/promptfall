@@ -444,14 +444,22 @@
       "id": "enemy:emberfall_wyrm",
       "file": "sprites/enemy/emberfall_wyrm.png",
       "fileHires": "sprites-hires/enemy/emberfall_wyrm.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/emberfall_wyrm-windup.png",
+        "strike": "sprites-frames/enemy/emberfall_wyrm-strike.png"
+      }
     },
     {
       "id": "enemy:slag_giant",
       "file": "sprites/enemy/slag_giant.png",
       "fileHires": "sprites-hires/enemy/slag_giant.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/slag_giant-windup.png",
+        "strike": "sprites-frames/enemy/slag_giant-strike.png"
+      }
     },
     {
       "id": "enemy:frost_wolf",

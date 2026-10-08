@@ -1089,6 +1089,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-6.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-6.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/emberfall_wyrm-windup,enemy/slag_giant-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/emberfall_wyrm-strike,enemy/slag_giant-strike
+```
+
 ## frames-bosses-7.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-7.png` (`pnpm refsheet art/sheets/ref-frames-bosses-7.png
@@ -1393,3 +1402,8 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:glass_leviathan` | strike | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 79% |
 | `enemy:reef_troll` | windup | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 63% |
 | `enemy:reef_troll` | strike | frames-bosses-5 | frame size drift: the fit to the idle canvas shrinks it to 61% |
+| `enemy:slag_giant` | windup | frames-bosses-6 | frame size drift: native 63 against idle 49 (+29%) |
+| `enemy:slag_giant` | strike | frames-bosses-6 | frame size drift: native 71 against idle 49 (+45%) |
+| `enemy:emberfall_wyrm` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:slag_giant` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 63% |
+| `enemy:slag_giant` | strike | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 69% |
