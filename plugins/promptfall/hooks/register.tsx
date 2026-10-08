@@ -36,6 +36,7 @@ import type {
   MarketResult,
   ServerClient,
   Unauthorized,
+  WorldSnapshot,
 } from './vendor/protocol.js'
 import { type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
@@ -435,6 +436,10 @@ class GameSession implements GameHandle {
 
   view(): Promise<GameView | null> {
     return this.io.view()
+  }
+
+  pollWorld(): Promise<WorldSnapshot | null> {
+    return this.poller.pollNow()
   }
 
   async leaderboards(): Promise<Boards | Unauthorized> {

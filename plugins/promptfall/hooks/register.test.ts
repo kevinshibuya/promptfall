@@ -3,13 +3,20 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
+import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { effectToast } from './toasts'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
-import { type ChatMessage, MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
+import {
+  BOSS_WINDOW_MS,
+  type ChatMessage,
+  MemoryKeyValue,
+  type WorldSnapshot,
+} from './vendor/protocol.js'
 import { createInitialState, GAUGE_FULL, type GameState, hashState, step } from './vendor/sim.js'
+import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
-import { WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
+import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
 /** Answers $.store from a map and records every write. */
 function store(on: On, seed: Record<string, unknown> = {}) {
@@ -79,10 +86,10 @@ function clock(on: On) {
   }
 }
 
-function engineBottom(on: On, toasts: string[] = []) {
+function engineBottom(on: On, toasts: string[] = [], env: Record<string, string> = {}) {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  // The sandbox switch reads the environment: unset here.
-  mock.env(on, {})
+  // The sandbox switch reads the environment: unset unless a test turns the sandbox on.
+  mock.env(on, env)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('ui.toast', (_$, e) => {
@@ -1312,4 +1319,80 @@ test('the world boss appearing plays the boss cue; going down plays none', async
   await time.advance(15_000)
   expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toHaveLength(1)
   expect(plays.filter((p) => p.asset !== 'cues/boss.wav')).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// The sandbox's world boss verbs: one world poll runs inside the command
+
+/** Past the sandbox grid's first window, so no grid boss is open when a test starts. */
+const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
+const APPEARED = 'World boss The Promptwyrm has appeared'
+const DOWN = 'The Promptwyrm is down'
+
+function sandboxSounding(on: On, seed: Record<string, unknown> = {}) {
+  const time = mock.clock(on, { now: PAST_GRID_BOSS })
+  const { data } = store(on, { ...SOUND_ON, ...seed })
+  const last = states(on)
+  const toasts: string[] = []
+  engineBottom(on, toasts, { PROMPTFALL_SANDBOX: '1' })
+  const plays: string[] = []
+  on('audio.play', (_$, e) => {
+    plays.push(e.clip.asset ?? '')
+    return { value: undefined }
+  })
+  return { time, data, last, toasts, plays }
+}
+
+test('sandbox worldboss has toasted and cued when it returns; worldboss end has toasted down', async ($, on) => {
+  const { toasts, plays } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = async (args: string) =>
+    (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
+  // The clock never moves in this test: no timer poll runs, only the verbs' own.
+  expect(await run('worldboss')).toBe(`Sandbox: world boss The Promptwyrm has appeared`)
+  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(plays).toEqual(['cues/boss.wav'])
+  expect(await run('worldboss end')).toBe('Sandbox: The Promptwyrm is down, rewards delivered')
+  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(plays).toEqual(['cues/boss.wav'])
+})
+
+test('a secondary sandbox session toasts the world boss appearing and going down, with no cue', async ($, on) => {
+  const { time, data, last, toasts, plays } = sandboxSounding(on, {
+    [`${SANDBOX_PREFIX}lease`]: { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  // The primary elsewhere: a ledger over the same sandbox save, its account the one this session reads.
+  const ledger = new Ledger({
+    kv: new StoreKeyValue(
+      {
+        get: async (key) => data.get(key),
+        set: async (key, value) => {
+          data.set(key, JSON.parse(JSON.stringify(value)))
+        },
+        delete: async (key) => {
+          data.delete(key)
+        },
+        keys: async () => [...data.keys()],
+      },
+      SANDBOX_PREFIX,
+    ),
+    now: async () => PAST_GRID_BOSS,
+    minClientVersion: '0.0.0',
+    seedSource: () => 1,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: async () => null,
+    flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
+  })
+  const boot = await ledger.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  data.set(`${SANDBOX_PREFIX}deviceToken`, boot.deviceToken)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect(await ledger.host.spawnBoss()).toEqual({ ok: true })
+  await time.advance(WORLD_POLL_MS)
+  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(await ledger.host.settleBoss()).toEqual({ ok: true })
+  await time.advance(WORLD_POLL_FAST_MS)
+  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(plays).toEqual([])
 })

@@ -175,12 +175,8 @@ test('sandbox alone lists the nine verbs, one line each', async ($, on) => {
     'wipe',
     'reset',
   ])
-  expect(lines.find((l) => l.trim().startsWith('worldboss'))).toContain('not yet')
-  for (const verb of ['boss', 'item', 'level', 'gold', 'zone', 'recruit', 'wipe', 'reset']) {
-    expect(lines.find((l) => l.trim().startsWith(`${verb} `) || l.trim() === verb)).not.toContain(
-      'not yet',
-    )
-  }
+  // Every verb is built: none is marked as pending.
+  for (const line of lines) expect(line).not.toContain('not yet')
 })
 
 const PANE = {

@@ -1,6 +1,7 @@
 import type { On } from 'claude-code'
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
-import type { GameView } from '../types'
+import type { GameView, WorldState } from '../types'
+import { decode } from './sprites/base64'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { Ledger } from './vendor/ledger.js'
 import { BOSS_WINDOW_MS } from './vendor/protocol.js'
@@ -150,8 +151,8 @@ const SANDBOX_ON = { PROMPTFALL_SANDBOX: '1' }
 /** The sandbox runs the world boss grid: past the first grid window, so no grid boss engages the party. */
 const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
 
-async function sandboxOn(on: On, $: Parameters<TestBody>[0]) {
-  const h = harness(on, {}, SANDBOX_ON, PAST_GRID_BOSS)
+async function sandboxOn(on: On, $: Parameters<TestBody>[0], seed: Record<string, unknown> = {}) {
+  const h = harness(on, seed, SANDBOX_ON, PAST_GRID_BOSS)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const run = async (args: string) =>
     (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
@@ -318,4 +319,76 @@ test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
   expect(await run('wipe')).toBe('Sandbox: not in boss mode')
   expect(await run('zone 5')).toBe('Sandbox: not in boss mode')
   expect({ zone: view().zone, wipes: view().wipes }).toEqual(before)
+})
+
+/** What the band's strip says: its Raster's cells as text. */
+async function stripText(ui: {
+  find: (q: { key: string }) => Promise<{ props: Record<string, unknown> } | undefined>
+}): Promise<string> {
+  const strip = await ui.find({ key: 'strip' })
+  if (!strip) return ''
+  const columns = Number(strip.props.columns)
+  const bytes = decode(String(strip.props.cells))
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const lines: string[] = []
+  for (let y = 0; y < words.length / 3 / columns; y++) {
+    let line = ''
+    for (let x = 0; x < columns; x++)
+      line += String.fromCodePoint(words[(y * columns + x) * 3] ?? 32)
+    lines.push(line)
+  }
+  return lines.join('\n')
+}
+
+const BAND = {
+  component: 'AbovePrompt',
+  requestId: 'band-test',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 30,
+    bodyColumns: 150,
+    scroll: { offset: 0, bodyRows: 30 },
+    view: {},
+  },
+} as const
+
+test('sandbox worldboss engages the party in boss mode; worldboss end pays it and the boss is down', async ($, on) => {
+  const { run, view, states, toasts } = await sandboxOn(on, $, {
+    'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+  })
+  expect(await run('worldboss')).toBe('Sandbox: world boss The Promptwyrm has appeared')
+  // One undying enemy: the world boss, whose name travels with the engagement.
+  expect(view().enemies.map((e) => [e.kind, e.name])).toEqual([['world_boss', 'The Promptwyrm']])
+  expect(view().boss).toMatchObject({ name: 'The Promptwyrm', dealt: 0 })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
+  await ui.press({ key: 'hot-p' })
+  const strip = await stripText(ui)
+  expect(strip).toMatch(/World boss · \d+[mh]/)
+  expect(strip).toContain('The Promptwyrm'.slice(0, 7))
+  await ui.unmount()
+
+  toasts.length = 0
+  expect(await run('worldboss end')).toBe('Sandbox: The Promptwyrm is down, rewards delivered')
+  expect(view().boss).toBeNull()
+  expect(view().enemies.every((e) => e.kind !== 'world_boss')).toBe(true)
+  // The reward came with nothing dealt: the settle pays every engaged party.
+  expect(toasts.filter((t) => t.startsWith('Boss reward: '))).toHaveLength(1)
+  const world = states.get('world') as WorldState
+  expect(world.snapshot?.boss).toMatchObject({ name: 'The Promptwyrm', hp: 0 })
+})
+
+test('sandbox worldboss twice answers that one is live; worldboss end with none answers so', async ($, on) => {
+  const { run, view, states } = await sandboxOn(on, $)
+  // The game as the player sees it; the first run's welcome flag clears at the verb's sync.
+  const game = () => JSON.stringify({ ...view(), firstRun: false })
+  const before = game()
+  expect(await run('worldboss end')).toBe('Sandbox: no world boss is live')
+  expect(game()).toBe(before)
+  expect(await run('worldboss')).toBe('Sandbox: world boss The Promptwyrm has appeared')
+  const bossId = view().boss?.bossId
+  expect(await run('worldboss')).toBe('Sandbox: a world boss is already live')
+  expect(view().boss?.bossId).toBe(bossId)
+  expect((states.get('world') as WorldState).snapshot?.boss?.bossId).toBe(bossId)
+  expect(await run('worldboss later')).toBe('Usage: /promptfall sandbox worldboss [end]')
 })

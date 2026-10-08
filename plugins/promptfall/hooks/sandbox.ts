@@ -10,8 +10,8 @@ type SandboxVerb = {
   verb: string
   args: string
   help: string
-  /** Answers the command's reply. Null: listed in the spec, not built yet. */
-  run: ((game: GameHandle, args: string) => Promise<string>) | null
+  /** Answers the command's reply. */
+  run: (game: GameHandle, args: string) => Promise<string>
 }
 
 /** Authors a `credited` event with reason `sandbox`, then syncs so the gold is in the view. */
@@ -187,6 +187,32 @@ async function wipe(game: GameHandle): Promise<string> {
   return `Sandbox: the party fell, retreating to zone ${(await game.view())?.zone ?? 1}`
 }
 
+/**
+ * `worldboss [end]`: the ledger spawns or settles the world boss, the sync applies the engagement
+ * or the reward, and one world poll raises the "appeared" or "down" toast before the reply.
+ * Syncs first, as a grant does: the engagement lands after every tick already played.
+ */
+async function worldboss(game: GameHandle, args: string): Promise<string> {
+  const end = args.toLowerCase()
+  if (end !== '' && end !== 'end') return 'Usage: /promptfall sandbox worldboss [end]'
+  const host = game.host()
+  if (!host || !game.canApply()) return NOT_PLAYING
+  await game.sync()
+  const outcome = end ? await host.settleBoss() : await host.spawnBoss()
+  if (!outcome.ok) {
+    if (outcome.reason === 'sandbox_off') return SANDBOX_OFF
+    if (outcome.reason === 'boss_live') return 'Sandbox: a world boss is already live'
+    if (outcome.reason === 'no_boss') return 'Sandbox: no world boss is live'
+    return `Sandbox: nothing changed (${outcome.detail ?? outcome.reason})`
+  }
+  await game.sync()
+  await game.settled()
+  const name = (await game.pollWorld())?.boss?.name ?? 'The world boss'
+  return end
+    ? `Sandbox: ${name} is down, rewards delivered`
+    : `Sandbox: world boss ${name} has appeared`
+}
+
 /** The account reset: books and token go, the lease and the settings stay, a fresh account boots. */
 async function reset(game: GameHandle): Promise<string> {
   await game.reset()
@@ -194,10 +220,15 @@ async function reset(game: GameHandle): Promise<string> {
   return 'Sandbox: the save starts over'
 }
 
-/** Every verb of the spec, in its order; `worldboss` is filled in by its own ticket. */
+/** Every verb of the spec, in its order. */
 export const SANDBOX_VERBS: readonly SandboxVerb[] = [
   { verb: 'boss', args: '<name>', help: 'make a zone or turn boss the next encounter', run: boss },
-  { verb: 'worldboss', args: '[end]', help: 'spawn a world boss now, or settle it', run: null },
+  {
+    verb: 'worldboss',
+    args: '[end]',
+    help: 'spawn a world boss now, or settle it',
+    run: worldboss,
+  },
   { verb: 'item', args: '<base> [rarity]', help: 'drop an item, common by default', run: item },
   { verb: 'level', args: '<hero> <n>', help: 'raise a hero to a level, up to its cap', run: level },
   { verb: 'gold', args: '<n>', help: 'add gold', run: gold },
@@ -210,7 +241,7 @@ export const SANDBOX_VERBS: readonly SandboxVerb[] = [
 function listing(): string {
   const lines = SANDBOX_VERBS.map((v) => {
     const usage = v.args ? `${v.verb} ${v.args}` : v.verb
-    return `  ${usage}: ${v.help}${v.run ? '' : ' (not yet)'}`
+    return `  ${usage}: ${v.help}`
   })
   return ['Sandbox verbs, /promptfall sandbox <verb>:', ...lines].join('\n')
 }
@@ -229,7 +260,6 @@ export async function runSandbox(
   const [name = '', ...words] = rest.split(/\s+/)
   const verb = SANDBOX_VERBS.find((v) => v.verb === name.toLowerCase())
   if (!verb) return `No sandbox verb '${name}'.\n${listing()}`
-  if (!verb.run) return `Sandbox: ${verb.verb} is not built yet`
   if (verb.verb !== 'reset') await game?.claim()
   if (!game) return NOT_PLAYING
   return verb.run(game, words.join(' '))

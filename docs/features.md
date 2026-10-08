@@ -233,7 +233,10 @@ the tactics.
 **The verbs.** `/promptfall sandbox <verb>` hands out what play would earn, each answering in one
 line once the grant is in the view; `/promptfall sandbox` alone lists them. `boss <name>` makes a
 zone boss or turn boss the next encounter, moving the party to its zone. `worldboss` spawns a
-world boss and engages the party; `worldboss end` settles it. `item <base> [rarity]` drops an item
+world boss and engages the party; `worldboss end` settles it and pays every engaged party. Each
+answers once the boss's "appeared" or "down" toast has shown, and refuses while a boss is already
+live or when none is. The sandbox keeps the world boss's own schedule, so one can also appear by
+itself. `item <base> [rarity]` drops an item
 through the normal drop, common unless a rarity is given; with the inventory full it is vendored,
 as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and

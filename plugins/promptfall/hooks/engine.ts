@@ -23,6 +23,7 @@ import type {
   ServerConfig,
   TimedEvent,
   Unauthorized,
+  WorldSnapshot,
 } from './vendor/protocol.js'
 import {
   type Effect,
@@ -112,6 +113,8 @@ export type GameHandle = {
   accountId: () => string | null
   /** The view as last published: what the band and the dialog draw. */
   view: () => Promise<GameView | null>
+  /** One world poll now, its toasts and cue fired; the snapshot it holds, null before any. */
+  pollWorld: () => Promise<WorldSnapshot | null>
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>

@@ -71,6 +71,8 @@ export class WorldPoller {
   private period = 0
   private started = false
   private inFlight = false
+  /** The poll in flight, for a caller that must see the answer of a poll it starts itself. */
+  private flight: Promise<void> = Promise.resolve()
   /** Bumped by a reset: an answer from before it is dropped. */
   private epoch = 0
   /** Bumped by each fresh snapshot: a stale timer from before it does nothing. */
@@ -129,6 +131,21 @@ export class WorldPoller {
     await this.deps.publish(this.state)
   }
 
+  /**
+   * One poll now, after any in flight, so its transitions (toasts and cue) have fired when it
+   * resolves. The snapshot it holds then; null before the first answer or while stopped.
+   */
+  async pollNow(): Promise<WorldSnapshot | null> {
+    // Each flight awaited once: a flight dropped by a stop never clears the flag.
+    let awaited: Promise<void> | null = null
+    while (this.started && this.inFlight && this.flight !== awaited) {
+      awaited = this.flight
+      await awaited
+    }
+    await this.poll()
+    return this.state.snapshot
+  }
+
   periodMs(): number {
     return this.period
   }
@@ -146,18 +163,19 @@ export class WorldPoller {
     this.timer = this.deps.every(ms, () => void this.poll())
   }
 
-  private async poll(): Promise<void> {
-    if (this.inFlight || !this.started) return
+  private poll(): Promise<void> {
+    if (this.inFlight || !this.started) return Promise.resolve()
     this.inFlight = true
     const epoch = this.epoch
-    try {
-      await this.pollOnce(epoch)
-    } catch {
-      // A thrown poll is ignored: the next one runs on the same cadence.
-    } finally {
-      // Held until the answer is applied, so a newer poll can never be overtaken by this one.
-      if (epoch === this.epoch) this.inFlight = false
-    }
+    this.flight = this.pollOnce(epoch)
+      .catch(() => {
+        // A thrown poll is ignored: the next one runs on the same cadence.
+      })
+      .finally(() => {
+        // Held until the answer is applied, so a newer poll can never be overtaken by this one.
+        if (epoch === this.epoch) this.inFlight = false
+      })
+    return this.flight
   }
 
   private async pollOnce(epoch: number): Promise<void> {
