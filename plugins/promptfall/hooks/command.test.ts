@@ -25,6 +25,8 @@ function harness(on: On, seed: Record<string, unknown> = {}) {
     return next(e)
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset here.
+  mock.env(on, {})
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   on('ui.open', (_$, e) => {

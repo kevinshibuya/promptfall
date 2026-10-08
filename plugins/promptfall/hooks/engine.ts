@@ -4,6 +4,7 @@ import type { GaugeTrack } from './stage/gauges'
 import type { MessageLog } from './stage/log'
 import type { StageLoop } from './stage/loop'
 import type { StageTimeline } from './stage/timeline'
+import type { LedgerHost } from './vendor/ledger.js'
 import type {
   Account,
   Auth,
@@ -46,6 +47,8 @@ export type EngineDeps = {
   tokenKey?: string
   /** The server's label in the view; `in-process` by default. */
   label?: string
+  /** The sandbox save: the view says so. */
+  sandbox?: boolean
   now: () => Promise<number>
   newBatchId: () => string
   /** Writes atoms; a closure over the session's `$`. */
@@ -103,6 +106,10 @@ export type GameHandle = {
   chat: (text: string) => Promise<ChatResult>
   /** The boards, with the stored token. Throws `unreachable` or `not_started`. */
   leaderboards: () => Promise<Boards | Unauthorized>
+  /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
+  host: () => LedgerHost | null
+  /** The account the engine plays, once bootstrapped. */
+  accountId: () => string | null
 }
 
 export type TradeCall<R extends MarketResult> = (client: ServerClient, auth: Auth) => Promise<R>
@@ -629,6 +636,7 @@ export class GameEngine {
       this.config,
       this.deps.label ?? 'in-process',
       this.returns,
+      this.deps.sandbox ?? false,
     )
     return toGameView(this.local, this.account, this.firstRun, account)
   }

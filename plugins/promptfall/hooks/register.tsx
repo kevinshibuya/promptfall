@@ -1,7 +1,7 @@
 import type { Register, RenderSurface, UiBlitArgs, UiBlitResult } from 'claude-code'
 import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
-import { COMMAND, registerCommand } from './command'
+import { commandSpec, registerCommand } from './command'
 import { CUE_ASSET, type Cue, cueFor } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
@@ -22,7 +22,7 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from './state'
-import { type StoreCalls, StoreKeyValue } from './storage'
+import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
 import { effectToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
@@ -71,6 +71,8 @@ type Io = {
   settings: () => Promise<Settings>
   /** Plays a file of the plugin's; resolves or rejects with nothing played off macOS. */
   play: (asset: string, gain: number) => Promise<void>
+  /** The sandbox switch, read once for the session: its own save on the in-process ledger. */
+  sandbox: boolean
 }
 
 /** The store key of the machine's server setting: a URL, or absent for the in-process ledger. */
@@ -170,7 +172,7 @@ class GameSession implements GameHandle {
   }
 
   constructor(private readonly io: Io) {
-    this.kv = new StoreKeyValue(io.store)
+    this.kv = new StoreKeyValue(io.store, io.sandbox ? SANDBOX_PREFIX : PREFIX)
     this.server = this.resolve(null)
     this.engine = this.makeEngine()
     this.poller = new WorldPoller({
@@ -206,7 +208,11 @@ class GameSession implements GameHandle {
   }
 
   private resolve(setting: string | null): ResolvedServer {
-    return resolveClient(setting, { kv: this.kv, now: this.io.now, fetch: this.io.fetch })
+    return resolveClient(
+      setting,
+      { kv: this.kv, now: this.io.now, fetch: this.io.fetch },
+      this.io.sandbox,
+    )
   }
 
   private makeEngine(): GameEngine {
@@ -216,6 +222,7 @@ class GameSession implements GameHandle {
       kv: this.kv,
       tokenKey: this.server.tokenKey,
       label: this.server.label,
+      sandbox: this.server.sandbox,
       now: io.now,
       newBatchId: () => crypto.randomUUID(),
       publish: (patch) => {
@@ -245,6 +252,8 @@ class GameSession implements GameHandle {
   }
 
   private async readSetting(): Promise<string | null> {
+    // The sandbox pins the in-process ledger: a stored URL is ignored.
+    if (this.io.sandbox) return null
     const raw = await this.kv.get(SERVER_KEY)
     return typeof raw === 'string' && raw !== '' ? raw : null
   }
@@ -337,6 +346,8 @@ class GameSession implements GameHandle {
   /** Starts the device flow; polling is the session's, so it outlives a closed dialog. */
   async link(): Promise<void> {
     if (this.role !== 'primary') throw new Error('not_primary')
+    // The sandbox save never links: nothing granted may reach the market or chat.
+    if (this.server.sandbox) return
     const engine = this.engine
     let start: LinkStart | Unauthorized
     try {
@@ -412,6 +423,14 @@ class GameSession implements GameHandle {
     }
     if (result.ok) await this.poller.insert(result.message)
     return result
+  }
+
+  host(): ReturnType<GameHandle['host']> {
+    return this.server.host
+  }
+
+  accountId(): string | null {
+    return this.engine.accountId()
   }
 
   async leaderboards(): Promise<Boards | Unauthorized> {
@@ -562,7 +581,13 @@ class GameSession implements GameHandle {
       boot.state,
       boot.delivery.events.map((e) => e.event),
     ).state
-    const account = toAccountView(boot.account, boot.config, this.server.label, 0)
+    const account = toAccountView(
+      boot.account,
+      boot.config,
+      this.server.label,
+      0,
+      this.server.sandbox,
+    )
     await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
@@ -613,15 +638,22 @@ const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'u
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 
 let game: GameSession | null = null
+/** PROMPTFALL_SANDBOX=1, read at session start and at the desktop attach. */
+let sandbox = false
 
 export const register: Register = (on) => {
   registerBand(on, () => game)
   registerDialog(on, () => game)
-  registerCommand(on, () => game)
+  registerCommand(
+    on,
+    () => game,
+    () => sandbox,
+  )
 
   on('session.start', async ($, e, next) => {
     game = null
-    await $.command.register(COMMAND)
+    sandbox = (await $.env.get('PROMPTFALL_SANDBOX')) === '1'
+    await $.command.register(commandSpec(sandbox))
     // A set lease owner means this session ran a game before a hot reload, on any surface.
     const hadGame = (await read($, leaseOwnerAtom)) !== null
     const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
@@ -693,6 +725,7 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        sandbox,
       })
       game = session
       await session.start()
@@ -702,6 +735,7 @@ export const register: Register = (on) => {
 
   on('session.attach', async ($, e, next) => {
     if (e.surface === 'desktop') {
+      sandbox = (await $.env.get('PROMPTFALL_SANDBOX')) === '1'
       const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       await update($, settingsAtom, () => settings)
     }
@@ -768,6 +802,7 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        sandbox,
       })
       game = session
       await session.start()

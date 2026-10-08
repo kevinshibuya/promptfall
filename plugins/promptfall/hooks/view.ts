@@ -152,6 +152,7 @@ export function toAccountView(
   config: ServerConfig | null,
   server: string,
   returns: number,
+  sandbox = false,
 ): AccountView {
   return {
     linked: account?.linked?.login ?? null,
@@ -162,6 +163,7 @@ export function toAccountView(
     leaderboardsOpen: config?.flags['leaderboards.enabled'] ?? true,
     bossOpen: config?.flags['worldboss.enabled'] ?? true,
     returns,
+    sandbox,
   }
 }
 

@@ -81,6 +81,8 @@ function clock(on: On) {
 
 function engineBottom(on: On, toasts: string[] = []) {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset here.
+  mock.env(on, {})
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('ui.toast', (_$, e) => {

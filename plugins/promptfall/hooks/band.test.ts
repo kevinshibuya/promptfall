@@ -39,6 +39,8 @@ function harness(on: On) {
     return next(e)
   })
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset here.
+  mock.env(on, {})
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   // The engine's own band, drawn when the plugin passes.
@@ -255,6 +257,33 @@ test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so
   const after = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
   expect(await stripText(after)).toContain('Farm here')
   await after.unmount()
+})
+
+test('the sandbox purse says Sandbox where the tactics sit; farming puts Farm on its title', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const purse = async (sandbox: boolean, farm: boolean, surface: 'terminal' | 'desktop') => {
+    const base = wave()
+    shown.view = { ...base, farm, account: { ...base.account, sandbox } }
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
+    const text = await stripText(ui)
+    await ui.unmount()
+    return text
+  }
+  const still = await purse(true, false, 'terminal')
+  expect(still).toContain('Sandbox')
+  expect(still).not.toContain('Push on')
+  expect(still).not.toContain('Farm')
+  const farming = await purse(true, true, 'terminal')
+  expect(farming).toContain('Sandbox')
+  expect(farming).toContain('Farm')
+  expect(farming).not.toContain('Farm here')
+  expect(await purse(true, false, 'desktop')).toContain('Sandbox')
+  // The real save keeps its tactics line.
+  expect(await purse(false, false, 'terminal')).toContain('Push on')
+  expect(await purse(false, true, 'terminal')).toContain('Farm here')
+  expect(await purse(false, true, 'terminal')).not.toContain('Sandbox')
 })
 
 test('on terminals the hotkeys sit in a zero-width Box: no row, no column', async ($, on) => {

@@ -157,7 +157,7 @@ half-blocks on other terminals, and as vector art on the desktop.
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
 come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
 the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics).
+and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox).
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
@@ -211,6 +211,35 @@ them.
 **Sound toggle.** Sound is off by default and is one setting per machine: `s` on the Account tab
 or `/promptfall sound on|off`. It switches the cues, at a fixed volume, and plays on macOS; other
 systems stay silent. The setting survives a reset of the machine's data.
+
+## Sandbox
+
+**The switch.** Starting Claude Code with `PROMPTFALL_SANDBOX=1` turns the sandbox on for that
+session: the game plays on the in-process fake whatever server the machine points at, with chat
+off and the world boss on, and `/promptfall server` answers that the sandbox pins the server.
+Without the variable the `sandbox` verb is not in the command's hint, and typing it anyway answers
+"Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1."
+
+**The sandbox save.** The sandbox plays a separate save with its own account, which it keeps
+across sessions like the real one. The real party is never read or changed, and a sandbox session
+and a real session can play side by side. The settings (sound, motion, renderer) are the
+machine's and stay shared. The sandbox account never links to GitHub: the Account tab has no Link
+GitHub row.
+
+**The mark.** The purse says `Sandbox` where the tactics line sits, so a screenshot of the sandbox
+is never mistaken for real play. While farming, the purse is titled `Farm`, and `f` still flips
+the tactics.
+
+**The verbs.** `/promptfall sandbox <verb>` hands out what play would earn, each answering in one
+line once the grant is in the view; `/promptfall sandbox` alone lists them. `boss <name>` makes a
+zone boss or turn boss the next encounter, moving the party to its zone. `worldboss` spawns a
+world boss and engages the party; `worldboss end` settles it. `item <base> [rarity]` drops an item
+through the normal drop, common unless a rarity is given. `level <hero> <n>` raises a hero level
+by level up to its rarity's cap. `gold <n>` adds gold. `zone <n>` moves the party to that zone at
+wave 1. `recruit [rarity]` recruits a hero, and refuses with a full roster. `wipe` makes the party
+fall now. `reset` throws the sandbox save away and starts a fresh one in place. Names match by
+the start of a name, any word in it or its id, and an ambiguous or unknown name answers with the
+candidates.
 
 ## Planned
 
