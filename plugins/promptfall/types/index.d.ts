@@ -82,6 +82,8 @@ export type AccountView = {
   leaderboardsOpen: boolean
   bossOpen: boolean
   returns: number
+  /** The sandbox save: the purse says `Sandbox` and the account never links. */
+  sandbox: boolean
 }
 export type GameView = {
   heroes: HeroView[]

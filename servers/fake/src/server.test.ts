@@ -269,13 +269,14 @@ describe('VirtualClock', () => {
 })
 
 describe('parseFlags', () => {
-  it('reads name=value pairs over the six ledger flags', () => {
+  it('reads name=value pairs over the ledger flags', () => {
     expect(parseFlags([])).toEqual({})
     expect(parseFlags(['chat.enabled=false'])).toEqual({ 'chat.enabled': false })
     expect(parseFlags(['maintenance=true', 'worldboss.enabled=false'])).toEqual({
       maintenance: true,
       'worldboss.enabled': false,
     })
+    expect(parseFlags(['sandbox.enabled=true'])).toEqual({ 'sandbox.enabled': true })
   })
 
   it('throws on an unknown name or a value other than true and false', () => {

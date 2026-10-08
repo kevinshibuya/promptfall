@@ -337,15 +337,22 @@ function partyWindow(input: StripInput, x: number): Built {
 function purseWindow(input: StripInput, x: number): Built {
   const gold = clip(`${formatCount(input.view.gold)}G`, 9)
   const tactics = input.view.farm ? 'Farm here' : 'Push on'
-  const lines: Line[] = [{ spans: [pad(1), text(gold)] }, { spans: [pad(1), text(tactics)] }]
+  // The sandbox mark takes the tactics line; farming moves to the title, and `f` still toggles.
+  const sandbox = input.view.account.sandbox
+  const lines: Line[] = [
+    { spans: [pad(1), text(gold)] },
+    { spans: [pad(1), text(sandbox ? 'Sandbox' : tactics)] },
+  ]
+  const alt = `Gold ${formatCount(input.view.gold)}.${sandbox ? ' Sandbox.' : ''} Tactics: ${tactics.toLowerCase()}.`
   return {
     win: {
       key: 'purse',
       x,
       columns: PURSE_COLUMNS,
       rows: STRIP_ROWS,
+      ...(sandbox && input.view.farm ? { title: [text('Farm')] } : {}),
       lines,
-      alt: `Gold ${formatCount(input.view.gold)}. Tactics: ${tactics.toLowerCase()}.`,
+      alt,
     },
     hotspots: [{ hotkey: 'f', label: tactics, x: x + 2, y: 2, columns: 9 }],
     slots: [],

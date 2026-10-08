@@ -22,6 +22,7 @@ import {
   PRESENCE_TTL_MS,
   type ServerClient,
   type ServerConfig,
+  ServerEventSchema,
   type Unauthorized,
   type WorldSnapshot,
 } from '@promptfall/protocol'
@@ -32,6 +33,8 @@ import {
   type PlayerEvent,
   type PlayerEventKind,
   replay,
+  SANDBOX_EVENT_KINDS,
+  type SandboxEvent,
   SIM_VERSION,
   type TradeKind,
 } from '@promptfall/sim'
@@ -49,6 +52,7 @@ import {
   settle,
   TrackedKeyValue,
   tokenKey,
+  tryAuthor,
 } from './books'
 import * as boss from './boss'
 import * as market from './market'
@@ -61,6 +65,12 @@ export type LedgerFlag =
   | 'presence.enabled'
   | 'leaderboards.enabled'
   | 'maintenance'
+  | 'sandbox.enabled'
+
+/** What a sandbox host call answers: the refusal is an answer, not a throw. */
+export type SandboxOutcome =
+  | { ok: true }
+  | { ok: false; reason: 'sandbox_off' | 'boss_live' | 'no_boss' | 'unapplicable'; detail?: string }
 
 export type LedgerOptions = {
   kv: KeyValue
@@ -93,6 +103,12 @@ export type LedgerHost = {
   settle(accountId: string): Promise<void>
   /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
   sweep(): Promise<void>
+  /** Authors a sandbox grant in cursor position. Throws on an unknown account or a non-sandbox event. */
+  sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>
+  /** Spawns a world boss whose window starts now and engages the online accounts. */
+  spawnBoss(): Promise<SandboxOutcome>
+  /** Settles the open world boss now, paying every engaged account. */
+  settleBoss(): Promise<SandboxOutcome>
 }
 
 export const LINK_URL = 'https://github.com/login/device'
@@ -103,6 +119,7 @@ type Link = { accountId: string; createdAt: number }
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
+const sandboxOff: SandboxOutcome = { ok: false, reason: 'sandbox_off' }
 
 /**
  * The account ledger: records, batch replay, server events and the market.
@@ -124,6 +141,9 @@ export class Ledger implements ServerClient {
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
       settle: (accountId) => this.run(() => this.settleAccount(accountId)),
       sweep: () => this.run(() => this.sweep()),
+      sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
+      spawnBoss: () => this.run(() => this.spawnBoss()),
+      settleBoss: () => this.run(() => this.settleBoss()),
     }
   }
 
@@ -151,6 +171,7 @@ export class Ledger implements ServerClient {
       'presence.enabled': true,
       'leaderboards.enabled': true,
       maintenance: false,
+      'sandbox.enabled': false,
       ...this.options.flags,
     }
   }
@@ -599,6 +620,40 @@ export class Ledger implements ServerClient {
     const record = await this.currentRecord(accountId)
     author(record, { t: 'credited', gold, reason })
     await this.books.save(record)
+  }
+
+  private async sandbox(accountId: string, input: SandboxEvent): Promise<SandboxOutcome> {
+    // The wire schema's own check, so a grant never makes the account's deliveries unreadable.
+    const event = ServerEventSchema.parse(input)
+    if (!(SANDBOX_EVENT_KINDS as readonly string[]).includes(event.t)) {
+      throw new Error(`sandbox: not a sandbox event: ${event.t}`)
+    }
+    const record = await this.currentRecord(accountId)
+    if (!this.flags()['sandbox.enabled']) return sandboxOff
+    const refused = tryAuthor(record, event)
+    if (refused !== null) {
+      return {
+        ok: false,
+        reason: 'unapplicable',
+        detail: refused.replace(/^server_event_unapplicable:/, ''),
+      }
+    }
+    await this.books.save(record)
+    return { ok: true }
+  }
+
+  private async spawnBoss(): Promise<SandboxOutcome> {
+    if (!this.flags()['sandbox.enabled']) return sandboxOff
+    return (await boss.spawnNow(await this.worldContext()))
+      ? { ok: true }
+      : { ok: false, reason: 'boss_live' }
+  }
+
+  private async settleBoss(): Promise<SandboxOutcome> {
+    if (!this.flags()['sandbox.enabled']) return sandboxOff
+    return (await boss.settleNow(await this.worldContext()))
+      ? { ok: true }
+      : { ok: false, reason: 'no_boss' }
   }
 
   private async settleAccount(accountId: string): Promise<void> {

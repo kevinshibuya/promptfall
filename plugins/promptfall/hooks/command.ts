@@ -1,6 +1,7 @@
 import { atom, type On, read, update } from 'claude-code'
 import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
 import type { GameHandle } from './engine'
+import { runSandbox, SANDBOX_PINS_SERVER } from './sandbox'
 import {
   BOARDS_DEFAULT,
   DIALOG_DEFAULT,
@@ -18,13 +19,19 @@ import { PANE_ROWS } from './windows/tuning'
 
 export const PANE_ID = 'promptfall'
 
-export const COMMAND = {
-  name: 'promptfall',
-  description: 'Promptfall: open the game, or off / on / farm / server / sound / motion / renderer',
-  argumentHint:
-    '[inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local|sound on|off|motion full|still|renderer auto|image|raster]',
-  immediate: true,
-} as const
+const HINT =
+  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local|sound on|off|motion full|still|renderer auto|image|raster'
+
+/** The command, its hint naming the sandbox verb only while the sandbox is on. */
+export function commandSpec(sandbox: boolean) {
+  return {
+    name: 'promptfall',
+    description:
+      'Promptfall: open the game, or off / on / farm / server / sound / motion / renderer',
+    argumentHint: `[${HINT}${sandbox ? '|sandbox <verb>' : ''}]`,
+    immediate: true,
+  } as const
+}
 
 const TABS: readonly DialogTab[] = [
   'inventory',
@@ -56,10 +63,18 @@ function serverTarget(rest: string): string | null | undefined {
   return /^https?:\/\/\S+$/i.test(url) ? url : undefined
 }
 
-export function registerCommand(on: On, game: () => GameHandle | null): void {
+export function registerCommand(
+  on: On,
+  game: () => GameHandle | null,
+  sandbox: () => boolean,
+): void {
   on('command.run', { command: 'promptfall' }, async ($, e) => {
     const raw = e.args.trim()
     const arg = raw.toLowerCase()
+    // The verbs claim the lease themselves, all but `reset`; off, they touch nothing.
+    if (arg === 'sandbox' || arg.startsWith('sandbox ')) {
+      return { text: await runSandbox(raw.slice('sandbox'.length).trim(), sandbox(), game()) }
+    }
     // Typing the command means the player is in this session: it takes the lease.
     if (arg !== 'off') await game()?.claim()
 
@@ -83,6 +98,7 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
     }
 
     if (arg === 'server' || arg.startsWith('server ')) {
+      if (sandbox()) return { text: SANDBOX_PINS_SERVER }
       const target = serverTarget(raw.slice('server'.length).trim())
       if (target === undefined) return { text: SERVER_USAGE }
       const running = game()

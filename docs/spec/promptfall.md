@@ -390,6 +390,39 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `/promptfall server local` back at the in-process fake. One device token per
   server; switching re-bootstraps and adopts that server's state. Nothing moves
   between servers, ever.
+- The sandbox (ADR `sandbox-grants-are-server-events`, "The sandbox hands things
+  out as server events"). The ledger flag `sandbox.enabled`, default off, gates
+  three host calls that answer a typed outcome, never a throw:
+  `sandbox(accountId, event)` authors a sandbox server event into the account's
+  log in cursor position, `spawnBoss()` opens a world boss whose window starts
+  now and engages every online account, and `settleBoss()` settles the open boss
+  as if its window had passed, paying every engaged account as if each had
+  reached the reward threshold. With the flag off each answers `sandbox_off`.
+  The switch is `PROMPTFALL_SANDBOX=1` in Claude Code's environment, read at session
+  start: the plugin then plays the in-process fake with `sandbox.enabled`
+  and `worldboss.enabled` on and chat off, ignores a stored server URL
+  (`/promptfall server` answers that the sandbox pins the server), and registers
+  `/promptfall sandbox <verb>`. Without it the verb is not registered, and typing
+  it answers that the sandbox is off and how to turn it on. The verbs: `boss
+  <name>` (`sandbox_boss`: the party moves to the boss's zone, the encounter ends,
+  the next empty tick spawns the zone or turn boss), `worldboss` and `worldboss
+  end` (`spawnBoss` and `settleBoss`, then one world poll so the "appeared" or
+  "down" toast fires inside the command), `item <base> [rarity]`
+  (`sandbox_item`: the sim's roll through the drop intake, vendored when the
+  inventory is full), `level <hero> <n>` (`sandbox_level`: XP level by level, up
+  to the rarity cap), `gold <n>` (`credited` with reason `sandbox`), `zone <n>`
+  (`sandbox_zone`: wave 1), `recruit [rarity]` (`sandbox_recruit`, refused on a
+  full roster), `wipe` (`sandbox_wipe`: the wipe path) and `reset` (the account
+  reset). Rarity defaults to common; names match by case-insensitive prefix of
+  the display name, a word in it or the id. `boss`, `zone` and `wipe` are
+  unapplicable in boss mode. Each verb syncs after the host call, so the grant is
+  in the view before the reply. The sandbox save is separate: its books, device
+  token and lease live under the store prefix `promptfall-sandbox:`, the settings
+  stay shared, and its link approver always answers no. The grid keeps running
+  beside the sandbox bosses, which take their own id space. The HTTP fake
+  accepts `--flag sandbox.enabled=true` by name and has no sandbox route, so
+  nothing over HTTP can author a grant. The real server never sets the flag and
+  refuses every sandbox call.
 - Until the event stream exists (phase 5), server events ride on responses: the
   batch ack and the market responses carry what is pending past the client's
   cursor, and the dialog refreshes when opened. The cursor is explicit in the
@@ -584,6 +617,10 @@ Each phase gets its own implementation plan when its turn comes.
   installs from git without a build; CI fails when they are stale), vitest for
   packages and servers, the official plugin test runner for the mod, Biome for
   lint and format.
+- Generated files are committed and CI regenerates each one, failing on a
+  diff: the vendored bundles (`vendor:check`), the sprites (`sprites:check`),
+  the font glyphs (`font:check`) and the content skill's reference
+  (`content:check`).
 - Determinism property test on the sim runs in CI on every change to the sim
   package.
 - Verification bar per phase: typecheck, lint, package tests, plugin tests on
