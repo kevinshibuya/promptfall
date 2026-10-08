@@ -61,8 +61,8 @@ actions would put every attacker's frames in one document.
 - The same frame with the boss 60 ms into a lunge on two dithered 72 × 51 frames and a hero hit
   is 216,353 characters: `svgWithFallback` draws the 1× `Svg` (51,341) for it. Adversarial art
   at the edge of legal costs the desktop its 1.5× drawing during a boss's attack.
-- The real bandit captain 60 ms into its attack, on its drawn frames (the `boss-strike`
-  scenario), is 32,734 characters: a quarter of the cap.
+- The real bandit captain 60 ms into its lunge, on its drawn frames (the `boss-strike`
+  scenario), is 32,731 characters: a quarter of the cap.
 
 ## Consequences
 
