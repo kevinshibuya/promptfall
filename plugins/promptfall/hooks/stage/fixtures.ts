@@ -246,6 +246,7 @@ export function fullerFrame(
     model: {
       box: { columns: 160, rows: 17 },
       ground: 0x5a8c3a,
+      backdrop: null,
       actors,
       numbers: [],
       drops: [

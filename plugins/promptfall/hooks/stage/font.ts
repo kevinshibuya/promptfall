@@ -29,6 +29,29 @@ export function textWidth(text: string, block = 1): number {
   return text.length === 0 ? 0 : (text.length * GLYPH_ADVANCE - 1) * block
 }
 
+/** The one-pixel outline under a damage number, so white reads on a pale backdrop (zone 12). */
+export const TEXT_OUTLINE_RGB = 0x000000
+
+/**
+ * `drawText` over a one-stage-pixel outline in `TEXT_OUTLINE_RGB`: the text drawn at the eight
+ * neighbouring offsets first, then in its colour on top.
+ */
+export function drawOutlinedText(
+  frame: Frame,
+  text: string,
+  x: number,
+  y: number,
+  rgb: number,
+  block = 1,
+): void {
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      if (dx !== 0 || dy !== 0) drawText(frame, text, x + dx, y + dy, TEXT_OUTLINE_RGB, block)
+    }
+  }
+  drawText(frame, text, x, y, rgb, block)
+}
+
 /** Draws `text` with its top-left at (x, y), opaque, clipped to the frame; each glyph pixel a `block` square. */
 export function drawText(
   frame: Frame,

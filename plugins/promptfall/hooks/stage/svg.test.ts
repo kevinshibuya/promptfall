@@ -1,10 +1,11 @@
 import { expect, test } from 'claude-code/testing'
+import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
 import { effectAt, stageAt } from './model'
 import { stage } from './scenarios'
-import { artPaths, renderSvg, svgWithFallback } from './svg'
+import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
 import {
   DROP_MS,
@@ -155,13 +156,13 @@ test('a hero flashing at a redraw keeps its rarity colour under the flash', () =
   expect(s).toContain(`color="${rare}"`)
 })
 
-test('the rest scenario at 1.5: viewBox 0 0 180 24 at the same rendered width', () => {
+test('the rest scenario at 1.5: viewBox 0 0 180 51 at the same rendered width', () => {
   const s = stage('rest')
   const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
   const hi = svgWithFallback(s.hires, s.model, s.motions, opts)
   const lo = renderSvg(s.model, s.motions, opts)
-  expect(hi).toContain('viewBox="0 0 180 24" width="960" height="128"')
-  expect(lo).toContain('viewBox="0 0 120 16" width="960" height="128"')
+  expect(hi).toContain('viewBox="0 0 180 51" width="960" height="272"')
+  expect(lo).toContain('viewBox="0 0 120 34" width="960" height="272"')
   // The hero art carries its 1.5x rarity slot as currentColor.
   expect(hi).toContain('fill="currentColor"')
 })
@@ -337,4 +338,49 @@ test('under SMIL an effect draws under the numbers, as on the pixel surfaces', (
   )
   expect(effectAt).toBeGreaterThan(-1)
   expect(effectAt).toBeLessThan(svg.indexOf('<text'))
+})
+
+test('a backdrop is one def, used under the actors in place of the ground strip; never an <image>', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  const base = stageAt(v, t, NOW, BOX, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  const idx = new Uint8Array(240 * 51).fill(1)
+  for (let x = 0; x < 240; x++) idx[50 * 240 + x] = 2
+  const backdrop = { width: 240, height: 51, palette: [0, 0x203040, 0x506070], pixels: encode(idx) }
+  const opts = { smil: false, now: NOW, width: 960, motion: 'still' as const }
+  const s = renderSvg({ ...base, backdrop }, [], opts)
+  expect(s).not.toContain('<image')
+  expect(s).not.toContain('<rect x="0" y="21"')
+  expect(s).toContain('<g id="bg"><path fill="#203040"')
+  expect(s).toContain('<path fill="#506070" d="M0 50h240v1h-240z"/></g>')
+  // The 180 × 24 frame (120 columns, 8 rows at 1.5) centre-crops the 240 × 51 painting: one use,
+  // before any actor.
+  const uses = [...s.matchAll(/<use href="#bg"[^>]*>/g)].map((m) => m[0])
+  expect(uses).toEqual(['<use href="#bg" transform="translate(-30 -27)"/>'])
+  expect(s.indexOf('<use href="#bg"')).toBeLessThan(s.indexOf('<use href="#a'))
+  // The strip stays for a model without a backdrop.
+  const bare = renderSvg({ ...base, backdrop: null }, [], opts)
+  expect(bare).toContain('<rect x="0" y="21" width="180" height="3"')
+  // A zoomed-out 600-wide frame: the painting at 180, mirrored copies to 0 and 600.
+  const wide = renderSvg({ ...base, backdrop, box: { columns: 400, rows: 8 } }, [], opts)
+  expect([...wide.matchAll(/<use href="#bg"[^>]*>/g)].map((m) => m[0])).toEqual([
+    '<use href="#bg" transform="translate(180 -27)"/>',
+    '<use href="#bg" transform="translate(180 -27) scale(-1 1)"/>',
+    '<use href="#bg" transform="translate(660 -27) scale(-1 1)"/>',
+  ])
+})
+
+test('backdropPlacements covers a frame of any width with mirrored copies, every other one plain', () => {
+  expect(backdropPlacements(240, 180, -30)).toEqual([{ x: -30, mirror: false }])
+  expect(backdropPlacements(240, 240, 0)).toEqual([{ x: 0, mirror: false }])
+  // 1000 wide: the painting at 380, then 380-240..380 mirrored, 620..860 mirrored, then plain
+  // copies at -100 and 860, the plain left one drawn from x -100.
+  expect(backdropPlacements(240, 1000, 380)).toEqual([
+    { x: 380, mirror: false },
+    { x: 380, mirror: true },
+    { x: 860, mirror: true },
+    { x: -100, mirror: false },
+    { x: 860, mirror: false },
+  ])
 })

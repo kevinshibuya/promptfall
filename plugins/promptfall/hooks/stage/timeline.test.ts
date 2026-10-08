@@ -4,6 +4,7 @@ import { boss, wave, worldBoss } from './fixtures'
 import { ACTION_MS, type Motion, StageTimeline } from './timeline'
 import {
   BOLT_MS,
+  BOSS_MIN_ROWS,
   BURST_MS,
   DISSOLVE_MS,
   DROP_MS,
@@ -13,8 +14,8 @@ import {
   NUMBER_RGB_HEAL,
   SLIDE_MS,
   SPAWN_MS,
-  STAGE_BOSS_ROWS,
-  STAGE_REST_ROWS,
+  STAGE_MIN_ROWS,
+  STAGE_ROWS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -275,14 +276,26 @@ test('survivors keep their places and a newcomer joins the end of the line after
   ])
 })
 
-test('rowsAt holds the boss height through the dissolve, then rests', () => {
+test('rowsAt is the boss height in every fight, with the boss and after it (ADR 0010)', () => {
   const t = observed(boss())
-  expect(t.rowsAt(boss(), NOW)).toBe(STAGE_BOSS_ROWS)
+  expect(t.rowsAt(boss(), NOW)).toBe(STAGE_ROWS)
   const after = boss()
   after.enemies = []
   t.observe(after, NOW)
-  expect(t.rowsAt(after, NOW + DISSOLVE_MS / 2)).toBe(STAGE_BOSS_ROWS)
-  expect(t.rowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_REST_ROWS)
+  expect(t.rowsAt(after, NOW + DISSOLVE_MS / 2)).toBe(STAGE_ROWS)
+  expect(t.rowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_ROWS)
+  expect(observed().rowsAt(wave(), NOW)).toBe(STAGE_ROWS)
+})
+
+test('minRowsAt is the tallest actor: 17 with a boss through its dissolve, 8 at rest', () => {
+  const t = observed(boss())
+  expect(t.minRowsAt(boss(), NOW)).toBe(BOSS_MIN_ROWS)
+  const after = boss()
+  after.enemies = []
+  t.observe(after, NOW)
+  expect(t.minRowsAt(after, NOW + DISSOLVE_MS / 2)).toBe(BOSS_MIN_ROWS)
+  expect(t.minRowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_MIN_ROWS)
+  expect(observed().minRowsAt(wave(), NOW)).toBe(STAGE_MIN_ROWS)
 })
 
 test('a drop pops from the target of the hit before it, once its fade is over', () => {

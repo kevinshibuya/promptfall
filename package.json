@@ -23,6 +23,7 @@
     "slice": "tsx scripts/slice-sheet.ts",
     "grid": "tsx scripts/sprite-grid.ts",
     "contact": "tsx scripts/contact.ts",
+    "backdrop": "tsx scripts/backdrop.ts",
     "test:scripts": "vitest run scripts",
     "stage:goldens": "tsx scripts/stage-goldens.ts",
     "refsheet": "tsx scripts/ref-sheet.ts"
