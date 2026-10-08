@@ -79,7 +79,7 @@ The plugin README covers commands, hotkeys, the market and the world: [plugins/p
 pnpm lint && pnpm typecheck && pnpm test && pnpm vendor:check && pnpm sprites:check && pnpm font:check
 claude plugin validate plugins/promptfall
 claude plugin test plugins/promptfall
-pnpm exec tsc -p plugins/promptfall
+pnpm typecheck:plugin
 ```
 
 CI runs the first line: lint, the type-check of the packages and the fake server, their tests

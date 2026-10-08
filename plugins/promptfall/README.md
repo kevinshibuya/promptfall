@@ -289,12 +289,13 @@ atoms it uses.
 ```sh
 claude plugin validate plugins/promptfall
 claude plugin test plugins/promptfall
-pnpm exec tsc -p plugins/promptfall
+pnpm typecheck:plugin
 ```
 
 `tsc -p plugins/promptfall` needs the engine's declarations, which an interactive
 `claude --plugin-dir plugins/promptfall` lays under `.claude-plugin/types/` on first load. They
-are generated per Claude Code version and stay uncommitted.
+are generated per Claude Code version and stay uncommitted. In a worktree that has none,
+`pnpm typecheck:plugin` copies the main checkout's first.
 
 ### Sprites
 
