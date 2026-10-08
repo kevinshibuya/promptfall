@@ -1665,3 +1665,18 @@ Zone briefs (one per run, after the common prompt):
 | Zone | Run | Band | Cut |
 | --- | --- | --- | --- |
 | 1 | backdrop-z1, 156 s, `20261008-140525-4201-backdrop-z1.log` | 1536 x 358 at y 336 | 240 x 56 cropped to 51 (15 colours); 160 x 37 to 34 (13) |
+| 2 | backdrop-z2, 213 s, `20261008-141143-31794-backdrop-z2.log` | 1536 x 357 at y 334 | 240 x 56 to 51 (9 colours); 160 x 37 to 34 (9) |
+| 3 | backdrop-z3, 311 s, `20261008-141517-61040-backdrop-z3.log` | 1536 x 338 at y 350 | 240 x 53 to 51 (15); 160 x 35 to 34 (14) |
+| 4 | backdrop-z4, 219 s, `20261008-142029-97743-backdrop-z4.log` | 1536 x 397 at y 313 | 240 x 62 to 51 (14); 160 x 41 to 34 (13) |
+| 5 | backdrop-z5, 239 s, `20261008-142409-27449-backdrop-z5.log` | 1536 x 342 at y 342 | 240 x 53 to 51 (14); 160 x 36 to 34 (12) |
+| 6 | backdrop-z6, 229 s, `20261008-141147-32624-backdrop-z6.log` | 1536 x 384 at y 320 | 240 x 60 to 51 (11); 160 x 40 to 34 (8) |
+| 7 | backdrop-z7, 227 s, `20261008-141537-63262-backdrop-z7.log` | 1536 x 360 at y 332 | 240 x 56 to 51 (16); 160 x 38 to 34 (15) |
+| 8 | backdrop-z8, 186 s, `20261008-141925-89776-backdrop-z8.log` | 1536 x 433 at y 291 | 240 x 68 to 51 (16); 160 x 45 to 34 (16) |
+| 9 | backdrop-z9, 257 s, `20261008-142232-12140-backdrop-z9.log` | 1536 x 352 at y 337 | 240 x 55 to 51 (15); 160 x 37 to 34 (15) |
+| 10 | backdrop-z10, 291 s, `20261008-141152-33625-backdrop-z10.log` | 1536 x 384 at y 318 | 240 x 60 to 51 (16); 160 x 40 to 34 (16) |
+| 11 | backdrop-z11, 246 s, `20261008-141644-72118-backdrop-z11.log` | 1536 x 365 at y 306 | 240 x 57 to 51 (15); 160 x 38 to 34 (15) |
+| 12 | backdrop-z12, 272 s, `20261008-142051-1208-backdrop-z12.log` | 1536 x 332 at y 378 | 240 x 52 to 51 (14); 160 x 35 to 34 (14) |
+
+The twelve ran three at a time on 2026-10-08, 14:11 to 14:27. The astra driver spent two to five minutes a
+sheet checking its own colour counts against the prompt's "at most 12 colours" before saving; the cut
+quantises anyway, so a future prompt can say "about 12".

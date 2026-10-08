@@ -1160,6 +1160,61 @@
       "zone": 1,
       "file": "backdrops/zone-1.png",
       "fileHires": "backdrops-hires/zone-1.png"
+    },
+    {
+      "zone": 2,
+      "file": "backdrops/zone-2.png",
+      "fileHires": "backdrops-hires/zone-2.png"
+    },
+    {
+      "zone": 3,
+      "file": "backdrops/zone-3.png",
+      "fileHires": "backdrops-hires/zone-3.png"
+    },
+    {
+      "zone": 4,
+      "file": "backdrops/zone-4.png",
+      "fileHires": "backdrops-hires/zone-4.png"
+    },
+    {
+      "zone": 5,
+      "file": "backdrops/zone-5.png",
+      "fileHires": "backdrops-hires/zone-5.png"
+    },
+    {
+      "zone": 6,
+      "file": "backdrops/zone-6.png",
+      "fileHires": "backdrops-hires/zone-6.png"
+    },
+    {
+      "zone": 7,
+      "file": "backdrops/zone-7.png",
+      "fileHires": "backdrops-hires/zone-7.png"
+    },
+    {
+      "zone": 8,
+      "file": "backdrops/zone-8.png",
+      "fileHires": "backdrops-hires/zone-8.png"
+    },
+    {
+      "zone": 9,
+      "file": "backdrops/zone-9.png",
+      "fileHires": "backdrops-hires/zone-9.png"
+    },
+    {
+      "zone": 10,
+      "file": "backdrops/zone-10.png",
+      "fileHires": "backdrops-hires/zone-10.png"
+    },
+    {
+      "zone": 11,
+      "file": "backdrops/zone-11.png",
+      "fileHires": "backdrops-hires/zone-11.png"
+    },
+    {
+      "zone": 12,
+      "file": "backdrops/zone-12.png",
+      "fileHires": "backdrops-hires/zone-12.png"
     }
   ]
 }
