@@ -3,6 +3,7 @@ import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
 import { COMMAND, registerCommand } from './command'
 import { CUE_ASSET, type Cue, cueFor } from './cues'
+import { setTraceWriter } from './diag'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import { type ResolvedServer, resolveClient } from './server'
@@ -621,6 +622,8 @@ export const register: Register = (on) => {
 
   on('session.start', async ($, e, next) => {
     game = null
+    // TEMPORARY diagnostics (diag.ts)
+    setTraceWriter((path, text) => $.fs.write(path, text))
     await $.command.register(COMMAND)
     // A set lease owner means this session ran a game before a hot reload, on any surface.
     const hadGame = (await read($, leaseOwnerAtom)) !== null

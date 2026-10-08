@@ -4,6 +4,7 @@
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
+import { payloadBytes, trace } from '../diag'
 import { stripScene } from '../ui/strip'
 import { windowFrame, windowKey } from '../windows/image'
 import { sceneCells } from '../windows/raster'
@@ -128,6 +129,7 @@ export class StageLoop {
   private fresh = false
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
+  private due = 0
 
   constructor(
     private readonly io: LoopIo,
@@ -179,6 +181,7 @@ export class StageLoop {
   private arm(ms: number): void {
     this.cancel()
     const gen = this.gen
+    this.due = Date.now() + ms
     this.timer = this.io.after(ms, () => {
       this.timer = null
       void this.tick(gen)
@@ -195,8 +198,11 @@ export class StageLoop {
     this.inFlight = true
     this.rerun = false
     let next: number | null = null
+    const tickStart = Date.now()
+    const late = tickStart - this.due
     try {
       next = await this.frame(gen)
+      trace('frame', { late, ms: Date.now() - tickStart, next: next ?? -1 })
     } catch {
       // A frame that throws (a rejected call through `$`) must not end the loop: nothing would
       // re-arm it until the next mount or wake. Try again at the next bob boundary.
@@ -261,16 +267,26 @@ export class StageLoop {
       const skip = settled && !this.wasBusy && actors === this.lastActors
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
+        const composeStart = Date.now()
         const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+        const composeMs = Date.now() - composeStart
         const at = {
           requestId: site.requestId,
           key: site.key,
           columns: box.columns,
           rows: box.rows,
         }
+        const blitStart = Date.now()
         const result = await this.io.blit(
           'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },
         )
+        trace('blit', {
+          what: 'stage',
+          compose: composeMs,
+          ms: Date.now() - blitStart,
+          bytes: payloadBytes(frame),
+          deny: result.deny !== undefined,
+        })
         this.blitCount += 1
         this.lastActors = actors
         if (gen !== this.gen) return null
@@ -325,7 +341,9 @@ export class StageLoop {
         }
       }
       for (const args of sends) {
+        const blitStart = Date.now()
         const result = await this.io.blit(args)
+        trace('blit', { what: args.key, ms: Date.now() - blitStart, bytes: payloadBytes(args) })
         this.blitCount += 1
         if (gen !== this.gen) return null
         if (result.deny !== undefined) {
