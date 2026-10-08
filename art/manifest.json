@@ -383,14 +383,22 @@
       "id": "enemy:glass_leviathan",
       "file": "sprites/enemy/glass_leviathan.png",
       "fileHires": "sprites-hires/enemy/glass_leviathan.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/glass_leviathan-windup.png",
+        "strike": "sprites-frames/enemy/glass_leviathan-strike.png"
+      }
     },
     {
       "id": "enemy:reef_troll",
       "file": "sprites/enemy/reef_troll.png",
       "fileHires": "sprites-hires/enemy/reef_troll.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/reef_troll-windup.png",
+        "strike": "sprites-frames/enemy/reef_troll-strike.png"
+      }
     },
     {
       "id": "enemy:ember_imp",
