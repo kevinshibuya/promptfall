@@ -136,7 +136,7 @@ in-process fake runs none.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
-"Boss reward: …", and goods with no free slot wait in returns.
+"Your share of …", and goods with no free slot wait in returns.
 
 ## Interface
 
@@ -195,16 +195,20 @@ and play goes on for two minutes, then pauses until the server answers again.
 
 ## Notifications and cues
 
-**Toasts.** The primary session raises a toast over the transcript for a Rare or better drop, a
-level-up, a zone cleared, a wipe, a hero recruited, a listing sold, a purchase, an item returned,
-a world boss appearing or going down, and a boss reward. Each is one line, subject first, such as
-"Zone 2 cleared, on to Marsh of Sighs" or "Party wiped, retreating to zone 1". Chat messages and
-routine combat never toast, and the open pane holds toasts until it closes. A first launch
-toasts a welcome that points at the Heroes tab.
+**Toasts.** Only the primary session toasts, one sentence per event worth a glance: a Rare or
+better drop, a recruit, a level-up, a zone arrival, a wipe, a boss reward, a sale, a purchase, a
+return, a world boss appearing or going down, a revoked item, and a Rare or better drop vendored
+for lack of room. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
+recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
+land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
+once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
+legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Routine combat,
+farming clears and chat never toast, the open pane holds toasts until it closes, and a first
+launch toasts a welcome that points at the Heroes tab.
 
 **Cues.** Four toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up and a
-world boss appearing. Only the primary session plays them, and hiding the band does not silence
-them.
+world boss appearing. A burst plays each of its cues once, after its toasts. Only the primary
+session plays them, and hiding the band does not silence them.
 
 ## Sound
 
