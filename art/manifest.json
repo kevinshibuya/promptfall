@@ -11,7 +11,15 @@
       "fileHires": "sprites-hires/hero/knight.png",
       "style": "nes",
       "rarityColor": "#df0301",
-      "rarityColorHires": "#fb0803"
+      "rarityColorHires": "#fb0803",
+      "frames": {
+        "windup": "sprites-frames/hero/knight-windup.png",
+        "follow": "sprites-frames/hero/knight-follow.png"
+      },
+      "frameRarityColors": {
+        "windup": "#fb0f06",
+        "follow": "#fc0c02"
+      }
     },
     {
       "id": "hero_attack:knight",
@@ -27,7 +35,13 @@
       "fileHires": "sprites-hires/hero/black_mage.png",
       "style": "nes",
       "rarityColor": "#6d0faf",
-      "rarityColorHires": "#7112b3"
+      "rarityColorHires": "#7112b3",
+      "frames": {
+        "windup": "sprites-frames/hero/black_mage-windup.png"
+      },
+      "frameRarityColors": {
+        "windup": "#6d19ab"
+      }
     },
     {
       "id": "hero_attack:black_mage",
@@ -43,7 +57,13 @@
       "fileHires": "sprites-hires/hero/white_mage.png",
       "style": "nes",
       "rarityColor": "#86eff5",
-      "rarityColorHires": "#07e4fa"
+      "rarityColorHires": "#07e4fa",
+      "frames": {
+        "windup": "sprites-frames/hero/white_mage-windup.png"
+      },
+      "frameRarityColors": {
+        "windup": "#02e1fd"
+      }
     },
     {
       "id": "hero_attack:white_mage",
@@ -59,7 +79,13 @@
       "fileHires": "sprites-hires/hero/archer.png",
       "style": "nes",
       "rarityColor": "#f0bc3c",
-      "rarityColorHires": "#fbeb05"
+      "rarityColorHires": "#fbeb05",
+      "frames": {
+        "windup": "sprites-frames/hero/archer-windup.png"
+      },
+      "frameRarityColors": {
+        "windup": "#fdee04"
+      }
     },
     {
       "id": "hero_attack:archer",
@@ -775,6 +801,24 @@
       "id": "item:phoenix_pendant",
       "file": "sprites/item/phoenix_pendant.png",
       "fileHires": "sprites-hires/item/phoenix_pendant.png",
+      "style": "nes"
+    },
+    {
+      "id": "effect:fireball",
+      "file": "sprites/effect/fireball.png",
+      "fileHires": "sprites-hires/effect/fireball.png",
+      "style": "nes"
+    },
+    {
+      "id": "effect:light_burst",
+      "file": "sprites/effect/light_burst.png",
+      "fileHires": "sprites-hires/effect/light_burst.png",
+      "style": "nes"
+    },
+    {
+      "id": "effect:arrow",
+      "file": "sprites/effect/arrow.png",
+      "fileHires": "sprites-hires/effect/arrow.png",
       "style": "nes"
     },
     { "id": "fallback", "file": "fallback.png", "style": "nes" }

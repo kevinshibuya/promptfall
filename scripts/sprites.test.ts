@@ -6,7 +6,9 @@ import {
   type BuildInput,
   buildSprites,
   downsample,
+  EFFECT_IDS,
   emitModule,
+  expectedIds,
   hiresMasterPaths,
   type Indexed,
   type Manifest,
@@ -347,6 +349,151 @@ describe('sprites build', () => {
       expect(a).toBe(emitModule(build([...entries].reverse())))
       expect(a).toContain('hires: { width: 24, height: 24')
       expect(a).toMatch(/'hero:knight': \{[^\n]*raritySlotHires: \d+/)
+    })
+  })
+
+  describe('the frames', () => {
+    const RED = 0xc84c0c
+    const WHITE = 0xfcfcfc
+    const solid = (w: number, h: number, c = RED) => image(w, h, () => c)
+    MEM.set('fr/16.png', solid(16, 16, WHITE))
+    MEM.set('fr/24.png', solid(24, 24, WHITE))
+    MEM.set('fr/24b.png', solid(24, 24))
+    MEM.set('fr/60x40.png', solid(60, 40))
+    MEM.set('fr/70x44.png', solid(70, 44))
+    MEM.set(
+      'fr/17.png',
+      image(17, 4, (x) => SNES[x] ?? 0),
+    )
+    MEM.set(
+      'fr/one.png',
+      image(24, 24, (x) => (x < 4 ? RED : WHITE)),
+    )
+    MEM.set(
+      'fr/two.png',
+      image(24, 24, (x) => (x < 4 || x > 19 ? RED : WHITE)),
+    )
+    const enemy = (frames: ManifestEntry['frames']): ManifestEntry => ({
+      id: 'enemy:a',
+      file: 'fr/16.png',
+      fileHires: 'fr/24.png',
+      style: 'nes',
+      frames,
+    })
+    const heroes = (windup: string): ManifestEntry[] => [
+      {
+        id: 'hero:knight',
+        file: 'nes-4.png',
+        fileHires: 'fr/one.png',
+        style: 'nes',
+        rarityColor: '#c84c0c',
+        rarityColorHires: '#c84c0c',
+        frames: { windup },
+        frameRarityColors: { windup: '#c84c0c' },
+      },
+      {
+        id: 'hero_attack:knight',
+        file: 'nes-12x9.png',
+        fileHires: 'fr/one.png',
+        style: 'nes',
+        rarityColor: '#c84c0c',
+        rarityColorHires: '#c84c0c',
+      },
+    ]
+
+    it('builds an enemy with a 24 × 24 windup and strike', () => {
+      const r = build([enemy({ windup: 'fr/24b.png', strike: 'fr/24.png' })])
+      expect(r.errors).toEqual([])
+      const f = r.sprites[0]?.frames
+      expect(f?.windup.art).toMatchObject({ width: 24, height: 24 })
+      expect(f?.strike.art).toMatchObject({ width: 24, height: 24 })
+      expect(f?.windup.raritySlot).toBe(null)
+      expect(f?.follow).toBe(null)
+    })
+
+    it('fails a 17-colour frame, naming it', () => {
+      const r = build([enemy({ windup: 'fr/24.png', strike: 'fr/17.png' })])
+      expect(r.errors).toEqual(['enemy:a: frames.strike has 17 colours, the 1.5x art allows 16'])
+    })
+
+    it("fits a boss's 70 × 44 strike to its 60 × 40 idle canvas", () => {
+      const r = build([
+        {
+          id: 'enemy:boss',
+          file: 'snes-48x34.png',
+          fileHires: 'fr/60x40.png',
+          style: 'snes',
+          frames: { windup: 'fr/60x40.png', strike: 'fr/70x44.png' },
+        },
+      ])
+      expect(r.errors).toEqual([])
+      const strike = r.sprites[0]?.frames?.strike.art
+      expect(strike).toMatchObject({ width: 60, height: 40 })
+      // shrunk to 60 × 38 and padded bottom-centred: the top two rows are empty
+      expect([...(strike?.idx.subarray(0, 120) ?? [])].every((v) => v === 0)).toBe(true)
+      expect(strike?.idx[2 * 60]).not.toBe(0)
+    })
+
+    it("gives a hero without a strike its hero_attack's hires art, by identity", () => {
+      const r = build(heroes('fr/one.png'))
+      expect(r.errors).toEqual([])
+      const knight = r.sprites.find((s) => s.id === 'hero:knight')
+      const attack = r.sprites.find((s) => s.id === 'hero_attack:knight')
+      expect(knight?.frames?.strike.art).toBe(r.art.get(attack?.stem ?? '')?.hires)
+      expect(knight?.frames?.strike.raritySlot).toBe(attack?.raritySlotHires)
+      const slot = knight?.frames?.windup.raritySlot ?? -1
+      expect(knight?.frames?.windup.art.palette[slot]).toBe(RED)
+      const out = emitModule(r)
+      expect(out).toMatch(/'hero:knight': \{[^\n]*strike: \{ art: a\d+\.hires, raritySlot: \d+ \}/)
+      expect(emitModule(build([...heroes('fr/one.png')].reverse()))).toBe(out)
+    })
+
+    it('fails a hero frame whose rarity colour lands in two regions', () => {
+      expect(build(heroes('fr/two.png')).errors).toEqual([
+        'hero:knight: frameRarityColors.windup is not one region',
+      ])
+    })
+
+    it('fails a non-hero with a windup only', () => {
+      expect(build([enemy({ windup: 'fr/24.png' })]).errors).toEqual([
+        'enemy:a: frames.strike is required for a non-hero',
+      ])
+    })
+
+    it('emits frames: null for an entry without frames', () => {
+      const r = build([enemy(undefined)])
+      expect(r.sprites[0]?.frames).toBe(null)
+      expect(emitModule(r)).toMatch(/'enemy:a': \{[^\n]*frames: null/)
+    })
+
+    it('lists a frame whose native is 30% larger than its idle native, and builds', () => {
+      MEM.set('sprites/enemy/d.png', solid(16, 16, WHITE))
+      MEM.set('sprites-hires/enemy/d.png', solid(24, 24, WHITE))
+      MEM.set('sprites-frames/enemy/d-windup.png', solid(24, 24))
+      MEM.set('sprites-frames/enemy/d-strike.png', solid(24, 24))
+      MEM.set('sheets/native/enemy/d.png', solid(20, 18))
+      MEM.set('sheets/native/enemy/d-windup.png', solid(26, 20))
+      MEM.set('sheets/native/enemy/d-strike.png', solid(21, 19))
+      const r = build([
+        {
+          id: 'enemy:d',
+          file: 'sprites/enemy/d.png',
+          fileHires: 'sprites-hires/enemy/d.png',
+          style: 'nes',
+          frames: {
+            windup: 'sprites-frames/enemy/d-windup.png',
+            strike: 'sprites-frames/enemy/d-strike.png',
+          },
+        },
+      ])
+      expect(r.errors).toEqual([])
+      expect(r.drift).toEqual(['enemy:d frames.windup: native 26 against idle 20 (+30%)'])
+    })
+
+    it('expects the three effect sprites', async () => {
+      expect(EFFECT_IDS).toEqual(['effect:fireball', 'effect:light_burst', 'effect:arrow'])
+      const ids = await expectedIds()
+      for (const id of EFFECT_IDS) expect(ids).toContain(id)
     })
   })
 

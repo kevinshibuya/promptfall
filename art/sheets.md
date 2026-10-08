@@ -623,7 +623,24 @@ pnpm slice $D art/sprites $=C --hires art/sprites-hires --row 0 --names x/d,x/e,
 rm -rf art/sprites-frames/x art/sprites/x art/sprites-hires/x art/sheets/native/x /tmp/promptfall-frame-cuts
 ```
 
+The five hero frames carry hand fixes for the one-region rule (Task F3), kept as grids
+(`art/sheets/grids/hires-hero-<name>-<frame>.txt`) and written back by the canonical cut. On each,
+the largest 8-connected region that snaps to the frame's rarity entry is flattened to its
+`frameRarityColors` value, and every other pixel on that entry moves to the nearest other master
+entry (`.promptfall/frames/fix-rarity.ts`):
+
+- knight wind-up (`#fb0f06`, the cape; 13 pixels of plume and shield cross moved) and
+  follow-through (`#fc0c02`, the cape; the plume, 9 pixels, moved).
+- black mage wind-up (`#6d19ab`, the robe; the hat, 32 pixels, and three specks moved).
+- white mage wind-up (`#02e1fd`, the staff orb; 5 cyan pixels on the body moved).
+- archer wind-up (`#fdee04`, the cape; 6 pixels of the bow hand moved).
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
 | --- | --- | --- | --- |
+| `hero:knight` | windup | frames-heroes | frame size drift: native 30 against idle 21 (+43%); the sword overhead adds height, so the fit shrinks the pixels |
+| `hero:knight` | follow | frames-heroes | frame size drift: native 30 against idle 21 (+43%) |
+| `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
+| `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
+| `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |

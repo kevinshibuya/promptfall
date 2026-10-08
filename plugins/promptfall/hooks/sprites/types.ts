@@ -7,7 +7,12 @@ export type SpriteArt = {
   pixels: string
 }
 
-export type SpriteKind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item'
+export type SpriteKind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'
+
+/** One drawn 1.5x frame, on its idle 1.5x art's canvas. */
+export type SpriteFrame = { art: SpriteArt; raritySlot: number | null }
+/** The drawn frames; a hero's strike is its `hero_attack` sprite's `hires`, by identity. */
+export type SpriteFrames = { windup: SpriteFrame; strike: SpriteFrame; follow: SpriteFrame | null }
 
 export type Sprite = {
   /** `${kind}:${key}`, e.g. 'hero:knight', 'enemy:road_slime'; or 'fallback' */
@@ -28,4 +33,6 @@ export type Sprite = {
   small: SpriteArt | null
   /** True while the manifest aliases this id to a concept sheet sprite. */
   isPlaceholder: boolean
+  /** The drawn 1.5x frames (wind-up, strike, follow-through), or null when the sprite has none. */
+  frames: SpriteFrames | null
 }
