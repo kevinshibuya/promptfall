@@ -291,15 +291,27 @@ export function renderSvg(
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
-    const slot = actor.raritySlot
-    const id = define(actor.art, slot)
-    // The accent before any flash: the flash is an overlay here, never baked into the base.
-    const color = slot === null ? '' : ` color="${hex(actor.accent ?? actor.palette[slot] ?? 0)}"`
-    const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
-    const use = `<use href="#${id}"${flip}${color}/>`
-    const flashUse = `<use href="#${id}"${flip} filter="url(#flash)"`
+    // The pose-at-now art, for the paths that draw it: the 1.5x SMIL path draws every pose from
+    // `poses` and must not define it (an idle B or hit art here is a def nothing uses).
+    const drawNow = () => {
+      const slot = actor.raritySlot
+      const id = define(actor.art, slot)
+      // The accent before any flash: the flash is an overlay here, never baked into the base. A
+      // hit's own palette is already lightened; its filter lightens the idle colour instead.
+      const accent =
+        scale !== 1 && actor.pose === 'hit' && slot !== null
+          ? actor.poses.idle.palette[slot]
+          : (actor.accent ?? (slot === null ? undefined : actor.palette[slot]))
+      const color = slot === null ? '' : ` color="${hex(accent ?? 0)}"`
+      const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
+      return {
+        use: `<use href="#${id}"${flip}${color}/>`,
+        flashUse: `<use href="#${id}"${flip} filter="url(#flash)"`,
+      }
+    }
 
     if (!opts.smil) {
+      const { use, flashUse } = drawNow()
       const opacity = actor.fallen ? 0.5 : actor.alpha
       const op = opacity < 1 ? ` opacity="${Number(opacity.toFixed(2))}"` : ''
       const flash = actor.flashing ? `${flashUse}/>` : ''
@@ -320,6 +332,7 @@ export function renderSvg(
       body.push(hiresActor(actor, mine, x))
       continue
     }
+    const { use, flashUse } = drawNow()
     const y = actor.y + (actor.fallen ? 0 : bob)
     base.set(actor.key, { x, y, actor })
     const anim: string[] = []
@@ -368,10 +381,14 @@ export function renderSvg(
     }
     for (const n of model.numbers) body.push(text(n.text, n.x, n.y, n.rgb, block, ''))
   } else {
+    // Effects draw under the numbers, as on the pixel surfaces: they go in before the first one.
+    let firstNumber = -1
+    const effects: string[] = []
     for (const m of live) {
       const at = base.get(m.actor)
       if (!at) continue
       if (m.kind === 'number') {
+        if (firstNumber < 0) firstNumber = body.length
         const w = textWidth(m.text, block)
         const x = clamp(
           Math.round(at.x + (at.actor.poses.idle.art.width - w) / 2),
@@ -415,11 +432,12 @@ export function renderSvg(
           m.shape === 'bolt'
             ? `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${end.x - start.x} ${end.y - start.y}" begin="${begin(m)}" dur="${dur(m)}"/>`
             : ''
-        body.push(
+        effects.push(
           `<g transform="translate(${start.x} ${start.y})" opacity="0"><animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/>${fly}<use href="#${define(art, null)}"${flip}/></g>`,
         )
       }
     }
+    body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }
 
   const height = Math.round((opts.width * H) / W)

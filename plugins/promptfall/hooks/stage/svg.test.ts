@@ -259,3 +259,67 @@ test('the 1.5x blink is 100 ms of white over the hit frame', () => {
     /<g opacity="0"><animate attributeName="opacity" values="1;0" begin="[-0-9.]+s" dur="0\.1s"\/><g transform="translate\(-?\d+ 0\)[^"]*" filter="url\(#flash\)">/,
   )
 })
+
+test('in the B half of a second, or during a hit, the 1.5x SMIL Svg defines no derived art', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  const at = NOW + 700 // the second half of the bob's clock: every actor in idle B
+  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  expect(model.actors.every((a) => a.pose === 'idle_b')).toBe(true)
+  const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
+  for (const a of model.actors) expect(svg).not.toContain(defOf(a.art, a.raritySlot))
+  // The same document as at rest in the A half, but for the clock's begin offsets.
+  expect(Math.abs(svg.length - hiSvg('rest').length)).toBeLessThan(100)
+  const s = stage('strike')
+  const goblin = s.hires.actors.find((a) => a.key === 'e1')
+  if (!goblin) throw new Error('no goblin')
+  expect(goblin.pose).toBe('hit')
+  expect(hiSvg('strike')).not.toContain(defOf(goblin.art, goblin.raritySlot))
+})
+
+test('without SMIL, a hero in its hit frame carries its idle rarity colour under the hit filter', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'e1', target: 'h1', amount: 3 },
+    ],
+    NOW,
+  )
+  const at = NOW + 150
+  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const svg = renderSvg(model, t.active(at), { ...SMIL, smil: false, now: at })
+  const common = `#${(RARITY_RGB.common ?? 0).toString(16).padStart(6, '0')}`
+  expect(svg).toContain(`color="${common}"`)
+})
+
+test('under SMIL an effect draws under the numbers, as on the pixel surfaces', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
+      { k: 'act', actor: 'h3', action: 'attack', at: 400 },
+      { k: 'hit', by: 'h3', target: 'e1', amount: 5 },
+    ],
+    NOW,
+  )
+  const at = NOW + 500
+  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
+  const burst = svg.indexOf(`href="#${''}`, svg.indexOf('values="1;1" begin'))
+  expect(svg.indexOf('>42</text>')).toBeGreaterThan(
+    svg.lastIndexOf('<g transform="translate(', svg.indexOf('<text')),
+  )
+  expect(burst).toBeGreaterThan(-1)
+  const effectAt = svg.search(
+    /<g transform="translate\(-?\d+ -?\d+\)" opacity="0"><animate attributeName="opacity" values="1;1"[^>]*\/><use/,
+  )
+  expect(effectAt).toBeGreaterThan(-1)
+  expect(effectAt).toBeLessThan(svg.indexOf('<text'))
+})

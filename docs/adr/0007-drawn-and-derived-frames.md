@@ -51,7 +51,7 @@ art, so they draw at both densities and on the compact stage.
 
 ## Headroom
 
-Drawn frames are defs of their own while in use: the frames of motions live at a redraw or
+The SMIL `Svg` draws every pose from the actor's poses, never from the drawing at the redraw's instant, so its length does not depend on which half of the bob's clock a redraw lands in. Drawn frames are defs of their own while in use: the frames of motions live at a redraw or
 starting before the next one (167 ms), with the rest of the same action. A whole tick's queued
 actions would put every attacker's frames in one document.
 
