@@ -9,18 +9,18 @@ import type {
 } from '../scenarios'
 
 export const GOLDENS: Record<Scenario, Golden> = {
-  rest: {rasterHash: "d15551d66f757f7b", imageHash: "f6d4c1e696afd2c3", svgHash: "3c8b2c5a1d9f97e0", svgChars: 14647, rasterPairs: 52, imageHashHires: "79712b01079b4704", svgHashLo: "0e1f41e78a78f4a4"},
-  boss: {rasterHash: "1e033afa223bc822", imageHash: "4a37fa639ac9c089", svgHash: "67705246e63da60d", svgChars: 18778, rasterPairs: 43, imageHashHires: "13c1d322179ab292", svgHashLo: "28f87ec4674855a5"},
+  rest: {rasterHash: "eef214302d1f8451", imageHash: "3cc6be7c0441346d", svgHash: "69267e832badf311", svgChars: 34965, rasterPairs: 61, imageHashHires: "652f5b639dc0231e", svgHashLo: "814a0f7fcbf65ce6"},
+  boss: {rasterHash: "f040b91827f6e567", imageHash: "cc0853ddc0c60bd6", svgHash: "9ce43ac98afa6581", svgChars: 39094, rasterPairs: 150, imageHashHires: "234e504da8e060b7", svgHashLo: "f8da9d65c0b5e0a3"},
   compact: {rasterHash: "05c760dc7780fe47", imageHash: "ec052af06fc8d8d4", svgHash: "a28b048364cb08b2", svgChars: 3679, rasterPairs: 32, imageHashHires: "ec052af06fc8d8d4", svgHashLo: "a28b048364cb08b2"},
-  dissolve: {rasterHash: "d75e0f0e2186af97", imageHash: "da5e7fa86fd0f91f", svgHash: "f243cfd932452a04", svgChars: 19915, rasterPairs: 47, imageHashHires: "680a90110a00db64", svgHashLo: "7e485a24a3a39320"},
-  drop: {rasterHash: "8fd63c90f3fabecc", imageHash: "ede2a8e745d12e34", svgHash: "a2b40894d63e5b4d", svgChars: 14097, rasterPairs: 52, imageHashHires: "9fe637e232343c29", svgHashLo: "b4e3c10aed422661"},
-  windup: {rasterHash: "09d06c0bbfd20980", imageHash: "a6e3c6a14789da48", svgHash: "b8decbd3a25e317e", svgChars: 23426, rasterPairs: 53, imageHashHires: "2f84d11f08ed1efb", svgHashLo: "8959927d286f861a"},
-  strike: {rasterHash: "891d6d6f2cc12cf4", imageHash: "33ebbcf8055f3a74", svgHash: "418ce35864bfbd30", svgChars: 20694, rasterPairs: 48, imageHashHires: "da82bbfa39e7adfc", svgHashLo: "f9de4cf1cef0ecb8"},
-  follow: {rasterHash: "674d1dde714de22a", imageHash: "ef0fc00a5c09f6ed", svgHash: "5faabbb741a18fc2", svgChars: 17070, rasterPairs: 53, imageHashHires: "ea542957c8f5440b", svgHashLo: "b91c4d62b6024afa"},
-  bolt: {rasterHash: "c8e30d7fe223a085", imageHash: "ebb7f69e48e9dd87", svgHash: "6ce023a8a8d39e4c", svgChars: 19755, rasterPairs: 56, imageHashHires: "2f826c3b3d956166", svgHashLo: "adf5ff9c72d7ef86"},
-  burst: {rasterHash: "51db9e9e781f139f", imageHash: "4d9f5d6b5f5bd4e6", svgHash: "4d879156b1b2538d", svgChars: 21170, rasterPairs: 51, imageHashHires: "b75c103a3d4ccf6a", svgHashLo: "321a3ed3bec7171a"},
-  'enemy-strike': {rasterHash: "b97b66718ac4f45f", imageHash: "4c1de31d93cc3ca7", svgHash: "b7deb3eb20cce94d", svgChars: 18108, rasterPairs: 51, imageHashHires: "860cfe9471c28725", svgHashLo: "11421c371c9ecb9b"},
-  'boss-strike': {rasterHash: "40817453baa2ad62", imageHash: "2111313d471e5389", svgHash: "9d6c11281dfde37a", svgChars: 32731, rasterPairs: 79, imageHashHires: "66435e164dd75770", svgHashLo: "488b5aaf676bce66"},
+  dissolve: {rasterHash: "20eb62b6678db725", imageHash: "4b379fdd92cc8db9", svgHash: "e7e862707175878b", svgChars: 40233, rasterPairs: 64, imageHashHires: "662301bb68e8ef2d", svgHashLo: "5b9bc073607e330a"},
+  drop: {rasterHash: "7b21ba67452661ee", imageHash: "13b545d1b13799c8", svgHash: "5122355d42a133b6", svgChars: 34415, rasterPairs: 62, imageHashHires: "8e3249241e12ae35", svgHashLo: "8e79906c0a587615"},
+  windup: {rasterHash: "3e5224e0fde4e07b", imageHash: "504f1874bcbf10f6", svgHash: "7d1ffadaeb55189f", svgChars: 43744, rasterPairs: 62, imageHashHires: "a1433e91b08d279d", svgHashLo: "6f16ca9e685b9dac"},
+  strike: {rasterHash: "50e734717f1fbecd", imageHash: "6a581a446dc65a0b", svgHash: "b7034a0ded9127fb", svgChars: 41012, rasterPairs: 62, imageHashHires: "5b95f7430a33bf8d", svgHashLo: "c0cf7cafc67a251a"},
+  follow: {rasterHash: "5ca63ce6a9be2f8e", imageHash: "4ffe5c87e9e65102", svgHash: "241eaa7ec08d1491", svgChars: 37388, rasterPairs: 62, imageHashHires: "946c4385974e1317", svgHashLo: "2fa125d0c81a642c"},
+  bolt: {rasterHash: "394cf68dd429695c", imageHash: "48509b2b7c895894", svgHash: "6c38356ddbad89b7", svgChars: 40073, rasterPairs: 65, imageHashHires: "0c128b1200e1a299", svgHashLo: "97467043c08e6488"},
+  burst: {rasterHash: "f93546a9ff07c171", imageHash: "72438e0e02ef307b", svgHash: "ab3e13d9609641fa", svgChars: 41488, rasterPairs: 64, imageHashHires: "9a036390b16a7e53", svgHashLo: "4d0169a50b833a9e"},
+  'enemy-strike': {rasterHash: "f63befc505076db7", imageHash: "f8aed0bcfdc8575c", svgHash: "d6ed0abb71f2c566", svgChars: 38426, rasterPairs: 61, imageHashHires: "fde210ac3afaf74a", svgHashLo: "0c173204800ee4a1"},
+  'boss-strike': {rasterHash: "bede66b933974df3", imageHash: "82fa39287e738353", svgHash: "ebe4bd12ab674eae", svgChars: 53047, rasterPairs: 142, imageHashHires: "65e1a6d036520da6", svgHashLo: "01f01d03837c42ac"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {

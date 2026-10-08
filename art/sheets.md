@@ -1599,3 +1599,69 @@ candidates for a later pass that refines the sprites and frames, not a redo orde
 | `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: native 76 against idle 55 (+38%) |
 | `world_boss:the_promptwyrm` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 63% |
 | `world_boss:hallucinox` | strike | frames-bosses-13 | frame size drift: the fit to the idle canvas shrinks it to 58% |
+
+## Backdrops (2026-10-08)
+
+One painting per zone under the stage (ADR 0008). Review: the same artifact, one section per zone
+under the frames. Each run attached one reference, the zone's boss stage view from
+`pnpm contact --zone <n>` (`.promptfall/contact/zone-<n>/stage-boss.png`), and used the common
+prompt `art/sheets/backdrop-common.txt` plus the zone brief `art/sheets/backdrop-briefs/z<n>.txt`,
+then the save line. The sheet is `art/sheets/backdrop-z<n>.png`.
+
+Run (one zone):
+
+```sh
+PROMPT="$(cat art/sheets/backdrop-common.txt)
+
+$(cat art/sheets/backdrop-briefs/z1.txt)
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/backdrop-z1.png."
+~/.claude/bin/codex-run.sh backdrop-z1 exec -m gpt-6-astra -C <repo> -s workspace-write \
+  -i=<repo>/.promptfall/contact/zone-1/stage-boss.png "$PROMPT"
+```
+
+Cut (both densities, 16 colours, the band fitted by width, the sky cropped from the top):
+
+```sh
+pnpm backdrop art/sheets/backdrop-z1.png --zone 1
+```
+
+Common prompt:
+
+```text
+HARD REQUIREMENT, READ FIRST: the image is 1536x1024 landscape. Draw ONE wide horizontal strip of scenery, the full 1536 width, about 330 pixels tall, placed across the vertical middle of the canvas. Everything above and below the strip is ONE flat solid pure magenta colour, #FF00FF, edge to edge. NOT black, NOT a gradient, NO vignette, NO frame, NO border line around the strip, NO drop shadow under it.
+
+The strip is a battle backdrop for a retro 8-bit console RPG: the stage of a side-view battle, in the manner of NES-era Final Fantasy and Dragon Quest battle backgrounds. It is pure scenery. NO characters, NO creatures, NO people, NO animals, NO monsters, NO text, NO letters, NO numbers, NO signs, NO logo, NO watermark.
+
+The attached picture is a STYLE reference only: it shows the characters that will stand in front of this backdrop, at their pixel size. Match that pixel block size and that family of colours. Do NOT draw any of them and do NOT copy its dark background.
+
+COMPOSITION, top to bottom inside the strip:
+- The bottom sixth of the strip is flat GROUND the party stands on: one level band in the zone's ground colour, running the full width along the strip's bottom edge, with at most a little low texture in a slightly darker shade of the same colour.
+- The lower half of the strip, just above the ground, stays CALM and LOW-CONTRAST: distant, simple shapes in muted colours, because the characters are drawn in front of it and must stay readable.
+- The upper half holds the detail: the horizon, the far scenery and the sky or ceiling.
+- Spread the scenery evenly across the whole width. No single large object at the left or right edge: the picture is cropped on both sides.
+
+STYLE:
+- Retro 8-bit pixel art built from large, perfectly square, equal-size pixel blocks about 6 screen pixels wide on a hard grid. No anti-aliasing, no gradients, no blur, no soft shadows, no glow, no bloom, no lens effects, no noise.
+- Flat fills. The whole strip uses at most 12 colours. Muted, slightly desaturated colours, a little darker than the characters. Big simple shapes and little fine detail: a stage only 240 pixels wide and 51 tall will be cut from this strip, so anything smaller than one block disappears.
+- Dithering only as a coarse checker of the same block size, and only a little.
+```
+
+Zone briefs (one per run, after the common prompt):
+
+- z1: ZONE: Greenmeadow Road, a sunny country road through farmland. Ground colour #5a8c3a (meadow green), with a dusty dirt track tone along it. Scenery: level green meadows, low hedgerows, a few round-topped trees, a wooden fence line, one small farmhouse and a windmill far off, soft daytime blue sky with two or three flat white clouds. Mood: bright, calm, early game.
+- z2: ZONE: Whisperwood, an old whispering forest at dusk. Ground colour #2f5a2a (dark mossy green). Scenery: tall dark tree trunks in rows, a dense canopy of deep greens closing over the top, a few pale spirit lights as single light dots between the trunks, moss and roots low down, almost no sky. Mood: dim, hushed, watchful.
+- z3: ZONE: Marsh of Sighs, a foggy swamp. Ground colour #4a5a3a (mud green). Scenery: murky teal water in flat bands behind the ground, mud banks, clumps of reeds, a few dead leafless trees, low horizontal fog bands, a flat grey-green sky. Mood: damp, still, mournful.
+- z4: ZONE: Old Barrow Hills, grave mounds under moonlight. Ground colour #6a6a4a (dry grey-olive turf). Scenery: rolling grey-blue hills, grass-covered barrow mounds with dark stone doorways, a few standing stones, a large pale full moon, a cold dark blue night sky with a handful of single-block stars. Mood: cold, silent, haunted.
+- z5: ZONE: Saltglass Coast, a bright shore of glassy sand. Ground colour #c8b88a (pale sand). Scenery: a flat sea in sea-blue bands with thin white wave lines, a few glassy teal rocks on the shore, a distant lighthouse on a headland, bright pale-blue sky, a few white clouds. Mood: bright, windy, open.
+- z6: ZONE: Emberfall Caves, lava caves deep underground. Ground colour #5a2a1a (dark scorched rock). Scenery: black and dark-brown rock walls, stalactites hanging from a rock ceiling instead of a sky, pools and cracks of orange lava glow behind the ground (drawn as flat orange shapes, no glow effect), soot and ash. Mood: hot, oppressive, red-orange on black.
+- z7: ZONE: Frostvein Pass, a snowy mountain pass. Ground colour #b8d0e0 (packed snow, pale ice blue). Scenery: ice-blue and white mountain peaks, grey stone cliffs on both sides opening to the middle, snow banks and drifts, a pale wintry sky, a few flat snowflakes as single blocks. Mood: cold, bright, thin air.
+- z8: ZONE: Sunken Abbey, a flooded stone abbey. Ground colour #3a4a5a (wet dark stone floor). Scenery: rows of stone arches and pillars receding into the distance, broken tall windows, standing teal water in the far hall behind the pillars, a few candle-gold points of light on the walls (flat yellow blocks, no glow), a vaulted dark ceiling instead of a sky. Mood: drowned, echoing, sacred.
+- z9: ZONE: Ashen Waste, a grey ash desert under a red sky. Ground colour #6a6460 (ash grey). Scenery: low ash dunes, a few rust-coloured broken ruins and pillars, scattered large bones, a dim red sun low on the horizon in a dull red-brown sky. Mood: dead, dry, scorched.
+- z10: ZONE: Starfall Spire, the top of a tower among the stars. Ground colour #3a2a5a (dark violet stone). Scenery: a stone parapet and railing line behind the ground, a few slender arches and spire tips, a deep navy night sky filled with single-block silver stars, one falling star drawn as a short straight streak, faint silver light on the stone edges. Mood: high, cold, cosmic.
+- z11: ZONE: Hollow King's Court, a dead royal court indoors. Ground colour #2a2a30 (black polished stone floor). Scenery: tall tarnished-gold pillars, long purple banners hanging between them, a throne on a dais far back in the middle distance, a dark vaulted ceiling, a few cold torch flames as flat blocks. Mood: regal, dead, purple and tarnished gold on black.
+- z12: ZONE: The Unwritten Reach, a world of blank paper and ink. Ground colour #e8e4d8 (off-white paper). Scenery: a paper-white world with faint ruled lines, half-drawn blue-ink outlines of hills and trees fading into white, a few black ink blots and splashes, an unfinished sketched horizon, white sky. Mood: empty, unfinished, white with black and blue ink. Use at most 8 colours here.
+
+| Zone | Run | Band | Cut |
+| --- | --- | --- | --- |
+| 1 | backdrop-z1, 156 s, `20261008-140525-4201-backdrop-z1.log` | 1536 x 358 at y 336 | 240 x 56 cropped to 51 (15 colours); 160 x 37 to 34 (13) |

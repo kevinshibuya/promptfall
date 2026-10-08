@@ -5,7 +5,7 @@
 // the painting's ground must sit on the band's bottom edge.
 //
 // tsx scripts/backdrop.ts <sheet.png> --zone <n> [--fit width|height] [--colours <n>] [--band <y0,y1>]
-//   [--out <dir>]
+//   [--sample vote|mean] [--out <dir>]
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { blank, medianCut, nearest, type Rgba, readPng, rgbOf, writePng } from './png'
@@ -17,6 +17,8 @@ export type BackdropOptions = {
   /** Which side of the band meets the canvas exactly; the other is cropped or extended. */
   fit: 'width' | 'height'
   colours: number
+  /** The block rule: `vote` snaps the sheet first and keeps flat blocks; `mean` averages. */
+  sample: 'vote' | 'mean'
   /** The band's rows, when the key detection is not to be trusted (inclusive, exclusive). */
   band?: { y0: number; y1: number }
 }
@@ -42,24 +44,85 @@ export function paintedBand(sheet: Rgba): Band | null {
 }
 
 /**
- * The band box-filtered to `W × H`: each output pixel the mean of its source block's painted
- * pixels (key pixels left out; a block with none takes its left neighbour, else the one above).
+ * The band's painted pixels snapped to a median-cut palette of `n` colours: one rgb per band
+ * pixel, row-major, -1 for the key. The sheet's blocks come back flat, so the vote below is clean.
  */
-export function resample(sheet: Rgba, band: Band, W: number, H: number): Rgba {
+export function snapBand(
+  sheet: Rgba,
+  band: Band,
+  n: number,
+): { rgb: Int32Array; palette: number[] } {
+  const bw = band.x1 - band.x0
+  const bh = band.y1 - band.y0
+  const raw = new Int32Array(bw * bh).fill(-1)
+  const counts = new Map<number, number>()
+  for (let y = 0; y < bh; y++) {
+    for (let x = 0; x < bw; x++) {
+      const p = ((band.y0 + y) * sheet.width + band.x0 + x) * 4
+      const r = sheet.data[p] ?? 0
+      const g = sheet.data[p + 1] ?? 0
+      const b = sheet.data[p + 2] ?? 0
+      if ((sheet.data[p + 3] ?? 0) < 128 || isKey(r, g, b)) continue
+      const rgb = (r << 16) | (g << 8) | b
+      raw[y * bw + x] = rgb
+      counts.set(rgb, (counts.get(rgb) ?? 0) + 1)
+    }
+  }
+  const palette = medianCut(counts, n)
+  const snapped = new Map<number, number>()
+  const rgb = new Int32Array(bw * bh)
+  for (let p = 0; p < raw.length; p++) {
+    const v = raw[p] ?? -1
+    if (v < 0) {
+      rgb[p] = -1
+      continue
+    }
+    let s = snapped.get(v)
+    if (s === undefined) {
+      s = nearest(v, palette)
+      snapped.set(v, s)
+    }
+    rgb[p] = s
+  }
+  return { rgb, palette }
+}
+
+/**
+ * The band resampled to `W × H`: each output pixel the commonest painted colour of its source
+ * block after the snap (`vote`, the sprite cut's rule: a block straddling two of the sheet's
+ * pixel blocks takes the one it mostly covers), or the mean of the raw painted pixels (`mean`).
+ * Key pixels are left out; a block with none takes its left neighbour, else the one above.
+ */
+export function resample(
+  sheet: Rgba,
+  band: Band,
+  W: number,
+  H: number,
+  opts: { sample: 'vote' | 'mean'; colours: number } = { sample: 'vote', colours: 16 },
+): Rgba {
   const out = blank(W, H)
   const bw = band.x1 - band.x0
   const bh = band.y1 - band.y0
+  const snapped = opts.sample === 'vote' ? snapBand(sheet, band, opts.colours).rgb : null
   for (let j = 0; j < H; j++) {
-    const sy0 = band.y0 + Math.floor((j * bh) / H)
-    const sy1 = band.y0 + Math.max(Math.floor((j * bh) / H) + 1, Math.floor(((j + 1) * bh) / H))
+    const sy0 = Math.floor((j * bh) / H)
+    const sy1 = Math.max(sy0 + 1, Math.floor(((j + 1) * bh) / H))
     for (let i = 0; i < W; i++) {
-      const sx0 = band.x0 + Math.floor((i * bw) / W)
-      const sx1 = band.x0 + Math.max(Math.floor((i * bw) / W) + 1, Math.floor(((i + 1) * bw) / W))
+      const sx0 = Math.floor((i * bw) / W)
+      const sx1 = Math.max(sx0 + 1, Math.floor(((i + 1) * bw) / W))
       let n = 0
       const sum = [0, 0, 0]
+      const votes = new Map<number, number>()
       for (let y = sy0; y < sy1; y++) {
         for (let x = sx0; x < sx1; x++) {
-          const p = (y * sheet.width + x) * 4
+          if (snapped) {
+            const v = snapped[y * bw + x] ?? -1
+            if (v < 0) continue
+            votes.set(v, (votes.get(v) ?? 0) + 1)
+            n++
+            continue
+          }
+          const p = ((band.y0 + y) * sheet.width + band.x0 + x) * 4
           const r = sheet.data[p] ?? 0
           const g = sheet.data[p + 1] ?? 0
           const b = sheet.data[p + 2] ?? 0
@@ -71,7 +134,18 @@ export function resample(sheet: Rgba, band: Band, W: number, H: number): Rgba {
         }
       }
       const o = (j * W + i) * 4
-      if (n > 0) {
+      if (n > 0 && snapped) {
+        // The commonest; the lowest rgb on a tie, so the cut is deterministic.
+        let best = -1
+        let bestN = 0
+        for (const [rgb, k] of [...votes.entries()].sort((a, b) => a[0] - b[0])) {
+          if (k > bestN) {
+            best = rgb
+            bestN = k
+          }
+        }
+        out.data.set([(best >> 16) & 0xff, (best >> 8) & 0xff, best & 0xff, 255], o)
+      } else if (n > 0) {
         out.data.set(
           [
             Math.round((sum[0] ?? 0) / n),
@@ -134,7 +208,7 @@ export function cutBackdrop(
   const scale = opts.fit === 'width' ? W / bw : H / bh
   const rw = opts.fit === 'width' ? W : Math.max(1, Math.round(bw * scale))
   const rh = opts.fit === 'height' ? H : Math.max(1, Math.round(bh * scale))
-  const resampled = resample(sheet, band, rw, rh)
+  const resampled = resample(sheet, band, rw, rh, { sample: opts.sample, colours: opts.colours })
   const { image, palette } = quantise(fitCanvas(resampled, W, H), opts.colours)
   return { image, resampled: { width: rw, height: rh }, palette }
 }
@@ -170,11 +244,13 @@ function parseArgs(argv: string[]): {
   const zone = Number(flag('zone'))
   if (!sheet || sheet.startsWith('--') || !Number.isInteger(zone) || zone < 1) {
     throw new Error(
-      'usage: tsx scripts/backdrop.ts <sheet.png> --zone <n> [--fit width|height] [--colours <n>] [--band <y0,y1>] [--out <dir>]',
+      'usage: tsx scripts/backdrop.ts <sheet.png> --zone <n> [--fit width|height] [--colours <n>] [--band <y0,y1>] [--sample vote|mean] [--out <dir>]',
     )
   }
   const fit = flag('fit') ?? 'width'
   if (fit !== 'width' && fit !== 'height') throw new Error(`--fit ${fit}: width or height`)
+  const sample = flag('sample') ?? 'vote'
+  if (sample !== 'vote' && sample !== 'mean') throw new Error(`--sample ${sample}: vote or mean`)
   const bandFlag = flag('band')
   const band = bandFlag
     ? (() => {
@@ -188,7 +264,7 @@ function parseArgs(argv: string[]): {
     sheet,
     zone,
     out: flag('out') ?? 'art',
-    opts: { fit, colours: Number(flag('colours') ?? BACKDROP_COLOURS), band },
+    opts: { fit, colours: Number(flag('colours') ?? BACKDROP_COLOURS), band, sample },
   }
 }
 

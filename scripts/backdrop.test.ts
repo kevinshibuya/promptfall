@@ -22,12 +22,22 @@ describe('backdrop', () => {
     expect(paintedBand(sheet(4, 4, () => KEY))).toBe(null)
   })
 
-  it('resamples by block mean, leaving key pixels out', () => {
-    // Two columns of 4 × 4 blocks: the left dark, the right light with one key pixel.
+  it('resamples by block vote or block mean, leaving key pixels out', () => {
+    // Two columns of 4 × 4 blocks: the left dark, the right light with one key pixel and one
+    // stray lighter pixel: the vote keeps the block's colour, the mean drifts.
     const s = sheet(8, 4, (x) => (x < 4 ? 0x202020 : 0x606060))
     s.data.set([255, 0, 255, 255], (1 * 8 + 5) * 4)
-    const r = resample(s, { x0: 0, y0: 0, x1: 8, y1: 4 }, 2, 1)
-    expect([at(r, 0, 0), at(r, 1, 0)]).toEqual([0x202020, 0x606060])
+    s.data.set([0x70, 0x70, 0x70, 255], (2 * 8 + 6) * 4)
+    const vote = resample(s, { x0: 0, y0: 0, x1: 8, y1: 4 }, 2, 1, { sample: 'vote', colours: 16 })
+    expect([at(vote, 0, 0), at(vote, 1, 0)]).toEqual([0x202020, 0x606060])
+    const mean = resample(s, { x0: 0, y0: 0, x1: 8, y1: 4 }, 2, 1, { sample: 'mean', colours: 16 })
+    expect([at(mean, 0, 0), at(mean, 1, 0)]).toEqual([0x202020, 0x616161])
+    // The snap folds the stray pixel into the palette when the limit is tight.
+    const snapped = resample(s, { x0: 0, y0: 0, x1: 8, y1: 4 }, 2, 1, {
+      sample: 'vote',
+      colours: 2,
+    })
+    expect([at(snapped, 0, 0), at(snapped, 1, 0)]).toEqual([0x202020, 0x616161])
   })
 
   it('fits a canvas from the bottom-centre: cropping, or extending the edges', () => {
@@ -56,7 +66,7 @@ describe('backdrop', () => {
     const s = sheet(1536, 1024, (_, y) =>
       y >= 600 && y < 840 ? (y < 700 ? 0x8899cc : 0x557733) : KEY,
     )
-    const out = backdropFrom(s, { fit: 'width', colours: 16 })
+    const out = backdropFrom(s, { fit: 'width', colours: 16, sample: 'vote' })
     if ('error' in out) throw new Error(out.error)
     expect([out.hires.width, out.hires.height, out.full.width, out.full.height]).toEqual([
       240, 51, 160, 34,

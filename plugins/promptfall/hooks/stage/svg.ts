@@ -117,12 +117,57 @@ export function artPaths(art: SpriteArt, raritySlot: number | null): string {
     .join('')
 }
 
+/**
+ * One <path> per colour of a painting, each a set of rectangles: a horizontal run joins the run
+ * directly under it when both start and end at the same columns, so a sky or ground band is one
+ * `M x y h w v h h -w z`. A backdrop is mostly bands, and this halves `artPaths`' markup for it.
+ */
+export function rectPaths(art: SpriteArt): string {
+  const px = decodePixels(art)
+  type Run = { x: number; y: number; w: number; h: number }
+  const rects = new Map<number, Run[]>()
+  /** The runs of the row above still open for joining, by colour. */
+  let above = new Map<number, Run[]>()
+  for (let y = 0; y < art.height; y++) {
+    const open = new Map<number, Run[]>()
+    let x = 0
+    while (x < art.width) {
+      const v = px[y * art.width + x] ?? 0
+      let end = x + 1
+      while (end < art.width && px[y * art.width + end] === v) end++
+      if (v !== 0) {
+        const w = end - x
+        const join = above.get(v)?.find((r) => r.x === x && r.w === w && r.y + r.h === y)
+        let run = join
+        if (!run) {
+          run = { x, y, w, h: 1 }
+          const list = rects.get(v) ?? []
+          list.push(run)
+          rects.set(v, list)
+        } else run.h++
+        const list = open.get(v) ?? []
+        list.push(run)
+        open.set(v, list)
+      }
+      x = end
+    }
+    above = open
+  }
+  return [...rects.keys()]
+    .sort((a, b) => a - b)
+    .map((v) => {
+      const d = (rects.get(v) ?? []).map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h-${r.w}z`).join('')
+      return `<path fill="${hex(art.palette[v] ?? 0)}" d="${d}"/>`
+    })
+    .join('')
+}
+
 /** A backdrop's paths, built once per painting: it is static and the largest art on the stage. */
 const backdropCache = new WeakMap<SpriteArt, string>()
 function backdropPaths(art: SpriteArt): string {
   let paths = backdropCache.get(art)
   if (paths === undefined) {
-    paths = artPaths(art, null)
+    paths = rectPaths(art)
     backdropCache.set(art, paths)
   }
   return paths
