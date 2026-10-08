@@ -198,8 +198,8 @@ export function stage(name: Scenario): Staged {
       )
     }
     case 'drop': {
-      // The drop pops when the kill's flash ends; at NOW it is half done.
-      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DROP_MS / 2)
+      // The drop pops when the kill's fade ends; at NOW it is half done.
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + DROP_MS / 2)
       return killed(
         t1,
         [

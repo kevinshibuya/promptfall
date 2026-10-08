@@ -15,6 +15,7 @@ import {
   SPAWN_MS,
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
+  WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
@@ -151,7 +152,7 @@ test("a black mage's kill of the first of two targets drops from the first", () 
   )
   expect(of(t.active(NOW), 'drop')[0]).toMatchObject({
     actor: 'e1',
-    from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + FLASH_MS,
+    from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + FLASH_MS + DISSOLVE_MS,
   })
 })
 
@@ -197,8 +198,10 @@ test('a newcomer waits while every departed enemy still has a hit to show', () =
   t.observe(next, NOW + 2000)
   expect(t.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
   expect(of(t.active(NOW + 2000), 'flash').map((m) => m.actor)).toEqual(['e1', 'e2', 'e3'])
-  // Once the numbers have risen, the newcomer takes the first slot to free, with a spawn.
-  const later = NOW + 1900 + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + NUMBER_MS
+  // Once the kills have faded and the pause after them is over, the newcomer takes the first
+  // slot to free, with a spawn.
+  const impact = NOW + 1900 + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS
+  const later = impact + FLASH_MS + DISSOLVE_MS + WAVE_GAP_MS
   t.observe(next, later)
   const e4 = t.known().find((k) => k.id === 'e4')
   expect(e4).toBeDefined()
@@ -241,7 +244,7 @@ test('enemies stand side by side: once one is gone, the ones after it slide over
   expect(t.placeAt('e1', gone + SLIDE_MS)).toBe(0)
 })
 
-test('survivors keep their slots and a newcomer takes the lowest free one, with a spawn', () => {
+test('survivors keep their slots and a newcomer takes the lowest free one after the pause, with a spawn', () => {
   const t = observed()
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
@@ -256,18 +259,18 @@ test('survivors keep their slots and a newcomer takes the lowest free one, with 
     maxHp: 9,
     kind: 'wave',
   })
-  t.observe(v, NOW + DISSOLVE_MS + 1)
+  t.observe(v, NOW + DISSOLVE_MS + WAVE_GAP_MS)
   expect(t.known().map((k) => [k.id, k.slot])).toEqual([
     ['e4', 0],
     ['e2', 1],
     ['e3', 2],
   ])
-  expect(of(t.active(NOW + DISSOLVE_MS + 1), 'spawn')).toEqual([
+  expect(of(t.active(NOW + DISSOLVE_MS + WAVE_GAP_MS), 'spawn')).toEqual([
     {
       kind: 'spawn',
       actor: 'e4',
-      from: NOW + DISSOLVE_MS + 1,
-      until: NOW + DISSOLVE_MS + 1 + SPAWN_MS,
+      from: NOW + DISSOLVE_MS + WAVE_GAP_MS,
+      until: NOW + DISSOLVE_MS + WAVE_GAP_MS + SPAWN_MS,
     },
   ])
 })
@@ -282,12 +285,12 @@ test('rowsAt holds the boss height through the dissolve, then rests', () => {
   expect(t.rowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_REST_ROWS)
 })
 
-test('a drop pops from the target of the hit before it', () => {
+test('a drop pops from the target of the hit before it, once its fade is over', () => {
   const t = observed()
   t.onEffects([hit('h1', 'e3'), { k: 'drop', item: item('iron_sword') }], NOW)
   const drop = of(t.active(NOW), 'drop')[0]
   expect(drop).toMatchObject({ actor: 'e3', item: 'item:iron_sword' })
-  expect(drop?.from).toBe(NOW + LUNGE_MS / 2 + FLASH_MS)
+  expect(drop?.from).toBe(NOW + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS)
   expect(drop?.until).toBe((drop?.from ?? 0) + DROP_MS)
   expect(t.known().find((k) => k.id === 'e3')?.slot).toBe(2)
   const t2 = observed()
@@ -510,4 +513,31 @@ test('a stage two rounds behind drops the attacks that have not started', () => 
   expect(Math.max(...starts)).toBeLessThanOrEqual(2 * 2000 + ACTION_MS)
   // The attack under way when the cap drops the queue still plays out.
   expect(starts).toContain(0 + WINDUP_HOLD_MS)
+})
+
+test('a kill plays in beats: the fade, then the drop, then a pause, then the next enemy', () => {
+  const t = observed()
+  t.onEffects([hit('h1', 'e1'), { k: 'drop', item: item('iron_sword') }], NOW)
+  const flashEnd = NOW + LUNGE_MS / 2 + FLASH_MS
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id !== 'e1')
+  t.observe(v, NOW + 10)
+  expect(of(t.active(NOW + 10), 'dissolve')[0]).toMatchObject({ from: flashEnd })
+  // The drop pops once the fade is over.
+  const dropFrom = flashEnd + DISSOLVE_MS
+  expect(of(t.active(NOW + 10), 'drop')[0]).toMatchObject({ actor: 'e1', from: dropFrom })
+  // The next enemy arrives in the view right away, but waits off stage for the pause.
+  v.enemies.push({
+    ...v.enemies[0],
+    id: 'e4',
+    def: 'road_slime',
+    name: 'Road Slime',
+  } as (typeof v.enemies)[number])
+  const settled = dropFrom + DROP_MS
+  t.observe(v, settled + WAVE_GAP_MS - 1)
+  expect(t.known().map((k) => k.id)).not.toContain('e4')
+  expect(t.isBusy(settled + WAVE_GAP_MS - 1)).toBe(true)
+  t.observe(v, settled + WAVE_GAP_MS)
+  expect(t.known().map((k) => k.id)).toContain('e4')
+  expect(of(t.active(settled + WAVE_GAP_MS), 'spawn').map((m) => m.actor)).toEqual(['e4'])
 })

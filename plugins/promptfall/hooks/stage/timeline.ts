@@ -20,6 +20,7 @@ import {
   STAGE_BOSS_ROWS,
   STAGE_REST_ROWS,
   STAGE_TURN_BOSS_ROWS,
+  WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
@@ -136,6 +137,8 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
+  /** No newcomer steps on stage before this: a departed enemy's fade and drop, then a pause. */
+  private enterAfter = Number.NEGATIVE_INFINITY
   /** Each enemy's place in the line, left to right in slot order, and the slide that took it there. */
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
   /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
@@ -159,6 +162,13 @@ export class StageTimeline {
         from: lastFlash,
         until: lastFlash + DISSOLVE_MS,
       })
+    }
+    // A kill plays out before the next enemy enters: its fade, its drop, then a pause.
+    for (const id of this.departed) {
+      const end = this.motions
+        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
+        .reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
+      this.enterAfter = Math.max(this.enterAfter, end + WAVE_GAP_MS)
     }
     // A departed enemy keeps its entry and slot until its dissolve and any drop end.
     for (const id of this.departed) {
@@ -190,6 +200,7 @@ export class StageTimeline {
         }
         continue
       }
+      if (this.observed && now < this.enterAfter) continue
       const slot = this.freeSlot(now)
       if (slot === null) continue
       this.entries.set(enemy.id, {
@@ -429,7 +440,8 @@ export class StageTimeline {
         } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
           const actor = last?.target ?? this.front()
           if (actor === null || !this.entries.has(actor)) continue
-          const from = last?.flashEnd ?? now
+          // The drop pops once its target's fade is over.
+          const from = last ? last.flashEnd + DISSOLVE_MS : now
           this.motions.push({
             kind: 'drop',
             actor,
@@ -503,6 +515,8 @@ export class StageTimeline {
   }
 
   isBusy(now: number): boolean {
+    // Through the pause after a kill too, so the next enemy steps on at its time.
+    if (now < this.enterAfter) return true
     if ([...this.places.values()].some((p) => p.until > now)) return true
     return this.motions.some((m) => m.until > now)
   }

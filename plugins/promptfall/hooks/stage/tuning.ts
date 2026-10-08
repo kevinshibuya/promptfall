@@ -47,6 +47,8 @@ export const SPAWN_MS = 360
 /** An enemy's slide into the gap a departed one left. */
 export const SLIDE_MS = 240
 export const DROP_MS = 600
+/** After a kill's fade and drop, the pause before the next enemy steps on stage. */
+export const WAVE_GAP_MS = 800
 export const DROP_RISE_PX = 10
 export const IDLE_FRAME_MS = 500
 export const EVENT_FRAME_MS = 83
