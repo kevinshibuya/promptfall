@@ -1,7 +1,7 @@
 import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
-import { artFrame, backdropOrigin, composeFrame } from './compose'
+import { artFrame, backdropOrigin, composeFrame, mirrored } from './compose'
 import { DIGITS } from './font'
 import { fnv1a64 } from './hash'
 import { type StageModel, samePoses } from './model'
@@ -139,17 +139,19 @@ const rgbAt = (f: { width: number; rgba: Uint8ClampedArray }, x: number, y: numb
     : null
 }
 
-test('a backdrop fills the frame bottom-anchored and centred, its edges extended past its size', () => {
+test('a backdrop fills the frame bottom-anchored and centred, mirrored past its sides, the sky above', () => {
   // A 12 × 6 frame around an 8 × 4 painting: the painting lands at (2, 2).
   const f = composeFrame(model({ box: { columns: 12, rows: 3 }, backdrop: painting() }), {
     numbers: false,
   })
   expect(backdropOrigin(painting(), 12, 6)).toEqual({ x: 2, y: 2 })
   expect(rgbAt(f, 5, 3)).toBe(0x010101 * (1 + 8 + 3))
-  // Past the painting: the nearest edge pixel, so no frame pixel stays transparent.
-  expect(rgbAt(f, 0, 0)).toBe(0x010101 * 1)
-  expect(rgbAt(f, 11, 5)).toBe(0x010101 * 32)
+  // Past the sides: the painting mirrored (frame x 0 is painting column 1, x 11 is column 6);
+  // above it: its top row. No frame pixel stays transparent.
+  expect(rgbAt(f, 0, 0)).toBe(0x010101 * 2)
+  expect(rgbAt(f, 11, 5)).toBe(0x010101 * (1 + 24 + 6))
   expect(rgbAt(f, 1, 4)).toBe(0x010101 * (1 + 16))
+  expect(rgbAt(f, 1, 2)).toBe(0x010101 * 1)
   expect(opaqueIn(f, 12, 6)).toBe(72)
   // No ground strip over it: the bottom row is the painting's.
   expect(rgbAt(f, 2, 5)).toBe(0x010101 * (1 + 24))
@@ -162,4 +164,10 @@ test('a frame smaller than its backdrop crops the sides evenly and the sky', () 
   expect(backdropOrigin(painting(), 4, 2)).toEqual({ x: -2, y: -2 })
   expect(rgbAt(f, 0, 0)).toBe(0x010101 * (1 + 16 + 2))
   expect(rgbAt(f, 3, 1)).toBe(0x010101 * (1 + 24 + 5))
+})
+
+test('mirrored continues a row past both edges without a seam', () => {
+  expect([-3, -2, -1, 0, 1, 7, 8, 9, 15, 16, 17].map((i) => mirrored(i, 8))).toEqual([
+    2, 1, 0, 0, 1, 7, 7, 6, 0, 0, 1,
+  ])
 })

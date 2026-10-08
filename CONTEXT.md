@@ -242,32 +242,7 @@ The running account of the encounter, one short line per event (hits, kills, dro
 deaths, sales), printed in the band's message window as it happens.
 _Avoid_: battle log, feed, history, last drop
 
-**Toast**:
-One sentence the primary session raises over the transcript for an event worth a glance away
-from Claude's work: rare good news, a state that wants a decision, or money that moved. Subject
-first, in the game's voice. Routine combat never toasts; the combat log carries it. A toast is
-short-lived or long-lived by the weight of its event.
-_Avoid_: notification (the whole layer, toasts and cues together), alert, popup, banner
-
-**Burst**:
-The effects the engine hands over together: one tick's, or one delivery's. Toasts fold within a
-burst and never across two.
-_Avoid_: batch (that is a submission of player events), tick (one of the two kinds of burst)
-
-**Fold**:
-Several effects of one kind in a burst becoming one toast that carries the count and the sum.
-A legendary drop, a recruit, a reward, a wipe or a zone arrival never folds.
-_Avoid_: group, coalesce, merge, summary toast
-
 **Cue**:
 A short sound the primary session plays alongside a toast. Every cue has a toast; most
 toasts have no cue.
 _Avoid_: sound effect, sfx, alert, chime
-
-### Development
-
-**Sandbox**:
-A separate save on a fake host where verbs hand out what play would earn: a boss, an item, a
-level, gold, a zone. Each one is a server event, so the sim and the toasts treat it as real.
-The real server has no sandbox. The band says so while it is on.
-_Avoid_: cheat, debug mode, creative mode, dev mode, god mode

@@ -247,6 +247,10 @@ function parseArgs(argv: string[]): {
       'usage: tsx scripts/backdrop.ts <sheet.png> --zone <n> [--fit width|height] [--colours <n>] [--band <y0,y1>] [--sample vote|mean] [--out <dir>]',
     )
   }
+  const colours = Number(flag('colours') ?? BACKDROP_COLOURS)
+  if (!Number.isInteger(colours) || colours < 2 || colours > BACKDROP_COLOURS) {
+    throw new Error(`--colours ${flag('colours')}: an integer from 2 to ${BACKDROP_COLOURS}`)
+  }
   const fit = flag('fit') ?? 'width'
   if (fit !== 'width' && fit !== 'height') throw new Error(`--fit ${fit}: width or height`)
   const sample = flag('sample') ?? 'vote'
@@ -264,7 +268,7 @@ function parseArgs(argv: string[]): {
     sheet,
     zone,
     out: flag('out') ?? 'art',
-    opts: { fit, colours: Number(flag('colours') ?? BACKDROP_COLOURS), band, sample },
+    opts: { fit, colours, band, sample },
   }
 }
 

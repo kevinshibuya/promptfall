@@ -72,6 +72,8 @@ export type BuildInput = {
   load: (path: string) => Rgba | null
   /** Every sprite id the content needs. */
   expected: readonly string[]
+  /** The content's zone count: a backdrop past it is an error. Unbounded when absent. */
+  zones?: number
 }
 export type BuiltBackdrop = { zone: number; full: Indexed; hires: Indexed }
 export type BuildResult = {
@@ -143,6 +145,10 @@ export function buildBackdrops(input: BuildInput, errors: string[]): BuiltBackdr
     const label = `backdrop zone ${entry.zone}`
     if (!Number.isInteger(entry.zone) || entry.zone < 1) {
       errors.push(`${label}: zone must be a positive integer`)
+      continue
+    }
+    if (input.zones !== undefined && entry.zone > input.zones) {
+      errors.push(`${label}: the content has ${input.zones} zones`)
       continue
     }
     if (zones.has(entry.zone)) {
@@ -855,6 +861,7 @@ async function main(): Promise<void> {
     },
     load: loadArt,
     expected: await expectedIds(),
+    zones: (await import('@promptfall/sim')).content.zones.length,
   })
   if (result.errors.length > 0) {
     for (const e of result.errors) console.error(e)

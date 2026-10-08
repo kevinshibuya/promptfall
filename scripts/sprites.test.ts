@@ -621,5 +621,8 @@ describe('backdrops', () => {
     expect(check([{ ...entry, zone: 0 }], null, null).errors).toEqual([
       'backdrop zone 0: zone must be a positive integer',
     ])
+    const bounded: string[] = []
+    buildBackdrops({ ...input([{ ...entry, zone: 13 }], files(null, null)), zones: 12 }, bounded)
+    expect(bounded).toEqual(['backdrop zone 13: the content has 12 zones'])
   })
 })

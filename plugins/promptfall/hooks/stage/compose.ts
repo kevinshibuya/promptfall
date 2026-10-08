@@ -1,6 +1,6 @@
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
-import { drawText, glyphBlock } from './font'
+import { drawOutlinedText, glyphBlock } from './font'
 import type { StageModel } from './model'
 
 /** RGBA, alpha 0 or 255 only. */
@@ -65,8 +65,9 @@ function blit(
 
 /**
  * Where a backdrop's top-left lands in a `width × height` frame: bottom-anchored, centred. A frame
- * narrower or shorter than the painting crops it (the sides, then the sky); a wider or taller one
- * extends its edge columns and its top row.
+ * narrower or shorter than the painting crops it (the sides, then the sky); a wider one (the Image
+ * stage zooming out for a boss, ADR 0004) continues it with mirrored copies on each side, so the
+ * scenery goes on without a seam; a taller one cannot happen and would repeat the top row.
  */
 export function backdropOrigin(
   art: { width: number; height: number },
@@ -76,14 +77,21 @@ export function backdropOrigin(
   return { x: Math.floor((width - art.width) / 2), y: height - art.height }
 }
 
-/** The whole frame painted from the backdrop, each pixel clamped into the painting. */
+/** Column `i` of the painting continued past its edges by mirroring: -1 is 0, `w` is `w - 1`. */
+export function mirrored(i: number, w: number): number {
+  const period = 2 * w
+  const m = ((i % period) + period) % period
+  return m < w ? m : period - 1 - m
+}
+
+/** The whole frame painted from the backdrop: mirrored past its sides, the top row above it. */
 function drawBackdrop(frame: Frame, art: SpriteArt): void {
   const px = pixelsOf(art)
   const { x: ox, y: oy } = backdropOrigin(art, frame.width, frame.height)
   for (let y = 0; y < frame.height; y++) {
     const sy = Math.min(art.height - 1, Math.max(0, y - oy))
     for (let x = 0; x < frame.width; x++) {
-      const sx = Math.min(art.width - 1, Math.max(0, x - ox))
+      const sx = mirrored(x - ox, art.width)
       put(frame, x, y, art.palette[px[sy * art.width + sx] ?? 0] ?? 0)
     }
   }
@@ -111,7 +119,7 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   for (const e of model.effects) blit(frame, e.art, e.art.palette, e.x, e.y, e.flipX, 1)
   const block = glyphBlock(model.scale)
   if (opts.numbers) {
-    for (const n of model.numbers) drawText(frame, n.text, n.x, n.y, n.rgb, block)
+    for (const n of model.numbers) drawOutlinedText(frame, n.text, n.x, n.y, n.rgb, block)
   }
   return frame
 }

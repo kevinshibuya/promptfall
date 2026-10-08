@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
+import { BACKDROPS } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { item, listing, marketPage, paneInput, paneView } from '../ui/pane/fixtures'
@@ -366,19 +367,40 @@ test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg, 11
   expect(svg.length).toBe(113_047)
 })
 
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,353 characters at 1.5x, so the 1x Svg (51,341)', () => {
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,408 characters at 1.5x, so the 1x Svg (51,396)', () => {
   const hi = fullerFrame(1.5, true, NOW)
   const lo = fullerFrame(1, true, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_353)
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_408)
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(51_341)
+  expect(svg.length).toBe(51_396)
 })
 
-test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 53,047 characters over the zone 1 backdrop, under the cap', () => {
+test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 53,127 characters over the zone 1 backdrop, under the cap', () => {
   const s = stage('boss-strike')
   const svg = renderSvg(s.hires, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
-  expect(svg.length).toBe(53_047)
+  expect(svg.length).toBe(53_127)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+})
+
+test('the fuller frame over every zone backdrop stays in budget at both scales', () => {
+  const zones = Object.keys(BACKDROPS)
+  expect(zones.length).toBeGreaterThan(0)
+  for (const zone of zones) {
+    const b = BACKDROPS[zone]
+    if (!b) continue
+    const lo = fullerFrame(1, true, NOW)
+    const hi = fullerFrame(1.5, true, NOW)
+    const loModel = { ...lo.model, backdrop: b.full }
+    const hiModel = { ...hi.model, backdrop: b.hires }
+    withinBudgets(loModel, lo.motions, NOW)
+    withinBudgets(hiModel, hi.motions, NOW)
+    for (const smil of [true, false]) {
+      const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
+      expect(svgWithFallback(hiModel, loModel, hi.motions, opts).length, zone).toBeLessThan(
+        SVG_MAX_CHARS,
+      )
+    }
+  }
 })

@@ -4,7 +4,7 @@ import { SPRITES } from '../sprites/generated'
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { backdropOrigin, frameSize } from './compose'
-import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
+import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
 import {
   effectAt,
@@ -120,7 +120,7 @@ export function artPaths(art: SpriteArt, raritySlot: number | null): string {
 /**
  * One <path> per colour of a painting, each a set of rectangles: a horizontal run joins the run
  * directly under it when both start and end at the same columns, so a sky or ground band is one
- * `M x y h w v h h -w z`. A backdrop is mostly bands, and this halves `artPaths`' markup for it.
+ * `M x y h w v h h -w z`. Against `artPaths` this saves 10% (zone 1) to 45% (zone 11).
  */
 export function rectPaths(art: SpriteArt): string {
   const px = decodePixels(art)
@@ -160,6 +160,26 @@ export function rectPaths(art: SpriteArt): string {
       return `<path fill="${hex(art.palette[v] ?? 0)}" d="${d}"/>`
     })
     .join('')
+}
+
+/**
+ * Where each copy of a `w`-wide painting goes across a `W`-wide frame whose painting starts at
+ * `ox`: the painting itself, then mirrored copies outward on both sides until the frame is covered,
+ * every other one plain again. A mirrored copy at `x` is drawn with `scale(-1 1)`, so `x` is its
+ * right edge; this matches compose's `mirrored` column by column.
+ */
+export function backdropPlacements(
+  w: number,
+  W: number,
+  ox: number,
+): { x: number; mirror: boolean }[] {
+  const out: { x: number; mirror: boolean }[] = [{ x: ox, mirror: false }]
+  for (let k = 1; ox - (k - 1) * w > 0 || ox + k * w < W; k++) {
+    const mirror = k % 2 === 1
+    if (ox - (k - 1) * w > 0) out.push({ x: mirror ? ox - (k - 1) * w : ox - k * w, mirror })
+    if (ox + k * w < W) out.push({ x: mirror ? ox + (k + 1) * w : ox + k * w, mirror })
+  }
+  return out
 }
 
 /** A backdrop's paths, built once per painting: it is static and the largest art on the stage. */
@@ -220,14 +240,21 @@ export function renderSvg(
   const bob = opts.motion === 'full' ? bobbingAt(opts.now) * bobPx : 0
   const ground = px(2)
 
-  // The backdrop as paths, like any art (no <image>): bottom-anchored and centred, as compose
-  // places it. The Svg stage never outgrows the painting (ADR 0004: terminal geometry, boss rows
-  // at most), so no edge needs extending here.
+  // The backdrop as paths, like any art (no <image>): one def, used bottom-anchored and centred
+  // as compose places it, and mirrored outward on each side while the frame is wider (the
+  // Image zoom-out; the desktop Svg never outgrows the painting, ADR 0004).
   const body: string[] = [
     model.backdrop
       ? (() => {
-          const at = backdropOrigin(model.backdrop, W, H)
-          return `<g transform="translate(${at.x} ${at.y})">${backdropPaths(model.backdrop)}</g>`
+          const art = model.backdrop
+          const at = backdropOrigin(art, W, H)
+          defs.push(`<g id="bg">${backdropPaths(art)}</g>`)
+          return backdropPlacements(art.width, W, at.x)
+            .map(
+              (p) =>
+                `<use href="#bg" transform="translate(${p.x} ${at.y})${p.mirror ? ' scale(-1 1)' : ''}"/>`,
+            )
+            .join('')
         })()
       : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${hex(model.ground)}"/>`,
   ]
@@ -558,5 +585,6 @@ function text(
   anim: string,
   extra = '',
 ): string {
-  return `<text x="${x}" y="${y + GLYPH_HEIGHT * block}" fill="${hex(rgb)}" font-family="monospace" font-size="${6 * block}" font-weight="bold"${extra}>${anim}${s}</text>`
+  // The stroke under the fill is the pixel surfaces' one-pixel outline, for pale backdrops.
+  return `<text x="${x}" y="${y + GLYPH_HEIGHT * block}" fill="${hex(rgb)}" stroke="${hex(TEXT_OUTLINE_RGB)}" stroke-width="1" paint-order="stroke" font-family="monospace" font-size="${6 * block}" font-weight="bold"${extra}>${anim}${s}</text>`
 }

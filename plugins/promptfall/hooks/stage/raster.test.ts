@@ -45,11 +45,12 @@ test('the cell count is columns * rows', () => {
   expect(cells(encodeRaster(frame(7, 6, {}), []))).toHaveLength(21)
 })
 
-test('a number replaces the cells under it, clamped inside the box', () => {
+test('a number replaces the cells under it over the scene pixel there, clamped inside the box', () => {
   const c = cells(
     encodeRaster(frame(6, 4, { '1,2': 0xff0000 }), [{ text: '42', x: 1.5, y: 3, rgb: 0xffffff }]),
   )
-  expect(c[6 + 1]).toEqual([0x34, 0xffffff, CLEAR])
+  // The '4' sits on a red pixel: its cell keeps red behind it; the '2' on nothing keeps CLEAR.
+  expect(c[6 + 1]).toEqual([0x34, 0xffffff, 0xff0000])
   expect(c[6 + 2]).toEqual([0x32, 0xffffff, CLEAR])
   const last = cells(encodeRaster(frame(6, 4, {}), [{ text: '123', x: 5, y: 3, rgb: 0xffffff }]))
   expect(last.slice(9, 12).map((x) => x[0])).toEqual([0x31, 0x32, 0x33])
