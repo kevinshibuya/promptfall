@@ -4,6 +4,7 @@ import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
 import {
@@ -925,12 +926,12 @@ test('/promptfall server local resets the world to the in-process snapshot, chat
 // ---------------------------------------------------------------------------
 // The world boss
 
-test('the boss appearing and going down toast once each', async ($, on) => {
+test('the boss appearing toasts once for 8 s and going down once for 4 s', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   store(on)
   states(on)
-  const toasts: string[] = []
-  engineBottom(on, toasts)
+  const raised: Raised[] = []
+  engineBottom(on, [], {}, (toast) => raised.push(toast))
   const net = worldNet(on)
   let boss: WorldSnapshot['boss'] = null
   net.world = () => snap({ boss })
@@ -943,8 +944,11 @@ test('the boss appearing and going down toast once each', async ($, on) => {
   boss = { ...LIVE_BOSS, hp: 0 }
   await time.advance(5_000)
   await time.advance(15_000)
-  expect(toasts.filter((t) => t === 'World boss The Promptwyrm has appeared')).toHaveLength(1)
-  expect(toasts.filter((t) => t === 'The Promptwyrm is down')).toHaveLength(1)
+  const world = raised.filter((t) => t.text.startsWith('World boss '))
+  expect(world).toEqual([
+    { text: 'World boss The Promptwyrm has appeared', timeoutMs: 8000 },
+    { text: 'World boss The Promptwyrm is down', timeoutMs: 4000 },
+  ])
 })
 
 test("a reward's loot log line names the item", () => {
@@ -1004,7 +1008,7 @@ test('a boss seen in the snapshot reaches the primary through its next flush, wi
 })
 
 test('a reload during a live boss keeps the held snapshot, so the boss is not announced again', async () => {
-  const toasts: string[] = []
+  const transitions: unknown[] = []
   const held: WorldState = {
     snapshot: snap({ boss: LIVE_BOSS }),
     fetchedAt: 1,
@@ -1021,10 +1025,10 @@ test('a reload during a live boss keeps the held snapshot, so the boss is not an
     publish: async () => undefined,
     load: async () => held,
     fetch: async () => snap({ boss: LIVE_BOSS }),
-    toast: (text) => toasts.push(text),
+    transition: (t) => transitions.push(t),
   })
   await poller.start()
-  expect(toasts).toEqual([])
+  expect(transitions).toEqual([])
 })
 
 // ---------------------------------------------------------------------------
@@ -1400,7 +1404,7 @@ test('the world boss appearing plays the boss cue; going down plays none', async
 /** Past the sandbox grid's first window, so no grid boss is open when a test starts. */
 const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
 const APPEARED = 'World boss The Promptwyrm has appeared'
-const DOWN = 'The Promptwyrm is down'
+const DOWN = 'World boss The Promptwyrm is down'
 
 function sandboxSounding(on: On, seed: Record<string, unknown> = {}) {
   const time = mock.clock(on, { now: PAST_GRID_BOSS })
@@ -1424,10 +1428,10 @@ test('sandbox worldboss has toasted and cued when it returns; worldboss end has 
     (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
   // The clock never moves in this test: no timer poll runs, only the verbs' own.
   expect(await run('worldboss')).toBe(`Sandbox: world boss The Promptwyrm has appeared`)
-  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(raised.filter((t) => t.text === APPEARED)).toEqual([{ text: APPEARED, timeoutMs: 8000 }])
   expect(plays).toEqual(['cues/boss.wav'])
   expect(await run('worldboss end')).toBe('Sandbox: The Promptwyrm is down, rewards delivered')
-  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(raised.filter((t) => t.text === DOWN)).toEqual([{ text: DOWN, timeoutMs: 4000 }])
   expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
   expect(plays).toEqual(['cues/boss.wav'])
   // The reward carries only the boss id, after boss mode ended: the session kept the name.
@@ -1436,7 +1440,7 @@ test('sandbox worldboss has toasted and cued when it returns; worldboss end has 
   expect(shares[0]?.text).toMatch(/^Your share of The Promptwyrm: \d+ gold/)
 })
 
-test('a secondary sandbox session toasts the world boss appearing and going down, with no cue', async ($, on) => {
+test('a read-only sandbox session raises no world boss toast and no cue; its band still shows the boss', async ($, on) => {
   const { time, data, last, toasts, plays } = sandboxSounding(on, {
     [`${SANDBOX_PREFIX}lease`]: { owner: 'someone-else', until: 9_999_999_999_999 },
   })
@@ -1468,9 +1472,11 @@ test('a secondary sandbox session toasts the world boss appearing and going down
   expect(last.get('mode')).toBe('secondary')
   expect(await ledger.host.spawnBoss()).toEqual({ ok: true })
   await time.advance(WORLD_POLL_MS)
-  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(worldRows(last.get('view') as GameView, worldOf(last))[1]?.text).toMatch(
+    /^World boss The Promptwyrm /,
+  )
   expect(await ledger.host.settleBoss()).toEqual({ ok: true })
   await time.advance(WORLD_POLL_FAST_MS)
-  expect(toasts.filter((t) => t === DOWN)).toHaveLength(1)
+  expect(toasts.filter((t) => t.startsWith('World boss '))).toEqual([])
   expect(plays).toEqual([])
 })
