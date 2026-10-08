@@ -17,9 +17,7 @@ import {
   NUMBER_RGB_HERO,
   SLIDE_MS,
   SPAWN_MS,
-  STAGE_BOSS_ROWS,
-  STAGE_REST_ROWS,
-  STAGE_TURN_BOSS_ROWS,
+  STAGE_ROWS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -531,15 +529,9 @@ export class StageTimeline {
     return this.departed.has(id)
   }
 
-  rowsAt(view: GameView, now: number): number {
-    const kinds = new Set(view.enemies.map((e) => e.kind))
-    for (const id of this.departed) {
-      const known = this.entries.get(id)
-      if (known && this.holds(id, now)) kinds.add(known.kind)
-    }
-    if (kinds.has('zone_boss') || kinds.has('world_boss')) return STAGE_BOSS_ROWS
-    if (kinds.has('turn_boss')) return STAGE_TURN_BOSS_ROWS
-    return STAGE_REST_ROWS
+  /** The stage's rows for what is on it: the boss height, every time (ADR 0010). */
+  rowsAt(_view: GameView, _now: number): number {
+    return STAGE_ROWS
   }
 
   isBusy(now: number): boolean {

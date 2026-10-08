@@ -8,7 +8,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { worldBossKey } from '../plugins/promptfall/hooks/sprites/keys'
-import { STAGE_BOSS_ROWS, STAGE_MAX_COLUMNS } from '../plugins/promptfall/hooks/stage/tuning'
+import { STAGE_MAX_COLUMNS, STAGE_ROWS } from '../plugins/promptfall/hooks/stage/tuning'
 import { hex, medianCut, nearest, parseHex, type Rgba, readPng, rgbOf } from './png'
 
 export type Style = 'nes' | 'snes'
@@ -108,7 +108,7 @@ const HIRES_MASTER_SIZE = 128
  * A zone backdrop's canvas: the widest, tallest full stage (160 columns, the boss rows), at 1x and
  * at 1.5x (compose.ts frameSize). The stage bottom-anchors it and centre-crops narrower boxes.
  */
-export const BACKDROP = { width: STAGE_MAX_COLUMNS, height: STAGE_BOSS_ROWS * 2 }
+export const BACKDROP = { width: STAGE_MAX_COLUMNS, height: STAGE_ROWS * 2 }
 export const BACKDROP_HIRES = {
   width: Math.ceil(BACKDROP.width * HIRES_SCALE),
   height: Math.ceil(BACKDROP.height * HIRES_SCALE),

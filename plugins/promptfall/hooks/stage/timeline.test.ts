@@ -13,8 +13,7 @@ import {
   NUMBER_RGB_HEAL,
   SLIDE_MS,
   SPAWN_MS,
-  STAGE_BOSS_ROWS,
-  STAGE_REST_ROWS,
+  STAGE_ROWS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -275,14 +274,15 @@ test('survivors keep their places and a newcomer joins the end of the line after
   ])
 })
 
-test('rowsAt holds the boss height through the dissolve, then rests', () => {
+test('rowsAt is the boss height in every fight, with the boss and after it (ADR 0010)', () => {
   const t = observed(boss())
-  expect(t.rowsAt(boss(), NOW)).toBe(STAGE_BOSS_ROWS)
+  expect(t.rowsAt(boss(), NOW)).toBe(STAGE_ROWS)
   const after = boss()
   after.enemies = []
   t.observe(after, NOW)
-  expect(t.rowsAt(after, NOW + DISSOLVE_MS / 2)).toBe(STAGE_BOSS_ROWS)
-  expect(t.rowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_REST_ROWS)
+  expect(t.rowsAt(after, NOW + DISSOLVE_MS / 2)).toBe(STAGE_ROWS)
+  expect(t.rowsAt(after, NOW + DISSOLVE_MS)).toBe(STAGE_ROWS)
+  expect(observed().rowsAt(wave(), NOW)).toBe(STAGE_ROWS)
 })
 
 test('a drop pops from the target of the hit before it, once its fade is over', () => {

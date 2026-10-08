@@ -144,9 +144,9 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
   withinBudgets(model, busyMotions('e1'), NOW)
 })
 
-test('at scale 1.5 the rest frame is 180 × 24 and the boss frame 180 × 51', () => {
+test('at scale 1.5 the rest frame and the boss frame are both 180 × 51 (ADR 0010)', () => {
   const rest = composeFrame(stage('rest').hires, { numbers: true })
-  expect([rest.width, rest.height]).toEqual([180, 24])
+  expect([rest.width, rest.height]).toEqual([180, 51])
   const boss = composeFrame(stage('boss').hires, { numbers: true })
   expect([boss.width, boss.height]).toEqual([180, 51])
   expect(stage('compact').hires.scale).toBe(1)

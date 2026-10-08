@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR 0010 for the stage's height
 ---
 
 # The band grows past 4 rows so the stage draws real pixels in every terminal
@@ -40,3 +40,9 @@ terminal shares that geometry, `Image` filling the same box crisp.
 The two text rows became the 5-row window strip (ADR 0005): the band is 13 rows at rest and up
 to 22 in a zone or world boss fight. The compact band is 6 rows (the 4-row stage beside one
 party window) and collapses under 6 rows; Loot and World are the strip alone, 5 rows.
+
+## Superseded (2026-10-08, ADR 0010)
+
+The stage is 17 rows in every fight and no longer grows for a boss; a band too short for it
+crops the sky rather than falling to compact until under 8 rows are left. The compact and
+collapsed escapes, and the cell thresholds, stand.

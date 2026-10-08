@@ -202,7 +202,7 @@ function backdropPaths(art: SpriteArt): string {
 export function renderSvg(
   model: StageModel,
   motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; crop?: number },
 ): string {
   const { width: W, height: H } = frameSize(model)
   const scale = model.scale
@@ -531,7 +531,9 @@ export function renderSvg(
     body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }
 
-  const height = Math.round((opts.width * H) / W)
+  // `crop`: the band is short, so the viewBox shows the stage's bottom rows only (ADR 0010).
+  const shownH = opts.crop === undefined ? H : Math.min(H, Math.ceil(opts.crop * 2 * scale))
+  const height = Math.round((opts.width * shownH) / W)
   const flashFilter =
     '<filter id="flash"><feFlood flood-color="#ffffff"/><feComposite operator="in" in2="SourceAlpha"/></filter>'
   // `lighten` on every fill, currentColor included: gamma 0.6 per channel, in sRGB.
@@ -539,7 +541,7 @@ export function renderSvg(
     scale === 1
       ? ''
       : '<filter id="hit" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" exponent="0.6"/><feFuncG type="gamma" exponent="0.6"/><feFuncB type="gamma" exponent="0.6"/></feComponentTransfer></filter>'
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"><defs>${flashFilter}${hitFilter}${defs.join('')}</defs>${body.join('')}</svg>`
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 ${H - shownH} ${W} ${shownH}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"><defs>${flashFilter}${hitFilter}${defs.join('')}</defs>${body.join('')}</svg>`
 }
 
 /**
@@ -550,7 +552,7 @@ export function svgWithFallback(
   hi: StageModel,
   lo: StageModel,
   motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; crop?: number },
 ): string {
   const svg = renderSvg(hi, motions, opts)
   return svg.length < SVG_MAX_CHARS ? svg : renderSvg(lo, motions, opts)
@@ -562,7 +564,7 @@ export function stageSvg(
   timeline: StageTimeline,
   now: number,
   box: Box,
-  opts: { smil: boolean; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; width: number; motion: 'full' | 'still'; crop?: number },
 ): string {
   const at = { compact: false, motion: opts.motion }
   const hi = stageAt(view, timeline, now, box, { ...at, scale: HIRES_SCALE })

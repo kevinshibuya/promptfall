@@ -5,16 +5,18 @@ import {
   COMPACT_STAGE_COLUMNS,
   COMPACT_STAGE_ROWS,
   FULL_MIN_COLUMNS,
-  IMAGE_MAX_BYTES,
-  IMAGE_SCALE,
   MIN_COLUMNS,
   STAGE_MAX_COLUMNS,
+  STAGE_MIN_ROWS,
 } from './tuning'
 
 /** The stage in cells; pixels are columns × (rows * 2). */
 export type Box = { columns: number; rows: number }
 export type Layout =
-  /** `cells`, when present, is the smaller box an Image stage too tall for the band draws into. */
+  /**
+   * `cells`, when present, is the shorter box a full stage too tall for the band shows its
+   * bottom rows in: the same columns, `rows` of `box` composed, the sky above the cells cropped.
+   */
   | { kind: 'full'; box: Box; cells?: Box; bandRows: number }
   | { kind: 'compact'; box: Box; bandRows: number }
   | { kind: 'bare'; box: null; bandRows: number }
@@ -30,7 +32,7 @@ export function layoutFor(
   rows: number,
   props: { bodyColumns: number; maxRows: number },
   surface: RenderSurface,
-  opts: { tab: BandTab; extra: 0 | 1; scalable?: boolean },
+  opts: { tab: BandTab; extra: 0 | 1 },
 ): Layout {
   const party = opts.tab === 'party'
   if (surface !== 'terminal') {
@@ -47,19 +49,16 @@ export function layoutFor(
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STRIP_ROWS + opts.extra }
   }
-  // An Image scales to its box: a stage too tall for the band (a boss, a long prompt) zooms out
-  // rather than flipping the band to compact. The scene widens so that, scaled into the rows left,
-  // it still spans the band; as far as its picture stays within IMAGE_MAX_BYTES.
+  // A stage too tall for the band (a long prompt) keeps its art size and loses the sky: the box
+  // stays whole and the stage shows its bottom `room` rows, down to the actors' height (ADR
+  // 0010). The band cannot take more rows than the engine gives it (`maxRows`).
   const room = props.maxRows - STRIP_ROWS - opts.extra
-  if (opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= COMPACT_STAGE_ROWS) {
+  if (props.bodyColumns >= FULL_MIN_COLUMNS && room >= STAGE_MIN_ROWS) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
-    // The Image's bytes: columns × rows cells at IMAGE_SCALE × 2·IMAGE_SCALE pixels, 4 a pixel.
-    const budget = Math.floor(IMAGE_MAX_BYTES / (IMAGE_SCALE * 2 * IMAGE_SCALE * 4 * rows))
-    const scene = Math.min(Math.round((columns * rows) / room), budget)
     return {
       kind: 'full',
-      box: { columns: scene, rows },
-      cells: { columns: Math.min(columns, Math.round((scene * room) / rows)), rows: room },
+      box: { columns, rows },
+      cells: { columns, rows: room },
       bandRows: props.maxRows,
     }
   }

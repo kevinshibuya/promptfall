@@ -124,6 +124,14 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   return frame
 }
 
+/** The bottom `height` pixel rows of a frame: a stage cropped to the cells a short band has. */
+export function cropBottom(frame: Frame, height: number): Frame {
+  const h = Math.max(0, Math.min(frame.height, height))
+  if (h === frame.height) return frame
+  const from = (frame.height - h) * frame.width * 4
+  return { width: frame.width, height: h, rgba: frame.rgba.slice(from) }
+}
+
 /** The frame's size in stage pixels: the box's columns and half-block rows, times the scale. */
 export function frameSize(model: { box: { columns: number; rows: number }; scale: number }): {
   width: number

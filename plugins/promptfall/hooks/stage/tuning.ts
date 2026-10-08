@@ -1,9 +1,13 @@
 // Every tuning number of the stage, and nowhere else. Tests import them rather than repeat them.
 
-// Heights in rows, and the widths that pick the layout (spec §2, ADR 0003).
-export const STAGE_REST_ROWS = 8
-export const STAGE_TURN_BOSS_ROWS = 12
-export const STAGE_BOSS_ROWS = 17
+// Heights in rows, and the widths that pick the layout (spec §2, ADR 0003, ADR 0010).
+/** The stage's rows in every fight: the boss height, so a boss lands at its full size (ADR 0010). */
+export const STAGE_ROWS = 17
+/**
+ * The fewest rows a full stage shows when the band is short: the actors' height (24 px at 1.5x
+ * and 16 px at 1x are 8 rows). The stage keeps its art size and loses the sky above (ADR 0010).
+ */
+export const STAGE_MIN_ROWS = 8
 export const COMPACT_STAGE_ROWS = 4
 export const COMPACT_STAGE_COLUMNS = 52
 export const FULL_MIN_COLUMNS = 116
