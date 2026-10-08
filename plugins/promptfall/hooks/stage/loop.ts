@@ -6,9 +6,9 @@ import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
 import { payloadBytes, trace } from '../diag'
 import { stripScene } from '../ui/strip'
-import { windowFrame, windowKey } from '../windows/image'
+import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
-import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
+import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import type { GaugeTrack } from './gauges'
 import { pngImage } from './image'
@@ -130,6 +130,8 @@ export class StageLoop {
   /** What each strip element last got: a window's model as JSON, or the raster's cells. */
   private sent = new Map<string, string>()
   private due = 0
+  /** The stage picture last sent, by element key, for a redraw of the same site to reuse. */
+  private lastStage: { key: string; source: { png: string } } | null = null
   /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
   private beat: number | null = null
 
@@ -166,6 +168,11 @@ export class StageLoop {
       this.stopped = false
       this.arm(EVENT_FRAME_MS)
     }
+  }
+
+  /** The picture the loop last sent to the stage Image keyed `key`, or null. */
+  stageSource(key: string): { png: string } | null {
+    return this.lastStage?.key === key ? this.lastStage.source : null
   }
 
   /** New effects landed: draw the next frame now. */
@@ -303,6 +310,7 @@ export class StageLoop {
           this.stopped = true
           return null
         }
+        if ('source' in frame) this.lastStage = { key: site.key, source: frame.source }
       }
     }
 
@@ -339,7 +347,7 @@ export class StageLoop {
           const json = JSON.stringify(win)
           if (this.sent.get(key) === json) continue
           this.sent.set(key, json)
-          const source = pngImage(windowFrame(win), WINDOW_SCALE)
+          const source = windowSource(win)
           sends.push({
             requestId: site.requestId,
             key,

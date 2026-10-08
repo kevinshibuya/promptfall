@@ -4,7 +4,7 @@ import { imageBytes } from '../stage/image'
 import { IMAGE_MAX_BYTES } from '../stage/tuning'
 import { testArt } from './fixtures'
 import { glyph } from './glyphs'
-import { windowFrame, windowKey } from './image'
+import { windowFrame, windowKey, windowSource } from './image'
 import type { Win } from './kit'
 import {
   BAR_BACK_RGB,
@@ -140,4 +140,13 @@ test('an art span draws the fitted sprite at its cell, index 0 left as field', (
   expect(at(f, 16, 16)).toBe(0xe83830)
   expect(at(f, 31, 31)).toBe(0xe83830)
   expect(at(f, 17, 16)).toBe(FIELD_RGB)
+})
+
+test('windowSource encodes a window once: the same content answers the same source', () => {
+  const a = windowSource(win({ title: [{ text: 'Party' }] }))
+  const b = windowSource(win({ title: [{ text: 'Party' }] }))
+  expect(b).toBe(a)
+  const c = windowSource(win({ title: [{ text: 'Loot' }] }))
+  expect(c).not.toBe(a)
+  expect(c.png).not.toBe(a.png)
 })

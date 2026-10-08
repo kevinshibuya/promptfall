@@ -185,6 +185,21 @@ test('a frame that overruns its slot runs the next at once, then the beat starts
   expect(gaps).toEqual([EVENT_FRAME_MS + 20, EVENT_FRAME_MS + 20])
 })
 
+test('the last stage picture the loop sent is there for a redraw of the same site to reuse', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  const s = { ...site('image'), key: 'stage-120x8' }
+  h.loop.mount(s)
+  expect(h.loop.stageSource('stage-120x8')).toBe(null)
+  h.timeline.onEffects(hit, 1_000_000)
+  h.loop.wake()
+  await clock.advance(EVENT_FRAME_MS)
+  const sent = h.blits.filter((b) => b.key === 'stage-120x8').at(-1)
+  expect(sent && 'source' in sent ? sent.source : null).not.toBe(null)
+  expect(h.loop.stageSource('stage-120x8')).toBe(sent && 'source' in sent ? sent.source : null)
+  expect(h.loop.stageSource('stage-130x8')).toBe(null)
+})
+
 test('mount(null) stops the blits', async () => {
   const clock = fakeClock()
   const h = harness(clock)
