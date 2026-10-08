@@ -1154,6 +1154,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-8.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-8.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/sunken_abbot-windup,enemy/choir_of_bones-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/sunken_abbot-strike,enemy/choir_of_bones-strike
+```
+
 ## frames-bosses-9.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-9.png` (`pnpm refsheet art/sheets/ref-frames-bosses-9.png
@@ -1407,3 +1416,11 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:emberfall_wyrm` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 78% |
 | `enemy:slag_giant` | windup | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 63% |
 | `enemy:slag_giant` | strike | frames-bosses-6 | frame size drift: the fit to the idle canvas shrinks it to 69% |
+| `enemy:sunken_abbot` | windup | frames-bosses-8 | frame size drift: native 48 against idle 38 (+26%) |
+| `enemy:sunken_abbot` | strike | frames-bosses-8 | frame size drift: native 78 against idle 38 (+105%) |
+| `enemy:choir_of_bones` | windup | frames-bosses-8 | frame size drift: native 43 against idle 35 (+23%) |
+| `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: native 50 against idle 35 (+43%) |
+| `enemy:sunken_abbot` | windup | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 79% |
+| `enemy:sunken_abbot` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 50% |
+| `enemy:choir_of_bones` | windup | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 72% |
+| `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 46% |

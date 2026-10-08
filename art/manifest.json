@@ -558,14 +558,22 @@
       "id": "enemy:sunken_abbot",
       "file": "sprites/enemy/sunken_abbot.png",
       "fileHires": "sprites-hires/enemy/sunken_abbot.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/sunken_abbot-windup.png",
+        "strike": "sprites-frames/enemy/sunken_abbot-strike.png"
+      }
     },
     {
       "id": "enemy:choir_of_bones",
       "file": "sprites/enemy/choir_of_bones.png",
       "fileHires": "sprites-hires/enemy/choir_of_bones.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/choir_of_bones-windup.png",
+        "strike": "sprites-frames/enemy/choir_of_bones-strike.png"
+      }
     },
     {
       "id": "enemy:ash_ghoul",
