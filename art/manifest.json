@@ -627,14 +627,22 @@
       "id": "enemy:waste_tyrant",
       "file": "sprites/enemy/waste_tyrant.png",
       "fileHires": "sprites-hires/enemy/waste_tyrant.png",
-      "style": "snes"
+      "style": "snes",
+      "frames": {
+        "windup": "sprites-frames/enemy/waste_tyrant-windup.png",
+        "strike": "sprites-frames/enemy/waste_tyrant-strike.png"
+      }
     },
     {
       "id": "enemy:sand_basilisk",
       "file": "sprites/enemy/sand_basilisk.png",
       "fileHires": "sprites-hires/enemy/sand_basilisk.png",
       "style": "snes",
-      "fit": { "height": 24 }
+      "fit": { "height": 24 },
+      "frames": {
+        "windup": "sprites-frames/enemy/sand_basilisk-windup.png",
+        "strike": "sprites-frames/enemy/sand_basilisk-strike.png"
+      }
     },
     {
       "id": "enemy:star_sentinel",

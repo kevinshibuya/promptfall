@@ -1200,6 +1200,15 @@ STYLE (match the attached reference sheet's pixel style exactly, these are the S
 Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-9.png.
 ```
 
+Picks: row 1 (wind-up) and row 2 (strike).
+
+```sh
+D=art/sheets/frames-bosses-9.png
+C="--grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/waste_tyrant-windup,enemy/sand_basilisk-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/waste_tyrant-strike,enemy/sand_basilisk-strike
+```
+
 ## frames-bosses-10.png
 
 2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-10.png` (`pnpm refsheet art/sheets/ref-frames-bosses-10.png
@@ -1435,3 +1444,9 @@ Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sh
 | `enemy:choir_of_bones` | strike | frames-bosses-8 | frame size drift: the fit to the idle canvas shrinks it to 46% |
 | `enemy:avalanche_drake` | strike | frames-bosses-7 | frame size drift: native 84 against idle 62 (+35%) |
 | `enemy:avalanche_drake` | windup | frames-bosses-7 | frame size drift: the fit to the idle canvas shrinks it to 77% |
+| `enemy:waste_tyrant` | strike | frames-bosses-9 | frame size drift: native 91 against idle 56 (+63%) |
+| `enemy:sand_basilisk` | windup | frames-bosses-9 | frame size drift: native 56 against idle 45 (+24%) |
+| `enemy:sand_basilisk` | strike | frames-bosses-9 | frame size drift: native 78 against idle 45 (+73%) |
+| `enemy:waste_tyrant` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 78% |
+| `enemy:sand_basilisk` | windup | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 69% |
+| `enemy:sand_basilisk` | strike | frames-bosses-9 | frame size drift: the fit to the idle canvas shrinks it to 63% |
