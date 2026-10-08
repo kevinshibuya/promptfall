@@ -523,25 +523,41 @@
       "id": "enemy:ash_ghoul",
       "file": "sprites/enemy/ash_ghoul.png",
       "fileHires": "sprites-hires/enemy/ash_ghoul.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/ash_ghoul-windup.png",
+        "strike": "sprites-frames/enemy/ash_ghoul-strike.png"
+      }
     },
     {
       "id": "enemy:dust_stalker",
       "file": "sprites/enemy/dust_stalker.png",
       "fileHires": "sprites-hires/enemy/dust_stalker.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/dust_stalker-windup.png",
+        "strike": "sprites-frames/enemy/dust_stalker-strike.png"
+      }
     },
     {
       "id": "enemy:cinder_colossus",
       "file": "sprites/enemy/cinder_colossus.png",
       "fileHires": "sprites-hires/enemy/cinder_colossus.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/cinder_colossus-windup.png",
+        "strike": "sprites-frames/enemy/cinder_colossus-strike.png"
+      }
     },
     {
       "id": "enemy:ash_oracle",
       "file": "sprites/enemy/ash_oracle.png",
       "fileHires": "sprites-hires/enemy/ash_oracle.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/ash_oracle-windup.png",
+        "strike": "sprites-frames/enemy/ash_oracle-strike.png"
+      }
     },
     {
       "id": "enemy:waste_tyrant",
@@ -560,25 +576,41 @@
       "id": "enemy:star_sentinel",
       "file": "sprites/enemy/star_sentinel.png",
       "fileHires": "sprites-hires/enemy/star_sentinel.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/star_sentinel-windup.png",
+        "strike": "sprites-frames/enemy/star_sentinel-strike.png"
+      }
     },
     {
       "id": "enemy:comet_hound",
       "file": "sprites/enemy/comet_hound.png",
       "fileHires": "sprites-hires/enemy/comet_hound.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/comet_hound-windup.png",
+        "strike": "sprites-frames/enemy/comet_hound-strike.png"
+      }
     },
     {
       "id": "enemy:spire_warden",
       "file": "sprites/enemy/spire_warden.png",
       "fileHires": "sprites-hires/enemy/spire_warden.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/spire_warden-windup.png",
+        "strike": "sprites-frames/enemy/spire_warden-strike.png"
+      }
     },
     {
       "id": "enemy:astral_seer",
       "file": "sprites/enemy/astral_seer.png",
       "fileHires": "sprites-hires/enemy/astral_seer.png",
-      "style": "nes"
+      "style": "nes",
+      "frames": {
+        "windup": "sprites-frames/enemy/astral_seer-windup.png",
+        "strike": "sprites-frames/enemy/astral_seer-strike.png"
+      }
     },
     {
       "id": "enemy:fallen_star",

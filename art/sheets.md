@@ -794,6 +794,129 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 3 --names enemy/frost_wolf-st
 rm -rf art/sprites-frames/x art/sheets/native/x
 ```
 
+## frames-monsters-5.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-5.png` (`pnpm refsheet art/sheets/ref-frames-monsters-5.png
+--columns 8 --cell 192x256 --scale 7 enemy/ash_ghoul,enemy/dust_stalker,enemy/cinder_colossus,enemy/ash_oracle,enemy/star_sentinel,enemy/comet_hound,enemy/spire_warden,enemy/astral_seer`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. ash ghoul, 2. dust stalker, 3. cinder colossus, 4. ash oracle, 5. star sentinel, 6. comet hound, 7. spire warden, 8. astral seer.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-5.png.
+```
+
+Picks: row 1 (wind-up) and row 2 (strike), the first take. In row 2 the spire warden's spear tip touches the astral seer: a forced gutter splits them.
+
+```sh
+D=art/sheets/frames-monsters-5.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names enemy/ash_ghoul-windup,enemy/dust_stalker-windup,enemy/cinder_colossus-windup,enemy/ash_oracle-windup,enemy/star_sentinel-windup,enemy/comet_hound-windup,enemy/spire_warden-windup,enemy/astral_seer-windup
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names enemy/ash_ghoul-strike,enemy/dust_stalker-strike,enemy/cinder_colossus-strike,enemy/ash_oracle-strike,enemy/star_sentinel-strike,enemy/comet_hound-strike,enemy/spire_warden-strike,enemy/astral_seer-strike --gutters 1352
+```
+
+## frames-monsters-6.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-monsters-6.png` (`pnpm refsheet art/sheets/ref-frames-monsters-6.png
+--columns 8 --cell 192x256 --scale 7 enemy/hollow_knight,enemy/court_jester,enemy/throne_guard,enemy/court_mage,enemy/ink_horror,enemy/blank_page,enemy/quill_golem,enemy/erased_scribe`), `art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows 8 creatures in one row, one per column, standing idle: 1. hollow knight, 2. court jester, 3. throne guard, 4. court mage, 5. ink horror, 6. blank page, 7. quill golem, 8. erased scribe.
+Draw the SAME 8 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (coiled back, weapon, claws or jaws raised, weight on the back foot).
+Row 2: each creature at the moment of its strike (lunging forward, weapon, claws or jaws swung forward).
+Rows 3 and 4: a second, different take of rows 1 and 2.
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-monsters-6.png.
+```
+
+## frames-bosses-1.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-1.png` (`pnpm refsheet art/sheets/ref-frames-bosses-1.png
+--columns 2 --cell 768x512 --scale 7 enemy/bandit_captain,enemy/wild_boar`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: bandit captain on the left, wild boar on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-1.png.
+```
+
+## frames-bosses-2.png
+
+2026-10-07, phase 4 PR 3: wind-up and strike frames. References: `art/sheets/ref-frames-bosses-2.png` (`pnpm refsheet art/sheets/ref-frames-bosses-2.png
+--columns 2 --cell 768x512 --scale 7 enemy/elder_treant,enemy/owlbear_cub`), `art/sheets/zone1-bosses.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 2 columns x 2 rows, 4 large sprites, one per cell, every cell the same size (768 x 512 screen pixels). The attached reference sheet shows 2 creatures in one row: elder treant on the left, owlbear cub on the right, standing idle.
+Draw the SAME 2 creatures in the SAME columns, exactly the same design, size, colours and pixel size as in the reference, in new poses.
+Row 1: each creature winding up to attack (reared back, weapon, claws, jaws or magic raised, weight on the back legs).
+Row 2: each creature at the moment of its strike (thrown forward, weapon, claws, jaws or magic driven forward).
+Creatures face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-bosses-2.png.
+```
+
 ## Redos (frames)
 
 | Id | Frame | From | Note |
@@ -827,3 +950,10 @@ rm -rf art/sprites-frames/x art/sheets/native/x
 | `enemy:drowned_monk` | windup | frames-monsters-4 | frame size drift: native 32 against idle 25 (+28%) |
 | `enemy:abbey_gargoyle` | windup | frames-monsters-4 | frame size drift: native 34 against idle 24 (+42%) |
 | `enemy:abbey_gargoyle` | strike | frames-monsters-4 | frame size drift: native 31 against idle 24 (+29%) |
+| `enemy:ash_ghoul` | strike | frames-monsters-5 | frame size drift: native 32 against idle 24 (+33%) |
+| `enemy:ash_oracle` | windup | frames-monsters-5 | frame size drift: native 27 against idle 22 (+23%) |
+| `enemy:star_sentinel` | strike | frames-monsters-5 | frame size drift: native 31 against idle 24 (+29%) |
+| `enemy:comet_hound` | strike | frames-monsters-5 | frame size drift: native 28 against idle 21 (+33%) |
+| `enemy:spire_warden` | strike | frames-monsters-5 | frame size drift: native 32 against idle 26 (+23%) |
+| `enemy:astral_seer` | windup | frames-monsters-5 | frame size drift: native 28 against idle 21 (+33%) |
+| `enemy:astral_seer` | strike | frames-monsters-5 | frame size drift: native 27 against idle 21 (+29%) |
