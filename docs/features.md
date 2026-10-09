@@ -151,9 +151,11 @@ field, fills the band's whole box, and on it sits the playfield: at most 160 col
 centred, the stage with the strip beneath it on Party and the strip alone on Loot and World,
 edged by one white line with cut corners like the windows'. On a wide terminal the shell fills
 the margins, and on a short one the zoomed-out stage and the strip still sit inside the line, so
-the terminal's background never shows through the band. It draws as one image on Kitty, Ghostty
+the terminal's background never shows through the band (Ghostty and cmux keep the picture's
+shape, so a sliver of terminal can show just above and below it). It draws as one image on Kitty, Ghostty
 and cmux (up to 255 columns, past which the terminal shows beside the shell), as one half-block
-picture on other terminals, and as two stacked vector pictures, the stage's and the strip's, on
+picture on other terminals (where the line opens over a boss's head rather than cover it), and
+as two stacked vector pictures, the stage's and the strip's, on
 the desktop. The compact band is the same: its small stage and its party window inside one line
 on the shell. Only the one-row collapsed band stays plain text.
 

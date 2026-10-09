@@ -38,13 +38,14 @@ own lines, and he wants one shared edge over them.
 ## Consequences
 
 - The strip is composed into every stage frame on Image terminals, so a strip change redraws the
-  band bitmap, and the per-window `Image` elements go. The band bitmap is about a third larger
-  than the stage PNG was.
+  band bitmap, and the per-window `Image` elements go. At 160 columns the band bitmap is
+  1280 × 352, about 2.3 times the pixels of the stage PNG it replaces (960 × 204).
 - The host's `Image` takes at most 255 columns: the shell stops there, centred, and the terminal
   shows beyond it. The `Raster` takes 512.
-- When a terminal fits the PNG to its cell box preserving aspect instead of stretching it, a
-  sub-row of terminal can show under the whole picture. The real cell ratio cannot be read from
-  inside the plugin, so the residue is accepted; a build-time check on cmux and Ghostty settles
-  where it lands and what the README says.
+- Ghostty and cmux fit the PNG to its cell box preserving aspect, centred, rather than stretching
+  it (checked 2026-10-09 with `spikes/aspect`, Ghostty 1.3.1 and cmux 0.64.25). Their cells are a
+  little taller than the band's 8 × 16, so a thin strip of terminal shows above and below the
+  whole picture, split evenly: about two thirds of a row in all at Ghostty's default font. The
+  real cell ratio cannot be read from inside the plugin, so the residue is accepted.
 - Switching tabs never flashes terminal background: the shell is the band's field on every tab
   and layout, except the one-line collapsed summary, which stays text.

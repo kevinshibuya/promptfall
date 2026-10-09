@@ -222,7 +222,13 @@ it drops loot.
   strip and the line in box-drawing text. The `Image` takes at most 255 columns, so past that the
   shell stops, centred, and the terminal shows on either side; the `Raster` takes 512. The
   `Raster`'s line takes the margin only when it has two cells a side, so 160 to 163 columns draw
-  like 160. The desktop app draws two `Svg`s, the stage's and the strip's, since one of both would
+  like 160. Over the stage's top row the `Raster`'s line opens where an actor's art reaches it, so
+  a boss keeps its head. Ghostty and cmux fit the `Image` to its cell box keeping the picture's
+  aspect, centred, rather than stretching it (checked 2026-10-09, Ghostty 1.3.1, cmux 0.64.25,
+  Claude Code 2.1.296, `spikes/aspect`). The band is drawn at 8 × 16 pixels a cell; their cells
+  are a little taller than that (16 × 34 screen pixels at Ghostty's default 13 pt), so a thin
+  strip of terminal shows above and below the band, about two thirds of a row in all, split
+  evenly. The desktop app draws two `Svg`s, the stage's and the strip's, since one of both would
   pass the engine's 131,072-character cap. Each is the band's width and draws its share of the
   shell and the line (the stage's the top and sides, the strip's the sides and bottom; on Loot and
   World the strip's draws all of it), so stacked they read as one picture. The stage is always
