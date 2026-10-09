@@ -199,7 +199,8 @@ machine's settings.
 another session makes that one the primary. A prompt goes through at once and the band catches up
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
-wait for the primary. A session that stops playing drops its banner, and the new primary does not toast again
+wait for the primary. A primary that has paused (an update to install, a save to reset) answers
+trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted.
 
 **Server status.** When the server stops answering, the band says "server unreachable, retrying"
