@@ -114,6 +114,13 @@ export type LedgerHost = {
   settleBoss(): Promise<SandboxOutcome>
 }
 
+/**
+ * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged. A
+ * secondary session reads with both off: those writes are the primary's, under its lease.
+ */
+export type ReadOptions = { expire?: boolean; advance?: boolean }
+
 /** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
 export const PLAYER_NAME_MAX = 64
 
@@ -503,8 +510,12 @@ export class Ledger implements ServerClient {
     return record ? { ctx, record } : null
   }
 
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.browse(ctx, record, query))
+  browse(
+    auth: Auth,
+    query: ListingQuery,
+    { expire = true }: ReadOptions = {},
+  ): Promise<ListingPage | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) => market.browse(ctx, record, query))
   }
 
   list(auth: Auth, input: { kind: TradeKind; id: string; price: number }): Promise<MarketResult> {
@@ -521,8 +532,8 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.buy(ctx, record, listingId))
   }
 
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.myOrders(ctx, record))
+  myOrders(auth: Auth, { expire = true }: ReadOptions = {}): Promise<MyOrders | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) => market.myOrders(ctx, record))
   }
 
   placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult> {
@@ -533,8 +544,14 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.cancelOrder(ctx, record, orderId))
   }
 
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.matchingOrders(ctx, record, itemId))
+  matchingOrders(
+    auth: Auth,
+    itemId: string,
+    { expire = true }: ReadOptions = {},
+  ): Promise<Order[] | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) =>
+      market.matchingOrders(ctx, record, itemId),
+    )
   }
 
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult> {
@@ -546,14 +563,18 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // World: presence, chat, leaderboards
 
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+  world(
+    auth: Auth,
+    since: number,
+    { advance = true }: ReadOptions = {},
+  ): Promise<WorldSnapshot | Unauthorized> {
     return this.run(async () => {
       const ctx = await this.worldContext()
       // Before any record loads: the caller's record is read fresh after it.
-      await boss.advanceBoss(ctx)
+      if (advance) await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
-      return world.world(ctx, record, since)
+      return world.world(ctx, record, since, advance)
     })
   }
 
