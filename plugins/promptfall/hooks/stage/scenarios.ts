@@ -635,12 +635,13 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
   }
 }
 
-// The band's scenarios (spec #45): the band as one picture, the playfield on the shell; on Loot
-// and World the playfield is the strip alone.
+// The band's scenarios (spec #45): the band as one picture, the playfield on the shell; compact's
+// small stage beside its window; on Loot and World the playfield is the strip alone.
 export const BAND_SCENARIOS = [
   'band-rest',
   'band-wide',
   'band-zoomed',
+  'band-compact',
   'band-loot',
   'band-world',
 ] as const
@@ -732,6 +733,33 @@ function bandSvgs(
   }
 }
 
+/**
+ * Compact at `columns`: the 4-row stage beside its window inside one line on the shell, on the
+ * Image and the Raster. The desktop never goes compact (ADR 0004): its Svgs are the band it draws
+ * at the same size, the full stage fitted over the strip.
+ */
+function compactInput(view: GameView, input: StripInput, columns: number): BandInput {
+  const t = new StageTimeline()
+  t.observe(view, NOW)
+  const props = { bodyColumns: columns, maxRows: 22 }
+  const layout = layoutFor(t.rowsAt(view, NOW), props, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    scalable: true,
+  })
+  if (layout.kind !== 'compact') throw new Error(`a ${columns}-column band is not compact`)
+  const box = { columns, rows: layout.bandRows }
+  const scene = stripScene({ ...input, kind: 'compact', columns }).scene
+  const model = stageAt(view, t, NOW, layout.box, { compact: true, motion: 'full' })
+  return {
+    box,
+    stage: composeFrame(model, { numbers: true }),
+    strip: scene,
+    cells: bandCells(view, t, NOW, layout, 'full', box, scene).cells,
+    svg: bandSvgs(view, t, { ...input, kind: 'full' }, columns, box.rows),
+  }
+}
+
 /** Loot or World at `columns`: the strip alone, the playfield as wide and centred as the Party tab's. */
 function bareInput(input: StripInput, columns: number): BandInput {
   const terminal = layoutFor(0, { bodyColumns: columns, maxRows: 22 }, 'terminal', {
@@ -774,6 +802,9 @@ export function band(name: BandScenario): BandInput {
     // A boss under a tall prompt: 12 rows, so the widened scene shrinks into the 7 left.
     case 'band-zoomed':
       return bandInput(boss(), strip('strip-boss'), 160, 12)
+    // Compact at 110 columns, as strip-compact: the stage's 52 columns, the window's 58.
+    case 'band-compact':
+      return compactInput(wave(), strip('strip-compact'), 110)
     // Loot at the Party tab's 160 columns: the line all round, over the windows' outer lines.
     case 'band-loot':
       return bareInput(strip('strip-loot'), 160)

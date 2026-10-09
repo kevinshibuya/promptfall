@@ -29,8 +29,8 @@ export type StageSite = {
   key: string
   layout: Layout
   /**
-   * The band's box in cells when the band is one picture (the full layout and Loot and World,
-   * spec #45): each frame composes the stage, if any, and the strip into it, and no strip element
+   * The band's box in cells when the band is one picture (the full and compact layouts and Loot
+   * and World, spec #45): each frame composes the stage, if any, and the strip into it, and no strip element
    * is blitted.
    */
   band?: Box
@@ -151,9 +151,9 @@ function rasterShown(model: StageModel, layout: Layout): { frame: Frame; numbers
 }
 
 /**
- * The Image band's picture (spec #45): the full stage's 1.5x frame and the strip's scene composed
- * into `band` on the windows' grid, the playfield on the shell; on Loot and World (`bare`) the
- * strip alone.
+ * The Image band's picture (spec #45): the full stage's 1.5x frame, or compact's 1x one beside its
+ * window, and the strip's scene composed into `band` on the windows' grid, the playfield on the
+ * shell; on Loot and World (`bare`) the strip alone.
  */
 export function bandFrame(
   view: GameView,
@@ -165,9 +165,9 @@ export function bandFrame(
   strip: Scene,
 ): { png: string } {
   if (layout.kind === 'bare') return pngImage(composeBand(band, null, strip), WINDOW_SCALE)
-  if (layout.kind !== 'full') throw new Error('the band is one picture only in full or bare')
+  if (layout.kind === 'collapsed') throw new Error('a collapsed band is text')
   const model = stageAt(view, timeline, now, layout.box, {
-    compact: false,
+    compact: layout.kind === 'compact',
     motion,
     scale: HIRES_SCALE,
   })
@@ -176,8 +176,8 @@ export function bandFrame(
 
 /**
  * The Raster band's cells (#61): the full stage's 1x frame, its sky cropped on a short band (ADR
- * 0010), and the strip's scene composed into `band`, the playfield on the shell; on Loot and
- * World (`bare`) the strip alone.
+ * 0010), or compact's beside its window, and the strip's scene composed into `band`, the playfield
+ * on the shell; on Loot and World (`bare`) the strip alone.
  */
 export function bandCells(
   view: GameView,
@@ -189,8 +189,12 @@ export function bandCells(
   strip: Scene,
 ): { cells: string } {
   if (layout.kind === 'bare') return { cells: composeBandCells(band, null, [], strip) }
-  if (layout.kind !== 'full') throw new Error('the band is one picture only in full or bare')
-  const model = stageAt(view, timeline, now, layout.box, { compact: false, motion, scale: 1 })
+  if (layout.kind === 'collapsed') throw new Error('a collapsed band is text')
+  const model = stageAt(view, timeline, now, layout.box, {
+    compact: layout.kind === 'compact',
+    motion,
+    scale: 1,
+  })
   const { frame, numbers } = rasterShown(model, layout)
   return { cells: composeBandCells(band, frame, numbers, strip) }
 }

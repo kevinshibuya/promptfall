@@ -208,14 +208,15 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
     // strip composed on the shell, the band's box up to the host's widest element, centred past it.
     // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
-    // Loot and World are the strip alone on the same shell, the playfield as wide and centred.
+    // Loot and World are the strip alone on the same shell, the playfield as wide and centred;
+    // compact is its small stage beside its window inside one line (#64).
     const picture =
       rendererNow === 'image' && 'Image' in els
         ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
         : rendererNow === 'raster' && 'Raster' in els
           ? { renderer: 'raster' as const, max: RASTER_MAX_COLUMNS }
           : null
-    if (terminal && picture && (layout.kind === 'full' || layout.kind === 'bare')) {
+    if (terminal && picture) {
       const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
       const key = bandKey(box)
       let element = null

@@ -64,6 +64,7 @@ export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
   'band-rest': {imageHash: "bdad633b8869e11c", cellsHash: "5f7467705699372e", width: 1280, height: 352, stageSvgHash: "02f33a0b72e4e96c", stageSvgChars: 35276, stripSvgHash: "ee60c92905ba48d9", stripSvgChars: 19191},
   'band-wide': {imageHash: "e2db1aa4c8115ae3", cellsHash: "875bbb08e6496db8", width: 1320, height: 352, stageSvgHash: "be9ba4956b836278", stageSvgChars: 35276, stripSvgHash: "713d06373ff6df67", stripSvgChars: 19191},
   'band-zoomed': {imageHash: "1293228b21a727ae", cellsHash: "8f469a4e112dacca", width: 1280, height: 192, stageSvgHash: "d70dc49646809e07", stageSvgChars: 39306, stripSvgHash: "b98a0211ae9d47a3", stripSvgChars: 18342},
+  'band-compact': {imageHash: "a6591e2905a1a2e6", cellsHash: "c4439c6f02807563", width: 880, height: 96, stageSvgHash: "6dd7df25ed3085e5", stageSvgChars: 35285, stripSvgHash: "7261638830ef3aae", stripSvgChars: 19140},
   'band-loot': {imageHash: "7cef1ea788ca93af", cellsHash: "02d3981708311301", width: 1280, height: 80, stripSvgHash: "148fb623c2288898", stripSvgChars: 16478},
   'band-world': {imageHash: "a22446cf5fc21e09", cellsHash: "7229258dd73f10c2", width: 1320, height: 80, stripSvgHash: "28415192550cb408", stripSvgChars: 17162},
 }

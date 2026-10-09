@@ -617,6 +617,65 @@ for (const renderer of ['image', 'raster'] as const) {
   )
 }
 
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+for (const renderer of ['image', 'raster'] as const) {
+  test(
+    `in play, compact is one element on the shell at 110 columns (${renderer})`,
+    { timeoutMs: 15_000 },
+    async ($, on) => {
+      await sandboxOn(on, $, {
+        'promptfall:settings': { sound: false, motion: 'full', renderer },
+      })
+      const narrow = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 110 } }
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
+      const band = await ui.find({ key: 'band' })
+      expect(((band?.children ?? []) as Found[]).map((c) => c.props.key)).toEqual(['row-band'])
+      const row = await ui.find({ key: 'row-band' })
+      const children = (row?.children ?? []) as Found[]
+      // One element at the band's width and compact's 6 rows; beside it only the hotkeys.
+      expect(children.map((c) => [c.type, c.props.key])).toEqual([
+        [renderer === 'image' ? 'Image' : 'Raster', bandKey({ columns: 110, rows: 6 })],
+        ['Box', 'hotkeys'],
+      ])
+      expect(children[0]?.props).toMatchObject({ columns: 110, rows: 6 })
+      for (const key of ['row-compact', 'compact-stage', 'stage', 'strip', 'strip-windows'])
+        expect(await ui.find({ key })).toBeUndefined()
+      if (renderer === 'image') {
+        const picture = pixels(children[0]?.props.source as { png: string } | undefined)
+        expect([picture.width, picture.height]).toEqual([110 * CELL_W, 6 * CELL_H])
+        // The line around the stage, over the window's own at the top, bottom and right: its
+        // left side 2 pixels in, its top and bottom over the window's lines, 10 pixels in.
+        expect([picture.at(0, 48), picture.at(2, 48), picture.at(3, 48)]).toEqual([
+          FIELD_RGB,
+          BORDER_RGB,
+          BORDER_RGB,
+        ])
+        expect([picture.at(200, 5), picture.at(200, 10), picture.at(200, 85)]).toEqual([
+          FIELD_RGB,
+          BORDER_RGB,
+          BORDER_RGB,
+        ])
+        expect(picture.at(110 * CELL_W - 3, 48)).toBe(BORDER_RGB)
+        // The window's title tab breaks the line: drawn over it, not under it.
+        const title = Array.from({ length: 80 }, (_, i) => picture.at(52 * CELL_W + 16 + i, 10))
+        expect(title.some((px) => px !== BORDER_RGB)).toBe(true)
+      } else {
+        const g = rasterCells(children[0] as Found)
+        const text = (y: number) => g[y]?.map((c) => c.ch).join('') ?? ''
+        // The line over the stage's outer column, the window's title and command line kept, its
+        // left side meeting the line.
+        expect(text(0)).toMatch(/^╭─{51}┬.*Z\d+ · .*╮$/)
+        expect(text(5)).toMatch(/^╰─{51}┴.*Party.*╯$/)
+        for (const y of [1, 2, 3, 4]) expect([g[y]?.[0]?.ch, g[y]?.[52]?.ch]).toEqual(['│', '│'])
+        expect(g[2]?.slice(1, 52).every((c) => c.ch === '▀' || c.ch === '▄' || c.ch === ' ')).toBe(
+          true,
+        )
+      }
+      await ui.unmount()
+    },
+  )
+}
+
 test('in play, the strip’s hero HP trails the state until the hit lands, never leads it (#20)', async ($, on) => {
   const { view, clock } = await sandboxOn(on, $, {
     'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },

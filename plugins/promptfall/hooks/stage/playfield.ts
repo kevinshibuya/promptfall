@@ -1,5 +1,6 @@
 // The band as one picture (ADR 0011): the shell over the band's whole box, the playfield centred
-// on it, the stage above the strip inside one window line; on Loot and World the strip alone. Pure; the Image path draws its bitmap,
+// on it, the stage above the strip inside one window line; compact's stage beside its window; on
+// Loot and World the strip alone. Pure; the Image path draws its bitmap,
 // the Raster draws the same placement in cells, the Svg path reuses its placement.
 import { encode } from '../sprites/base64'
 import { windowFrame } from '../windows/image'
@@ -10,7 +11,13 @@ import type { Frame } from './compose'
 import type { Box } from './layout'
 import type { StageNumber } from './model'
 import { CLEAR, rasterWords } from './raster'
-import { DESKTOP_COLUMN_PX, DESKTOP_ROW_PX, HIRES_SCALE, STAGE_MAX_COLUMNS } from './tuning'
+import {
+  COMPACT_STAGE_ROWS,
+  DESKTOP_COLUMN_PX,
+  DESKTOP_ROW_PX,
+  HIRES_SCALE,
+  STAGE_MAX_COLUMNS,
+} from './tuning'
 
 /** The playfield within the band's box, in cells: its column and row offsets and its size. */
 export type Placement = { x: number; y: number; columns: number; rows: number }
@@ -19,6 +26,27 @@ export type Placement = { x: number; y: number; columns: number; rows: number }
 export function playfieldOf(band: Box): Placement {
   const columns = Math.min(band.columns, STAGE_MAX_COLUMNS)
   return { x: Math.floor((band.columns - columns) / 2), y: 0, columns, rows: band.rows }
+}
+
+/**
+ * Where the stage and the strip sit inside the playfield, in cells from its corner. A strip of
+ * every row is compact's window: the stage goes beside it, in the columns it leaves, its 4 rows
+ * centred. Otherwise the stage takes the rows above the strip.
+ */
+function partsOf(
+  at: Placement,
+  strip: Scene,
+): { stage: Placement; strip: { x: number; y: number } } {
+  if (strip.rows >= at.rows) {
+    const columns = at.columns - strip.columns
+    const y = Math.floor((at.rows - COMPACT_STAGE_ROWS) / 2)
+    return {
+      stage: { x: 0, y, columns, rows: COMPACT_STAGE_ROWS },
+      strip: { x: columns, y: 0 },
+    }
+  }
+  const rows = at.rows - strip.rows
+  return { stage: { x: 0, y: 0, columns: at.columns, rows }, strip: { x: 0, y: rows } }
 }
 
 /**
@@ -56,7 +84,8 @@ function words(f: Frame): Uint32Array {
 /**
  * The stage frame (1.5x art) over the shell into `w × h` pixels at (x0, y0). A frame of the
  * stage's own rows draws at 16/3 pixels an art pixel, nearest-neighbour, so the art stays crisp;
- * a zoomed-out scene, wider than the playfield, is scaled into it with area averaging.
+ * a zoomed-out scene, wider than the playfield, is scaled into it with area averaging, and the
+ * compact stage's 1x art lands on whole 8-pixel steps the same way.
  */
 function drawStage(band: Frame, stage: Frame, x0: number, y0: number, w: number, h: number): void {
   if (stage.height * CELL_H === h * 2 * HIRES_SCALE) {
@@ -158,8 +187,9 @@ function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
  * The line: BORDER_PX white with cut corners, the shell outside it. With shell beside the
  * playfield it sits just outside it; where the playfield meets the band's edge it sits over the
  * stage's outermost art pixel (the top, a side) and over the strip's own outer line (the bottom),
- * so no stage row or column is spent on it (ADR 0010). With no stage its top sits over the strip
- * windows' top lines, as its bottom does over their bottom ones.
+ * so no stage row or column is spent on it (ADR 0010). With no stage on top (Loot and World,
+ * compact) its top sits over the strip windows' top lines, as its bottom does over their bottom
+ * ones.
  */
 function drawLine(band: Frame, at: Placement, full: Box, stage: boolean): void {
   const pfLeft = at.x * CELL_W
@@ -194,8 +224,9 @@ function drawLine(band: Frame, at: Placement, full: Box, stage: boolean): void {
 /**
  * The band as one bitmap on the windows' grid, CELL_W × CELL_H pixels a cell: the shell over
  * `band`, and on it the playfield, `stage` (a 1.5x frame) in the rows the strip leaves above
- * `strip`, inside the line. Loot and World pass no stage: the playfield is the strip alone.
- * Every pixel is opaque.
+ * `strip`, inside the line. Compact's `stage` (a 1x frame) sits beside its window, which is
+ * drawn over the line: the line meets the window's own and its title and command tabs break it.
+ * Loot and World pass no stage: the playfield is the strip alone. Every pixel is opaque.
  */
 export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame {
   const width = band.columns * CELL_W
@@ -203,12 +234,22 @@ export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame
   const out: Frame = { width, height, rgba: new Uint8ClampedArray(width * height * 4) }
   words(out).fill(FIELD)
   const at = playfieldOf(band)
-  const stageRows = at.rows - strip.rows
+  const parts = partsOf(at, strip)
   const x0 = at.x * CELL_W
   const y0 = at.y * CELL_H
-  if (stage) drawStage(out, stage, x0, y0, at.columns * CELL_W, stageRows * CELL_H)
-  drawStrip(out, strip, x0, y0 + stageRows * CELL_H)
-  drawLine(out, at, band, stage !== null)
+  if (stage) {
+    const s = parts.stage
+    drawStage(out, stage, x0 + s.x * CELL_W, y0 + s.y * CELL_H, s.columns * CELL_W, s.rows * CELL_H)
+  }
+  const sx = x0 + parts.strip.x * CELL_W
+  const sy = y0 + parts.strip.y * CELL_H
+  if (parts.strip.x > 0) {
+    drawLine(out, at, band, false)
+    drawStrip(out, strip, sx, sy)
+  } else {
+    drawStrip(out, strip, sx, sy)
+    drawLine(out, at, band, stage !== null)
+  }
   return out
 }
 
@@ -320,11 +361,12 @@ function lay(
 /**
  * The band as Raster cells, `band` columns by rows, base64: the shell's cells, and on them the
  * playfield at `playfieldOf`, `stage` (a 1x frame of the stage rows shown, its sky cropped on a
- * short band) above `strip`, inside one line; Loot and World pass no stage. The line takes the
- * shell's margin when it is two cells or more a side; under that it sits over the playfield's
- * outermost columns, so 160 to 163 columns draw like 160. Its top row is over the stage's top
- * row, or the strip's own top line with no stage, and its bottom row over the strip's own bottom
- * line, each window side meeting it. A damage number stays inside it.
+ * short band) above `strip`, or compact's beside its window, inside one line; Loot and World pass
+ * no stage. The line takes the shell's margin when it is two cells or more a side; under that it
+ * sits over the playfield's outermost columns, so 160 to 163 columns draw like 160. Its top row is
+ * over the stage's top row, or the strip's own top line with no stage, and its bottom row over the
+ * strip's own bottom line, each window side meeting it. Over compact's window the line is the
+ * window's own, its title and command line kept. A damage number stays inside it.
  */
 export function composeBandCells(
   band: Box,
@@ -335,7 +377,8 @@ export function composeBandCells(
   const cells = new Uint32Array(band.columns * band.rows * 3)
   for (let i = 0; i < cells.length; i += 3) cells.set([SPACE, FIELD_RGB, FIELD_RGB], i)
   const at = playfieldOf(band)
-  const stageRows = at.rows - strip.rows
+  const parts = partsOf(at, strip)
+  const beside = parts.strip.x > 0
   const inside = at.x < LINE_MARGIN_CELLS
   const left = inside ? at.x : at.x - 1
   const right = inside ? at.x + at.columns - 1 : at.x + at.columns
@@ -344,18 +387,23 @@ export function composeBandCells(
     const kept = numbers.map((n) => ({
       ...n,
       x: Math.max(inset, Math.min(stage.width - inset - n.text.length, n.x)),
-      y: Math.max(2, n.y),
+      // Under the line's top row; compact's stage starts a row below it.
+      y: parts.stage.y > 0 ? n.y : Math.max(2, n.y),
     }))
-    lay(cells, band, rasterWords(onShell(stage), kept), stage.width, at.x, at.y)
+    const words = rasterWords(onShell(stage), kept)
+    lay(cells, band, words, stage.width, at.x + parts.stage.x, at.y + parts.stage.y)
   }
-  lay(cells, band, sceneWords(strip), strip.columns, at.x, at.y + stageRows)
+  const stripX = at.x + parts.strip.x
+  lay(cells, band, sceneWords(strip), strip.columns, stripX, at.y + parts.strip.y)
 
   const top = at.y
   const bottom = at.y + at.rows - 1
   const put = (x: number, y: number, ch: string) =>
     cells.set([cp(ch), BORDER_RGB, FIELD_RGB], (y * band.columns + x) * 3)
   const under = (x: number, y: number) => cells[(y * band.columns + x) * 3]
-  for (let x = left + 1; x < right; x++) {
+  // Beside compact's stage the window's own top, bottom and right lines are the line's.
+  const end = beside ? stripX + 1 : right
+  for (let x = left + 1; x < end; x++) {
     // A window's side comes up to meet the top line (no stage) and down to meet the bottom one.
     const above = under(x, top) === cp('╭') || under(x, top) === cp('╮')
     put(x, top, above ? '┬' : '─')
@@ -365,11 +413,13 @@ export function composeBandCells(
   for (let y = top + 1; y < bottom; y++) {
     // Over the strip's outer windows, their top lines run into the line's sides.
     put(left, y, under(left, y) === cp('╭') ? '├' : '│')
-    put(right, y, under(right, y) === cp('╮') ? '┤' : '│')
+    if (!beside) put(right, y, under(right, y) === cp('╮') ? '┤' : '│')
   }
   put(left, top, '╭')
-  put(right, top, '╮')
   put(left, bottom, '╰')
-  put(right, bottom, '╯')
+  if (!beside) {
+    put(right, top, '╮')
+    put(right, bottom, '╯')
+  }
   return encode(new Uint8Array(cells.buffer))
 }

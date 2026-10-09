@@ -629,10 +629,13 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   // 12 rows: 7 left, under the actors' 8: compact.
   const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
   expect(await height(short)).toBe(6)
-  const compact = await short.find({ key: 'stage' })
-  expect([compact?.props.columns, compact?.props.rows]).toEqual([52, 4])
-  const strip = await short.find({ key: 'strip' })
-  expect([strip?.props.columns, strip?.props.rows]).toEqual([120 - 52, 6])
+  // Compact is the band Raster too: the 52-column stage beside the window, inside one line.
+  const compact = await bandRaster(short)
+  expect([compact?.props.columns, compact?.props.rows]).toEqual([120, 6])
+  expect(await short.find({ key: 'stage' })).toBeUndefined()
+  expect(await short.find({ key: 'strip' })).toBeUndefined()
+  const top = cellsOf(compact).text[0] ?? ''
+  expect([top[0], top[52], top[119]]).toEqual(['╭', '┬', '╮'])
   await short.unmount()
 })
 
