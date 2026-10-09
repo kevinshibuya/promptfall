@@ -16,6 +16,7 @@ import {
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MemoryKeyValue,
+  MIN_CLIENT_VERSION,
   MyOrdersResponseSchema,
   WorldResponseSchema,
 } from '@promptfall/protocol'
@@ -83,6 +84,14 @@ describe('HTTP fake', () => {
       speed: 1,
       now: T0,
     })
+  })
+
+  it('answers the protocol minimum client version, 0.1.0 for now', async () => {
+    const r = await raw('POST', '/v1/bootstrap', {
+      body: JSON.stringify({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null }),
+    })
+    expect(BootstrapSchema.parse(r.body).config.minClientVersion).toBe(MIN_CLIENT_VERSION)
+    expect(MIN_CLIENT_VERSION).toBe('0.1.0')
   })
 
   it('answers 400 on a bad body, a non-JSON body and a bad query', async () => {

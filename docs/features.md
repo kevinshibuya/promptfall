@@ -209,8 +209,11 @@ wait for the primary. A primary that has paused (an update to install, a save to
 trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted.
 
-**Server status.** When the server stops answering, the band says "server unreachable, retrying"
-and play goes on for two minutes, then pauses until the server answers again.
+**Server status.** When the server stops answering or refuses a batch, the band says "server
+unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
+again. The first answer sends everything played during the outage at once. When the server runs a
+newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
+older game, it asks for a reset from the Account tab.
 
 ## Notifications and cues
 
