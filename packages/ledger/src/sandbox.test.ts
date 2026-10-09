@@ -62,6 +62,19 @@ describe('host.sandbox', () => {
     expect(await record(kv, boot.account.accountId)).toEqual(before)
   })
 
+  it('sandbox off answers a refusal before anything else', async () => {
+    const { ledger } = ledgerAt(GRID)
+    const off = { ok: false, reason: 'sandbox_off' }
+    // An unknown account and a non-sandbox event would throw with the flag on.
+    expect(await ledger.host.sandbox('nobody', zone2)).toEqual(off)
+    const notSandbox = { t: 'credited', gold: 1, reason: 'x' } as unknown as SandboxEvent
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(await ledger.host.sandbox(boot.account.accountId, notSandbox)).toEqual(off)
+    expect(await ledger.host.sandbox(boot.account.accountId, {} as SandboxEvent)).toEqual(off)
+    expect(await ledger.host.spawnBoss()).toEqual(off)
+    expect(await ledger.host.settleBoss()).toEqual(off)
+  })
+
   it('with the flag on authors the event onto the log, and the next delivery carries it', async () => {
     const { ledger, kv } = ledgerAt(GRID, ON)
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })

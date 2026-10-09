@@ -41,7 +41,7 @@ type ListingPage = {
     page: number;
     total: number;
 };
-type MarketRefusal = 'market_closed' | 'not_linked' | 'unknown_goods' | 'not_tradeable_rarity' | 'in_cooldown' | 'in_party' | 'equipped' | 'bad_price' | 'not_enough_gold' | 'no_space' | 'self_trade' | 'gone' | 'not_owner' | 'no_match' | 'unauthorized';
+type MarketRefusal = 'market_closed' | 'not_linked' | 'unknown_goods' | 'not_tradeable_rarity' | 'in_cooldown' | 'in_party' | 'equipped' | 'bad_price' | 'not_enough_gold' | 'no_space' | 'buyer_full' | 'self_trade' | 'gone' | 'not_owner' | 'no_match' | 'unauthorized';
 type MarketResult = {
     ok: true;
     delivery: Delivery;
@@ -69,7 +69,7 @@ declare const ListingSchema: z.ZodType<Listing>;
 declare const OrderSchema: z.ZodType<Order>;
 declare const ListingQuerySchema: z.ZodType<ListingQuery>;
 declare const ListingPageSchema: z.ZodType<ListingPage>;
-declare const MARKET_REFUSALS: readonly ["market_closed", "not_linked", "unknown_goods", "not_tradeable_rarity", "in_cooldown", "in_party", "equipped", "bad_price", "not_enough_gold", "no_space", "self_trade", "gone", "not_owner", "no_match", "unauthorized"];
+declare const MARKET_REFUSALS: readonly ["market_closed", "not_linked", "unknown_goods", "not_tradeable_rarity", "in_cooldown", "in_party", "equipped", "bad_price", "not_enough_gold", "no_space", "buyer_full", "self_trade", "gone", "not_owner", "no_match", "unauthorized"];
 declare const MarketResultSchema: z.ZodType<MarketResult>;
 /** The price is checked by the ledger (`bad_price`), so the schema only wants an integer. */
 declare const NewOrderSchema: z.ZodType<NewOrder>;

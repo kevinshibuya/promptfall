@@ -34,6 +34,8 @@ export function refusalText(reason: MarketRefusal, remaining?: string): string {
       return 'Not enough gold'
     case 'no_space':
       return 'No free slot'
+    case 'buyer_full':
+      return "The buyer's inventory is full"
     case 'in_cooldown':
       return remaining ? `Tradeable in ${remaining}` : 'Not tradeable yet'
     default:

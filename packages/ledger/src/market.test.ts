@@ -239,3 +239,19 @@ describe('a market closed after trading opened', () => {
     expect(r.state.inventory.map((i) => i.id).sort()).toEqual(['iA', 'iB'])
   })
 })
+
+describe('placing an order', () => {
+  it("an order's base and affix are own properties only", async () => {
+    const w = world()
+    const a = await mint(w.ledger, 'Ann')
+    const order = { minRarity: 'rare' as const, maxPrice: 300 }
+    const unknown = { ok: false, reason: 'unknown_goods' }
+    expect(
+      await w.ledger.placeOrder(a.auth, { ...order, base: 'constructor', affixId: null }),
+    ).toEqual(unknown)
+    expect(
+      await w.ledger.placeOrder(a.auth, { ...order, base: 'steel_longsword', affixId: 'toString' }),
+    ).toEqual(unknown)
+    expect((await record(w.kv, a.accountId)).state.gold).toBe(10_000)
+  })
+})

@@ -98,7 +98,9 @@ gold and a free slot, and a bought hero arrives at level 1.
 **Buy orders.** A buy order asks for a base type, a minimum rarity, at most one affix and a
 maximum price, with the gold held in escrow. The Orders tab's New buy order opens a form window
 to place one. A seller fills an order by choosing it in the sell window; an order fills once,
-expires after seven days, and cancelling it refunds the escrow in full.
+expires after seven days, and cancelling it refunds the escrow in full. An order names a real
+base and affix or is refused, and a fill the buyer has no free slot for is refused with "The
+buyer's inventory is full", leaving the order open.
 
 **Orders and returns.** The Orders tab shows the count waiting in returns, then your listings and
 your buy orders, and Enter on one asks to cancel it, saying what happens to the fee or the held

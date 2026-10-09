@@ -21,5 +21,6 @@ export {
   type LedgerOptions,
   LINK_INTERVAL_MS,
   LINK_URL,
+  PLAYER_NAME_MAX,
   type SandboxOutcome,
 } from './ledger'
