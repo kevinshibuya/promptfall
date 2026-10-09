@@ -208,38 +208,59 @@ it drops loot.
   two uses of idle A's def under row clips; the hit is idle A's def under one row clip per
   column of lean and a gamma filter; the drawn frames are defs of their own while in use.
 
-- **Renderers.** Kitty and Ghostty draw the stage as an `Image`. Every other terminal (iTerm2,
-  Terminal.app, tmux) draws it as a `Raster` of half-block cells, two pixels per cell, with the
-  numbers as text. The desktop app draws it as an `Svg`, always the full stage: 116 to 160
-  columns, so 174 to 240 pixels of 1.5× art, scaled to the band's width (ADR 0004, ADR 0006). The desktop scrolls a band taller than
-  its `maxRows`, so a boss stage there is scaled down to the rows left and draws narrower than the
-  band. The stage is an image `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
+- **The band is one picture** (ADR 0011): a playfield on a shell. The shell is the windows'
+  charcoal and fills the band's whole box. The playfield sits on it, `min(columns, 160)` wide and
+  centred: on Party the stage with the strip beneath it, on Loot and World the strip alone at the
+  same width and centre. One white line with cut corners, the strip windows' own, goes around
+  the playfield. It sits in the shell's margin when the band is wider than 160 columns, and over
+  the stage's outermost pixel row and column and the strip's outer line when the playfield fills
+  the band, so it costs the stage no row or column. Nothing sits between the stage's bottom edge
+  and the windows' top lines.
+- **Renderers.** Kitty, Ghostty and cmux draw the band as one `Image`, keyed by its cells so only
+  a resize mounts a new one. Every other terminal (iTerm2, Terminal.app, tmux) draws it as one
+  `Raster`: the stage in half-block cells, two pixels per cell, with the numbers as text, and the
+  strip and the line in box-drawing text. The `Image` takes at most 255 columns, so past that the
+  shell stops, centred, and the terminal shows on either side; the `Raster` takes 512. The
+  `Raster`'s line takes the margin only when it has two cells a side, so 160 to 163 columns draw
+  like 160. The desktop app draws two `Svg`s, the stage's and the strip's, since one of both would
+  pass the engine's 131,072-character cap. Each is the band's width and draws its share of the
+  shell and the line (the stage's the top and sides, the strip's the sides and bottom; on Loot and
+  World the strip's draws all of it), so stacked they read as one picture. The stage is always
+  the full stage there: 116 to 160 columns, so 174 to 240 pixels of 1.5× art, scaled to the
+  band's width (ADR 0004, ADR 0006). The desktop scrolls a band taller than its `maxRows`, so the
+  stage there is scaled down to the rows left and sits centred on the shell. The stage is an image
+  `Svg`: SMIL plays in it and a redraw swaps it without a blank frame.
 - **Two art densities.** The full stage on an `Image` terminal and on the desktop draws the 1.5×
   art: `stageAt(…, { scale: 1.5 })` multiplies every stage-pixel distance by 1.5, so a 120 × 8
-  stage is 180 × 24 pixels, and the `Image` is upscaled 4 times instead of 6 (the same size on
-  screen). Damage numbers draw their 3 × 5 glyphs in 2 × 2 blocks. The `Raster`, the compact
+  stage is 180 × 24 pixels. The band's `Image` is a PNG on the windows' grid, 8 × 16 pixels a
+  cell, with each 1.5× art pixel drawn nearest-neighbour over 16/3 of them; at 255 columns and
+  22 rows it is 2040 × 352. Damage numbers draw their 3 × 5 glyphs in 2 × 2 blocks. The `Raster`, the compact
   stage and the list windows keep the 1× art, since a half-block cell shows one pixel per column.
   The desktop `Svg` falls back to the 1× art for a frame whose 1.5× markup would pass the
   engine's 131,072-character cap; legal art stays under it (ADR 0006).
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
-  Until the answer lands the stage rows stay empty, so the band does not change height.
+  Until the answer lands the band's rows stay empty, so the band does not change height.
 - **Heights.** The Party tab is 22 rows in every fight: 17 for the stage, the boss height, so the
   party stands small on the zone's painting and a boss lands at its full size (ADR 0010), and the
-  5-row window strip. A band too short for that shows the whole scene smaller: an `Image` zooms
-  it out into the rows left. A `Raster` cannot scale, so it keeps the art size and shows the
+  5-row window strip, inside the line. A band too short for that shows the whole scene smaller,
+  still the playfield's width with the strip under it: an `Image` zooms it out into the rows left. A `Raster` cannot scale, so it keeps the art size and shows the
   stage's bottom rows, the sky cut, down to the tallest actor on it (8 rows for the party, 12
   with a turn boss, 17 with a boss), then goes compact.
 - **Compact and collapsed.** On terminals, the full stage needs 116 columns and 8 rows above the
-  strip. With 100 to 115 columns, or fewer rows, the band keeps the three hero rows and the status row and draws a
-  52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
-  four rows and draw no stage.
+  strip. With 100 to 115 columns, or fewer rows, the band is one 6-row picture on the shell: a
+  52-column, 4-row stage beside one party window (three hero rows, the front enemy, the command
+  line in its border) inside one line, the window's own top, bottom and right lines serving as
+  the line's. Under 100 columns it is one row of text with no shell. Loot and World are the
+  5-row strip alone and draw no stage.
 - **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and
   `/promptfall renderer auto` returns to the probe. It applies at the next session start.
 - **Frames.** The render hook draws the first frame; a timer per surface blits the rest, about 12
-  a second while something moves and 2 a second at rest (the idle bob). A hidden, collapsed or
-  other-tab band blits nothing. The desktop's `Svg` animates itself with SMIL and redraws once a
+  a second while something moves and 2 a second at rest (the idle bob). On a terminal each blit is
+  the whole band picture, the stage frame with the current strip, so a strip change alone (a log
+  line typing out, a gauge filling) redraws it; on Loot and World the loop blits the strip alone,
+  paced by the gauges. A hidden or collapsed band blits nothing. The desktop's `Svg` animates itself with SMIL and redraws once a
   round.
 
 ### Sound and motion

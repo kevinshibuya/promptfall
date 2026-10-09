@@ -146,12 +146,23 @@ strip; Loot and World are the strip alone. On short or narrow terminals the band
 compact stage beside one party window, then to a single row, and it hides while Claude asks a
 question.
 
+**The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
+field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
+centred, the stage with the strip beneath it on Party and the strip alone on Loot and World,
+edged by one white line with cut corners like the windows'. On a wide terminal the shell fills
+the margins, and on a short one the zoomed-out stage and the strip still sit inside the line, so
+the terminal's background never shows through the band. It draws as one image on Kitty, Ghostty
+and cmux (up to 255 columns, past which the terminal shows beside the shell), as one half-block
+picture on other terminals, and as two stacked vector pictures, the stage's and the strip's, on
+the desktop. The compact band is the same: its small stage and its party window inside one line
+on the shell. Only the one-row collapsed band stays plain text.
+
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, on a ground strip coloured per zone. Actors bob between two idle
 drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
-rising damage number, heals rise green, the dead dissolve and drops pop out. It grows while a boss
-is on it and shrinks back after the boss falls. It draws as an image on Kitty and Ghostty, in
-half-blocks on other terminals, and as vector art on the desktop.
+rising damage number, heals rise green, the dead dissolve and drops pop out. It is 17 rows in
+every fight, the party small on the zone's painting, so a boss lands at its full size. It draws inside the band's picture, as described
+under the playfield above.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
