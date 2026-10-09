@@ -14,8 +14,8 @@ import type { GaugeTrack } from './gauges'
 import { pngImage } from './image'
 import { type Box, cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
-import { stageAt } from './model'
-import { composeBand } from './playfield'
+import { type StageModel, type StageNumber, stageAt } from './model'
+import { composeBand, composeBandCells } from './playfield'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
@@ -24,12 +24,12 @@ export type StageSite = {
   requestId: string
   /**
    * The element's key: `stage` for the Raster, `stageKey(box)` for the Image, `bandKey(band)` for
-   * the Image band; '' with no stage.
+   * the band as one picture, Image or Raster; '' with no stage.
    */
   key: string
   layout: Layout
   /**
-   * The band's box in cells when the band is one picture (the Image's full layout, spec #45):
+   * The band's box in cells when the band is one picture (the full layout, spec #45):
    * each frame composes the stage and the strip into it, and no strip element is blitted.
    */
   band?: Box
@@ -67,7 +67,7 @@ export function stageKey(box: { columns: number; rows: number }): string {
   return `stage-${box.columns}x${box.rows}`
 }
 
-/** The Image band's key, one per size, as the stage's: only a resize mounts a new picture. */
+/** The band picture's key, one per size, as the stage's: only a resize mounts a new picture. */
 export function bandKey(box: Box): string {
   return `band-${box.columns}x${box.rows}`
 }
@@ -117,27 +117,36 @@ export function stageFrame(
     motion,
     scale: renderer === 'image' ? HIRES_SCALE : 1,
   })
-  // A short band shows the stage's bottom rows: the frame is cropped to the cells' pixels, and
-  // the Raster's numbers move up with it (one clamped to the box's top stays visible). A zoom-out
-  // (cells narrower than the box) scales the whole frame instead, so nothing is cropped.
-  const cells =
-    layout.kind === 'full' && layout.cells?.columns === layout.box.columns
-      ? layout.cells
-      : undefined
-  const shown = (frame: Frame): Frame =>
-    cells ? cropBottom(frame, Math.ceil(cells.rows * 2 * model.scale)) : frame
   if (renderer === 'raster') {
-    const frame = shown(composeFrame(model, { numbers: false }))
-    const cut = Math.ceil(model.box.rows * 2 * model.scale) - frame.height
-    const numbers = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
+    const { frame, numbers } = rasterShown(model, layout)
     return { cells: encodeRaster(frame, numbers) }
   }
   return {
     source: pngImage(
-      shown(composeFrame(model, { numbers: true })),
+      shown(model, layout, composeFrame(model, { numbers: true })),
       imageScaleFor(layout.box.columns) / model.scale,
     ),
   }
+}
+
+/**
+ * A short band shows the stage's bottom rows: the frame cropped to the cells' pixels. A zoom-out
+ * (cells narrower than the box) scales the whole frame instead, so nothing is cropped.
+ */
+function shown(model: StageModel, layout: Layout, frame: Frame): Frame {
+  const cells =
+    layout.kind === 'full' && layout.cells?.columns === layout.box.columns
+      ? layout.cells
+      : undefined
+  return cells ? cropBottom(frame, Math.ceil(cells.rows * 2 * model.scale)) : frame
+}
+
+/** The Raster's stage: the rows shown, its numbers moved up with them (one clamped to the top stays visible). */
+function rasterShown(model: StageModel, layout: Layout): { frame: Frame; numbers: StageNumber[] } {
+  const frame = shown(model, layout, composeFrame(model, { numbers: false }))
+  const cut = Math.ceil(model.box.rows * 2 * model.scale) - frame.height
+  const numbers = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
+  return { frame, numbers }
 }
 
 /**
@@ -160,6 +169,25 @@ export function bandFrame(
     scale: HIRES_SCALE,
   })
   return pngImage(composeBand(band, composeFrame(model, { numbers: true }), strip), WINDOW_SCALE)
+}
+
+/**
+ * The Raster band's cells (#61): the full stage's 1x frame, its sky cropped on a short band (ADR
+ * 0010), and the strip's scene composed into `band`, the playfield on the shell.
+ */
+export function bandCells(
+  view: GameView,
+  timeline: StageTimeline,
+  now: number,
+  layout: Layout,
+  motion: Settings['motion'],
+  band: Box,
+  strip: Scene,
+): { cells: string } {
+  if (layout.kind !== 'full') throw new Error('the band is one picture only in the full layout')
+  const model = stageAt(view, timeline, now, layout.box, { compact: false, motion, scale: 1 })
+  const { frame, numbers } = rasterShown(model, layout)
+  return { cells: composeBandCells(band, frame, numbers, strip) }
 }
 
 export class StageLoop {
@@ -333,7 +361,7 @@ export class StageLoop {
           log: extras.log,
         }).scene
       : null
-    // The Image band draws the strip inside its picture: a change in the strip alone redraws it.
+    // The band picture draws the strip inside it: a change in the strip alone redraws it.
     const band = site.band && scene ? { box: site.band, scene, json: JSON.stringify(scene) } : null
 
     const box = layout.box
@@ -356,19 +384,21 @@ export class StageLoop {
         (band === null || this.sent.get('band') === band.json)
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
-        const frame = band
-          ? {
-              source: bandFrame(
-                view,
-                this.timeline,
-                now,
-                layout,
-                settings.motion,
-                band.box,
-                band.scene,
-              ),
-            }
-          : stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+        const frame = !band
+          ? stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+          : site.renderer === 'raster'
+            ? bandCells(view, this.timeline, now, layout, settings.motion, band.box, band.scene)
+            : {
+                source: bandFrame(
+                  view,
+                  this.timeline,
+                  now,
+                  layout,
+                  settings.motion,
+                  band.box,
+                  band.scene,
+                ),
+              }
         const at = {
           requestId: site.requestId,
           key: site.key,

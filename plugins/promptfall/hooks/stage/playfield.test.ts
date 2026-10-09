@@ -1,10 +1,13 @@
 import { expect, test } from 'claude-code/testing'
+import { decode } from '../sprites/base64'
 import { stripScene } from '../ui/strip'
 import { windowFrame } from '../windows/image'
 import type { Scene } from '../windows/kit'
+import { sceneCells } from '../windows/raster'
 import { BORDER_RGB, FIELD_RGB } from '../windows/tuning'
 import type { Frame } from './compose'
-import { composeBand, playfieldOf } from './playfield'
+import { composeBand, composeBandCells, playfieldOf } from './playfield'
+import { CLEAR } from './raster'
 import { strip } from './scenarios'
 
 const WHITE = BORDER_RGB
@@ -230,4 +233,131 @@ test('a zoomed scene is shrunk by area averaging, not sampled', () => {
   const halves = painted(584, 51, (x) => (x < 291 ? 0xc00000 : 0x0000c0))
   const seam = at(composeBand({ columns: 160, rows: 12 }, halves, stripOf(160)), 637, 50)
   expect([seam >> 16 > 0 && seam >> 16 < 0xc0, (seam & 0xff) > 0]).toEqual([true, true])
+})
+
+// The Raster's band (#61): the same placement in cells, the line in box-drawing text.
+
+type Cell = { ch: string; fg: number; bg: number }
+
+/** Raster cells, `columns` wide, as a grid of characters and colours. */
+function grid(cells: string, columns: number): Cell[][] {
+  const bytes = decode(cells)
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const rows: Cell[][] = []
+  for (let w = 0; w < words.length; w += 3) {
+    const i = w / 3
+    const y = Math.floor(i / columns)
+    rows[y] ??= []
+    rows[y].push({
+      ch: String.fromCodePoint(words[w] ?? 0),
+      fg: words[w + 1] ?? 0,
+      bg: words[w + 2] ?? 0,
+    })
+  }
+  return rows
+}
+
+const text = (g: Cell[][], y: number): string => (g[y] ?? []).map((c) => c.ch).join('')
+const shell: Cell = { ch: ' ', fg: SHELL, bg: SHELL }
+const line = (ch: string): Cell => ({ ch, fg: WHITE, bg: SHELL })
+
+/** A 1x stage frame of `rows` cells, every pixel opaque and telling where it came from. */
+const stage1x = (rows: number) => marked(160, rows * 2)
+
+test('the Raster band at 165 columns: shell cells beside the line, the playfield whole inside it', () => {
+  const scene = stripOf(160)
+  const g = grid(composeBandCells({ columns: 165, rows: 22 }, stage1x(17), [], scene), 165)
+  expect([g.length, g[0]?.length]).toEqual([22, 165])
+  // Two cells of margin on the left, three on the right: the line takes the inner one.
+  for (const y of [0, 5, 16, 17, 20, 21]) {
+    expect([g[y]?.[0], g[y]?.[163], g[y]?.[164]]).toEqual([shell, shell, shell])
+  }
+  expect([g[0]?.[1], g[0]?.[2], g[0]?.[161], g[0]?.[162]]).toEqual([
+    line('╭'),
+    line('─'),
+    line('─'),
+    line('╮'),
+  ])
+  for (const y of [1, 10, 16, 17, 19, 20])
+    expect([g[y]?.[1], g[y]?.[162]]).toEqual([line('│'), line('│')])
+  expect([g[21]?.[1], g[21]?.[162]]).toEqual([line('╰'), line('╯')])
+  // Under the top line every stage column is whole: art column 0 at cell 2, 159 at cell 161.
+  expect(g[5]?.[2]).toEqual({ ch: '▀', fg: art(0, 10), bg: art(0, 11) })
+  expect(g[5]?.[161]).toEqual({ ch: '▀', fg: art(159, 10), bg: art(159, 11) })
+  // The strip's rows are its own cells above the line: its windows' top lines meet the stage.
+  const own = grid(sceneCells(scene), 160)
+  for (const y of [0, 1, 2, 3]) {
+    const want = (own[y] ?? []).map((c) => (c.bg === CLEAR ? shell : c))
+    expect(g[17 + y]?.slice(2, 162)).toEqual(want)
+  }
+  // The bottom line runs over the strip's own bottom line, each window side meeting it.
+  const bottom = text(g, 21).slice(2, 162)
+  expect(bottom.replace(/[─┴]/g, '')).toBe('')
+  expect([...text(own, 4)].flatMap((ch, x) => ('╰╯'.includes(ch) ? [x] : []))).toEqual(
+    [...bottom].flatMap((ch, x) => (ch === '┴' ? [x] : [])),
+  )
+})
+
+test('the Raster band at 160 to 163 columns draws like 160: the line over the outermost cells', () => {
+  const at160 = grid(
+    composeBandCells({ columns: 160, rows: 22 }, stage1x(17), [], stripOf(160)),
+    160,
+  )
+  expect([
+    text(at160, 0)[0],
+    text(at160, 0)[159],
+    text(at160, 21)[0],
+    text(at160, 21)[159],
+  ]).toEqual(['╭', '╮', '╰', '╯'])
+  // The line's sides replace the stage's outermost columns and the strip's outer side lines,
+  // and meet the strip windows' top lines.
+  expect([at160[5]?.[0], at160[5]?.[159], at160[5]?.[1]]).toEqual([
+    line('│'),
+    line('│'),
+    { ch: '▀', fg: art(1, 10), bg: art(1, 11) },
+  ])
+  expect([at160[17]?.[0], at160[17]?.[159]]).toEqual([line('├'), line('┤')])
+  for (const columns of [161, 162, 163]) {
+    const x = Math.floor((columns - 160) / 2)
+    const g = grid(composeBandCells({ columns, rows: 22 }, stage1x(17), [], stripOf(160)), columns)
+    for (let y = 0; y < 22; y++) {
+      expect(g[y]?.slice(x, x + 160)).toEqual(at160[y])
+      expect([...(g[y]?.slice(0, x) ?? []), ...(g[y]?.slice(x + 160) ?? [])]).toEqual(
+        Array(columns - 160).fill(shell),
+      )
+    }
+  }
+})
+
+test('the Raster band under a short band: the stage rows shown above the strip, the line around them', () => {
+  // 12 rows: 7 of the stage's bottom rows over the 5-row strip.
+  const g = grid(composeBandCells({ columns: 160, rows: 12 }, stage1x(7), [], stripOf(160)), 160)
+  expect(g).toHaveLength(12)
+  expect(text(g, 0)).toBe(`╭${'─'.repeat(158)}╮`)
+  expect(g[1]?.[1]).toEqual({ ch: '▀', fg: art(1, 2), bg: art(1, 3) })
+  expect(g[6]?.[80]).toEqual({ ch: '▀', fg: art(80, 12), bg: art(80, 13) })
+  expect([g[7]?.[0], g[7]?.[159]]).toEqual([line('├'), line('┤')])
+  expect([text(g, 11)[0], text(g, 11)[159]]).toEqual(['╰', '╯'])
+})
+
+test('the Raster band is opaque: a transparent stage pixel shows the shell', () => {
+  const stage = stage1x(17)
+  stage.rgba.fill(0)
+  const g = grid(composeBandCells({ columns: 160, rows: 22 }, stage, [], stripOf(160)), 160)
+  expect(g[5]?.[80]).toEqual({ ch: '▀', fg: SHELL, bg: SHELL })
+  expect(g.flat().filter((c) => c.fg === CLEAR || c.bg === CLEAR)).toEqual([])
+})
+
+test('a damage number over the Raster band is never under the line', () => {
+  const numbers = [
+    { text: '12', x: 0, y: 0, rgb: 0xff0000 },
+    { text: '345', x: 159, y: 30, rgb: 0x00ff00 },
+  ] as Parameters<typeof composeBandCells>[2]
+  const g = grid(
+    composeBandCells({ columns: 160, rows: 22 }, stage1x(17), numbers, stripOf(160)),
+    160,
+  )
+  expect(text(g, 1).slice(1, 3)).toBe('12')
+  expect(text(g, 15).slice(156, 159)).toBe('345')
+  expect([text(g, 0)[1], text(g, 15)[159]]).toEqual(['─', '│'])
 })

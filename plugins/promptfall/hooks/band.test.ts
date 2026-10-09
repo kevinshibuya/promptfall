@@ -3,6 +3,7 @@ import { expect, mock, test } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
+import { bandKey } from './stage/loop'
 import {
   DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
@@ -138,8 +139,16 @@ function cellsOf(node: Node | undefined): { text: string[]; fg: number[][] } {
   return { text, fg }
 }
 
-/** What the strip says: its Raster's text, else its pictures' alts. */
+/** The Party tab's band Raster (#61): the band row's one Raster, the stage and strip inside it. */
+async function bandRaster(ui: Finder): Promise<Node | undefined> {
+  const row = await ui.find({ key: 'row-band' })
+  return ((row?.children ?? []) as Node[]).find((c) => c.type === 'Raster')
+}
+
+/** What the strip says: its Raster's text, the band Raster's strip rows, else its pictures' alts. */
 async function stripText(ui: Finder): Promise<string> {
+  const band = await bandRaster(ui)
+  if (band) return cellsOf(band).text.slice(-STRIP_ROWS).join('\n')
   const strip = await ui.find({ key: 'strip' })
   if (strip?.type === 'Raster') return cellsOf(strip).text.join('\n')
   // The desktop's Svgs keep no key: the strip's is the strip row's first child.
@@ -162,6 +171,8 @@ async function svgs(ui: Finder): Promise<{ stage: Node | undefined; strip: Node 
 /** The band's height in terminal rows: the stage's rows and the strip's, or 6 for compact. */
 async function height(ui: Finder) {
   if (await ui.find({ key: 'compact-stage' })) return 6
+  const band = await bandRaster(ui)
+  if (band) return Number(band.props.rows)
   const count = async (key: string) => {
     const n = await ui.find({ key })
     if (!n) return 0
@@ -566,17 +577,22 @@ test('in boss mode the enemy window shows the world boss with its bar and time l
 // ---------------------------------------------------------------------------
 // The stage and the strip
 
-test('the full layout: a 120 × 17 stage Raster and a 120 × 5 strip Raster, 22 rows', async ($, on) => {
+/** The rows the band Raster's stage takes: down to the strip's top row, where the line meets it. */
+async function stageRowsOf(ui: Finder): Promise<number> {
+  return cellsOf(await bandRaster(ui)).text.findIndex((row) => row.startsWith('├'))
+}
+
+test('the full layout: one 120 × 22 band Raster, the 17-row stage above the 5-row strip', async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, RASTER)
   shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  const stage = await ui.find({ key: 'stage' })
-  expect(stage?.type).toBe('Raster')
-  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 17])
-  const strip = await ui.find({ key: 'strip' })
-  expect([strip?.type, strip?.props.columns, strip?.props.rows]).toEqual(['Raster', 120, 5])
+  const raster = await bandRaster(ui)
+  expect([raster?.props.columns, raster?.props.rows]).toEqual([120, 22])
+  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  expect(await ui.find({ key: 'strip' })).toBeUndefined()
+  expect(await stageRowsOf(ui)).toBe(17)
   expect(await height(ui)).toBe(22)
   await ui.unmount()
 })
@@ -591,8 +607,8 @@ for (const [name, view, rowsOf] of [
     shown.view = view()
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-    const stage = await ui.find({ key: 'stage' })
-    expect([stage?.props.columns, stage?.props.rows]).toEqual([120, rowsOf])
+    expect((await bandRaster(ui))?.props.columns).toBe(120)
+    expect(await stageRowsOf(ui)).toBe(rowsOf)
     expect(await height(ui)).toBe(rowsOf + STRIP_ROWS)
     await ui.unmount()
   })
@@ -606,8 +622,8 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   // 16 rows: 11 for the stage above the 5-row strip, the sky cropped (ADR 0010).
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
   expect(await height(ui)).toBe(16)
-  const stage = await ui.find({ key: 'stage' })
-  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 11])
+  expect((await bandRaster(ui))?.props.columns).toBe(120)
+  expect(await stageRowsOf(ui)).toBe(11)
   await ui.unmount()
   // A boss needs all 17: the Raster cannot scale, so the same band is compact.
   shown.view = boss()
@@ -832,7 +848,7 @@ test('on the desktop the World tab draws the strip Svg alone, its hotkeys hidden
   await ui.unmount()
 })
 
-test('an action blits the stage at the event rate', async ($, on) => {
+test('an action blits the band at the event rate', async ($, on) => {
   const { data, blits, clock, states } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -845,8 +861,10 @@ test('an action blits the stage at the event rate', async ($, on) => {
   for (let i = 0; i < 60 && busiest < 10; i++) {
     const before = blits.length
     await clock.advance(1_000)
-    const second = blits.slice(before).filter((b) => b.key === 'stage')
-    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+    // The Raster band (#61): the stage loop blits the one band picture, 120 × 20.
+    const key = bandKey({ columns: 120, rows: 20 })
+    const second = blits.slice(before).filter((b) => b.key === key)
+    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key, rows: 20 })
     busiest = Math.max(busiest, second.length)
   }
   expect(busiest).toBeGreaterThanOrEqual(10)

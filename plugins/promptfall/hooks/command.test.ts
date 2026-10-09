@@ -2,13 +2,13 @@ import type { On } from 'claude-code'
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { decode } from './sprites/base64'
-import { stageKey } from './stage/loop'
+import { bandKey, stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { unzlibSync } from './vendor/fflate.js'
 import { Ledger } from './vendor/ledger.js'
 import { BOSS_WINDOW_MS } from './vendor/protocol.js'
 import { content } from './vendor/sim.js'
-import { CELL_H, CELL_W, FIELD_RGB } from './windows/tuning'
+import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
 
 const RUN = {
   origin: { kind: 'composer' },
@@ -326,23 +326,43 @@ test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
   expect({ zone: view().zone, wipes: view().wipes }).toEqual(before)
 })
 
-/** What the band's strip says: its Raster's cells as text. */
-async function stripText(ui: {
-  find: (q: { key: string }) => Promise<{ props: Record<string, unknown> } | undefined>
-}): Promise<string> {
-  const strip = await ui.find({ key: 'strip' })
-  if (!strip) return ''
-  const columns = Number(strip.props.columns)
-  const bytes = decode(String(strip.props.cells))
+type Found = { type?: string; props: Record<string, unknown>; children?: unknown[] }
+type Finder = { find: (q: { key: string }) => Promise<Found | undefined> }
+
+/** A Raster's cells, row by row: each cell's character and colours. */
+function rasterCells(node: Found): { ch: string; fg: number; bg: number }[][] {
+  const columns = Number(node.props.columns)
+  const bytes = decode(String(node.props.cells))
   const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
-  const lines: string[] = []
+  const rows: { ch: string; fg: number; bg: number }[][] = []
   for (let y = 0; y < words.length / 3 / columns; y++) {
-    let line = ''
-    for (let x = 0; x < columns; x++)
-      line += String.fromCodePoint(words[(y * columns + x) * 3] ?? 32)
-    lines.push(line)
+    const row: { ch: string; fg: number; bg: number }[] = []
+    for (let x = 0; x < columns; x++) {
+      const w = (y * columns + x) * 3
+      row.push({
+        ch: String.fromCodePoint(words[w] ?? 32),
+        fg: words[w + 1] ?? 0,
+        bg: words[w + 2] ?? 0,
+      })
+    }
+    rows.push(row)
   }
-  return lines.join('\n')
+  return rows
+}
+
+/** The band Raster on the Party tab (#61), the band row's one Raster. */
+async function bandRaster(ui: Finder): Promise<Found | undefined> {
+  const row = await ui.find({ key: 'row-band' })
+  return ((row?.children ?? []) as Found[]).find((c) => c.type === 'Raster')
+}
+
+/** What the band's strip says: its Raster's cells as text, or the band Raster's strip rows. */
+async function stripText(ui: Finder): Promise<string> {
+  const band = await bandRaster(ui)
+  const strip = band ?? (await ui.find({ key: 'strip' }))
+  if (!strip) return ''
+  const lines = rasterCells(strip).map((row) => row.map((c) => c.ch).join(''))
+  return (band ? lines.slice(-STRIP_ROWS) : lines).join('\n')
 }
 
 const BAND = {
@@ -483,6 +503,58 @@ test(
     expect(children.filter((c) => c.type !== 'Image').map((c) => c.props.key)).toEqual(['hotkeys'])
     expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
     await ui.unmount()
+  },
+)
+
+test(
+  'in play, the Raster band is one element with the shell around the playfield',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    await sandboxOn(on, $, {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    })
+    const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+    const row = await ui.find({ key: 'row-band' })
+    const children = (row?.children ?? []) as Found[]
+    // One Raster at the band's box; beside it only the zero-width hotkey box.
+    expect(children.map((c) => [c.type, c.props.key])).toEqual([
+      ['Raster', bandKey({ columns: 165, rows: 22 })],
+      ['Box', 'hotkeys'],
+    ])
+    expect(children[0]?.props).toMatchObject({ columns: 165, rows: 22 })
+    for (const key of ['stage', 'strip', 'row-stage', 'row-strip'])
+      expect(await ui.find({ key })).toBeUndefined()
+    const g = rasterCells(children[0] as Found)
+    const shell = { ch: ' ', fg: FIELD_RGB, bg: FIELD_RGB }
+    const line = (ch: string) => ({ ch, fg: BORDER_RGB, bg: FIELD_RGB })
+    // Two cells of shell on the left, three on the right, the line in the inner one.
+    for (const y of [0, 8, 21])
+      expect([g[y]?.[0], g[y]?.[163], g[y]?.[164]]).toEqual([shell, shell, shell])
+    expect([g[0]?.[1], g[0]?.[80], g[0]?.[162]]).toEqual([line('╭'), line('─'), line('╮')])
+    expect([g[8]?.[1], g[19]?.[162]]).toEqual([line('│'), line('│')])
+    expect([g[21]?.[1], g[21]?.[162]]).toEqual([line('╰'), line('╯')])
+    // Inside the line: the stage's half-block cells above the strip's windows.
+    expect(g[8]?.slice(2, 162).every((c) => c.ch === '▀' || c.ch === '▄' || /\d/.test(c.ch))).toBe(
+      true,
+    )
+    expect(g[17]?.[2]?.ch).toBe('╭')
+    await ui.unmount()
+
+    // A tall prompt crops the Raster to the stage's bottom rows: the line goes around them.
+    const short = { ...BAND, props: { ...BAND.props, maxRows: 16, bodyColumns: 160 } }
+    const cropped = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
+    const raster = await bandRaster(cropped)
+    expect([raster?.props.columns, raster?.props.rows]).toEqual([160, 16])
+    const c = rasterCells(raster as Found)
+    expect(c[0]?.map((x) => x.ch).join('')).toBe(`╭${'─'.repeat(158)}╮`)
+    expect([c[5]?.[0]?.ch, c[11]?.[0]?.ch, c[11]?.[159]?.ch, c[15]?.[0]?.ch]).toEqual([
+      '│',
+      '├',
+      '┤',
+      '╰',
+    ])
+    await cropped.unmount()
   },
 )
 

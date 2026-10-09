@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { encode } from '../sprites/base64'
+import { decode, encode } from '../sprites/base64'
 import { BACKDROPS } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
@@ -239,6 +239,11 @@ for (const name of PANE_SCENARIOS) {
 for (const name of BAND_SCENARIOS) {
   test(`band golden: ${name}`, () => {
     expect(bandGoldenOf(band(name))).toEqual(BAND_GOLDENS[name])
+  })
+  test(`band ${name}: the Raster's cells are the band's box and fit the colour pair budget`, () => {
+    const input = band(name)
+    expect(decode(input.cells).length).toBe(input.box.columns * input.box.rows * 12)
+    expect(rasterPairs(input.cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
   })
 }
 

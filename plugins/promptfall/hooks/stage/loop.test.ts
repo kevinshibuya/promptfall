@@ -529,9 +529,13 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   expect(pngSize(compact.source)).toEqual([312, 48])
 })
 
-/** The Image band's site (spec #45): the band's box, drawn as one picture at its key. */
-function bandSite(props: StageSite['props'] = PROPS, view = wave()): StageSite {
-  const s = site('image', view, props)
+/** The band's site (spec #45): the band's box, drawn as one picture at its key. */
+function bandSite(
+  props: StageSite['props'] = PROPS,
+  view = wave(),
+  renderer: StageSite['renderer'] = 'image',
+): StageSite {
+  const s = site(renderer, view, props)
   const band = { columns: props.bodyColumns, rows: s.layout.bandRows }
   return { ...s, key: bandKey(band), band }
 }
@@ -567,4 +571,53 @@ test('with motion still, a change in the strip alone redraws the band through th
   await clock.advance(IDLE_FRAME_MS * 2)
   expect(h.blits.slice(settled)).toHaveLength(1)
   expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+})
+
+/** A blit's Raster cells as rows of text. */
+function cellText(b: UiBlitArgs): string[] {
+  if (!('cells' in b) || typeof b.cells !== 'string') throw new Error('expected Raster cells')
+  const bytes = decode(b.cells)
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const columns = b.columns ?? 0
+  const out: string[] = []
+  for (let y = 0; y < (b.rows ?? 0); y++) {
+    let line = ''
+    for (let x = 0; x < columns; x++)
+      line += String.fromCodePoint(words[(y * columns + x) * 3] ?? 0)
+    out.push(line)
+  }
+  return out
+}
+
+test('a Raster band site blits one band Raster at the band key, the stage and strip inside it', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(bandSite(PROPS, wave(), 'raster'))
+  await clock.advance(IDLE_FRAME_MS * 3)
+  expect(h.blits.length).toBeGreaterThan(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+  const text = cellText(h.blits[0] as UiBlitArgs)
+  expect([text[0]?.[0], text[0]?.[119], text[17]?.[0], text[21]?.[119]]).toEqual([
+    '╭',
+    '╮',
+    '├',
+    '╯',
+  ])
+  // The stage's half blocks above the strip's windows, whose sides meet the bottom line.
+  expect(text[8]?.slice(1, 119)).toMatch(/^[▀▄]+$/)
+  expect(text[21]).toContain('┴')
+})
+
+test('a Raster band under a short band blits the stage rows shown, the line around them', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  // 16 rows: the stage's bottom 11 above the strip (ADR 0010).
+  h.loop.mount(bandSite({ bodyColumns: 120, maxRows: 16 }, wave(), 'raster'))
+  await clock.advance(IDLE_FRAME_MS)
+  const last = h.blits.at(-1) as UiBlitArgs
+  expect(last).toMatchObject({ key: 'band-120x16', columns: 120, rows: 16 })
+  const text = cellText(last)
+  expect([text[0]?.[0], text[11]?.[0], text[15]?.[0]]).toEqual(['╭', '├', '╰'])
 })

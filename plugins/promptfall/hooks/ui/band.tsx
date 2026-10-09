@@ -4,7 +4,7 @@ import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
-import { bandFrame, bandKey, stageFrame, stageKey } from '../stage/loop'
+import { bandCells, bandFrame, bandKey, stageFrame, stageKey } from '../stage/loop'
 import { altText } from '../stage/model'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
@@ -15,6 +15,7 @@ import {
   FULL_MIN_COLUMNS,
   IMAGE_MAX_COLUMNS,
   PROBE_DELAY_MS,
+  RASTER_MAX_COLUMNS,
   STAGE_MAX_COLUMNS,
   SVG_INTERACTIVE,
   SVG_SMIL,
@@ -205,23 +206,46 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       </Box>
     )
 
-    // The Party tab's full layout on the Image is one picture (spec #45): the stage and the strip
-    // composed on the shell, the band's box up to the host's widest Image, centred past it.
-    if (terminal && rendererNow === 'image' && layout.kind === 'full' && 'Image' in els) {
-      const { Image } = els
-      const box = { columns: Math.min(width, IMAGE_MAX_COLUMNS), rows: layout.bandRows - extra }
+    // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
+    // strip composed on the shell, the band's box up to the host's widest element, centred past it.
+    // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
+    const picture =
+      rendererNow === 'image' && 'Image' in els
+        ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
+        : rendererNow === 'raster' && 'Raster' in els
+          ? { renderer: 'raster' as const, max: RASTER_MAX_COLUMNS }
+          : null
+    if (terminal && picture && layout.kind === 'full') {
+      const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
       const key = bandKey(box)
-      // As the stage's: a redraw of the site the loop is drawing reuses the picture it last sent,
-      // the loop's next frame a beat away; anything new composes the first frame here.
-      const source =
-        loop?.stageSource(key, layout) ??
-        bandFrame(view, timeline, now, layout, settings.motion, box, scene)
+      let element = null
+      if (picture.renderer === 'raster' && 'Raster' in els) {
+        const { Raster } = els
+        const { cells } = bandCells(view, timeline, now, layout, settings.motion, box, scene)
+        element = <Raster key={key} columns={box.columns} rows={box.rows} cells={cells} />
+      } else if ('Image' in els) {
+        const { Image } = els
+        // As the stage's: a redraw of the site the loop is drawing reuses the picture it last
+        // sent, the loop's next frame a beat away; anything new composes the first frame here.
+        const source =
+          loop?.stageSource(key, layout) ??
+          bandFrame(view, timeline, now, layout, settings.motion, box, scene)
+        element = (
+          <Image
+            key={key}
+            source={source}
+            columns={box.columns}
+            rows={box.rows}
+            alt={`${altText(view)}\n${scene.alt}`}
+          />
+        )
+      }
       loop?.mount({
         requestId: e.requestId,
         key,
         band: box,
         layout,
-        renderer: 'image',
+        renderer: picture.renderer,
         props: e.props,
         surface: e.surface,
         strip: { kind, columns: stripColumns, tab, extra },
@@ -229,13 +253,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       return (
         <Box key="band" flexDirection="column">
           <Box key="row-band" flexDirection="row" justifyContent="center">
-            <Image
-              key={key}
-              source={source}
-              columns={box.columns}
-              rows={box.rows}
-              alt={`${altText(view)}\n${scene.alt}`}
-            />
+            {element}
             {hidden}
           </Box>
         </Box>

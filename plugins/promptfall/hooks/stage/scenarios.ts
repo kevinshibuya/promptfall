@@ -30,8 +30,9 @@ import { boss, empty, fallen, wave, worldBoss } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { fnv1a64 } from './hash'
 import { encodeImage, pngImage } from './image'
-import { type Box, layoutFor } from './layout'
+import { type Box, type Layout, layoutFor } from './layout'
 import { MessageLog } from './log'
+import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
 import { composeBand } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
@@ -635,9 +636,12 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
 // The band's scenarios (spec #45): the Party tab's band as one picture, the playfield on the shell.
 export const BAND_SCENARIOS = ['band-rest', 'band-wide', 'band-zoomed'] as const
 export type BandScenario = (typeof BAND_SCENARIOS)[number]
-export type BandGolden = { imageHash: string; width: number; height: number }
-/** What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene. */
-export type BandInput = { box: Box; stage: Frame; strip: Scene }
+export type BandGolden = { imageHash: string; cellsHash: string; width: number; height: number }
+/**
+ * What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene; and
+ * the Raster's band at the same box, as cells.
+ */
+export type BandInput = { box: Box; stage: Frame; strip: Scene; cells: string }
 
 /** `view` on a 160-column stage of `rows`, its strip under it, in a band of `columns` × `maxRows`. */
 function bandInput(view: GameView, input: StripInput, columns: number, maxRows: number): BandInput {
@@ -656,10 +660,23 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
     scale: HIRES_SCALE,
   })
   const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
+  const box = { columns, rows: layout.bandRows }
+  const scene = stripScene({ ...input, columns: playfield }).scene
+  // The Raster cannot zoom: it shows the stage's bottom rows at the same box (ADR 0010). A boss
+  // needs all 17, so in play a 12-row band goes compact on the Raster; the zoomed scenario's
+  // cells pin the crop at that box all the same.
+  const room = box.rows - scene.rows
+  const raster: Layout = {
+    kind: 'full',
+    box: { columns: playfield, rows },
+    ...(room < rows ? { cells: { columns: playfield, rows: room } } : {}),
+    bandRows: box.rows,
+  }
   return {
-    box: { columns, rows: layout.bandRows },
+    box,
     stage: composeFrame(model, { numbers: true }),
-    strip: stripScene({ ...input, columns: playfield }).scene,
+    strip: scene,
+    cells: bandCells(view, t, NOW, raster, 'full', box, scene).cells,
   }
 }
 
@@ -691,5 +708,10 @@ export function bandSvgOf(input: BandInput): string {
 
 export function bandGoldenOf(input: BandInput): BandGolden {
   const image = encodeImage(bandPicture(input), WINDOW_SCALE)
-  return { imageHash: fnv1a64(image.rgba), width: image.width, height: image.height }
+  return {
+    imageHash: fnv1a64(image.rgba),
+    cellsHash: fnv1a64(input.cells),
+    width: image.width,
+    height: image.height,
+  }
 }
