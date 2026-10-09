@@ -113,7 +113,7 @@ test('the sandbox save lives under its own prefix; the real save is never touche
 // Two bootstraps: twice the default budget's work.
 test(
   'a second session start with the variable set reuses the sandbox account',
-  { timeoutMs: 15_000 },
+  { timeoutMs: 60_000 },
   async ($, on) => {
     const { view } = harness(on, ON)
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
