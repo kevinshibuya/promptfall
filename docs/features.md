@@ -174,10 +174,12 @@ come the enemy window (titled with the zone and wave, an HP bar per enemy), the 
 the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
 and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The stage
 and every window draw the staged state, the fight as the stage has played it so far, so they never
-run ahead of the picture: a killed monster keeps its row until its death has played, the title
+run ahead of the picture: a killed monster keeps its row until its death has played, a wiped hero
+falls on his blow and is up at full only once the field has cleared, a monster that leaves alive
+keeps its HP through its fade, the title
 stays on the wave or zone being watched until its last monster has dissolved, the backdrop changes
 zone only then, so a zone boss dies against its own painting, and the world boss bar drops as the
-party's hits land. On the desktop, which redraws once
+party's hits land, the boss standing at an empty bar until the server lets it go. On the desktop, which redraws once
 a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
@@ -213,7 +215,7 @@ when the server answers. Every other session draws read-only and says "playing i
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
 trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
-what the old one already toasted.
+what the old one already toasted, nor leaves out what arrived after the old one last looked.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers

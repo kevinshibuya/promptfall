@@ -528,9 +528,15 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   timeline, in the view's shape, and is the only reader of the timeline's
   landings. A hero's HP is the view's less the landings still pending for him,
   and he stands, lunges and flashes while that HP is above zero, even when the
-  view says he is dead. The enemies are the timeline's line in arrival order,
-  a killed one kept with its row until its death has played, each with its HP
-  staged the same way. The encounter's zone, wave and title stay on the wave
+  view says he is dead. A change the state makes without a blow (a wipe's
+  heal, a wave clear's revive, a rest) is a landing too, landing once the
+  stage has let the tick go: the action under way over and every row the tick
+  took off the field faded and dropped. So a wiped hero falls on his blow and
+  stands up at full only after the field has cleared. The enemies are the
+  timeline's line in arrival order, a departed one kept with its row until it
+  has faded, a killed one at 0 and one cleared alive at its last HP, each with
+  its HP staged the same way. A departed enemy fades after the last action
+  shown on it, its own blow included. The encounter's zone, wave and title stay on the wave
   or zone a held enemy was seen in, and newcomers stay out until the timeline
   admits them, so the next wave enters after the last of the previous one has
   gone, and the backdrop changes zone when the zone boss's row leaves. The
@@ -551,7 +557,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   left in the wave's place. Between polls the bar shows the last polled HP less
   the damage this party has landed since the poll's baseline, so it drops as
   the stage lands the party's hits; damage still in the air is subtracted from
-  a fresh poll too. No other surface.
+  a fresh poll too. A bar this party has emptied holds at zero, the boss
+  standing, until the server disengages it; it dissolves then. No other
+  surface.
 - World poll failures (phase 3): a thrown poll is ignored and the World tab dims
   as stale after 45 seconds without a fresh snapshot; only a thrown submit or
   bootstrap is an outage. Chat posting during an outage answers the unreachable
@@ -674,7 +682,11 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   is held across calls; there is no timer. Toasts of one burst are raised in
   the table's order, so the long tier lands on top of the stack. Cues keep
   their rule: the burst's distinct cues, each played once, after the toasts.
-  Only the primary session toasts, the world boss included.
+  Only the primary session toasts, the world boss included. The primary
+  records in the shared store the cursor it has shown events through; a
+  session's bootstrap, a promotion included, hands on only the events past
+  it, so a handover neither repeats what was toasted nor silences what nobody
+  saw.
 
   Folding. Within a burst, effects are grouped by row. A row that folds yields
   one toast carrying the count and, where the row has one, the sum; a row that
