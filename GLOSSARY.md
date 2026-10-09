@@ -157,6 +157,12 @@ party on the right, side-on. Drawn on every surface, in whatever pixels the surf
 glyph rows are never the stage's fallback.
 _Avoid_: scene, arena, battlefield, viewport
 
+**Staged state**:
+The fight as the stage has played it so far: the sim's state less every hit, heal and death the
+stage has not landed yet. The stage and every window of the band draw the staged state; the sim,
+the server, the pane and the toasts deal in the state.
+_Avoid_: shown state, played state, predicted HP, animation state
+
 **Sprite**:
 The pixel art of one hero class, enemy, world boss or item, with its animation frames.
 Replaces the glyph where pixels draw; the glyph stays as its fallback. Each sprite has two
@@ -187,6 +193,18 @@ _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 The row of windows under the stage: the enemy window, the message window, the party window and
 the purse. Beside the compact stage it is one party window; on Loot and World it is the band.
 _Avoid_: HUD, status bar, party line (the text row it replaced)
+
+**Playfield**:
+What a band tab draws, set into the shell: on Party the stage with the strip beneath it, on Loot
+and World the strip alone. One width, centred, edged by one window line, so the stage and the
+strip read as one picture.
+_Avoid_: frame (a sprite's drawing), game area, viewport, screen
+
+**Shell**:
+The charcoal field that fills the band's box around the playfield, whatever the terminal's width
+and whatever rows the prompt leaves. The band is the shell with the playfield on it; the terminal
+never shows through.
+_Avoid_: frame, bezel, border, background, chrome
 
 **Message window**:
 The strip's middle window: the command line on top, then the combat log, the latest drops or
