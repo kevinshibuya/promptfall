@@ -299,7 +299,7 @@ function prune(ctx) {
     if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
   }
 }
-async function world(ctx, record, since) {
+async function world(ctx, record, since, engageCaller = true) {
   const presenceOn = ctx.flags["presence.enabled"] !== false;
   const id = record.account.accountId;
   prune(ctx);
@@ -322,7 +322,7 @@ async function world(ctx, record, since) {
     }
   }
   const boss = await loadBoss(ctx.books.kv);
-  if (boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
+  if (engageCaller && boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
     engage(record, boss);
     await ctx.books.save(record);
     await ctx.books.kv.set(BOSS_KEY, boss);
@@ -1204,8 +1204,8 @@ var Ledger = class {
     const record = await this.books.load(caller.account.accountId);
     return record ? { ctx, record } : null;
   }
-  browse(auth, query) {
-    return this.marketRead(auth, true, (ctx, record) => browse(ctx, record, query));
+  browse(auth, query, { expire = true } = {}) {
+    return this.marketRead(auth, expire, (ctx, record) => browse(ctx, record, query));
   }
   list(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => list(ctx, record, input));
@@ -1220,8 +1220,8 @@ var Ledger = class {
   buy(auth, listingId) {
     return this.marketWrite(auth, true, (ctx, record) => buy(ctx, record, listingId));
   }
-  myOrders(auth) {
-    return this.marketRead(auth, true, (ctx, record) => myOrders(ctx, record));
+  myOrders(auth, { expire = true } = {}) {
+    return this.marketRead(auth, expire, (ctx, record) => myOrders(ctx, record));
   }
   placeOrder(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => placeOrder(ctx, record, input));
@@ -1229,8 +1229,12 @@ var Ledger = class {
   cancelOrder(auth, orderId) {
     return this.marketWrite(auth, true, (ctx, record) => cancelOrder(ctx, record, orderId));
   }
-  matchingOrders(auth, itemId) {
-    return this.marketRead(auth, true, (ctx, record) => matchingOrders(ctx, record, itemId));
+  matchingOrders(auth, itemId, { expire = true } = {}) {
+    return this.marketRead(
+      auth,
+      expire,
+      (ctx, record) => matchingOrders(ctx, record, itemId)
+    );
   }
   fillOrder(auth, orderId, itemId) {
     return this.marketWrite(
@@ -1241,13 +1245,13 @@ var Ledger = class {
   }
   // ---------------------------------------------------------------------------
   // World: presence, chat, leaderboards
-  world(auth, since) {
+  world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      await advanceBoss(ctx);
+      if (advance) await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
-      return world(ctx, record, since);
+      return world(ctx, record, since, advance);
     });
   }
   chat(auth, text) {

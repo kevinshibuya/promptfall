@@ -1,4 +1,4 @@
-import { type Bootstrap, MemoryKeyValue } from '@promptfall/protocol'
+import { BOSS_GRID_MS, type Bootstrap, MemoryKeyValue } from '@promptfall/protocol'
 import {
   createInitialState,
   type GameState,
@@ -10,10 +10,20 @@ import {
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, LOG_CAP } from './books'
+import { EXPIRY_MS } from './goods'
 import { Ledger, type LedgerOptions } from './ledger'
 
 class CountingKeyValue extends MemoryKeyValue {
   flushes = 0
+  writes = 0
+  async set(key: string, value: unknown): Promise<void> {
+    this.writes += 1
+    await super.set(key, value)
+  }
+  async delete(key: string): Promise<void> {
+    this.writes += 1
+    await super.delete(key)
+  }
   async flush(): Promise<void> {
     this.flushes += 1
   }
@@ -315,5 +325,97 @@ describe('Ledger flush', () => {
     const r = await record(kv as MemoryKeyValue, boot.account.accountId)
     expect(r.cursor).toBe(20)
     expect(r.state.gold).toBe(boot.state.gold + 20)
+  })
+})
+
+describe('Ledger reads without writes', () => {
+  it('a read with expiry off leaves an expired listing in place', async () => {
+    const { ledger, kv, advance } = makeLedger()
+    const counting = kv as CountingKeyValue
+    const seller = await ledger.host.mint({
+      state: { ...createInitialState(5), gold: 10_000, inventory: [rareItem('iA')] },
+      name: 'Ann',
+      linked: true,
+    })
+    const buyer = await ledger.host.mint({
+      state: { ...createInitialState(6), gold: 10_000, inventory: [rareItem('iB')] },
+      name: 'Bob',
+      linked: true,
+    })
+    const ann = { deviceToken: seller.deviceToken }
+    const bob = { deviceToken: buyer.deviceToken }
+    expect(await ledger.list(ann, { kind: 'item', id: 'iA', price: 100 })).toMatchObject({
+      ok: true,
+    })
+    expect(
+      await ledger.placeOrder(ann, {
+        base: 'steel_longsword',
+        minRarity: 'rare',
+        affixId: null,
+        maxPrice: 50,
+      }),
+    ).toMatchObject({ ok: true })
+    advance(EXPIRY_MS)
+    const writes = counting.writes
+    const flushes = counting.flushes
+
+    const page = await ledger.browse(
+      bob,
+      { kind: 'item', sort: 'newest', page: 0 },
+      { expire: false },
+    )
+    expect(page).toMatchObject({ total: 1, listings: [{ sellerId: seller.accountId }] })
+    expect(await ledger.myOrders(ann, { expire: false })).toMatchObject({
+      listings: [{ sellerId: seller.accountId }],
+      orders: [{ buyerId: seller.accountId }],
+    })
+    expect(await ledger.matchingOrders(bob, 'iB', { expire: false })).toHaveLength(1)
+    expect(counting.writes).toBe(writes)
+    expect(counting.flushes).toBe(flushes)
+    const r = await record(counting, seller.accountId)
+    expect(r.state.inventory.map((i) => i.id)).toEqual([])
+
+    // The default read is the primary's: it expires what is due.
+    expect(await ledger.browse(bob, { kind: 'item', sort: 'newest', page: 0 })).toMatchObject({
+      total: 0,
+    })
+    expect(counting.writes).toBeGreaterThan(writes)
+    const back = await record(counting, seller.accountId)
+    expect(back.state.inventory.map((i) => i.id)).toEqual(['iA'])
+  })
+
+  it('a world poll with advance off spawns no boss and writes nothing', async () => {
+    let t = 1_700_006_400_000 // a grid point
+    expect(t % BOSS_GRID_MS).toBe(0)
+    const { ledger, kv } = makeLedger({ now: async () => t })
+    const counting = kv as CountingKeyValue
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: boot.deviceToken }
+    const writes = counting.writes
+    const flushes = counting.flushes
+
+    expect(await ledger.world(auth, 0, { advance: false })).toMatchObject({ boss: null })
+    expect(counting.writes).toBe(writes)
+    expect(counting.flushes).toBe(flushes)
+
+    // The default poll is the primary's: it spawns the grid's boss and engages the caller.
+    t += 1
+    expect(await ledger.world(auth, 0)).toMatchObject({ boss: { hp: expect.any(Number) } })
+    expect(counting.writes).toBeGreaterThan(writes)
+  })
+
+  it('a world poll with advance off does not engage the caller in a live boss', async () => {
+    const t = 1_700_006_400_000
+    const { ledger, kv } = makeLedger({ now: async () => t })
+    const counting = kv as CountingKeyValue
+    const first = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    await ledger.world({ deviceToken: first.deviceToken }, 0)
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const writes = counting.writes
+
+    await ledger.world({ deviceToken: boot.deviceToken }, 0, { advance: false })
+    expect(counting.writes).toBe(writes)
+    const r = await record(counting, boot.account.accountId)
+    expect(r.state.boss).toBeNull()
   })
 })

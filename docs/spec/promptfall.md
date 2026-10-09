@@ -362,7 +362,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 
 - `@promptfall/ledger` is the server core: account records, batch replay and
   the market rules as pure functions over an injected clock and key-value
-  store, with expiries enforced on every market call and swept by the host.
+  store, with expiries enforced on every market call and swept by the host. A
+  read can leave expiries and the world boss alone: a secondary session's reads
+  of the in-process store do, so only the primary writes it.
   Three hosts run it: the
   in-process fake, the HTTP fake and the real server. A host adds transport,
   persistence and, for the HTTP fake, bots; it never adds rules.
