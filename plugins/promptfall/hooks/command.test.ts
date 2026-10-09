@@ -1,9 +1,10 @@
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
 import type { WorldState } from '../types'
 import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { test } from './testing'
 import { Ledger } from './vendor/ledger.js'
 import { content } from './vendor/sim.js'
 

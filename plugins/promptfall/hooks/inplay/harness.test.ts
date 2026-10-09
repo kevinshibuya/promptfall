@@ -1,4 +1,5 @@
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from '../testing'
 import { BAND, sandboxOn, stripText } from './harness'
 
 test('in play, the band mounts over the sandboxed engine and its strip reads as text', async ($, on) => {

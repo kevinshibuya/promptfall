@@ -1,5 +1,5 @@
 import type { On, RenderElement, UiBlitArgs } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
@@ -10,6 +10,7 @@ import {
   SVG_INTERACTIVE,
 } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
+import { test } from './testing'
 import { shownBoss, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'

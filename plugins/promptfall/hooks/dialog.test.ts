@@ -1,6 +1,7 @@
 import type { On } from 'claude-code'
-import { expect, type Mounted, mock, type TestBody, test } from 'claude-code/testing'
+import { expect, type Mounted, mock, type TestBody } from 'claude-code/testing'
 import type { GameView } from '../types'
+import { test } from './testing'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
