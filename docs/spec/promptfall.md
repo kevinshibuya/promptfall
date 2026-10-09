@@ -188,8 +188,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   kind `world_boss`, carrying the stats the event gives, scaled to the party's zone.
   It never dies locally; every hit adds to the state's damage dealt for that boss.
   `boss_disengaged` clears it and the next tick spawns the wave as usual.
-- In boss mode tool calls spawn nothing, a wipe heals the party in place with no
-  retreat and no wipe counted, a rest heals as usual, and the boss grants no XP,
+- In boss mode tool calls spawn nothing, a wipe resets the battle like any wipe
+  (every gauge empty, the action queue cleared) and heals the party in place with
+  no retreat and no wipe counted, a rest heals as usual, and the boss grants no XP,
   gold or drops. Rewards come from the server (§6).
 
 ## 5. Economy and market (phase 2)
