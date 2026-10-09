@@ -7,8 +7,9 @@ function upscale(
   frame: Frame,
   scale: number,
 ): { bytes: Uint8Array; width: number; height: number } {
-  const width = frame.width * scale
-  const height = frame.height * scale
+  // A fractional scale (a zoomed-out stage, #21) lands on whole pixels.
+  const width = Math.round(frame.width * scale)
+  const height = Math.round(frame.height * scale)
   const src = new Uint8Array(frame.rgba.buffer, frame.rgba.byteOffset, frame.rgba.byteLength)
   if (scale === 1) return { bytes: src, width, height }
   const out = new Uint8Array(width * height * 4)
@@ -32,9 +33,9 @@ function upscale(
     return { bytes: out, width, height }
   }
   for (let y = 0; y < height; y++) {
-    const sy = Math.floor(y / scale)
+    const sy = Math.min(frame.height - 1, Math.floor(y / scale))
     for (let x = 0; x < width; x++) {
-      const si = (sy * frame.width + Math.floor(x / scale)) * 4
+      const si = (sy * frame.width + Math.min(frame.width - 1, Math.floor(x / scale))) * 4
       const di = (y * width + x) * 4
       out[di] = src[si] ?? 0
       out[di + 1] = src[si + 1] ?? 0

@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { cellsOf, layoutFor } from './layout'
+import { cellsOf, imageScaleFor, layoutFor } from './layout'
+import { IMAGE_MAX_SIDE, IMAGE_SCALE } from './tuning'
 
 const PARTY = { tab: 'party', extra: 0 } as const
 
@@ -84,17 +85,17 @@ test('an Image stage too tall for the band zooms the whole scene out; the Raster
     }),
   ).toMatchObject({
     kind: 'full',
-    box: { columns: 214, rows: 17 },
-    cells: { columns: 138, rows: 11 },
+    box: { columns: 223, rows: 17 },
+    cells: { columns: 144, rows: 11 },
   })
-  // The Image widens the scene until its picture meets IMAGE_MAX_BYTES (214 columns at 17 rows)
-  // and draws it into the 11 rows, so nothing is cropped and the boss stays whole.
+  // The Image widens the scene to 223 columns, which 11 rows of it span at the band's 144,
+  // so nothing is cropped and the boss stays whole.
   expect(
     layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', { ...boss, scalable: true }),
   ).toEqual({
     kind: 'full',
-    box: { columns: 214, rows: 17 },
-    cells: { columns: 138, rows: 11 },
+    box: { columns: 223, rows: 17 },
+    cells: { columns: 144, rows: 11 },
     bandRows: 16,
   })
   // A turn boss (12 rows) on a 17-row Raster band: 12 rows left meet its floor, so it is cropped.
@@ -110,6 +111,24 @@ test('an Image stage too tall for the band zooms the whole scene out; the Raster
   expect(
     layoutFor(17, { bodyColumns: 144, maxRows: 8 }, 'terminal', { ...boss, scalable: true }).kind,
   ).toBe('compact')
+})
+
+test('an Image boss under a tall prompt still spans the band (#21)', () => {
+  const boss = { tab: 'party', extra: 0, minRows: 17, scalable: true } as const
+  // 5 rows left under the strip: the scene widens to 490 columns so 5 rows of it span 144.
+  const layout = layoutFor(17, { bodyColumns: 144, maxRows: 10 }, 'terminal', boss)
+  expect(layout).toEqual({
+    kind: 'full',
+    box: { columns: 490, rows: 17 },
+    cells: { columns: 144, rows: 5 },
+    bandRows: 10,
+  })
+  // Its picture stays within the host's 2048 px a side: the pre-upscale drops below 6.
+  const scale = imageScaleFor(490)
+  expect(scale).toBeLessThan(IMAGE_SCALE)
+  expect(490 * scale).toBeLessThanOrEqual(IMAGE_MAX_SIDE)
+  // A stage at the band's own width keeps the crisp 6.
+  expect(imageScaleFor(160)).toBe(IMAGE_SCALE)
 })
 
 test('Loot and World are the strip alone: 5 rows, collapsed under 5 rows or 100 columns', () => {

@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, type TestBody, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { decode } from './sprites/base64'
+import { stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { Ledger } from './vendor/ledger.js'
 import { BOSS_WINDOW_MS } from './vendor/protocol.js'
@@ -393,4 +394,30 @@ test('sandbox worldboss twice answers that one is live; worldboss end with none 
   expect(view().boss?.bossId).toBe(bossId)
   expect((states.get('world') as WorldState).snapshot?.boss?.bossId).toBe(bossId)
   expect(await run('worldboss later')).toBe('Usage: /promptfall sandbox worldboss [end]')
+})
+
+test('in play, a boss under a tall prompt draws the Image stage the band’s full width (#21)', async ($, on) => {
+  const { run, view, clock } = await sandboxOn(on, $, {
+    'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+  })
+  expect(await run('boss treant')).toBe('Sandbox: Elder Treant is next')
+  for (let i = 0; i < 40 && !view().enemies.some((e) => e.name === 'Elder Treant'); i++)
+    await clock.advance(500)
+  expect(view().enemies.map((e) => e.name)).toContain('Elder Treant')
+  // A tall prompt leaves the band 10 rows: 5 for the stage over the 5-row strip.
+  const short = { ...BAND, props: { ...BAND.props, maxRows: 10, bodyColumns: 144 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
+  const stage = await ui.find({ key: stageKey({ columns: 144, rows: 5 }) })
+  expect(stage?.props).toMatchObject({ columns: 144, rows: 5 })
+  // The picture stays within the host's 2048 px a side: its PNG header's width and height.
+  const source = stage?.props.source as { png: string } | undefined
+  const png = decode(source?.png ?? '')
+  const be = (at: number) =>
+    ((png[at] ?? 0) << 24) |
+    ((png[at + 1] ?? 0) << 16) |
+    ((png[at + 2] ?? 0) << 8) |
+    (png[at + 3] ?? 0)
+  expect(be(16)).toBeLessThanOrEqual(2048)
+  expect(be(20)).toBeLessThanOrEqual(2048)
+  await ui.unmount()
 })
