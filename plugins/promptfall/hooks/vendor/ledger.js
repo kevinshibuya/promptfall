@@ -299,7 +299,7 @@ function prune(ctx) {
     if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
   }
 }
-async function world(ctx, record, since) {
+async function world(ctx, record, since, engageCaller = true) {
   const presenceOn = ctx.flags["presence.enabled"] !== false;
   const id = record.account.accountId;
   prune(ctx);
@@ -322,7 +322,7 @@ async function world(ctx, record, since) {
     }
   }
   const boss = await loadBoss(ctx.books.kv);
-  if (boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
+  if (engageCaller && boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
     engage(record, boss);
     await ctx.books.save(record);
     await ctx.books.kv.set(BOSS_KEY, boss);
@@ -828,8 +828,10 @@ async function placeOrder(ctx, record, input) {
   if (gate) return refuse(gate);
   if (!validPrice(input.maxPrice)) return refuse("bad_price");
   if (!tradeableRarity(input.minRarity)) return refuse("not_tradeable_rarity");
-  if (!content2.itemBases[input.base]) return refuse("unknown_goods");
-  if (input.affixId !== null && !content2.affixes[input.affixId]) return refuse("unknown_goods");
+  if (!Object.hasOwn(content2.itemBases, input.base)) return refuse("unknown_goods");
+  if (input.affixId !== null && !Object.hasOwn(content2.affixes, input.affixId)) {
+    return refuse("unknown_goods");
+  }
   if (record.state.gold < input.maxPrice) return refuse("not_enough_gold");
   const id = await nextLedgerId(ctx.books.kv, "O");
   author(record, { t: "order_placed", orderId: id, escrow: input.maxPrice });
@@ -866,7 +868,7 @@ async function fillOrder(ctx, record, orderId, itemId) {
   if (order.buyerId === record.account.accountId) return refuse("self_trade");
   if (!matches(order, goods.item)) return refuse("no_match");
   const buyer = await counterparty(ctx, order.buyerId);
-  if (!hasRoom(buyer.state, goods)) return refuse("no_space");
+  if (!hasRoom(buyer.state, goods)) return refuse("buyer_full");
   const moved = await transfer(goods, ctx.now, () => nextLedgerId(ctx.books.kv, "t"), buyer.state);
   if (moved.kind !== "item") throw new Error("market: an order fill moved a hero");
   author(record, {
@@ -884,6 +886,7 @@ async function fillOrder(ctx, record, orderId, itemId) {
 }
 
 // packages/ledger/src/ledger.ts
+var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
 var unauthorized = { reason: "unauthorized" };
@@ -1201,8 +1204,8 @@ var Ledger = class {
     const record = await this.books.load(caller.account.accountId);
     return record ? { ctx, record } : null;
   }
-  browse(auth, query) {
-    return this.marketRead(auth, true, (ctx, record) => browse(ctx, record, query));
+  browse(auth, query, { expire = true } = {}) {
+    return this.marketRead(auth, expire, (ctx, record) => browse(ctx, record, query));
   }
   list(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => list(ctx, record, input));
@@ -1217,8 +1220,8 @@ var Ledger = class {
   buy(auth, listingId) {
     return this.marketWrite(auth, true, (ctx, record) => buy(ctx, record, listingId));
   }
-  myOrders(auth) {
-    return this.marketRead(auth, true, (ctx, record) => myOrders(ctx, record));
+  myOrders(auth, { expire = true } = {}) {
+    return this.marketRead(auth, expire, (ctx, record) => myOrders(ctx, record));
   }
   placeOrder(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => placeOrder(ctx, record, input));
@@ -1226,8 +1229,12 @@ var Ledger = class {
   cancelOrder(auth, orderId) {
     return this.marketWrite(auth, true, (ctx, record) => cancelOrder(ctx, record, orderId));
   }
-  matchingOrders(auth, itemId) {
-    return this.marketRead(auth, true, (ctx, record) => matchingOrders(ctx, record, itemId));
+  matchingOrders(auth, itemId, { expire = true } = {}) {
+    return this.marketRead(
+      auth,
+      expire,
+      (ctx, record) => matchingOrders(ctx, record, itemId)
+    );
   }
   fillOrder(auth, orderId, itemId) {
     return this.marketWrite(
@@ -1238,13 +1245,13 @@ var Ledger = class {
   }
   // ---------------------------------------------------------------------------
   // World: presence, chat, leaderboards
-  world(auth, since) {
+  world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      await advanceBoss(ctx);
+      if (advance) await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
-      return world(ctx, record, since);
+      return world(ctx, record, since, advance);
     });
   }
   chat(auth, text) {
@@ -1266,7 +1273,11 @@ var Ledger = class {
   // ---------------------------------------------------------------------------
   // Host privileges
   async mint(input) {
-    if (input.name.length > 128) throw new Error("mint: name over 128 characters");
+    if (input.name.length < 1 || input.name.length > PLAYER_NAME_MAX) {
+      throw new Error(
+        `mint: name wants 1 to ${PLAYER_NAME_MAX} characters; got ${input.name.length}`
+      );
+    }
     const now = await this.options.now();
     const accountId = this.options.tokenSource();
     const deviceToken = this.options.tokenSource();
@@ -1308,12 +1319,12 @@ var Ledger = class {
     await this.books.save(record);
   }
   async sandbox(accountId, input) {
+    if (!this.flags()["sandbox.enabled"]) return sandboxOff;
     const event = ServerEventSchema.parse(input);
     if (!SANDBOX_EVENT_KINDS.includes(event.t)) {
       throw new Error(`sandbox: not a sandbox event: ${event.t}`);
     }
     const record = await this.currentRecord(accountId);
-    if (!this.flags()["sandbox.enabled"]) return sandboxOff;
     const refused = tryAuthor(record, event);
     if (refused !== null) {
       return {
@@ -1359,6 +1370,7 @@ export {
   Ledger,
   MAX_PRICE,
   MIN_PRICE,
+  PLAYER_NAME_MAX,
   WORLD_BOSSES,
   isBlocked,
   listingFee,

@@ -22,16 +22,16 @@ The sandbox is a separate save on the in-process fake where `/promptfall sandbox
 | --- | --- | --- | --- |
 | `boss` | `<name>`, a zone boss or turn boss | `sandbox_boss`: the party moves to the boss's zone if elsewhere, the encounter ends with no drops or XP, and the next empty tick spawns the boss (`boss_spawned`, its log line) | `Sandbox: Elder Treant is next` |
 | `worldboss` | none | Ledger-side: a world boss whose window starts now engages every online account; boss mode starts, and one world poll raises the `World boss The Promptwyrm has appeared` toast | `Sandbox: world boss The Promptwyrm has appeared`, or `Sandbox: a world boss is already live` |
-| `worldboss end` | none | Ledger-side: the live boss settles as if its window had passed, every engaged account is paid as `rewarded` (toast `Boss reward: …`) and disengaged, and the world snapshot shows it at 0 HP, so the poll raises `The Promptwyrm is down` | `Sandbox: The Promptwyrm is down, rewards delivered`, or `Sandbox: no world boss is live` |
-| `item` | `<base> [rarity]`, common by default | `sandbox_item`: the sim's own roll, then the drop intake: `drop` (log line, `lastDrop`, a toast `<glyph> Oak Staff (legendary)` from rare up) or, inventory full, `drop_vendored` and the vendor gold | `Sandbox: Oak Staff (legendary) dropped`, or `Sandbox: Oak Staff vendored, inventory full` |
-| `level` | `<hero> <n>` | `sandbox_level`: XP through the XP path one level at a time up to `n` or the rarity cap, a `level_up` and a `Level k` toast for each | `Sandbox: Aldric the Bold is level 7`, `… is already level 7`, or `… is level 20, the common cap` |
+| `worldboss end` | none | Ledger-side: the live boss settles as if its window had passed, every engaged account is paid as `rewarded` (toast `Your share of The Promptwyrm: …`) and disengaged, and the world snapshot shows it at 0 HP, so the poll raises `World boss The Promptwyrm is down` | `Sandbox: The Promptwyrm is down, rewards delivered`, or `Sandbox: no world boss is live` |
+| `item` | `<base> [rarity]`, common by default | `sandbox_item`: the sim's own roll, then the drop intake: `drop` (log line, `lastDrop`, a toast from rare up: `Legendary drop: Oak Staff`, `Rare drop: …`, `Epic drop: …`) or, inventory full, `drop_vendored` and the vendor gold | `Sandbox: Oak Staff (legendary) dropped`, or `Sandbox: Oak Staff vendored, inventory full` |
+| `level` | `<hero> <n>` | `sandbox_level`: XP through the XP path one level at a time up to `n` or the rarity cap, a `level_up` for each; the burst folds them into one toast at the highest, `Aldric the Bold reached level 7` | `Sandbox: Aldric the Bold is level 7`, `… is already level 7`, or `… is level 20, the common cap` |
 | `gold` | `<n>` | `credited` with reason `sandbox`; no toast | `Sandbox: 5000 gold added` |
 | `zone` | `<n>`, 1 to 12 | `sandbox_zone`: the zone change (wave 1, highest zone bumped), the encounter ended | `Sandbox: zone 4, Old Barrow Hills`, or `Sandbox: zones run 1 to 12` |
-| `recruit` | `[rarity]`, common by default | `sandbox_recruit`: a hero of that rarity through the recruit path, `hero_recruited` with `via: 'sandbox'`, toast `<name> joined (epic)` | `Sandbox: <name> (epic) recruited`, or `Sandbox: roster full, nobody recruited` |
-| `wipe` | none | `sandbox_wipe`: the wipe path, as if every party hero hit 0 HP: the `wipe` effect, the retreat one zone, the wipe counted, toast `Party wiped, retreating to zone 2` | `Sandbox: the party fell, retreating to zone 2` |
+| `recruit` | `[rarity]`, common by default | `sandbox_recruit`: a hero of that rarity through the recruit path, `hero_recruited` with `via: 'sandbox'`, toast `Epic recruit: <name>` | `Sandbox: <name> (epic) recruited`, or `Sandbox: roster full, nobody recruited` |
+| `wipe` | none | `sandbox_wipe`: the wipe path, as if every party hero hit 0 HP: the `wipe` effect, the retreat one zone, the wipe counted, toast `The party fell, retreating to zone 2` | `Sandbox: the party fell, retreating to zone 2` |
 | `reset` | none | The account reset: books and token go, lease and settings stay, a fresh account bootstraps in the same session | `Sandbox: the save starts over` |
 
-In boss mode `boss`, `zone` and `wipe` answer `Sandbox: the party is fighting a world boss, nothing changed` and change nothing; `item`, `level` and `recruit` apply. Bad arguments answer the verb's `Usage: /promptfall sandbox …` line, an unknown verb answers `No sandbox verb 'x'.` and the listing, and any other refusal answers `Sandbox: nothing changed (<reason>)`.
+In boss mode `boss`, `zone` and `wipe` answer `Sandbox: the party is fighting a world boss, nothing changed` and change nothing; `item`, `level` and `recruit` apply. Bad arguments answer the verb's `Usage: /promptfall sandbox …` line, an unknown verb answers `No sandbox verb 'x'.` and the listing, and any other refusal answers `Sandbox: nothing changed (<reason>)`. A primary paused on an update or a reset notice answers `Promptfall is paused`, and a session that still cannot play after the claim answers `Promptfall is not playing in this session`.
 
 ## Names
 
@@ -62,11 +62,11 @@ The raw effects are the sim's: `packages/sim/src/sandbox.test.ts` asserts state 
 const { run, view, toasts } = await sandboxOn(on, $)
 await run('zone 3')
 expect(await run('wipe')).toBe('Sandbox: the party fell, retreating to zone 2')
-expect(toasts).toContain('Party wiped, retreating to zone 2')
+expect(toasts).toContain('The party fell, retreating to zone 2')
 ```
 
 ## The world boss in the sandbox
 
 - The sandbox ledger runs the world boss on its grid too, beside the verbs. A test whose clock starts inside a grid window finds a grid boss engaged and `boss`, `zone` and `wipe` refused, which is why `sandboxOn` starts the clock at `BOSS_WINDOW_MS + 1_000_000`. In a live session a world boss can appear by itself.
 - The grid does not spawn while a stored boss is open; sandbox bosses take ids from their own `sb` space.
-- A settle pays every engaged account as if each had reached the reward threshold, so `worldboss` then `worldboss end` with nothing dealt still delivers one `Boss reward: …` toast, and in a test with several accounts every engaged one is paid.
+- A settle pays every engaged account as if each had reached the reward threshold, so `worldboss` then `worldboss end` with nothing dealt still delivers one `Your share of The Promptwyrm: …` toast, and in a test with several accounts every engaged one is paid.

@@ -69,7 +69,10 @@ test('the actions: settings, the band, off, link, and reset opening its Yes/No o
     input(
       {},
       {},
-      { settings: { sound: true, motion: 'still', renderer: 'raster' }, collapsed: true },
+      {
+        settings: { sound: true, motion: 'still', renderer: 'raster', probed: null },
+        collapsed: true,
+      },
     ),
   )
   const lines = linesOf(win(forced, 'list'))

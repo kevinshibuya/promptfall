@@ -1,9 +1,10 @@
 import type { On, UiBlitArgs } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { test } from './testing'
 import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
@@ -313,8 +314,9 @@ test('the session the player uses takes the lease back; Claude working elsewhere
   // Claude's own tool calls do not claim it.
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(last.get('mode')).toBe('secondary')
-  // The player typing here does.
+  // The player typing here does; the promotion lands after the prompt has gone through.
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
 })
@@ -548,6 +550,31 @@ test('a primary demoted during an outage never submits the batch it held', async
   expect(last.get('mode')).toBe('secondary')
 })
 
+test("a demoted primary's notice clears; the re-promoted engine's own notice shows", async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  // Another session takes the lease: the discarded engine's banner goes with it.
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(last.get('notice')).toBeNull()
+  // The lease comes back while the server is still down: the new engine raises its own.
+  data.delete(LEASE)
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+})
+
 test('a server that never answers is an outage after 15 s', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   store(on, { 'promptfall:server': URL_A })
@@ -566,7 +593,7 @@ test('a server that never answers is an outage after 15 s', async ($, on) => {
 })
 
 test("the player's claim follows a server switch made in another session", async ($, on) => {
-  mock.clock(on, { now: 1_000_000 })
+  const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, { [LEASE]: { owner: 'other', until: 9_999_999_999_999 } })
   const last = states(on)
   engineBottom(on)
@@ -576,6 +603,7 @@ test("the player's claim follows a server switch made in another session", async
   expect(last.get('mode')).toBe('secondary')
   data.set('promptfall:server', URL_A)
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect(last.get('server')).toBe(URL_A)
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
@@ -1078,24 +1106,29 @@ test('the probe settles on image when the blit is taken', async ($, on) => {
 })
 
 test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
-  const { time, last } = probing(on, {
+  const { time, last, data } = probing(on, {
     deny: `${PROBE_ALT_DENY} (env: terminal=Apple_Terminal, not asked yet, no answer)`,
   })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
   expect(last.get('renderer')).toBe('raster')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'raster' })
   await ui.unmount()
 })
 
 test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
-  const { time, last, blits } = probing(on, {
+  const { time, last, blits, data } = probing(on, {
     deny: 'no Image of its own is mounted under key "probe" in band-probe',
   })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
   expect(last.get('renderer') ?? 'unknown').toBe('unknown')
+  // Nothing settled, nothing recorded.
+  expect(
+    (data.get('promptfall:settings') as { probed?: unknown } | undefined)?.probed ?? null,
+  ).toBe(null)
   await ui.unmount()
   const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
@@ -1105,7 +1138,7 @@ test('any other deny leaves the renderer unknown, and a later render probes agai
 
 test('a pane drawn while the renderer is unknown probes too, and a taken blit settles on image', async ($, on) => {
   // A docked pane collapses the band, which then never probes (UI PR 3).
-  const { time, last, blits } = probing(on, {})
+  const { time, last, blits, data } = probing(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   const probe = await ui.find({ key: 'probe' })
@@ -1113,6 +1146,7 @@ test('a pane drawn while the renderer is unknown probes too, and a taken blit se
   await time.advance(PROBE_DELAY_MS)
   expect(blits.filter((b) => b.key === 'probe').map((b) => b.requestId)).toEqual(['promptfall'])
   expect(last.get('renderer')).toBe('image')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'image' })
   await ui.unmount()
 })
 

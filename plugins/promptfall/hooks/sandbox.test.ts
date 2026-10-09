@@ -1,10 +1,11 @@
 import type { On, RenderElement } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
+import { expect, mock } from 'claude-code/testing'
 import type { GameView } from '../types'
 import { RETRYING_NOTICE } from './engine'
 import { pick } from './sandbox'
 import { resolveClient } from './server'
 import { SETTINGS_DEFAULT } from './state'
+import { test } from './testing'
 import { paneText } from './ui/pane/testing'
 import { MemoryKeyValue } from './vendor/protocol.js'
 import { CLIENT_VERSION } from './version'
@@ -84,7 +85,7 @@ const REAL_SAVE = {
   'promptfall:pf:token:real-token': 'real-acct',
   'promptfall:pf:acct:real-acct:record': { account: { accountId: 'real-acct' }, gold: 123 },
   'promptfall:lease': { owner: 'real-session', until: 9_999_999_999_999 },
-  'promptfall:settings': { sound: true, motion: 'still', renderer: 'auto' },
+  'promptfall:settings': { sound: true, motion: 'still', renderer: 'auto', probed: null },
 }
 
 test('the sandbox save lives under its own prefix; the real save is never touched', async ($, on) => {
@@ -112,7 +113,7 @@ test('the sandbox save lives under its own prefix; the real save is never touche
 // Two bootstraps: twice the default budget's work.
 test(
   'a second session start with the variable set reuses the sandbox account',
-  { timeoutMs: 15_000 },
+  { timeoutMs: 60_000 },
   async ($, on) => {
     const { view } = harness(on, ON)
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })

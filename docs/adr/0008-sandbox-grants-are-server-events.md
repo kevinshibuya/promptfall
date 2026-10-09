@@ -32,7 +32,8 @@ is a separate save, never linked, so nothing it holds can reach the market.
 - The sim's server-event union grows by the sandbox kinds; `SIM_VERSION` moves if the state
   shape changes, which the grants avoid by reusing the existing drop, level-up, zone and
   encounter paths.
-- The HTTP fake can offer the same verbs behind its `--flag` switch through an admin route; the
-  real server has no route, so the verbs cannot exist against it.
+- The verbs reach the ledger only in process: the sandbox pins the plugin to the in-process
+  ledger. The HTTP fake can switch `sandbox.enabled` on with `--flag`, but it has no route for the
+  verbs, and neither has the real server, so the verbs cannot exist against a remote host.
 - A sandbox grant shows in the combat log and toasts exactly as play would, so a screenshot of
   a sandbox is only told apart by the band's `Sandbox` mark.

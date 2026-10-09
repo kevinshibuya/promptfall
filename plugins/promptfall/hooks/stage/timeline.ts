@@ -1,4 +1,4 @@
-import type { GameView } from '../../types'
+import type { EnemyView, GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
 import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
@@ -98,6 +98,21 @@ type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
 export type Group = { act: Act | null; effects: Effect[] }
 
+/**
+ * An enemy in the line for the staged state: its last view row, the zone and wave it was last
+ * seen in, and whether it has left the view.
+ */
+export type Lined = {
+  row: EnemyView
+  zone: number
+  zoneName: string
+  wave: number
+  departed: boolean
+}
+
+/** A hit's or heal's HP change on `actor`, landing on the stage at `at`. */
+export type Landing = { actor: string; delta: number; at: number }
+
 /** An action on the timeline: its actor, when it starts, and when its ▶ goes (`acting`). */
 export type Action = { actor: string; start: number; until: number }
 
@@ -119,7 +134,8 @@ export function bobbingAt(now: number): 0 | 1 {
   return Math.floor(now / IDLE_FRAME_MS) % 2 === 0 ? 0 : 1
 }
 
-function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
+/** An enemy's sprite: the world boss's by name, any other by its content id. */
+export function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
   return enemy.kind === 'world_boss'
     ? spriteFor('world_boss', worldBossKey(enemy.name)).id
     : spriteFor('enemy', enemy.def).id
@@ -145,15 +161,21 @@ export class StageTimeline {
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
   /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
   private actions_: (Action & { keep: number })[] = []
-  /** The HP each actor had at the last observe: the state a burst starts from. */
+  /**
+   * The HP each actor had at the last observe: the state a burst starts from. After a burst, the
+   * HP it leaves once every one of its hits and heals has landed.
+   */
   private seenHp = new Map<string, number>()
   /** Each hit's or heal's HP change, kept until it lands on the stage (#20). */
-  private landing: { actor: string; delta: number; at: number }[] = []
+  private landing: Landing[] = []
+  /** Each entry's last view row and where it was seen: what its staged row needs once departed. */
+  private seen = new Map<string, Omit<Lined, 'departed'>>()
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
+    const predicted = this.seenHp
     this.seenHp = new Map([...view.heroes, ...view.enemies].map((a) => [a.id, a.hp]))
     this.landing = this.landing.filter((l) => l.at > now)
     const live = new Set(view.enemies.map((e) => e.id))
@@ -161,15 +183,16 @@ export class StageTimeline {
     for (const [id, known] of this.entries) {
       if (live.has(id) || this.departed.has(id)) continue
       this.departed.add(id)
-      const lastFlash = this.motions
-        .filter((m) => m.kind === 'flash' && m.actor === known.id)
-        .reduce((end, m) => Math.max(end, m.until), now)
-      this.motions.push({
-        kind: 'dissolve',
-        actor: id,
-        from: lastFlash,
-        until: lastFlash + DISSOLVE_MS,
-      })
+      // It leaves with the HP its burst leaves it: 0 for a kill, its last HP when it left alive.
+      // The world boss's bar was never its row's.
+      const seen = this.seen.get(id)
+      if (seen) {
+        const hp = known.kind === 'world_boss' ? 0 : (predicted.get(id) ?? 0)
+        this.seen.set(id, { ...seen, row: { ...seen.row, hp } })
+      }
+      // It fades once the last action shown on it is over: its death flash, or its own blow.
+      const from = this.lastShownEnd(id, now)
+      this.motions.push({ kind: 'dissolve', actor: id, from, until: from + DISSOLVE_MS })
     }
     // A kill plays out before the next enemy enters: its fade, its drop, then a pause.
     for (const [id, until] of this.gaps) if (until <= now) this.gaps.delete(id)
@@ -211,22 +234,105 @@ export class StageTimeline {
         }
         continue
       }
-      if (this.observed && now < this.enterAfter()) continue
-      const slot = this.freeSlot(now)
-      if (slot === null) continue
-      this.entries.set(enemy.id, {
-        id: enemy.id,
-        spriteId,
-        kind: enemy.kind,
-        slot,
-        name: enemy.name,
-      })
-      if (this.observed) {
-        this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
-      }
+      this.enter(enemy, now)
     }
+    for (const enemy of view.enemies) {
+      if (!this.entries.has(enemy.id)) continue
+      this.seen.set(enemy.id, {
+        row: enemy,
+        zone: view.zone,
+        zoneName: view.zoneName,
+        wave: view.wave,
+      })
+    }
+    for (const id of this.seen.keys()) if (!this.entries.has(id)) this.seen.delete(id)
+    this.reconcile(view, now, predicted)
     this.observed = true
     this.settlePlaces(now)
+  }
+
+  /**
+   * An HP change the stage did not play (a wipe's heal, a wave clear's revive, a rest) is a
+   * landing of its own: the view's HP less what the bursts left predicted, landing once the stage
+   * has let the tick go. The world boss is left out: its bar is the poll's, not its row's.
+   */
+  private reconcile(view: GameView, now: number, predicted: Map<string, number>): void {
+    let at: number | null = null
+    for (const actor of [...view.heroes, ...view.enemies]) {
+      if ('kind' in actor && actor.kind === 'world_boss') continue
+      const before = predicted.get(actor.id)
+      if (before === undefined || before === actor.hp) continue
+      at ??= this.settleAt(now)
+      this.landing.push({ actor: actor.id, delta: actor.hp - before, at })
+    }
+  }
+
+  /**
+   * When the stage has let the tick go: the action under way over, and every row the tick took
+   * off the field faded and dropped.
+   */
+  private settleAt(now: number): number {
+    let at = Math.max(now, this.actionEnd)
+    for (const m of this.motions) {
+      if (!this.departed.has(m.actor)) continue
+      if (m.kind === 'dissolve' || m.kind === 'drop') at = Math.max(at, m.until)
+    }
+    return at
+  }
+
+  /** When the last action motion shown on this actor ends, its own or one on it, or `now`; a number floats on. */
+  private lastShownEnd(id: string, now: number): number {
+    return this.motions
+      .filter((m) => m.actor === id && ACTION_KINDS.has(m.kind) && m.kind !== 'number')
+      .reduce((end, m) => Math.max(end, m.until), now)
+  }
+
+  /**
+   * Enters the view's newcomers, with their spawn, and nothing else: no enemy departs and no HP
+   * moves, since the view is the tick's end and the kills in its effects have not played. The
+   * engine calls it as it hands over a tick's effects, so a monster that entered since the last
+   * observe has a place for its first actions before any redraw observes it (the desktop redraws
+   * once a round). Before the first observe it does nothing: that observe places the line. Nor
+   * while a live entry is missing from the view: that kill's pause is not on the timeline until a
+   * redraw departs it, and a newcomer let in now would stand beside a death still to play.
+   */
+  admit(view: GameView, now: number): void {
+    if (!this.observed) return
+    const live = new Set(view.enemies.map((e) => e.id))
+    for (const id of this.entries.keys()) if (!live.has(id) && !this.departed.has(id)) return
+    let entered = false
+    for (const enemy of view.enemies) {
+      if (this.entries.has(enemy.id) || !this.enter(enemy, now)) continue
+      this.seen.set(enemy.id, {
+        row: enemy,
+        zone: view.zone,
+        zoneName: view.zoneName,
+        wave: view.wave,
+      })
+      entered = true
+    }
+    if (entered) this.settlePlaces(now)
+  }
+
+  /**
+   * An enemy the timeline does not know steps on at `now` with a spawn, once the last kill's pause
+   * is over and a slot is free; true when it did.
+   */
+  private enter(enemy: EnemyView, now: number): boolean {
+    if (this.observed && now < this.enterAfter()) return false
+    const slot = this.freeSlot(now)
+    if (slot === null) return false
+    this.entries.set(enemy.id, {
+      id: enemy.id,
+      spriteId: enemySpriteId(enemy),
+      kind: enemy.kind,
+      slot,
+      name: enemy.name,
+    })
+    if (this.observed) {
+      this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
+    }
+    return true
   }
 
   /** When the last kill's pause is over: no newcomer steps on before it. */
@@ -252,9 +358,7 @@ export class StageTimeline {
     for (const id of this.departed) {
       const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
       if (dissolve === undefined) continue
-      const from = this.motions
-        .filter((m) => m.kind === 'flash' && m.actor === id)
-        .reduce((end, m) => Math.max(end, m.until), now)
+      const from = this.lastShownEnd(id, now)
       if (from >= dissolve.from) continue
       const faded = from + DISSOLVE_MS
       this.motions = this.motions.map((m) => {
@@ -507,18 +611,21 @@ export class StageTimeline {
     at: number,
     hp: Map<string, number>,
   ): void {
-    const before = hp.get(effect.target)
+    // The world boss never dies in the sim: its row's HP is no cap, and a hit lands whole.
+    const before =
+      this.entries.get(effect.target)?.kind === 'world_boss' ? undefined : hp.get(effect.target)
     const delta =
       effect.k === 'heal' ? effect.amount : -Math.min(effect.amount, before ?? effect.amount)
     if (before !== undefined) hp.set(effect.target, before + delta)
     this.landing.push({ actor: effect.target, delta, at })
   }
 
-  /** `hp` as the stage shows it at `now`: the hits and heals still to land undone (#20). */
-  shownHp(actor: string, hp: number, maxHp: number, now: number): number {
-    let shown = hp
-    for (const l of this.landing) if (l.actor === actor && l.at > now) shown -= l.delta
-    return Math.max(0, Math.min(maxHp, shown))
+  /**
+   * The hits and heals still to land after `now`, in the order they were recorded. The staged
+   * state's business (stage/staged.ts): no window reads them.
+   */
+  pending(now: number): readonly Landing[] {
+    return this.landing.filter((l) => l.at > now)
   }
 
   acting(now: number): string | null {
@@ -558,6 +665,19 @@ export class StageTimeline {
   /** The enemies in line order: by arrival, so a newcomer joins the end and never shoves. */
   known(): readonly Known[] {
     return [...this.entries.values()]
+  }
+
+  /**
+   * The line in arrival order, departed enemies included while it holds them. The staged
+   * state's business (stage/staged.ts): no window reads it.
+   */
+  lineup(): readonly Lined[] {
+    const out: Lined[] = []
+    for (const id of this.entries.keys()) {
+      const seen = this.seen.get(id)
+      if (seen) out.push({ ...seen, departed: this.departed.has(id) })
+    }
+    return out
   }
 
   isDeparted(id: string): boolean {

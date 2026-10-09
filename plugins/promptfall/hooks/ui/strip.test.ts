@@ -1,11 +1,15 @@
 import { expect, test } from 'claude-code/testing'
-import type { GameView } from '../../types'
+import type { GameView, WorldState } from '../../types'
+import { boss, wave, worldBoss } from '../stage/fixtures'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
+import { stagedState } from '../stage/staged'
 import { StageTimeline } from '../stage/timeline'
+import { DISSOLVE_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
 import { type StripInput, stripScene, stripTracks, wrap } from './strip'
+import { worldRows } from './world-rows'
 
 const win = (scene: Scene, key: string) => scene.windows.find((w) => w.key === key) as Win
 const lineText = (l: Line | undefined) =>
@@ -58,6 +62,16 @@ test('the enemy window titles: a wave, a boss, the world boss with its time left
   const boss = strip('strip-boss')
   expect(titled({ ...boss, view: { ...boss.view, zone: 3 } })).toBe('Zone 3 · Boss')
   expect(titled(strip('strip-world-boss'))).toBe('World boss · 11m')
+})
+
+test("the compact window's title carries the world boss's time left", () => {
+  const titled = (i: StripInput) =>
+    lineText({
+      spans: win(stripScene({ ...i, kind: 'compact', columns: 110 }).scene, 'compact').title ?? [],
+    })
+  expect(titled(strip('strip-world-boss'))).toMatch(/^Z1 · World boss 11m · \d+G$/)
+  // None up: the zone and the wave, as before.
+  expect(titled(strip('strip-rest'))).toMatch(/^Z1 · W2 · \d+G$/)
 })
 
 test('▶ marks the acting hero and the current tab', () => {
@@ -114,42 +128,6 @@ test('the alt names every hero’s HP and gauge', () => {
   expect(scene.alt).toContain('gauge full')
 })
 
-/** The HP the strip's alt gives `hero` at each time, after `enemy` hits it for `amount`. */
-function hpAfterHit(before: number, amount: number, times: (impact: number) => number[]) {
-  const base = strip('strip-rest')
-  const hero = base.view.heroes[0] as GameView['heroes'][number]
-  const enemy = base.view.enemies[0] as GameView['enemies'][number]
-  const withHp = (hp: number): GameView => ({
-    ...base.view,
-    heroes: base.view.heroes.map((h) => (h.id === hero.id ? { ...h, hp, alive: hp > 0 } : h)),
-  })
-  // The stage last saw the hero before the tick; the sim's tick has already taken the HP.
-  const timeline = new StageTimeline()
-  timeline.observe(withHp(before), base.now - 1)
-  const [start = 0] = timeline.onEffects(
-    [
-      { k: 'act', actor: enemy.id, action: 'attack', at: 0 },
-      { k: 'hit', by: enemy.id, target: hero.id, amount },
-    ],
-    base.now,
-    2000,
-  )
-  const view = withHp(Math.max(0, before - amount))
-  // The impact: when the hit's number shows on the stage.
-  const number = timeline.active(start).find((m) => m.kind === 'number' && m.actor === hero.id)
-  const impact = number?.from ?? Number.NaN
-  return times(impact).map((now) => {
-    const { scene } = stripScene({ ...base, view, timeline, now })
-    return Number(scene.alt.match(new RegExp(`${hero.shortName} level \\d+, HP (\\d+) of`))?.[1])
-  })
-}
-
-test('a hero’s HP drops when the hit lands on the stage, not when the sim applies it (#20)', () => {
-  expect(hpAfterHit(50, 5, (impact) => [impact - 1, impact])).toEqual([50, 45])
-  // A killing blow over the HP left shows the HP left until it lands, never more.
-  expect(hpAfterHit(3, 10, (impact) => [impact - 1, impact])).toEqual([3, 0])
-})
-
 test('every character a strip scene holds has a glyph, on every tab and with a notice', () => {
   for (const name of STRIP_SCENARIOS) {
     for (const tab of ['party', 'loot', 'world'] as const) {
@@ -181,4 +159,142 @@ test('a hero-joined loot line drops the glyph the font lacks', () => {
   const { scene } = stripScene({ ...input, view })
   const message = win(scene, 'message')
   expect(lineText(message.lines[1]).trim()).toBe('Aldric joined (rare)')
+})
+
+/** `actor` acts at `now` and hits `target` for `amount`; answers the hit's impact. */
+function strike(t: StageTimeline, actor: string, target: string, amount: number, now: number) {
+  const [start = now] = t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target, amount },
+    ],
+    now,
+    2000,
+  )
+  return t.active(start).find((m) => m.kind === 'number' && m.actor === target)?.from ?? Number.NaN
+}
+
+test('the enemy and compact windows hold a killed zone boss, and its zone, until its death has played', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(boss(), now - 1)
+  const impact = strike(t, 'h1', 'e9', 500, now)
+  // The boss fell: the sim moved on to zone 2, wave 1, and brought the next wave.
+  const next: GameView = { ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+  t.observe(next, now)
+  const shown = (at: number) => {
+    const base = { ...strip('strip-rest'), view: next, timeline: t, now: at }
+    const enemy = win(stripScene(base).scene, 'enemy')
+    const compact = win(stripScene({ ...base, kind: 'compact', columns: 110 }).scene, 'compact')
+    // Names from the alts: a boss's row clips its name to leave room for the percentage.
+    return {
+      title: lineText({ spans: enemy.title ?? [] }),
+      rows: [...enemy.alt.matchAll(/(?:\. |, )([A-Z][\w ]+?) \d+ of/g)].map((m) => m[1]),
+      compact: lineText({ spans: compact.title ?? [] })
+        .split(' · ')
+        .slice(0, 2)
+        .join(' · '),
+      front: compact.alt.match(/Front enemy (.+?) \d+ of/)?.[1],
+    }
+  }
+  const held = { title: 'Zone 1 · Boss', rows: ['Bandit Captain'], compact: 'Z1 · Boss' }
+  expect(shown(impact - 1)).toEqual({ ...held, front: 'Bandit Captain' })
+  expect(shown(impact + DISSOLVE_MS)).toEqual({ ...held, front: 'Bandit Captain' })
+  // Its dissolve and the pause over, the newcomers step on and the windows take the view's zone.
+  const later = impact + 1_000 + DISSOLVE_MS + WAVE_GAP_MS
+  t.observe(next, later)
+  expect(shown(later)).toEqual({
+    title: 'Zone 2 · Wave 1',
+    rows: ['Goblin Scout', 'Field Rat', 'Road Slime'],
+    compact: 'Z2 · W1',
+    front: 'Goblin Scout',
+  })
+})
+
+test('the world boss bar drops as the hits land, in the enemy window and the World rows', () => {
+  const input = strip('strip-world-boss')
+  const now = input.now
+  const polled = input.world.snapshot?.boss
+  if (!polled) throw new Error('the scenario polls a boss')
+  // Polled at 55,800 with nothing committed; the party then deals 900 in one blow.
+  const world: WorldState = { ...input.world, committedDealt: { bossId: polled.bossId, dealt: 0 } }
+  const t = new StageTimeline()
+  t.observe(worldBoss(), now - 1)
+  const impact = strike(t, 'h1', 'e7', 900, now)
+  const view: GameView = {
+    ...worldBoss(),
+    boss: { bossId: polled.bossId, name: polled.name, glyph: polled.glyph, dealt: 900 },
+  }
+  t.observe(view, now)
+  const bar = (at: number) => {
+    const { scene } = stripScene({ ...input, view, world, timeline: t, now: at })
+    const enemy = win(scene, 'enemy')
+    const records = worldRows(stagedState(view, world, t, at), world, at)[1]?.text ?? ''
+    return [enemy.alt.match(/The Promptwyrm (\d+) of/)?.[1], records.match(/ (\d+)% /)?.[1]]
+  }
+  expect(bar(impact - 1)).toEqual(['55800', '62'])
+  expect(bar(impact)).toEqual(['54900', '61'])
+})
+
+/** The HP bar tracks of a window's line, in span order. */
+const hpBars = (i: StripInput, horizonMs: number, window: string, line: number) =>
+  stripTracks(i, horizonMs)
+    .filter(
+      (t): t is Extract<Track, { kind: 'bar' }> =>
+        t.kind === 'bar' && t.window === window && t.line === line,
+    )
+    .sort((a, b) => a.span - b.span)
+
+test('a landing yields an HP bar keyframe at its impact time', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(wave(), now - 1)
+  // The Goblin Scout hits Aldric (50 of 50) for 20: the view already has him at 30.
+  const impact = strike(t, 'e1', 'h1', 20, now)
+  const view: GameView = {
+    ...wave(),
+    heroes: wave().heroes.map((h) => (h.id === 'h1' ? { ...h, hp: 30 } : h)),
+  }
+  t.observe(view, now)
+  const input = { ...strip('strip-rest'), view, timeline: t, now }
+  const at = impact - now
+  expect(at).toBeGreaterThan(0)
+  const [aldric] = hpBars(input, 6000, 'party', 1)
+  expect(aldric?.keys).toEqual([
+    { at: 0, fill: 10000 },
+    { at, fill: 10000 },
+    { at, fill: 6000 },
+    { at: 6000, fill: 6000 },
+  ])
+  // The compact window's bar drops at the same moment.
+  const compact = { ...input, kind: 'compact' as const, columns: 110 }
+  expect(hpBars(compact, 6000, 'compact', 0)[0]?.keys).toEqual(aldric?.keys)
+})
+
+test('an enemy row’s HP bar drops at the impact; a landing past the horizon waits for the redraw', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(wave(), now - 1)
+  // Aldric hits the Goblin Scout (42 of 60) for 30: the view already has it at 12.
+  const impact = strike(t, 'h1', 'e1', 30, now)
+  const view: GameView = {
+    ...wave(),
+    enemies: wave().enemies.map((e) => (e.id === 'e1' ? { ...e, hp: 12 } : e)),
+  }
+  t.observe(view, now)
+  const input = { ...strip('strip-rest'), view, timeline: t, now }
+  const at = impact - now
+  expect(hpBars(input, 6000, 'enemy', 0)[0]?.keys).toEqual([
+    { at: 0, fill: 7000 },
+    { at, fill: 7000 },
+    { at, fill: 2000 },
+    { at: 6000, fill: 2000 },
+  ])
+  const compact = { ...input, kind: 'compact' as const, columns: 110 }
+  expect(hpBars(compact, 6000, 'compact', 3)[0]?.keys.at(-1)).toEqual({ at: 6000, fill: 2000 })
+  // A horizon that ends before the impact keys nothing: the bar holds the staged 42 until the
+  // next tick's redraw draws what has landed by then.
+  expect(hpBars(input, at - 1, 'enemy', 0)).toEqual([])
+  const row = win(stripScene(input).scene, 'enemy').lines[0]?.spans.find((s) => 'bar' in s)
+  expect(row && 'bar' in row ? row.bar : null).toBe(7000)
 })

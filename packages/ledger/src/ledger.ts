@@ -103,13 +103,26 @@ export type LedgerHost = {
   settle(accountId: string): Promise<void>
   /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
   sweep(): Promise<void>
-  /** Authors a sandbox grant in cursor position. Throws on an unknown account or a non-sandbox event. */
+  /**
+   * Authors a sandbox grant in cursor position. With the flag off it answers `sandbox_off` before
+   * anything else; with it on it throws on an unknown account or a non-sandbox event.
+   */
   sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>
   /** Spawns a world boss whose window starts now and engages the online accounts. */
   spawnBoss(): Promise<SandboxOutcome>
   /** Settles the open world boss now, paying every engaged account. */
   settleBoss(): Promise<SandboxOutcome>
 }
+
+/**
+ * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged. A
+ * secondary session reads with both off: those writes are the primary's, under its lease.
+ */
+export type ReadOptions = { expire?: boolean; advance?: boolean }
+
+/** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
+export const PLAYER_NAME_MAX = 64
 
 export const LINK_URL = 'https://github.com/login/device'
 export const LINK_INTERVAL_MS = 5000
@@ -497,8 +510,12 @@ export class Ledger implements ServerClient {
     return record ? { ctx, record } : null
   }
 
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.browse(ctx, record, query))
+  browse(
+    auth: Auth,
+    query: ListingQuery,
+    { expire = true }: ReadOptions = {},
+  ): Promise<ListingPage | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) => market.browse(ctx, record, query))
   }
 
   list(auth: Auth, input: { kind: TradeKind; id: string; price: number }): Promise<MarketResult> {
@@ -515,8 +532,8 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.buy(ctx, record, listingId))
   }
 
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.myOrders(ctx, record))
+  myOrders(auth: Auth, { expire = true }: ReadOptions = {}): Promise<MyOrders | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) => market.myOrders(ctx, record))
   }
 
   placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult> {
@@ -527,8 +544,14 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.cancelOrder(ctx, record, orderId))
   }
 
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized> {
-    return this.marketRead(auth, true, (ctx, record) => market.matchingOrders(ctx, record, itemId))
+  matchingOrders(
+    auth: Auth,
+    itemId: string,
+    { expire = true }: ReadOptions = {},
+  ): Promise<Order[] | Unauthorized> {
+    return this.marketRead(auth, expire, (ctx, record) =>
+      market.matchingOrders(ctx, record, itemId),
+    )
   }
 
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult> {
@@ -540,14 +563,18 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // World: presence, chat, leaderboards
 
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+  world(
+    auth: Auth,
+    since: number,
+    { advance = true }: ReadOptions = {},
+  ): Promise<WorldSnapshot | Unauthorized> {
     return this.run(async () => {
       const ctx = await this.worldContext()
       // Before any record loads: the caller's record is read fresh after it.
-      await boss.advanceBoss(ctx)
+      if (advance) await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
-      return world.world(ctx, record, since)
+      return world.world(ctx, record, since, advance)
     })
   }
 
@@ -577,7 +604,11 @@ export class Ledger implements ServerClient {
     name: string
     linked: boolean
   }): Promise<{ accountId: string; deviceToken: string }> {
-    if (input.name.length > 128) throw new Error('mint: name over 128 characters')
+    if (input.name.length < 1 || input.name.length > PLAYER_NAME_MAX) {
+      throw new Error(
+        `mint: name wants 1 to ${PLAYER_NAME_MAX} characters; got ${input.name.length}`,
+      )
+    }
     const now = await this.options.now()
     const accountId = this.options.tokenSource()
     const deviceToken = this.options.tokenSource()
@@ -623,13 +654,14 @@ export class Ledger implements ServerClient {
   }
 
   private async sandbox(accountId: string, input: SandboxEvent): Promise<SandboxOutcome> {
+    // The flag first: with it off nothing below runs, so the answer is never a throw.
+    if (!this.flags()['sandbox.enabled']) return sandboxOff
     // The wire schema's own check, so a grant never makes the account's deliveries unreadable.
     const event = ServerEventSchema.parse(input)
     if (!(SANDBOX_EVENT_KINDS as readonly string[]).includes(event.t)) {
       throw new Error(`sandbox: not a sandbox event: ${event.t}`)
     }
     const record = await this.currentRecord(accountId)
-    if (!this.flags()['sandbox.enabled']) return sandboxOff
     const refused = tryAuthor(record, event)
     if (refused !== null) {
       return {
