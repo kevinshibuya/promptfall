@@ -43,6 +43,9 @@ party window) and collapses under 6 rows; Loot and World are the strip alone, 5 
 
 ## Superseded (2026-10-08, ADR 0010)
 
-The stage is 17 rows in every fight and no longer grows for a boss; a band too short for it
-crops the sky rather than falling to compact until under 8 rows are left. The compact and
-collapsed escapes, and the cell thresholds, stand.
+The stage is 17 rows in every fight and no longer grows for a boss, so the Party tab's band is 22
+rows. A band too short for it shows the whole scene smaller where it can: the Image zooms out
+into the rows left, down to 4, and the desktop scales the Svg. The Raster cannot scale: it crops
+the sky down to the tallest actor on the stage (8 rows for the party, 12 with a turn boss, 17 with
+a zone or world boss), then falls to compact. The compact and collapsed escapes, and the cell
+thresholds, stand.

@@ -4,6 +4,7 @@
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
+import { WORLD_DEFAULT } from '../state'
 import { stripScene } from '../ui/strip'
 import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
@@ -15,6 +16,7 @@ import { cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './la
 import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
+import { stagedState } from './staged'
 import type { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
@@ -84,7 +86,7 @@ function same(a: StageSite, b: StageSite): boolean {
   )
 }
 
-/** The pixels for a stage frame, encoded for its element. */
+/** The pixels for a stage frame, encoded for its element; `view` is the staged state at `now`. */
 export function stageFrame(
   view: GameView,
   timeline: StageTimeline,
@@ -282,9 +284,10 @@ export class StageLoop {
     const box = layout.box
     const cells = cellsOf(layout)
     if (box && cells) {
+      const staged = stagedState(view, extras?.world ?? WORLD_DEFAULT, this.timeline, now)
       const actors = [
-        ...this.timeline.known().map((k) => k.id),
-        ...view.heroes.map((h) => `${h.id}:${h.alive}`),
+        ...staged.enemies.map((e) => e.id),
+        ...staged.heroes.map((h) => `${h.id}:${h.alive}`),
       ].join(',')
       if (this.fresh) {
         this.fresh = false
@@ -294,7 +297,7 @@ export class StageLoop {
       const skip = settled && !this.wasBusy && actors === this.lastActors
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
-        const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+        const frame = stageFrame(staged, this.timeline, now, layout, site.renderer, settings.motion)
         const at = {
           requestId: site.requestId,
           key: site.key,

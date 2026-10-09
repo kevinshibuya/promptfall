@@ -1,4 +1,4 @@
-export const SIM_VERSION = 4 as const
+export const SIM_VERSION = 5 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']

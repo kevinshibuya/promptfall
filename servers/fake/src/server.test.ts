@@ -16,6 +16,7 @@ import {
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MemoryKeyValue,
+  MIN_CLIENT_VERSION,
   MyOrdersResponseSchema,
   WorldResponseSchema,
 } from '@promptfall/protocol'
@@ -23,7 +24,7 @@ import { hashState, replay, SIM_VERSION } from '@promptfall/sim'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
-import { parseFlags } from './flags'
+import { parseFlags, parsePlayerName } from './flags'
 import { createFakeServer } from './server'
 import { nodeFetch } from './test-support'
 
@@ -83,6 +84,14 @@ describe('HTTP fake', () => {
       speed: 1,
       now: T0,
     })
+  })
+
+  it('answers the protocol minimum client version, 0.1.0 for now', async () => {
+    const r = await raw('POST', '/v1/bootstrap', {
+      body: JSON.stringify({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null }),
+    })
+    expect(BootstrapSchema.parse(r.body).config.minClientVersion).toBe(MIN_CLIENT_VERSION)
+    expect(MIN_CLIENT_VERSION).toBe('0.1.0')
   })
 
   it('answers 400 on a bad body, a non-JSON body and a bad query', async () => {
@@ -283,5 +292,22 @@ describe('parseFlags', () => {
     expect(() => parseFlags(['bogus=true'])).toThrow(/chat\.enabled/)
     expect(() => parseFlags(['chat.enabled=maybe'])).toThrow()
     expect(() => parseFlags(['chat.enabled'])).toThrow()
+  })
+})
+
+describe('parsePlayerName', () => {
+  it('takes a name of 1 to 64 characters as it is', () => {
+    expect(parsePlayerName('kevin')).toBe('kevin')
+    expect(parsePlayerName('k'.repeat(64))).toBe('k'.repeat(64))
+  })
+
+  it('rejects an empty player name', () => {
+    expect(() => parsePlayerName('')).toThrow(/--player-name wants 1 to 64 characters/)
+  })
+
+  it('rejects a player name over 64 characters', () => {
+    expect(() => parsePlayerName('k'.repeat(65))).toThrow(
+      /--player-name wants 1 to 64 characters; got 65/,
+    )
   })
 })

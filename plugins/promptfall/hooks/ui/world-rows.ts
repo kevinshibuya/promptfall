@@ -18,7 +18,26 @@ function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
   return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
 }
 
-/** The World tab's three rows: who is around, the account's records or the boss, the chat ticker. */
+/**
+ * The account's records, then, with the world boss off by the server's flag, a note saying so in
+ * place: the World rows' second row when no boss is up, and the strip's World tab's while chat is
+ * closed or quiet. The note goes when the row has under `cells` for it, so the records stay whole.
+ */
+export function recordsRow(
+  view: GameView,
+  world: WorldState,
+  cells = Number.POSITIVE_INFINITY,
+): string {
+  const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  if (gates(world, view.account).bossOpen) return records
+  const noted = `${records} · world boss is off`
+  return [...noted].length <= cells ? noted : records
+}
+
+/**
+ * The World tab's three rows: who is around, the account's records or the boss, the chat ticker.
+ * `view` is the staged state, so the boss's bar drops as the hits land.
+ */
 export function worldRows(
   view: GameView,
   world: WorldState,
@@ -34,7 +53,7 @@ export function worldRows(
     presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
   }
   const shown = shownBoss(view, world)
-  let records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  let records = recordsRow(view, world)
   if (shown && shown.boss.hp > 0) {
     const max = shown.boss.maxHp
     const filled =

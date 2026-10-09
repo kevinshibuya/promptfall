@@ -961,7 +961,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       await seller.inSync()
     })
 
-    it('rule 23: a fill into a full inventory is no_space and the order stays open', async (ctx) => {
+    it("rule 23: a fill refused for the buyer's slot says buyer_full and the order stays open", async (ctx) => {
       const { client, trader } = await market(ctx)
       const buyer = await trader(
         'Bea',
@@ -980,7 +980,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       )
       expect(await client.fillOrder(seller.auth, id, 'iS')).toEqual({
         ok: false,
-        reason: 'no_space',
+        reason: 'buyer_full',
       })
       const mine = await client.myOrders(buyer.auth)
       if ('reason' in mine) throw new Error('unauthorized')

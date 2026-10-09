@@ -331,8 +331,11 @@ export async function placeOrder(
   if (gate) return refuse(gate)
   if (!validPrice(input.maxPrice)) return refuse('bad_price')
   if (!tradeableRarity(input.minRarity)) return refuse('not_tradeable_rarity')
-  if (!content.itemBases[input.base]) return refuse('unknown_goods')
-  if (input.affixId !== null && !content.affixes[input.affixId]) return refuse('unknown_goods')
+  // Own keys only: a name off the prototype (`constructor`, `toString`) is no base and no affix.
+  if (!Object.hasOwn(content.itemBases, input.base)) return refuse('unknown_goods')
+  if (input.affixId !== null && !Object.hasOwn(content.affixes, input.affixId)) {
+    return refuse('unknown_goods')
+  }
   if (record.state.gold < input.maxPrice) return refuse('not_enough_gold')
   const id = await nextLedgerId(ctx.books.kv, 'O')
   author(record, { t: 'order_placed', orderId: id, escrow: input.maxPrice })
@@ -380,7 +383,7 @@ export async function fillOrder(
   if (order.buyerId === record.account.accountId) return refuse('self_trade')
   if (!matches(order, goods.item)) return refuse('no_match')
   const buyer = await counterparty(ctx, order.buyerId)
-  if (!hasRoom(buyer.state, goods)) return refuse('no_space')
+  if (!hasRoom(buyer.state, goods)) return refuse('buyer_full')
   const moved = await transfer(goods, ctx.now, () => nextLedgerId(ctx.books.kv, 't'), buyer.state)
   if (moved.kind !== 'item') throw new Error('market: an order fill moved a hero')
   author(record, {
