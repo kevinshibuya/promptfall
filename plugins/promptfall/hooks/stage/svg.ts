@@ -556,7 +556,10 @@ export function svgWithFallback(
   return svg.length < SVG_MAX_CHARS ? svg : renderSvg(lo, motions, opts)
 }
 
-/** The desktop's full stage: the 1.5x model, falling back to the 1x one over the cap. */
+/**
+ * The desktop's full stage: the 1.5x model, falling back to the 1x one over the cap. `view` is the
+ * staged state at `now`.
+ */
 export function stageSvg(
   view: GameView,
   timeline: StageTimeline,

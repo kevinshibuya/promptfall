@@ -5,7 +5,7 @@ import { commandSpec, registerCommand } from './command'
 import { CUE_ASSET, type Cue } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
-import { type ResolvedServer, resolveClient } from './server'
+import { type ResolvedServer, resolveClient, type SecondaryReads } from './server'
 import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
@@ -34,7 +34,6 @@ import type {
   LinkPoll,
   LinkStart,
   MarketResult,
-  ServerClient,
   Unauthorized,
   WorldSnapshot,
 } from './vendor/protocol.js'
@@ -192,7 +191,12 @@ class GameSession implements GameHandle {
         return io.publish({ world })
       },
       load: io.readWorld,
-      fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
+      // A secondary's poll leaves the world boss to the primary.
+      fetch: async (since) =>
+        (this.role === 'primary' ? this.server.client : this.server.reads).world(
+          await this.storedAuth(),
+          since,
+        ),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
       // Only the primary toasts, the world boss included: two terminals never show the news twice.
@@ -411,13 +415,16 @@ class GameSession implements GameHandle {
     matching: (itemId) => this.read((client, auth) => client.matchingOrders(auth, itemId)),
   }
 
-  /** A market read: through the engine when playing; with the stored token otherwise (reads write nothing). */
-  private async read<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<T> {
+  /**
+   * A market read: through the engine when playing, expiring what is due; with the stored token
+   * otherwise, through the reads that leave expiries to the primary.
+   */
+  private async read<T>(fn: (client: SecondaryReads, auth: Auth) => Promise<T>): Promise<T> {
     if (this.role === 'primary') return this.engine.call(fn)
     const token = await this.kv.get(this.server.tokenKey)
     if (typeof token !== 'string') throw new Error('not_started')
     try {
-      return await fn(this.server.client, { deviceToken: token })
+      return await fn(this.server.reads, { deviceToken: token })
     } catch {
       throw new Error('unreachable')
     }

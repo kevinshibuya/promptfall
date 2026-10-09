@@ -4,6 +4,7 @@
 import type { BandTab, GameView, HeroView, Settings, WorldState } from '../../types'
 import type { GaugeTrack } from '../stage/gauges'
 import type { MessageLog } from '../stage/log'
+import { stagedState } from '../stage/staged'
 import type { StageTimeline } from '../stage/timeline'
 import { COMPACT_STAGE_COLUMNS, RARITY_RGB } from '../stage/tuning'
 import { GAUGE_FULL } from '../vendor/sim.js'
@@ -131,16 +132,13 @@ function enemyLabel(input: StripInput): { title: string; boss: boolean } {
 
 /** The live enemies in line order, each with the HP it shows (the world boss's predicted bar). */
 function enemies(input: StripInput): { name: string; hp: number; maxHp: number; boss: boolean }[] {
-  const { view, world, timeline } = input
-  const slot = new Map(timeline.known().map((k, place) => [k.id, place]))
+  const { view, world } = input
   const shown = shownBoss(view, world)
-  return [...view.enemies]
-    .sort((a, b) => (slot.get(a.id) ?? 9) - (slot.get(b.id) ?? 9))
-    .map((e) => {
-      const hp = e.kind === 'world_boss' && shown ? shown.shownHp : e.hp
-      const maxHp = e.kind === 'world_boss' && shown ? shown.boss.maxHp : e.maxHp
-      return { name: e.name, hp, maxHp, boss: e.kind !== 'wave' }
-    })
+  return view.enemies.map((e) => {
+    const hp = e.kind === 'world_boss' && shown ? shown.shownHp : e.hp
+    const maxHp = e.kind === 'world_boss' && shown ? shown.boss.maxHp : e.maxHp
+    return { name: e.name, hp, maxHp, boss: e.kind !== 'wave' }
+  })
 }
 
 /** One enemy row in `n` cells: name, gap, bar; a boss: name, gap, bar, percentage in 4. */
@@ -422,22 +420,25 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
 }
 
 /**
- * The view as the stage shows it: each hero's and enemy's HP before the hits and heals still to
- * land (#20), so a bar drops with the hit frame and its number. The world boss keeps its
- * predicted bar.
+ * The view as the stage shows it: the staged heroes (stage/staged.ts), so a bar drops with the hit
+ * frame and its number and a hero is down once his killing blow lands (#20). The enemy rows stay
+ * the view's, each with its staged HP; the world boss keeps its predicted bar.
  */
 function asStaged(input: StripInput): StripInput {
-  const { view, timeline, now } = input
-  const staged = <T extends { id: string; hp: number; maxHp: number }>(a: T): T => {
-    const hp = timeline.shownHp(a.id, a.hp, a.maxHp, now)
-    return hp === a.hp ? a : { ...a, hp }
-  }
-  const heroes = view.heroes.map((h) => {
-    const s = staged(h)
-    return s === h ? h : { ...s, alive: h.alive || s.hp > 0 }
-  })
-  const enemies = view.enemies.map((e) => (e.kind === 'world_boss' ? e : staged(e)))
-  return { ...input, view: { ...view, heroes, enemies } }
+  const { view } = input
+  const staged = stagedState(view, input.world, input.timeline, input.now)
+  const place = new Map(staged.enemies.map((e, i) => [e.id, i]))
+  const hp = new Map(staged.enemies.map((e) => [e.id, e.hp]))
+  // In the stage's line order; one the line has not admitted yet goes last.
+  const enemies = [...view.enemies]
+    .sort((a, b) => (place.get(a.id) ?? 9) - (place.get(b.id) ?? 9))
+    .map((e) => {
+      const shown = hp.get(e.id)
+      return e.kind === 'world_boss' || shown === undefined || shown === e.hp
+        ? e
+        : { ...e, hp: shown }
+    })
+  return { ...input, view: { ...view, heroes: staged.heroes, enemies } }
 }
 
 function build(raw: StripInput): { scene: Scene; built: Built[] } {

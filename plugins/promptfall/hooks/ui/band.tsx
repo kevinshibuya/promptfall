@@ -6,6 +6,7 @@ import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { stageFrame, stageKey } from '../stage/loop'
 import { altText } from '../stage/model'
+import { stagedState } from '../stage/staged'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
@@ -273,8 +274,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     }
 
     // The stage: an element sized to the layout's box, its first frame drawn here so a redraw
-    // is never blank; the loop blits every frame after it.
+    // is never blank; the loop blits every frame after it. It draws the staged state.
     const box = layout.box
+    const staged = box ? stagedState(view, world, timeline, now) : view
     if (box && !terminal && 'Svg' in els) {
       // At the band's width the stage is taller than the band the desktop shows whole, and the
       // desktop scrolls the rest away: scale the whole stage down to the rows left under it
@@ -289,7 +291,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
           : {}
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
-      const source = stageSvg(view, timeline, now, box, {
+      const source = stageSvg(staged, timeline, now, box, {
         smil: SVG_SMIL,
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
@@ -300,7 +302,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         <Svg
           key="stage"
           source={source}
-          alt={altText(view)}
+          alt={altText(staged)}
           isInteractive={SVG_INTERACTIVE}
           {...fit}
         />
@@ -326,7 +328,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           reused !== null
             ? { source: reused }
             : stageFrame(
-                view,
+                staged,
                 timeline,
                 now,
                 layout,
@@ -345,7 +347,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
               source={frame.source}
               columns={cells.columns}
               rows={cells.rows}
-              alt={altText(view)}
+              alt={altText(staged)}
             />
           )
         }

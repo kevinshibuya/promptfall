@@ -5,7 +5,7 @@ import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
-import { bobbingAt, type Motion, type StageTimeline } from './timeline'
+import { bobbingAt, enemySpriteId, type Motion, type StageTimeline } from './timeline'
 import {
   ACTOR_EDGE,
   ACTOR_PITCH,
@@ -169,8 +169,9 @@ function posesOf(
 }
 
 /**
- * The stage at `now`: where every actor, number and drop is and how it looks. The caller has
- * observed `view` on `timeline` first, so the enemies it knows are the view's plus the departed.
+ * The stage at `now`: where every actor, number and drop is and how it looks. `view` is the staged
+ * state at `now` (stage/staged.ts): its enemies are the line, a departed one included while it is
+ * held, and a hero is fallen once the blow that kills him has landed.
  */
 export function stageAt(
   view: GameView,
@@ -210,7 +211,6 @@ export function stageAt(
 
   const actors: StageActor[] = []
   const bosses: StageActor[] = []
-  const live = new Set(view.enemies.map((e) => e.id))
   // The party stands in its order, left to right as the heroes window lists it: the first hero
   // faces the enemies, the last stands at the right edge.
   const partySize = Math.min(view.heroes.length, 3)
@@ -229,19 +229,18 @@ export function stageAt(
 
   /** Each actor's top-left without the bob: effects never bob. */
   const grounded = new Map<string, { x: number; y: number; width: number; height: number }>()
-  for (const known of timeline.known()) {
-    const sprite = SPRITES[known.spriteId] ?? FALLBACK
+  for (const known of view.enemies) {
+    const sprite = SPRITES[enemySpriteId(known)] ?? FALLBACK
     const art = variant(sprite, opts.compact, scale)
     const slotX = edge + Math.round(timeline.placeAt(known.id, now) * pitch)
     const roomLeft = heroLeft - gap - art.width
     const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
     nextFree = Math.max(nextFree, baseX + art.width + gap)
-    let alpha = 1
-    if (!live.has(known.id)) {
-      // Departed: whole until its dissolve starts, then fading; gone once the dissolve is over.
-      const dissolve = all.find((m) => m.actor === known.id && m.kind === 'dissolve')
-      alpha = dissolve === undefined ? 0 : now < dissolve.from ? 1 : 1 - progress(dissolve, now)
-    }
+    // Departed: whole until its dissolve starts, then fading; gone once the dissolve is over and
+    // only its drop holds it, dead in the staged state.
+    const dissolve = all.find((m) => m.actor === known.id && m.kind === 'dissolve')
+    let alpha = known.hp > 0 ? 1 : 0
+    if (dissolve !== undefined) alpha = now < dissolve.from ? 1 : 1 - progress(dissolve, now)
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
     const lunge = motionOf(known.id, 'lunge')
@@ -398,8 +397,9 @@ export function effectAt(
   return { x: Math.round(fx + (tx - fx) * p - ox), y: Math.round(fy + (ty - fy) * p - oy) }
 }
 
+/** The stage in words; `view` is the staged state, so a hero is down once the blow has landed. */
 export function altText(view: GameView): string {
   const enemies = view.enemies.map((e) => `${e.name} ${e.hp}/${e.maxHp}`).join(', ')
-  const heroes = view.heroes.map((h) => `${h.name} L${h.level}`).join(', ')
+  const heroes = view.heroes.map((h) => `${h.name} L${h.level}${h.alive ? '' : ' down'}`).join(', ')
   return `Zone ${view.zone}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`
 }

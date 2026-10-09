@@ -128,6 +128,15 @@ type LedgerHost = {
     /** Settles the open world boss now, paying every engaged account. */
     settleBoss(): Promise<SandboxOutcome>;
 };
+/**
+ * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged. A
+ * secondary session reads with both off: those writes are the primary's, under its lease.
+ */
+type ReadOptions = {
+    expire?: boolean;
+    advance?: boolean;
+};
 /** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
 declare const PLAYER_NAME_MAX = 64;
 declare const LINK_URL = "https://github.com/login/device";
@@ -175,7 +184,7 @@ declare class Ledger implements ServerClient {
      * expiring the caller's own listing changes the caller's record.
      */
     private authenticated;
-    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
+    browse(auth: Auth, query: ListingQuery, { expire }?: ReadOptions): Promise<ListingPage | Unauthorized>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -183,12 +192,12 @@ declare class Ledger implements ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth): Promise<MyOrders | Unauthorized>;
+    myOrders(auth: Auth, { expire }?: ReadOptions): Promise<MyOrders | Unauthorized>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
+    matchingOrders(auth: Auth, itemId: string, { expire }?: ReadOptions): Promise<Order[] | Unauthorized>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
-    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
     private mint;
@@ -201,4 +210,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
