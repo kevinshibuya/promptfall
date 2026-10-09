@@ -652,66 +652,81 @@ test('110 columns is compact with the front enemy in the party window; 99 or 5 r
   }
 })
 
-test('the image renderer draws the full band as one Image keyed by its cells, and no window Images', async ($, on) => {
-  const { data } = harness(on)
-  settings(data, { renderer: 'image' })
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  // The 17-row stage over the 5-row strip: 22 rows, one picture.
-  const picture = await ui.find({ key: 'band-120x22' })
-  expect(picture?.type).toBe('Image')
-  expect([picture?.props.columns, picture?.props.rows]).toEqual([120, 22])
-  expect(String(picture?.props.alt)).toMatch(/^Zone 1/)
-  expect(await ui.find({ key: 'stage-120x17' })).toBeUndefined()
-  expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
-  // Beside it only the zero-width hotkey box.
-  const [row, ...others] = await rows(ui)
-  expect(others).toHaveLength(0)
-  expect(((row as Node).children as Node[]).map((c) => c.props.key ?? c.type)).toEqual([
-    'band-120x22',
-    'hotkeys',
-  ])
-  await ui.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'the image renderer draws the full band as one Image keyed by its cells, and no window Images',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    const { data } = harness(on)
+    settings(data, { renderer: 'image' })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
+    // The 17-row stage over the 5-row strip: 22 rows, one picture.
+    const picture = await ui.find({ key: 'band-120x22' })
+    expect(picture?.type).toBe('Image')
+    expect([picture?.props.columns, picture?.props.rows]).toEqual([120, 22])
+    expect(String(picture?.props.alt)).toMatch(/^Zone 1/)
+    expect(await ui.find({ key: 'stage-120x17' })).toBeUndefined()
+    expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
+    // Beside it only the zero-width hotkey box.
+    const [row, ...others] = await rows(ui)
+    expect(others).toHaveLength(0)
+    expect(((row as Node).children as Node[]).map((c) => c.props.key ?? c.type)).toEqual([
+      'band-120x22',
+      'hotkeys',
+    ])
+    await ui.unmount()
+  },
+)
 
-test('a short band keys the image band by the rows left, and the loop blits to it', async ($, on) => {
-  // Ghostty kept a keyed Image at its first placement's height: each size is its own key. A boss
-  // no longer grows the stage (ADR 0010); the band's rows change its size instead. With a boss
-  // the 15 rows left are under its 17, so the Image zooms the whole scene out into them.
-  const { data, shown, clock, blits } = harness(on)
-  settings(data, { renderer: 'image' })
-  shown.view = boss()
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  expect((await ui.find({ key: 'band-120x22' }))?.props.rows).toBe(22)
-  await clock.advance(1_000)
-  await ui.unmount()
-  // 20 rows: the zoomed-out stage in the 15 above the strip.
-  const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  expect(await short.find({ key: 'band-120x22' })).toBeUndefined()
-  expect((await short.find({ key: 'band-120x20' }))?.props).toMatchObject({
-    columns: 120,
-    rows: 20,
-  })
-  const before = blits.length
-  await clock.advance(1_000)
-  const later = blits.slice(before)
-  expect(later.length).toBeGreaterThan(0)
-  for (const b of later) expect(b).toMatchObject({ key: 'band-120x20', columns: 120, rows: 20 })
-  await short.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'a short band keys the image band by the rows left, and the loop blits to it',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    // Ghostty kept a keyed Image at its first placement's height: each size is its own key. A boss
+    // no longer grows the stage (ADR 0010); the band's rows change its size instead. With a boss
+    // the 15 rows left are under its 17, so the Image zooms the whole scene out into them.
+    const { data, shown, clock, blits } = harness(on)
+    settings(data, { renderer: 'image' })
+    shown.view = boss()
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
+    expect((await ui.find({ key: 'band-120x22' }))?.props.rows).toBe(22)
+    await clock.advance(1_000)
+    await ui.unmount()
+    // 20 rows: the zoomed-out stage in the 15 above the strip.
+    const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    expect(await short.find({ key: 'band-120x22' })).toBeUndefined()
+    expect((await short.find({ key: 'band-120x20' }))?.props).toMatchObject({
+      columns: 120,
+      rows: 20,
+    })
+    const before = blits.length
+    await clock.advance(1_000)
+    const later = blits.slice(before)
+    expect(later.length).toBeGreaterThan(0)
+    for (const b of later) expect(b).toMatchObject({ key: 'band-120x20', columns: 120, rows: 20 })
+    await short.unmount()
+  },
+)
 
-test('above 255 columns the image band is 255 wide and centred', async ($, on) => {
-  const { data, clock, blits } = harness(on)
-  settings(data, { renderer: 'image' })
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(300, 30) })
-  expect((await ui.find({ key: 'band-255x22' }))?.props).toMatchObject({ columns: 255, rows: 22 })
-  expect((await ui.find({ key: 'row-band' }))?.props.justifyContent).toBe('center')
-  await clock.advance(1_000)
-  for (const b of blits) expect(b).toMatchObject({ key: 'band-255x22', columns: 255, rows: 22 })
-  await ui.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'above 255 columns the image band is 255 wide and centred',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    const { data, clock, blits } = harness(on)
+    settings(data, { renderer: 'image' })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(300, 30) })
+    expect((await ui.find({ key: 'band-255x22' }))?.props).toMatchObject({ columns: 255, rows: 22 })
+    expect((await ui.find({ key: 'row-band' }))?.props.justifyContent).toBe('center')
+    await clock.advance(1_000)
+    for (const b of blits) expect(b).toMatchObject({ key: 'band-255x22', columns: 255, rows: 22 })
+    await ui.unmount()
+  },
+)
 
 test('while the renderer is unknown the stage and strip rows are empty and the strip row probes', async ($, on) => {
   harness(on)

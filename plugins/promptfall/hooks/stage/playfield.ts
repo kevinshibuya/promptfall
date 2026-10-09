@@ -26,11 +26,27 @@ export function playfieldOf(band: Box): Placement {
 const LINE_IN = CELL_W - PAD_PX - BORDER_PX
 const LINE_IN_STRIP = CELL_H - PAD_PX - BORDER_PX
 
-function put(f: Frame, i: number, rgb: number): void {
-  f.rgba[i] = (rgb >>> 16) & 0xff
-  f.rgba[i + 1] = (rgb >>> 8) & 0xff
-  f.rgba[i + 2] = rgb & 0xff
-  f.rgba[i + 3] = 255
+// The band is drawn a whole pixel at a time, through a Uint32Array over the RGBA bytes, and in
+// spans the runtime fills or copies natively: a frame is a few hundred thousand pixels, every
+// busy beat, in the hooks' runtime.
+
+/** An opaque `rgb` as one RGBA pixel read as a 32-bit word, in the platform's byte order. */
+function word(rgb: number): number {
+  const px = Uint8Array.of((rgb >>> 16) & 0xff, (rgb >>> 8) & 0xff, rgb & 0xff, 255)
+  return new Uint32Array(px.buffer)[0] ?? 0
+}
+
+const FIELD = word(FIELD_RGB)
+const BORDER = word(BORDER_RGB)
+/** The alpha byte alone: a pixel ANDed with it is 0 where the pixel is transparent. */
+const ALPHA = word(0)
+
+/** The frame's pixels as words; a frame whose bytes do not start on a word is copied first. */
+function words(f: Frame): Uint32Array {
+  const { buffer, byteOffset, length } = f.rgba
+  return byteOffset % 4 === 0
+    ? new Uint32Array(buffer, byteOffset, length / 4)
+    : new Uint32Array(f.rgba.slice().buffer)
 }
 
 /**
@@ -40,13 +56,26 @@ function put(f: Frame, i: number, rgb: number): void {
  */
 function drawStage(band: Frame, stage: Frame, x0: number, y0: number, w: number, h: number): void {
   if (stage.height * CELL_H === h * 2 * HIRES_SCALE) {
+    const src = words(stage)
+    const dst = words(band)
+    const xs = new Int32Array(w)
+    for (let x = 0; x < w; x++) {
+      xs[x] = Math.min(stage.width - 1, Math.floor((x * HIRES_SCALE) / CELL_W))
+    }
+    let last = -1
     for (let y = 0; y < h; y++) {
       const sy = Math.min(stage.height - 1, Math.floor((y * 2 * HIRES_SCALE) / CELL_H))
+      const at = (y0 + y) * band.width + x0
+      // An art row spans 16/3 band rows: the first draws it, the rest copy the row above.
+      if (sy === last) {
+        dst.copyWithin(at, at - band.width, at - band.width + w)
+        continue
+      }
+      last = sy
+      const row = sy * stage.width
       for (let x = 0; x < w; x++) {
-        const sx = Math.min(stage.width - 1, Math.floor((x * HIRES_SCALE) / CELL_W))
-        const si = (sy * stage.width + sx) * 4
-        const rgb = (stage.rgba[si + 3] ?? 0) === 0 ? FIELD_RGB : rgbAt(stage, si)
-        put(band, ((y0 + y) * band.width + x0 + x) * 4, rgb)
+        const px = src[row + (xs[x] ?? 0)] ?? 0
+        dst[at + x] = (px & ALPHA) === 0 ? FIELD : px | ALPHA
       }
     }
     return
@@ -100,15 +129,22 @@ function taps(from: number, to: number): [number, number][][] {
 
 /** The strip's windows, each opaque pixel as it is; the shell shows between and around them. */
 function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
+  const dst = words(band)
   for (const win of scene.windows) {
     const f = windowFrame(win)
+    const src = words(f)
     const left = x0 + win.x * CELL_W
     const top = y0 + (win.y ?? 0) * CELL_H
     for (let y = 0; y < f.height; y++) {
-      for (let x = 0; x < f.width; x++) {
-        const si = (y * f.width + x) * 4
-        if ((f.rgba[si + 3] ?? 0) === 0) continue
-        band.rgba.set(f.rgba.subarray(si, si + 4), ((top + y) * band.width + left + x) * 4)
+      const row = y * f.width
+      const at = (top + y) * band.width + left
+      // Each run of opaque pixels in one copy; the transparent ones between leave the shell.
+      let x = 0
+      while (x < f.width) {
+        while (x < f.width && ((src[row + x] ?? 0) & ALPHA) === 0) x++
+        const from = x
+        while (x < f.width && ((src[row + x] ?? 0) & ALPHA) !== 0) x++
+        if (x > from) dst.set(src.subarray(row + from, row + x), at + from)
       }
     }
   }
@@ -127,17 +163,25 @@ function drawLine(band: Frame, at: Placement, full: Box): void {
   const right = at.x + at.columns < full.columns ? pfRight + BORDER_PX : pfRight - LINE_IN
   const top = at.y * CELL_H + LINE_IN
   const bottom = (at.y + at.rows) * CELL_H - 1 - LINE_IN_STRIP
+  const dst = words(band)
   for (let y = 0; y < band.height; y++) {
-    for (let x = 0; x < band.width; x++) {
-      const i = (y * band.width + x) * 4
-      if (x < left || x > right || y < top || y > bottom) {
-        put(band, i, FIELD_RGB)
-        continue
-      }
-      const dx = Math.min(x - left, right - x)
-      const dy = Math.min(y - top, bottom - y)
-      if (dx >= BORDER_PX && dy >= BORDER_PX) continue
-      put(band, i, dx === 0 && dy === 0 ? FIELD_RGB : BORDER_RGB)
+    const row = y * band.width
+    if (y < top || y > bottom) {
+      dst.fill(FIELD, row, row + band.width)
+      continue
+    }
+    dst.fill(FIELD, row, row + Math.max(0, left))
+    dst.fill(FIELD, row + right + 1, row + band.width)
+    if (y - top < BORDER_PX || bottom - y < BORDER_PX) {
+      dst.fill(BORDER, row + left, row + right + 1)
+    } else {
+      dst.fill(BORDER, row + left, row + left + BORDER_PX)
+      dst.fill(BORDER, row + right - BORDER_PX + 1, row + right + 1)
+    }
+    // The corners are cut: the line's own corner pixel is the shell.
+    if (y === top || y === bottom) {
+      dst[row + left] = FIELD
+      dst[row + right] = FIELD
     }
   }
 }
@@ -151,7 +195,7 @@ export function composeBand(band: Box, stage: Frame, strip: Scene): Frame {
   const width = band.columns * CELL_W
   const height = band.rows * CELL_H
   const out: Frame = { width, height, rgba: new Uint8ClampedArray(width * height * 4) }
-  for (let i = 0; i < out.rgba.length; i += 4) put(out, i, FIELD_RGB)
+  words(out).fill(FIELD)
   const at = playfieldOf(band)
   const stageRows = at.rows - strip.rows
   const x0 = at.x * CELL_W

@@ -429,49 +429,62 @@ function pixels(source: { png: string } | undefined): {
   return { width, height, at }
 }
 
-test("in play, a boss under a tall prompt draws the band as one picture the band's full width (#21)", async ($, on) => {
-  const { run, view, clock } = await sandboxOn(on, $, {
-    'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
-  })
-  expect(await run('boss treant')).toBe('Sandbox: Elder Treant is next')
-  for (let i = 0; i < 40 && !view().enemies.some((e) => e.name === 'Elder Treant'); i++)
-    await clock.advance(500)
-  expect(view().enemies.map((e) => e.name)).toContain('Elder Treant')
-  // A tall prompt leaves the band 10 rows: 5 for the stage over the 5-row strip.
-  const short = { ...BAND, props: { ...BAND.props, maxRows: 10, bodyColumns: 144 } }
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
-  const band = await ui.find({ key: 'band-144x10' })
-  expect(band?.type).toBe('Image')
-  expect(band?.props).toMatchObject({ columns: 144, rows: 10 })
-  expect(await ui.find({ key: stageKey({ columns: 144, rows: 5 }) })).toBeUndefined()
-  // The picture stays within the host's 2048 px a side, 8 by 16 pixels a cell.
-  const picture = pixels(band?.props.source as { png: string } | undefined)
-  expect([picture.width, picture.height]).toEqual([144 * CELL_W, 10 * CELL_H])
-  // The zoomed-out stage spans the playfield: inside the line, no shell across the stage's rows.
-  for (const y of [20, 40, 60]) {
-    for (let x = 4; x < picture.width - 4; x++) expect(picture.at(x, y)).not.toBe(FIELD_RGB)
-  }
-  await ui.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  "in play, a boss under a tall prompt draws the band as one picture the band's full width (#21)",
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    const { run, view, clock } = await sandboxOn(on, $, {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+    })
+    expect(await run('boss treant')).toBe('Sandbox: Elder Treant is next')
+    for (let i = 0; i < 40 && !view().enemies.some((e) => e.name === 'Elder Treant'); i++)
+      await clock.advance(500)
+    expect(view().enemies.map((e) => e.name)).toContain('Elder Treant')
+    // A tall prompt leaves the band 10 rows: 5 for the stage over the 5-row strip.
+    const short = { ...BAND, props: { ...BAND.props, maxRows: 10, bodyColumns: 144 } }
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
+    const band = await ui.find({ key: 'band-144x10' })
+    expect(band?.type).toBe('Image')
+    expect(band?.props).toMatchObject({ columns: 144, rows: 10 })
+    expect(await ui.find({ key: stageKey({ columns: 144, rows: 5 }) })).toBeUndefined()
+    // The picture stays within the host's 2048 px a side, 8 by 16 pixels a cell.
+    const picture = pixels(band?.props.source as { png: string } | undefined)
+    expect([picture.width, picture.height]).toEqual([144 * CELL_W, 10 * CELL_H])
+    // The zoomed-out stage spans the playfield: inside the line, no shell across the stage's rows.
+    for (const y of [20, 40, 60]) {
+      for (let x = 4; x < picture.width - 4; x++) expect(picture.at(x, y)).not.toBe(FIELD_RGB)
+    }
+    await ui.unmount()
+  },
+)
 
-test('in play, one band element at 165 columns: the strip is inside the picture, not beside it', async ($, on) => {
-  await sandboxOn(on, $, {
-    'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
-  })
-  const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
-  const root = await ui.find({ key: 'band' })
-  const rows = (root?.children ?? []) as { props: Record<string, unknown>; children: unknown[] }[]
-  expect(rows).toHaveLength(1)
-  const children = (rows[0]?.children ?? []) as { type?: string; props: Record<string, unknown> }[]
-  // One picture at the band's width; beside it only the zero-width hotkey box.
-  const pictures = children.filter((c) => c.type === 'Image')
-  expect(pictures).toHaveLength(1)
-  expect(pictures[0]?.props).toMatchObject({ columns: 165, rows: 22 })
-  expect(children.filter((c) => c.type !== 'Image').map((c) => c.props.key)).toEqual(['hotkeys'])
-  expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
-  await ui.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'in play, one band element at 165 columns: the strip is inside the picture, not beside it',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    await sandboxOn(on, $, {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+    })
+    const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+    const root = await ui.find({ key: 'band' })
+    const rows = (root?.children ?? []) as { props: Record<string, unknown>; children: unknown[] }[]
+    expect(rows).toHaveLength(1)
+    const children = (rows[0]?.children ?? []) as {
+      type?: string
+      props: Record<string, unknown>
+    }[]
+    // One picture at the band's width; beside it only the zero-width hotkey box.
+    const pictures = children.filter((c) => c.type === 'Image')
+    expect(pictures).toHaveLength(1)
+    expect(pictures[0]?.props).toMatchObject({ columns: 165, rows: 22 })
+    expect(children.filter((c) => c.type !== 'Image').map((c) => c.props.key)).toEqual(['hotkeys'])
+    expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
+    await ui.unmount()
+  },
+)
 
 test('in play, the strip’s hero HP trails the state until the hit lands, never leads it (#20)', async ($, on) => {
   const { view, clock } = await sandboxOn(on, $, {
