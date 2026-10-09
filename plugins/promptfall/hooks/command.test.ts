@@ -375,13 +375,18 @@ test('in play, the strip’s hero HP trails the state until the hit lands, never
     return [...line.matchAll(/H\s+(\d+)/g)].map((m) => Number(m[1]))
   }
   let trailed = 0
+  // Each hero's state HP over the last two ticks: a heal still to land holds the strip at one.
+  const recent: number[][] = []
   for (let step = 0; step < 600; step++) {
     await clock.advance(50)
     const state = view().heroes.map((h) => h.hp)
+    recent.push(state)
+    if (recent.length > 80) recent.shift()
     const strip = await shown()
     if (strip.length !== state.length) continue
-    // Never below the state: the strip only holds back HP a hit has not yet taken on the stage.
-    for (const [i, hp] of strip.entries()) expect(hp).toBeGreaterThanOrEqual(state[i] ?? 0)
+    // Never below what the state was: the strip only holds back a hit or a heal not yet landed.
+    for (const [i, hp] of strip.entries())
+      expect(hp).toBeGreaterThanOrEqual(Math.min(...recent.map((s) => s[i] ?? 0)))
     if (strip.some((hp, i) => hp > (state[i] ?? 0))) trailed++
   }
   // Over 30 s of play some hit was ticked before it landed, and the strip waited for it.

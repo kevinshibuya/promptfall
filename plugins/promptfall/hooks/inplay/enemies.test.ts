@@ -42,12 +42,17 @@ async function band(ui: Ui) {
   }
 }
 
-/** The rows the band holds that the view has dropped: what the stage is still playing. */
-function held(shown: readonly { name: string }[], view: GameView): number {
+/**
+ * The rows the band holds that the view has dropped: what the stage is still playing. A row at 0
+ * HP is held whatever its name, since the view drops a monster as it dies: a newcomer of the next
+ * wave may share the name of the one whose death is still playing. A row with a hit still in the
+ * air can share it too, so this count is a floor.
+ */
+function held(shown: readonly { name: string; hp: number }[], view: GameView): number {
   const live = view.enemies.map((e) => e.name)
   let n = 0
-  for (const { name } of shown) {
-    const i = live.indexOf(name)
+  for (const { name, hp } of shown) {
+    const i = hp === 0 ? -1 : live.indexOf(name)
     if (i < 0) n++
     else live.splice(i, 1)
   }
@@ -63,21 +68,35 @@ test(
     let kept = 0
     let waveHeld = 0
     let caughtUp = 0
+    // Each wave's monsters as the view had them, by id: the rows a title held on that wave may show.
+    const waves = new Map<number, Map<string, string>>()
     for (let step = 0; step < 6000 && caughtUp === 0; step++) {
       await clock.advance(50)
       const v = view()
       const shown = await band(ui)
       const ranked = viewRank(v)
+      const wave = waves.get(ranked) ?? new Map<string, string>()
+      for (const e of v.enemies) wave.set(e.id, e.name)
+      waves.set(ranked, wave)
       // Never ahead of the state: the title never names a wave the view has not reached.
       expect(shown.rank).toBeLessThanOrEqual(ranked)
       const holding = held(shown.rows, v)
       if (holding > 0) kept++
-      // A row the view dropped belongs to the wave the title still names.
+      // The title holds a wave only while a row of it is held, and every row is of that wave: a
+      // newcomer waits for the death. Rows match by name, since a dying row's HP is what its hits
+      // in the air leave it and a newcomer of the next wave may share its name.
       if (shown.rank < ranked) {
         waveHeld++
-        expect(holding, 'the previous wave holds the title only while a row of it is held').toBe(
+        expect(
           shown.rows.length,
-        )
+          'the previous wave holds the title only while a row of it is held',
+        ).toBeGreaterThan(0)
+        const left = [...(waves.get(shown.rank)?.values() ?? [])]
+        for (const { name } of shown.rows) {
+          const i = left.indexOf(name)
+          expect(i, `${name} is a monster of the wave the title names`).toBeGreaterThanOrEqual(0)
+          left.splice(i, 1)
+        }
       } else if (waveHeld > 0 && holding === 0) caughtUp++
     }
     expect(kept, 'a killed monster kept its row').toBeGreaterThan(0)
