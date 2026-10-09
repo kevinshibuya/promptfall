@@ -215,7 +215,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   matching orders in the sell flow and accepts one explicitly. An order expires
   after 7 days, fills exactly once and closes; cancel refunds the escrow in full.
 - A purchase needs a free inventory slot (roster slot for a hero) and the gold,
-  or it is refused. Buyer and seller are never the same account.
+  or it is refused. Buyer and seller are never the same account. A fill whose
+  buyer has no free slot is refused as `buyer_full`, apart from a buyer's own
+  `no_space`, and the order stays open.
 - A hero is listed with no equipment: the dialog unequips into the inventory
   first and refuses when space is lacking. A transferred hero arrives at level
   1, 0 XP, full HP, same rarity and traits.
@@ -375,7 +377,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   cadence and the ledger's clock together, so cooldowns and expiries can be
   watched. `--flag <name>=<value>`, repeatable, sets a flag for the run; a flag
   change is a restart. The GitHub link flow is approved on the first poll with
-  `--player-name` as the login.
+  `--player-name` as the login, 1 to 64 characters as the wire takes a login:
+  anything else exits at startup with the reason, and the ledger's mint holds
+  names to the same bound.
 - Bots: 12 seeded accounts with names from a fixed list, inventories and
   rosters rolled from the sim's own loot tables, a gold stipend per tick so
   they never run dry. From phase 3 a bot is an HTTP client of the fake's own

@@ -121,10 +121,17 @@ describe('Ledger host guards', () => {
     expect(r.log).toEqual([])
   })
 
-  it('mint refuses a name over 128 characters', async () => {
+  it('mint refuses an empty name or one over 64 characters, and takes 64', async () => {
     const { ledger } = makeLedger()
     const state = createInitialState(1)
-    await expect(ledger.host.mint({ state, name: 'n'.repeat(129), linked: true })).rejects.toThrow()
+    const bounds = /mint: name wants 1 to 64 characters/
+    await expect(ledger.host.mint({ state, name: '', linked: true })).rejects.toThrow(bounds)
+    await expect(ledger.host.mint({ state, name: 'n'.repeat(65), linked: true })).rejects.toThrow(
+      bounds,
+    )
+    await expect(
+      ledger.host.mint({ state, name: 'n'.repeat(64), linked: true }),
+    ).resolves.toMatchObject({ accountId: expect.any(String) })
   })
 })
 

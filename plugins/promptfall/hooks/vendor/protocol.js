@@ -4276,6 +4276,7 @@ var MARKET_REFUSALS = [
   "bad_price",
   "not_enough_gold",
   "no_space",
+  "buyer_full",
   "self_trade",
   "gone",
   "not_owner",

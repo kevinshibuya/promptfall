@@ -103,13 +103,19 @@ export type LedgerHost = {
   settle(accountId: string): Promise<void>
   /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
   sweep(): Promise<void>
-  /** Authors a sandbox grant in cursor position. Throws on an unknown account or a non-sandbox event. */
+  /**
+   * Authors a sandbox grant in cursor position. With the flag off it answers `sandbox_off` before
+   * anything else; with it on it throws on an unknown account or a non-sandbox event.
+   */
   sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>
   /** Spawns a world boss whose window starts now and engages the online accounts. */
   spawnBoss(): Promise<SandboxOutcome>
   /** Settles the open world boss now, paying every engaged account. */
   settleBoss(): Promise<SandboxOutcome>
 }
+
+/** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
+export const PLAYER_NAME_MAX = 64
 
 export const LINK_URL = 'https://github.com/login/device'
 export const LINK_INTERVAL_MS = 5000
@@ -577,7 +583,11 @@ export class Ledger implements ServerClient {
     name: string
     linked: boolean
   }): Promise<{ accountId: string; deviceToken: string }> {
-    if (input.name.length > 128) throw new Error('mint: name over 128 characters')
+    if (input.name.length < 1 || input.name.length > PLAYER_NAME_MAX) {
+      throw new Error(
+        `mint: name wants 1 to ${PLAYER_NAME_MAX} characters; got ${input.name.length}`,
+      )
+    }
     const now = await this.options.now()
     const accountId = this.options.tokenSource()
     const deviceToken = this.options.tokenSource()
@@ -623,13 +633,14 @@ export class Ledger implements ServerClient {
   }
 
   private async sandbox(accountId: string, input: SandboxEvent): Promise<SandboxOutcome> {
+    // The flag first: with it off nothing below runs, so the answer is never a throw.
+    if (!this.flags()['sandbox.enabled']) return sandboxOff
     // The wire schema's own check, so a grant never makes the account's deliveries unreadable.
     const event = ServerEventSchema.parse(input)
     if (!(SANDBOX_EVENT_KINDS as readonly string[]).includes(event.t)) {
       throw new Error(`sandbox: not a sandbox event: ${event.t}`)
     }
     const record = await this.currentRecord(accountId)
-    if (!this.flags()['sandbox.enabled']) return sandboxOff
     const refused = tryAuthor(record, event)
     if (refused !== null) {
       return {

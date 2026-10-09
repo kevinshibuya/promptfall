@@ -118,13 +118,18 @@ type LedgerHost = {
     settle(accountId: string): Promise<void>;
     /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
     sweep(): Promise<void>;
-    /** Authors a sandbox grant in cursor position. Throws on an unknown account or a non-sandbox event. */
+    /**
+     * Authors a sandbox grant in cursor position. With the flag off it answers `sandbox_off` before
+     * anything else; with it on it throws on an unknown account or a non-sandbox event.
+     */
     sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>;
     /** Spawns a world boss whose window starts now and engages the online accounts. */
     spawnBoss(): Promise<SandboxOutcome>;
     /** Settles the open world boss now, paying every engaged account. */
     settleBoss(): Promise<SandboxOutcome>;
 };
+/** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
+declare const PLAYER_NAME_MAX = 64;
 declare const LINK_URL = "https://github.com/login/device";
 declare const LINK_INTERVAL_MS = 5000;
 /**
@@ -196,4 +201,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
