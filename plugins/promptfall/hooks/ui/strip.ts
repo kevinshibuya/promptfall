@@ -421,7 +421,27 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
   }
 }
 
-function build(input: StripInput): { scene: Scene; built: Built[] } {
+/**
+ * The view as the stage shows it: each hero's and enemy's HP before the hits and heals still to
+ * land (#20), so a bar drops with the hit frame and its number. The world boss keeps its
+ * predicted bar.
+ */
+function asStaged(input: StripInput): StripInput {
+  const { view, timeline, now } = input
+  const staged = <T extends { id: string; hp: number; maxHp: number }>(a: T): T => {
+    const hp = timeline.shownHp(a.id, a.hp, a.maxHp, now)
+    return hp === a.hp ? a : { ...a, hp }
+  }
+  const heroes = view.heroes.map((h) => {
+    const s = staged(h)
+    return s === h ? h : { ...s, alive: h.alive || s.hp > 0 }
+  })
+  const enemies = view.enemies.map((e) => (e.kind === 'world_boss' ? e : staged(e)))
+  return { ...input, view: { ...view, heroes, enemies } }
+}
+
+function build(raw: StripInput): { scene: Scene; built: Built[] } {
+  const input = asStaged(raw)
   const columns = Math.min(input.columns, STRIP_MAX_COLUMNS)
   if (input.kind === 'compact') {
     // The window sits beside the compact stage: the band's columns less the stage's.

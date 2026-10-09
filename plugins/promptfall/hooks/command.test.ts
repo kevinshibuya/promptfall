@@ -421,3 +421,28 @@ test('in play, a boss under a tall prompt draws the Image stage the band’s ful
   expect(be(20)).toBeLessThanOrEqual(2048)
   await ui.unmount()
 })
+
+test('in play, the strip’s hero HP trails the state until the hit lands, never leads it (#20)', async ($, on) => {
+  const { view, clock } = await sandboxOn(on, $, {
+    'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+  })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
+  await ui.press({ key: 'hot-p' })
+  const shown = async () => {
+    const line = (await stripText(ui)).split('\n').find((l) => /H\s+\d+.*H\s+\d+/.test(l)) ?? ''
+    return [...line.matchAll(/H\s+(\d+)/g)].map((m) => Number(m[1]))
+  }
+  let trailed = 0
+  for (let step = 0; step < 600; step++) {
+    await clock.advance(50)
+    const state = view().heroes.map((h) => h.hp)
+    const strip = await shown()
+    if (strip.length !== state.length) continue
+    // Never below the state: the strip only holds back HP a hit has not yet taken on the stage.
+    for (const [i, hp] of strip.entries()) expect(hp).toBeGreaterThanOrEqual(state[i] ?? 0)
+    if (strip.some((hp, i) => hp > (state[i] ?? 0))) trailed++
+  }
+  // Over 30 s of play some hit was ticked before it landed, and the strip waited for it.
+  expect(trailed).toBeGreaterThan(0)
+  await ui.unmount()
+})
