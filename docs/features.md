@@ -152,7 +152,9 @@ question.
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, on a ground strip coloured per zone. Actors bob between two idle
 drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
-rising damage number, heals rise green, the dead dissolve and drops pop out. It grows while a boss
+rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
+fights until the blow that kills him lands, then dims, and the party window's HP drops with each
+hit as it lands, not when the game applies it. It grows while a boss
 is on it and shrinks back after the boss falls. It draws as an image on Kitty and Ghostty, in
 half-blocks on other terminals, and as vector art on the desktop.
 

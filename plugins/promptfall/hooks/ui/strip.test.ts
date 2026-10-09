@@ -1,7 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
-import { StageTimeline } from '../stage/timeline'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
@@ -112,42 +111,6 @@ test('the alt names every hero’s HP and gauge', () => {
   for (const h of input.view.heroes)
     expect(scene.alt).toContain(`${h.shortName} level ${h.level}, HP ${h.hp} of ${h.maxHp}`)
   expect(scene.alt).toContain('gauge full')
-})
-
-/** The HP the strip's alt gives `hero` at each time, after `enemy` hits it for `amount`. */
-function hpAfterHit(before: number, amount: number, times: (impact: number) => number[]) {
-  const base = strip('strip-rest')
-  const hero = base.view.heroes[0] as GameView['heroes'][number]
-  const enemy = base.view.enemies[0] as GameView['enemies'][number]
-  const withHp = (hp: number): GameView => ({
-    ...base.view,
-    heroes: base.view.heroes.map((h) => (h.id === hero.id ? { ...h, hp, alive: hp > 0 } : h)),
-  })
-  // The stage last saw the hero before the tick; the sim's tick has already taken the HP.
-  const timeline = new StageTimeline()
-  timeline.observe(withHp(before), base.now - 1)
-  const [start = 0] = timeline.onEffects(
-    [
-      { k: 'act', actor: enemy.id, action: 'attack', at: 0 },
-      { k: 'hit', by: enemy.id, target: hero.id, amount },
-    ],
-    base.now,
-    2000,
-  )
-  const view = withHp(Math.max(0, before - amount))
-  // The impact: when the hit's number shows on the stage.
-  const number = timeline.active(start).find((m) => m.kind === 'number' && m.actor === hero.id)
-  const impact = number?.from ?? Number.NaN
-  return times(impact).map((now) => {
-    const { scene } = stripScene({ ...base, view, timeline, now })
-    return Number(scene.alt.match(new RegExp(`${hero.shortName} level \\d+, HP (\\d+) of`))?.[1])
-  })
-}
-
-test('a hero’s HP drops when the hit lands on the stage, not when the sim applies it (#20)', () => {
-  expect(hpAfterHit(50, 5, (impact) => [impact - 1, impact])).toEqual([50, 45])
-  // A killing blow over the HP left shows the HP left until it lands, never more.
-  expect(hpAfterHit(3, 10, (impact) => [impact - 1, impact])).toEqual([3, 0])
 })
 
 test('every character a strip scene holds has a glyph, on every tab and with a notice', () => {

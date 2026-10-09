@@ -1,4 +1,4 @@
-import type { GameView } from '../../types'
+import type { EnemyView, GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
 import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
@@ -98,6 +98,21 @@ type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
 export type Group = { act: Act | null; effects: Effect[] }
 
+/**
+ * An enemy in the line for the staged state: its last view row, the zone and wave it was last
+ * seen in, and whether it has left the view.
+ */
+export type Lined = {
+  row: EnemyView
+  zone: number
+  zoneName: string
+  wave: number
+  departed: boolean
+}
+
+/** A hit's or heal's HP change on `actor`, landing on the stage at `at`. */
+export type Landing = { actor: string; delta: number; at: number }
+
 /** An action on the timeline: its actor, when it starts, and when its ▶ goes (`acting`). */
 export type Action = { actor: string; start: number; until: number }
 
@@ -119,7 +134,8 @@ export function bobbingAt(now: number): 0 | 1 {
   return Math.floor(now / IDLE_FRAME_MS) % 2 === 0 ? 0 : 1
 }
 
-function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
+/** An enemy's sprite: the world boss's by name, any other by its content id. */
+export function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
   return enemy.kind === 'world_boss'
     ? spriteFor('world_boss', worldBossKey(enemy.name)).id
     : spriteFor('enemy', enemy.def).id
@@ -148,7 +164,9 @@ export class StageTimeline {
   /** The HP each actor had at the last observe: the state a burst starts from. */
   private seenHp = new Map<string, number>()
   /** Each hit's or heal's HP change, kept until it lands on the stage (#20). */
-  private landing: { actor: string; delta: number; at: number }[] = []
+  private landing: Landing[] = []
+  /** Each entry's last view row and where it was seen: what its staged row needs once departed. */
+  private seen = new Map<string, Omit<Lined, 'departed'>>()
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -225,6 +243,16 @@ export class StageTimeline {
         this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
       }
     }
+    for (const enemy of view.enemies) {
+      if (!this.entries.has(enemy.id)) continue
+      this.seen.set(enemy.id, {
+        row: enemy,
+        zone: view.zone,
+        zoneName: view.zoneName,
+        wave: view.wave,
+      })
+    }
+    for (const id of this.seen.keys()) if (!this.entries.has(id)) this.seen.delete(id)
     this.observed = true
     this.settlePlaces(now)
   }
@@ -514,11 +542,12 @@ export class StageTimeline {
     this.landing.push({ actor: effect.target, delta, at })
   }
 
-  /** `hp` as the stage shows it at `now`: the hits and heals still to land undone (#20). */
-  shownHp(actor: string, hp: number, maxHp: number, now: number): number {
-    let shown = hp
-    for (const l of this.landing) if (l.actor === actor && l.at > now) shown -= l.delta
-    return Math.max(0, Math.min(maxHp, shown))
+  /**
+   * The hits and heals still to land after `now`, in the order they were recorded. The staged
+   * state's business (stage/staged.ts): no window reads them.
+   */
+  pending(now: number): readonly Landing[] {
+    return this.landing.filter((l) => l.at > now)
   }
 
   acting(now: number): string | null {
@@ -558,6 +587,19 @@ export class StageTimeline {
   /** The enemies in line order: by arrival, so a newcomer joins the end and never shoves. */
   known(): readonly Known[] {
     return [...this.entries.values()]
+  }
+
+  /**
+   * The line in arrival order, departed enemies included while it holds them. The staged
+   * state's business (stage/staged.ts): no window reads it.
+   */
+  lineup(): readonly Lined[] {
+    const out: Lined[] = []
+    for (const id of this.entries.keys()) {
+      const seen = this.seen.get(id)
+      if (seen) out.push({ ...seen, departed: this.departed.has(id) })
+    }
+    return out
   }
 
   isDeparted(id: string): boolean {
