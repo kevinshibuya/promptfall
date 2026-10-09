@@ -64,6 +64,16 @@ test('the enemy window titles: a wave, a boss, the world boss with its time left
   expect(titled(strip('strip-world-boss'))).toBe('World boss · 11m')
 })
 
+test("the compact window's title carries the world boss's time left", () => {
+  const titled = (i: StripInput) =>
+    lineText({
+      spans: win(stripScene({ ...i, kind: 'compact', columns: 110 }).scene, 'compact').title ?? [],
+    })
+  expect(titled(strip('strip-world-boss'))).toMatch(/^Z1 · World boss 11m · \d+G$/)
+  // None up: the zone and the wave, as before.
+  expect(titled(strip('strip-rest'))).toMatch(/^Z1 · W2 · \d+G$/)
+})
+
 test('▶ marks the acting hero and the current tab', () => {
   const input = strip('strip-rest')
   const { scene } = stripScene(input)

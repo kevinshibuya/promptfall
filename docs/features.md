@@ -134,9 +134,11 @@ damage this week, your own rows in gold.
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
 percentage and time left, the bar dropping as the party's hits land, waves pause and tool calls
-spawn nothing. A wipe in boss mode empties
+spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
+boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
-needs a server; the default in-process fake runs none.
+needs a server; the default in-process fake runs none, and with the boss off the World tab's
+records row says so in place when it has room.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as

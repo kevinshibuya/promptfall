@@ -35,7 +35,7 @@ import {
 } from '../windows/tuning'
 import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
-import { worldRows } from './world-rows'
+import { recordsRow, worldRows } from './world-rows'
 
 export type StripInput = {
   view: GameView
@@ -116,16 +116,21 @@ export function wrap(line: string, n: number): string[] {
   return rows
 }
 
-function enemyLabel(input: StripInput): { title: string; boss: boolean } {
+/**
+ * The world boss's time left while the staged enemies hold its row: '' without a clock or a
+ * polled boss, null when no world boss is up.
+ */
+function worldBossLeft(input: StripInput): string | null {
   const { view, world, now } = input
-  if (view.enemies.some((e) => e.kind === 'world_boss')) {
-    const boss = world.snapshot?.boss
-    const left =
-      boss && world.clock
-        ? ` · ${formatRemaining(remainingRealMs(boss.endsAt, world.clock, now))}`
-        : ''
-    return { title: `World boss${left}`, boss: true }
-  }
+  if (!view.enemies.some((e) => e.kind === 'world_boss')) return null
+  const boss = world.snapshot?.boss
+  return boss && world.clock ? formatRemaining(remainingRealMs(boss.endsAt, world.clock, now)) : ''
+}
+
+function enemyLabel(input: StripInput): { title: string; boss: boolean } {
+  const { view } = input
+  const left = worldBossLeft(input)
+  if (left !== null) return { title: left ? `World boss · ${left}` : 'World boss', boss: true }
   if (view.wave >= 11 || view.enemies.some((e) => e.kind === 'zone_boss' || e.kind === 'turn_boss'))
     return { title: `Zone ${view.zone} · Boss`, boss: true }
   return { title: `Zone ${view.zone} · Wave ${view.wave}`, boss: false }
@@ -237,8 +242,7 @@ function tabRows(input: StripInput, n: number, at = input.now): Line[] {
   }
   if (tab === 'world') {
     const [presence, , chat] = worldRows(view, world, at)
-    const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
-    const second = chat && !chat.dim ? chat.text : records
+    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n)
     return [
       { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
       { spans: [text(clip(second, n))] },
@@ -377,7 +381,14 @@ function purseWindow(input: StripInput, x: number): Built {
 function compactWindow(input: StripInput, x: number, columns: number): Built {
   const { view } = input
   const inner = columns - 2
-  const wave = view.wave >= 11 ? 'Boss' : `W${view.wave}`
+  // Under 116 columns there is no enemy window: the world boss's time left takes the wave's place.
+  const left = worldBossLeft(input)
+  const wave =
+    left !== null
+      ? `World boss${left ? ` ${left}` : ''}`
+      : view.wave >= 11
+        ? 'Boss'
+        : `W${view.wave}`
   let title = `Z${view.zone} · ${wave} · ${formatCount(view.gold)}G`
   if (view.farm && chars(`${title} · Farm`).length <= inner - 3) title = `${title} · Farm`
   const acting = input.timeline.acting(input.now)
