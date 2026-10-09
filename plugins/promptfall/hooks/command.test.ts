@@ -6,7 +6,7 @@ import { stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { Ledger } from './vendor/ledger.js'
-import { content } from './vendor/sim.js'
+import { content, createInitialState } from './vendor/sim.js'
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
   const { states, clock } = harness(on)
@@ -61,6 +61,38 @@ test('/promptfall in a secondary session takes the lease', async ($, on) => {
   expect(states.get('mode')).toBe('secondary')
   await $.command.run({ ...RUN, command: 'promptfall', args: 'heroes' })
   expect(states.get('mode')).toBe('primary')
+})
+
+/** A save from an older sim version under `prefix`: the session takes the lease and its engine pauses. */
+function oldSave(prefix: string): Record<string, unknown> {
+  return {
+    [`${prefix}deviceToken`]: 'token-1',
+    [`${prefix}pf:token:token-1`]: 'acct-1',
+    [`${prefix}pf:acct:acct-1:record`]: {
+      account: { accountId: 'acct-1', seed: 5, createdAt: 0, displayName: null, linked: null },
+      state: { ...createInitialState(5), v: 1 },
+      seq: 3,
+      refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      committed: [],
+    },
+  }
+}
+
+test('a paused primary answers farm and the sandbox verbs as paused, not as another session', async ($, on) => {
+  const { states } = harness(on, oldSave(SANDBOX_PREFIX), { PROMPTFALL_SANDBOX: '1' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('paused')
+  const zoneBoss = content.zones[0]?.boss ?? ''
+  const base = Object.values(content.itemBases)[0]?.id ?? ''
+  const verbs = ['farm', 'sandbox gold 100', `sandbox boss ${zoneBoss}`, `sandbox item ${base}`]
+  verbs.push('sandbox level Aria 5', 'sandbox zone 2', 'sandbox recruit', 'sandbox wipe')
+  verbs.push('sandbox worldboss')
+  for (const args of verbs) {
+    const r = await $.command.run({ ...RUN, command: 'promptfall', args })
+    expect({ args, text: r.text }).toEqual({ args, text: 'Promptfall is paused' })
+  }
+  expect(states.get('mode')).toBe('paused')
 })
 
 test('the settings commands write the store and the atom, and answer', async ($, on) => {

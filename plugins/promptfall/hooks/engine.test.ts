@@ -510,9 +510,23 @@ test('a flush that pauses the engine stops the trade', async () => {
       called = true
       return { ok: false, reason: 'gone' } as MarketResult
     }),
-  ).rejects.toThrow('not_primary')
+  ).rejects.toThrow('paused')
   expect(called).toBe(false)
   expect(engine.isPaused()).toBe(true)
+})
+
+test('a paused primary refuses a trade as paused', async () => {
+  const { engine } = setup()
+  await engine.start()
+  engine.setPaused(UPDATE_NOTICE)
+  let called = false
+  const trade = engine.trade(async () => {
+    called = true
+    return { ok: false, reason: 'gone' } as MarketResult
+  })
+  await expect(trade).rejects.toThrow('paused')
+  await expect(trade).rejects.not.toThrow('not_primary')
+  expect(called).toBe(false)
 })
 
 test("a stopped engine's in-flight bootstrap writes nothing", async () => {

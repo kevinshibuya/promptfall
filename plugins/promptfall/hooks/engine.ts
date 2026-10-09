@@ -80,11 +80,13 @@ export type GameHandle = {
   }
   apply: (event: PlayerEvent, at: number) => void
   canApply: () => boolean
+  /** This session holds the lease and its engine has paused: its refusals say paused. */
+  isPaused: () => boolean
   setOff: (off: boolean) => Promise<void>
   /** The player is using this session: take the lease if another session holds it. */
   claim: () => Promise<void>
   settled: () => Promise<void>
-  /** A market call after a flush, its delivery applied. Throws `not_primary` or `unreachable`. */
+  /** A market call after a flush, its delivery applied. Throws `not_primary`, `paused` or `unreachable`. */
   trade: <R extends MarketResult>(fn: TradeCall<R>) => Promise<R>
   /** Flushes, then applies what `account()` delivers. Throws `unreachable` during an outage. */
   sync: () => Promise<void>
@@ -128,6 +130,8 @@ export const OLD_VERSION_NOTICE =
   "Promptfall: this machine's data is from an older version, reset it in /promptfall account"
 export const RETRYING_NOTICE = 'Promptfall: server unreachable, retrying'
 export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
+/** A paused primary's refusal, on every surface: the band's notice says why. */
+export const PAUSED_LINE = 'Promptfall is paused'
 
 /** How long the sim keeps ticking and buffering after the first failure. */
 export const OUTAGE_BUFFER_MS = 120_000
@@ -458,12 +462,12 @@ export class GameEngine {
   // Market and account
 
   trade<R extends MarketResult>(fn: TradeCall<R>): Promise<R> {
-    if (this.paused !== null) return Promise.reject(new Error('not_primary'))
+    if (this.paused !== null) return Promise.reject(new Error('paused'))
     return this.lock(async () => {
       if (this.outage) throw new Error('unreachable')
       await this.doFlush()
       if (this.outage) throw new Error('unreachable')
-      if (this.paused !== null) throw new Error('not_primary')
+      if (this.paused !== null) throw new Error('paused')
       const token = this.token
       if (!token) throw new Error('not_primary')
       let r: R
