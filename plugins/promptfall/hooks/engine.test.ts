@@ -763,20 +763,64 @@ test('a stopped engine caught in a cursor-behind loop stops looping', async () =
   expect(client.bootstraps).toBe(1)
 })
 
-test("a promotion's bootstrap delivery does not toast", async () => {
+test('a bootstrap hands on only the events past the cursor the last primary showed', async () => {
+  const a = setup()
+  await a.engine.start()
+  const account = a.engine.accountId() ?? ''
+  await a.ledger.host.credit(account, 40, 'gift')
+  // The primary receives the gift unflushed and toasts it.
+  await a.engine.sync()
+  await a.engine.settled()
+  expect(a.effects).toContain('gold')
+  expect(await a.kv.get('deviceToken:shown')).toEqual({ account, cursor: 1 })
+  // A sale fills before anyone has received it; then another session takes over.
+  await a.ledger.host.credit(account, 30, 'sale')
+  const promoted = setup(a.kv)
+  await promoted.engine.start()
+  expect(gold(promoted.engine.state())).toBe(70)
+  expect(promoted.effects.filter((k) => k === 'gold')).toHaveLength(1)
+  expect(promoted.patches.some((p) => p.view)).toBe(true)
+})
+
+test('a start with nothing shown hands the whole delivery on', async () => {
   const a = setup()
   await a.engine.start()
   await a.ledger.host.credit(a.engine.accountId() ?? '', 40, 'gift')
-  // A promotion: the session's previous primary already toasted what the delivery holds.
-  const promoted = setup(a.kv)
-  await promoted.engine.start({ promotion: true })
-  expect(gold(promoted.engine.state())).toBe(40)
-  expect(promoted.effects).toEqual([])
-  expect(promoted.patches.some((p) => p.view)).toBe(true)
-  // A session's first start hands the same delivery on, so it toasts.
+  await a.kv.delete('deviceToken:shown')
   const first = setup(a.kv)
   await first.engine.start()
   expect(first.effects).toContain('gold')
+})
+
+test('a shown cursor of another account is ignored', async () => {
+  const a = setup()
+  await a.engine.start()
+  await a.ledger.host.credit(a.engine.accountId() ?? '', 40, 'gift')
+  await a.kv.set('deviceToken:shown', { account: 'other', cursor: 99 })
+  const next = setup(a.kv)
+  await next.engine.start()
+  expect(next.effects).toContain('gold')
+})
+
+test('a stopped engine records nothing as shown', async () => {
+  const { engine, client, ledger, kv, at } = setup()
+  await engine.start()
+  await engine.settled()
+  const before = await kv.get('deviceToken:shown')
+  engine.apply({ t: 'tick' }, at())
+  // The server holds gold the engine has not seen: the submit answers cursor_behind with it.
+  await ledger.host.credit(engine.accountId() ?? '', 99, 'behind')
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  engine.stop()
+  release()
+  await flushed
+  await engine.settled()
+  expect(await kv.get('deviceToken:shown')).toEqual(before)
 })
 
 // ---------------------------------------------------------------------------

@@ -523,7 +523,7 @@ class GameSession implements GameHandle {
   async claim(): Promise<void> {
     if (this.role === 'primary') return
     await this.followSetting()
-    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary(true)
+    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
   }
 
   /**
@@ -534,7 +534,9 @@ class GameSession implements GameHandle {
     if (this.role !== 'primary') {
       await this.followSetting()
       if (await claim(this.kv, this.owner, await this.io.now())) {
-        void this.becomePrimary(true)
+        // Not awaited, so nothing reports a rejection: the engine's start rides out a failed
+        // bootstrap itself, and a failed publish or poll start leaves the next one to try.
+        this.becomePrimary().catch(() => undefined)
         // The promotion's start is queued on its engine's lock by now.
         void this.engine.idle().then(() => this.apply({ t: 'rest' }, at))
         return
@@ -572,10 +574,9 @@ class GameSession implements GameHandle {
     this.engine.apply({ t: 'tick' }, await this.io.now())
   }
 
-  /** `promotion`: this session was secondary, so another primary already toasted what the bootstrap delivers. */
-  private async becomePrimary(promotion = false): Promise<void> {
+  private async becomePrimary(): Promise<void> {
     this.role = 'primary'
-    await this.engine.start({ promotion })
+    await this.engine.start()
     await this.io.publish({ mode: this.mode() })
     await this.poller.start()
     if (this.firstRun) {
@@ -602,7 +603,7 @@ class GameSession implements GameHandle {
   private async renew(): Promise<void> {
     if (this.role === 'secondary') await this.followSetting()
     const ok = await acquire(this.kv, this.owner, await this.io.now())
-    if (ok && this.role === 'secondary') await this.becomePrimary(true)
+    if (ok && this.role === 'secondary') await this.becomePrimary()
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
     else if (!ok) await this.refresh()
   }

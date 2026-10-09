@@ -39,6 +39,13 @@ import {
 import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView, tradeName } from './view'
 
+/** The cursor `shown` records for `account`, or 0 when it records none or another account's. */
+function shownThrough(shown: unknown, account: string): number {
+  if (typeof shown !== 'object' || shown === null) return 0
+  const { account: of, cursor } = shown as { account?: unknown; cursor?: unknown }
+  return of === account && typeof cursor === 'number' ? cursor : 0
+}
+
 export type EnginePublish = (patch: Partial<PluginState['promptfall']>) => Promise<void>
 
 export type EngineDeps = {
@@ -172,6 +179,8 @@ export class GameEngine {
   private chain: Promise<unknown> = Promise.resolve()
   private held = 0
   private queue: Promise<void> = Promise.resolve()
+  /** The shown cursor's writes, in order. */
+  private shownWrite: Promise<void> = Promise.resolve()
   private noticeGen = 0
   private outageGen = 0
 
@@ -179,6 +188,14 @@ export class GameEngine {
 
   private get tokenKey(): string {
     return this.deps.tokenKey ?? 'deviceToken'
+  }
+
+  /**
+   * Where the cursor this account's events have been handed on through is kept, beside the token:
+   * every session's primary reads it, so a handover neither repeats nor silences a toast.
+   */
+  private get shownKey(): string {
+    return `${this.tokenKey}:shown`
   }
 
   /** Runs `fn` under the lock: every server call goes through here. */
@@ -196,15 +213,14 @@ export class GameEngine {
 
   /**
    * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries.
-   * A promotion applies the bootstrap's delivery without handing its effects on: the session's
-   * previous primary already toasted those events.
+   * The bootstrap's delivery hands on only the events past the cursor a primary of this account
+   * has shown: what one already toasted does not toast again, and what nobody saw still does.
    */
-  start(options: { promotion?: boolean } = {}): Promise<void> {
-    const promotion = options.promotion ?? false
-    return this.lock(() => this.doStart(promotion))
+  start(): Promise<void> {
+    return this.lock(() => this.doStart())
   }
 
-  private async doStart(promotion = false): Promise<void> {
+  private async doStart(): Promise<void> {
     const stored = await this.deps.kv.get(this.tokenKey)
     const token = typeof stored === 'string' ? stored : null
     let boot: Awaited<ReturnType<ServerClient['bootstrap']>>
@@ -212,7 +228,7 @@ export class GameEngine {
       boot = await this.deps.client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
     } catch {
       if (this.stopped) return
-      await this.enterOutage(() => this.doStart(promotion))
+      await this.enterOutage(() => this.doStart())
       return
     }
     // Replaced (a reset or a switch) while the bootstrap was in flight: write nothing.
@@ -244,7 +260,8 @@ export class GameEngine {
       this.paused = null
       void this.publish({ mode: 'primary', notice: null })
     }
-    this.receive(boot.delivery, false, !promotion)
+    const shown = await this.deps.kv.get(this.shownKey)
+    this.receive(boot.delivery, false, shownThrough(shown, boot.account.accountId))
     await this.publish({ view: this.view() })
     // Only the minted account's first view says firstRun; every later view says no.
     this.firstRun = false
@@ -423,20 +440,20 @@ export class GameEngine {
 
   /**
    * Applies the delivered events not seen yet, then re-steps what is in flight
-   * and buffered on top. Called only under the lock. `handOn` false applies the
-   * events without handing their effects on, so they never toast.
+   * and buffered on top. Called only under the lock. The effects of events at or
+   * before `shownThrough` are not handed on: a primary already toasted them.
    */
-  private receive(delivery: Delivery, publish = true, handOn = true): void {
+  private receive(delivery: Delivery, publish = true, shownThrough = 0): void {
     const fresh = delivery.events.filter((e) => e.n > this.cursor).sort((a, b) => a.n - b.n)
     const last = fresh.at(-1)?.n ?? 0
     this.cursor = Math.max(this.cursor, delivery.cursor, last)
     if (fresh.length === 0 || !this.committed) return
     const effects: Effect[] = []
     let s = replay(this.committed, this.pending).state
-    for (const { event } of fresh) {
+    for (const { n, event } of fresh) {
       const r = step(s, event)
       s = r.state
-      effects.push(...r.effects)
+      if (n > shownThrough) effects.push(...r.effects)
       this.pending.push(event)
     }
     const restep = (events: TimedEvent[]) => {
@@ -452,12 +469,23 @@ export class GameEngine {
     }
     restep(this.buffer)
     this.local = s
-    // A stopped engine's effects never toast.
+    // A stopped engine's effects never toast, and it records nothing as shown.
     if (this.stopped) return
-    if (!publish && (effects.length === 0 || !handOn)) return
+    this.recordShown()
+    if (!publish && effects.length === 0) return
     const view = this.view()
     if (publish) void this.publish({ view })
-    if (handOn) this.deps.onEffects(effects, undefined, view)
+    this.deps.onEffects(effects, undefined, view)
+  }
+
+  /** Records that this account's events have been handed on through the cursor. */
+  private recordShown(): void {
+    const account = this.account
+    if (account === null) return
+    const value = { account, cursor: this.cursor }
+    this.shownWrite = this.shownWrite
+      .then(() => this.deps.kv.set(this.shownKey, value))
+      .catch(() => undefined)
   }
 
   // ---------------------------------------------------------------------------
@@ -634,7 +662,7 @@ export class GameEngine {
 
   /** Resolves once every publish queued so far has landed. */
   settled(): Promise<void> {
-    return this.queue
+    return this.queue.then(() => this.shownWrite)
   }
 
   /** Resolves once every locked operation queued so far has ended. */
