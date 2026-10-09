@@ -1,10 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
+import { WORLD_DEFAULT } from '../state'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
 import { effectAt, stageAt } from './model'
 import { stage } from './scenarios'
+import { stagedState } from './staged'
 import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
 import {
@@ -26,7 +28,10 @@ function svg(effects: Effect[] = [], at = NOW, opts: Opts = { smil: true, motion
   const v = wave()
   t.observe(v, NOW)
   t.onEffects(effects, NOW)
-  const model = stageAt(v, t, at, BOX, { compact: false, motion: opts.motion })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: opts.motion,
+  })
   return renderSvg(model, t.active(at), { ...opts, now: at, width: 960 })
 }
 
@@ -136,7 +141,10 @@ test('a drop still running after its enemy dissolved stays in a redraw', () => {
   t.observe(gone, NOW + 10)
   // Past the dissolve, inside the drop.
   const at = NOW + 750
-  const model = stageAt(gone, t, at, BOX, { compact: false, motion: 'full' })
+  const model = stageAt(stagedState(gone, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
   expect(model.drops).toHaveLength(1)
   const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
   expect(s).toMatch(/values="1;1;0"/)
@@ -150,7 +158,10 @@ test('a hero flashing at a redraw keeps its rarity colour under the flash', () =
   const flash = t.active(NOW).find((m) => m.actor === 'h2' && m.kind === 'flash')
   if (!flash) throw new Error('no flash')
   const at = flash.from + 10
-  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full' })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
   const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
   const rare = `#${(RARITY_RGB.rare ?? 0).toString(16).padStart(6, '0')}`
   expect(s).toContain(`color="${rare}"`)
@@ -228,7 +239,11 @@ test('an action that starts after the next redraw carries none of its frames', (
     NOW,
   )
   const moving = NOW + WINDUP_HOLD_MS
-  const model = stageAt(v, t, moving, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, moving), t, moving, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
   const svg = renderSvg(model, t.active(moving), { ...SMIL, now: moving })
   const f = knightHi.frames
   if (!f) throw new Error('the knight has no frames')
@@ -281,7 +296,11 @@ test('in the B half of a second, or during a hit, the 1.5x SMIL Svg defines no d
   const v = wave()
   t.observe(v, NOW)
   const at = NOW + 700 // the second half of the bob's clock: every actor in idle B
-  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
   expect(model.actors.every((a) => a.pose === 'idle_b')).toBe(true)
   const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
   for (const a of model.actors) expect(svg).not.toContain(defOf(a.art, a.raritySlot))
@@ -306,7 +325,11 @@ test('without SMIL, a hero in its hit frame carries its idle rarity colour under
     NOW,
   )
   const at = NOW + 150
-  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
   const svg = renderSvg(model, t.active(at), { ...SMIL, smil: false, now: at })
   const common = `#${(RARITY_RGB.common ?? 0).toString(16).padStart(6, '0')}`
   expect(svg).toContain(`color="${common}"`)
@@ -326,7 +349,11 @@ test('under SMIL an effect draws under the numbers, as on the pixel surfaces', (
     NOW,
   )
   const at = NOW + 500
-  const model = stageAt(v, t, at, BOX, { compact: false, motion: 'full', scale: HIRES_SCALE })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
   const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
   const burst = svg.indexOf(`href="#${''}`, svg.indexOf('values="1;1" begin'))
   expect(svg.indexOf('>42</text>')).toBeGreaterThan(
@@ -344,7 +371,11 @@ test('a backdrop is one def, used under the actors in place of the ground strip;
   const t = new StageTimeline()
   const v = wave()
   t.observe(v, NOW)
-  const base = stageAt(v, t, NOW, BOX, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  const base = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
+    compact: false,
+    motion: 'still',
+    scale: HIRES_SCALE,
+  })
   const idx = new Uint8Array(240 * 51).fill(1)
   for (let x = 0; x < 240; x++) idx[50 * 240 + x] = 2
   const backdrop = { width: 240, height: 51, palette: [0, 0x203040, 0x506070], pixels: encode(idx) }

@@ -571,7 +571,7 @@ export function svgWithFallback(
 
 /**
  * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the 1.5x model,
- * falling back to the 1x one over the cap.
+ * falling back to the 1x one over the cap. `view` is the staged state at `now`.
  */
 export function stageSvg(
   view: GameView,

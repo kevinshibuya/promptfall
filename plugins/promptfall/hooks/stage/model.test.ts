@@ -1,10 +1,13 @@
 import { expect, test } from 'claude-code/testing'
+import type { GameView, WorldState } from '../../types'
 import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { backdropFor, spriteFor } from '../sprites/index'
+import { WORLD_DEFAULT } from '../state'
 import type { Effect } from '../vendor/sim.js'
 import { composeFrame } from './compose'
-import { boss, wave } from './fixtures'
+import { boss, wave, worldBoss } from './fixtures'
 import { lungeOffset, type StageActor, stageAt } from './model'
+import { stagedState } from './staged'
 import { StageTimeline } from './timeline'
 import {
   ACTOR_EDGE,
@@ -31,7 +34,7 @@ function at(view = wave(), effects: Effect[] = [], now = NOW, box = BOX, opts: O
   t.observe(view, NOW)
   // An attack holds its wind-up before it moves: start it a hold early, so it moves at NOW.
   t.onEffects(effects, effects.some((e) => e.k === 'act') ? NOW - WINDUP_HOLD_MS : NOW)
-  return stageAt(view, t, now, box, opts)
+  return stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts)
 }
 
 const actor = (actors: StageActor[], key: string) => {
@@ -109,6 +112,34 @@ test('a fallen hero has its palette halved per channel', () => {
       (((a >> 16) & 0xff) >> 1) * 0x10000 + (((a >> 8) & 0xff) >> 1) * 0x100 + ((a & 0xff) >> 1),
     )
   })
+})
+
+test('a hero struck dead stands, flashes and keeps his colours until the blow lands, then dims', () => {
+  const struck = (hp: number): GameView => ({
+    ...wave(),
+    heroes: wave().heroes.map((h) => (h.id === 'h1' ? { ...h, hp, alive: hp > 0 } : h)),
+  })
+  const t = new StageTimeline()
+  t.observe(struck(7), NOW - 1)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'e1', target: 'h1', amount: 20 },
+    ],
+    NOW,
+  )
+  const impact = NOW + WINDUP_HOLD_MS + LUNGE_MS / 2
+  // The sim has the hero dead from the tick on.
+  const view = struck(0)
+  t.observe(view, NOW)
+  const hero = (now: number) =>
+    actor(stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, BOX, STILL).actors, 'h1')
+  expect(hero(impact - 1)).toMatchObject({ fallen: false, flashing: false })
+  expect(hero(impact)).toMatchObject({ fallen: true, flashing: false, pose: 'idle' })
+  const before = stageAt(stagedState(view, WORLD_DEFAULT, t, impact - 1), t, impact - 1, BOX, STILL)
+  expect(before.alt).toContain('Aldric L5,')
+  const after = stageAt(stagedState(view, WORLD_DEFAULT, t, impact), t, impact, BOX, STILL)
+  expect(after.alt).toContain('Aldric L5 down')
 })
 
 test('the compact box uses compact art, the compact pitch and no edge', () => {
@@ -328,4 +359,60 @@ test('the backdrop is the zone painting at the stage scale, and none on the comp
   expect(hires.backdrop).toBe(backdropFor(1, 1.5))
   const compact = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
   expect(compact.backdrop).toBe(null)
+})
+
+test('a world boss at an emptied bar stands whole until the server disengages it, then dissolves', () => {
+  const full: Opts = { compact: false, motion: 'full' }
+  // The Promptwyrm at 100 HP in the poll, none of this party's damage committed.
+  const world: WorldState = {
+    ...WORLD_DEFAULT,
+    snapshot: {
+      serverNow: NOW,
+      speed: 1,
+      online: 1,
+      zones: [],
+      here: [],
+      boss: {
+        bossId: 'wb1',
+        name: 'The Promptwyrm',
+        glyph: 'W',
+        maxHp: 90_000,
+        hp: 100,
+        spawnedAt: NOW - 3_600_000,
+        endsAt: NOW + 660_000,
+        yours: 0,
+      },
+      chat: [],
+      flags: {},
+    },
+    committedDealt: { bossId: 'wb1', dealt: 0 },
+  }
+  const t = new StageTimeline()
+  t.observe(worldBoss(), NOW - 1)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e7', amount: 100 },
+    ],
+    NOW - WINDUP_HOLD_MS,
+  )
+  const impact =
+    t.active(NOW).find((m) => m.kind === 'number' && m.actor === 'e7')?.from ?? Number.NaN
+  const engaged: GameView = {
+    ...worldBoss(),
+    boss: { bossId: 'wb1', name: 'The Promptwyrm', glyph: '☠', dealt: 100 },
+  }
+  t.observe(engaged, NOW)
+  const emptied = stagedState(engaged, world, t, impact)
+  expect(emptied.enemies[0]?.hp).toBe(0)
+  expect(actor(stageAt(emptied, t, impact, BOX, full).actors, 'e7').alpha).toBe(1)
+  // The server disengages it: it dissolves from there.
+  const gone: GameView = { ...worldBoss(), enemies: [], boss: null }
+  t.observe(gone, impact)
+  const dissolve = t.active(impact).find((m) => m.actor === 'e7' && m.kind === 'dissolve')
+  expect(dissolve).toBeDefined()
+  const mid = ((dissolve?.from ?? 0) + (dissolve?.until ?? 0)) / 2
+  const fading = actor(stageAt(stagedState(gone, world, t, mid), t, mid, BOX, full).actors, 'e7')
+  expect(fading.alpha).toBeGreaterThan(0)
+  expect(fading.alpha).toBeLessThan(1)
 })

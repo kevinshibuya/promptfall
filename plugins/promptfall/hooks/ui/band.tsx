@@ -7,6 +7,7 @@ import { MessageLog } from '../stage/log'
 import { bandCells, bandFrame, bandKey } from '../stage/loop'
 import { altText } from '../stage/model'
 import { svgFit } from '../stage/playfield'
+import { stagedState } from '../stage/staged'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
@@ -120,13 +121,17 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // the desktop (rung a′), a row of their own on VS Code and mobile, untested there (rung c).
     const hiddenKeys = terminal || e.surface === 'desktop'
     const extra: 0 | 1 = hiddenKeys ? 0 : 1
-    if (party) timeline.observe(view, now)
+    // Every tab: the strip's enemy window reads the staged state the timeline holds.
+    timeline.observe(view, now)
     const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
+    // While the probe is pending, the verdict the last session recorded, else the half-block
+    // rules: from the second session on the band keeps its height when the probe lands.
+    const laidOut = rendererNow === 'unknown' ? (settings.probed ?? 'raster') : rendererNow
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
       extra,
       minRows: party ? timeline.minRowsAt(view, now) : undefined,
-      scalable: rendererNow === 'image',
+      scalable: laidOut === 'image',
     })
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
@@ -217,10 +222,12 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     if (terminal && picture) {
       const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
       const key = bandKey(box)
+      // The stage and its alt draw the staged state, as everywhere else.
+      const shown = layout.box ? stagedState(view, world, timeline, now) : view
       let element = null
       if (picture.renderer === 'raster' && 'Raster' in els) {
         const { Raster } = els
-        const { cells } = bandCells(view, timeline, now, layout, settings.motion, box, scene)
+        const { cells } = bandCells(shown, timeline, now, layout, settings.motion, box, scene)
         element = <Raster key={key} columns={box.columns} rows={box.rows} cells={cells} />
       } else if ('Image' in els) {
         const { Image } = els
@@ -228,14 +235,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         // sent, the loop's next frame a beat away; anything new composes the first frame here.
         const source =
           loop?.stageSource(key, layout, tab) ??
-          bandFrame(view, timeline, now, layout, settings.motion, box, scene)
+          bandFrame(shown, timeline, now, layout, settings.motion, box, scene)
         element = (
           <Image
             key={key}
             source={source}
             columns={box.columns}
             rows={box.rows}
-            alt={party ? `${altText(view)}\n${scene.alt}` : scene.alt}
+            alt={party ? `${altText(shown)}\n${scene.alt}` : scene.alt}
           />
         )
       }
@@ -287,7 +294,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
                 (error: unknown) => String(error),
               )
               const verdict = probeVerdict(deny)
-              if (verdict) await update($, rendererAtom, () => verdict)
+              if (verdict === null) return
+              await update($, rendererAtom, () => verdict)
+              // For the next session's band while its own probe is pending; the player's choice stays.
+              const key = `promptfall:${SETTINGS_KEY}`
+              await $.store.set(key, { ...parseSettings(await $.store.get(key)), probed: verdict })
             })()
           })
         }
@@ -310,13 +321,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     }
 
     // The stage: an element sized to the layout's box, its first frame drawn here so a redraw
-    // is never blank; the loop blits every frame after it.
+    // is never blank; the loop blits every frame after it. It draws the staged state.
     const box = layout.box
+    const staged = box ? stagedState(view, world, timeline, now) : view
     if (box && !terminal && 'Svg' in els) {
       // The band's width, its share of the shell and line drawn around the stage; on a short band
       // the whole stage scales down to the rows the strip leaves, centred on the shell (ADR 0004).
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
-      const source = stageSvg(view, timeline, now, box, {
+      const source = stageSvg(staged, timeline, now, box, {
         smil: SVG_SMIL,
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
@@ -325,7 +337,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       })
       const { Svg } = els
       stage = (
-        <Svg key="stage" source={source} alt={altText(view)} isInteractive={SVG_INTERACTIVE} />
+        <Svg key="stage" source={source} alt={altText(staged)} isInteractive={SVG_INTERACTIVE} />
       )
     } else if (box && terminal && renderer === 'unknown') {
       // Empty rows while the probe decides; a known renderer drew the band as one picture above.

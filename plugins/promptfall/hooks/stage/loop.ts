@@ -4,6 +4,7 @@
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
+import { WORLD_DEFAULT } from '../state'
 import { stripScene } from '../ui/strip'
 import type { Scene } from '../windows/kit'
 import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
@@ -15,6 +16,7 @@ import type { MessageLog } from './log'
 import { type StageModel, type StageNumber, stageAt } from './model'
 import { composeBand, composeBandCells, headsOf } from './playfield'
 import { encodeRaster } from './raster'
+import { stagedState } from './staged'
 import type { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
@@ -100,7 +102,7 @@ function same(a: StageSite, b: StageSite): boolean {
   )
 }
 
-/** The pixels for a stage frame, encoded for its element. */
+/** The pixels for a stage frame, encoded for its element; `view` is the staged state at `now`. */
 export function stageFrame(
   view: GameView,
   timeline: StageTimeline,
@@ -392,9 +394,10 @@ export class StageLoop {
     // A site without a band (the loop's own tests) draws the stage alone.
     const drawn = band ? band.box : !site.band ? cells : null
     if (drawn) {
+      const staged = stagedState(view, extras?.world ?? WORLD_DEFAULT, this.timeline, now)
       const actors = [
-        ...this.timeline.known().map((k) => k.id),
-        ...view.heroes.map((h) => `${h.id}:${h.alive}`),
+        ...staged.enemies.map((e) => e.id),
+        ...staged.heroes.map((h) => `${h.id}:${h.alive}`),
       ].join(',')
       if (this.fresh) {
         this.fresh = false
@@ -407,12 +410,12 @@ export class StageLoop {
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
         const frame = !band
-          ? stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+          ? stageFrame(staged, this.timeline, now, layout, site.renderer, settings.motion)
           : site.renderer === 'raster'
-            ? bandCells(view, this.timeline, now, layout, settings.motion, band.box, band.scene)
+            ? bandCells(staged, this.timeline, now, layout, settings.motion, band.box, band.scene)
             : {
                 source: bandFrame(
-                  view,
+                  staged,
                   this.timeline,
                   now,
                   layout,

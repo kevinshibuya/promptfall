@@ -10,6 +10,7 @@ export {
   type Delivery,
   type LinkPoll,
   type LinkStart,
+  MIN_CLIENT_VERSION,
   type ServerClient,
   type ServerConfig,
 } from './client'

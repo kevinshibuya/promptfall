@@ -6,7 +6,7 @@ import { bossInRebase, nextGridPoint } from './boss-in'
 import { startBots } from './bots'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
-import { parseFlags } from './flags'
+import { parseFlags, parsePlayerName } from './flags'
 import { nodeFetch } from './node-fetch'
 import { createFakeServer } from './server'
 
@@ -61,6 +61,14 @@ try {
   process.exit(2)
 }
 
+let playerName: string
+try {
+  playerName = parsePlayerName(values['player-name'])
+} catch (error) {
+  console.error(`promptfall fake: ${(error as Error).message}`)
+  process.exit(2)
+}
+
 const bossIn = values['boss-in'] === undefined ? null : positive('boss-in', values['boss-in'], true)
 
 const kv = new FileKeyValue(data)
@@ -85,7 +93,7 @@ const server = createFakeServer({
   flags,
   seedSource: () => randomInt(0, 2 ** 32),
   tokenSource: () => randomUUID(),
-  playerName: values['player-name'],
+  playerName,
   seed,
 })
 

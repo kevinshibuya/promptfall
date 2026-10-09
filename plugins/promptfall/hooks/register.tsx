@@ -5,7 +5,7 @@ import { commandSpec, registerCommand } from './command'
 import { CUE_ASSET, type Cue } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
-import { type ResolvedServer, resolveClient } from './server'
+import { type ResolvedServer, resolveClient, type SecondaryReads } from './server'
 import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
@@ -34,7 +34,6 @@ import type {
   LinkPoll,
   LinkStart,
   MarketResult,
-  ServerClient,
   Unauthorized,
   WorldSnapshot,
 } from './vendor/protocol.js'
@@ -192,7 +191,12 @@ class GameSession implements GameHandle {
         return io.publish({ world })
       },
       load: io.readWorld,
-      fetch: async (since) => this.server.client.world(await this.storedAuth(), since),
+      // A secondary's poll leaves the world boss to the primary.
+      fetch: async (since) =>
+        (this.role === 'primary' ? this.server.client : this.server.reads).world(
+          await this.storedAuth(),
+          since,
+        ),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
       // Only the primary toasts, the world boss included: two terminals never show the news twice.
@@ -257,7 +261,7 @@ class GameSession implements GameHandle {
 
   /** Points the session at a server: a fresh client and engine; the old engine stops. */
   private useServer(setting: string | null): void {
-    this.engine.stop()
+    void this.engine.stop()
     this.linkGen += 1
     this.orphanToken = null
     this.setting = setting
@@ -299,6 +303,10 @@ class GameSession implements GameHandle {
   /** What the band and the dialog show: off, then paused, then the lease role. */
   mode(): Mode {
     return this.off ? 'off' : this.engine.isPaused() ? 'paused' : this.role
+  }
+
+  isPaused(): boolean {
+    return this.role === 'primary' && this.engine.isPaused()
   }
 
   isPrimary(): boolean {
@@ -407,13 +415,16 @@ class GameSession implements GameHandle {
     matching: (itemId) => this.read((client, auth) => client.matchingOrders(auth, itemId)),
   }
 
-  /** A market read: through the engine when playing; with the stored token otherwise (reads write nothing). */
-  private async read<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<T> {
+  /**
+   * A market read: through the engine when playing, expiring what is due; with the stored token
+   * otherwise, through the reads that leave expiries to the primary.
+   */
+  private async read<T>(fn: (client: SecondaryReads, auth: Auth) => Promise<T>): Promise<T> {
     if (this.role === 'primary') return this.engine.call(fn)
     const token = await this.kv.get(this.server.tokenKey)
     if (typeof token !== 'string') throw new Error('not_started')
     try {
-      return await fn(this.server.client, { deviceToken: token })
+      return await fn(this.server.reads, { deviceToken: token })
     } catch {
       throw new Error('unreachable')
     }
@@ -469,7 +480,7 @@ class GameSession implements GameHandle {
   /** Deletes every Promptfall key but the lease, then starts over on the same server. */
   async reset(): Promise<void> {
     await this.claim()
-    this.engine.stop()
+    await this.engine.stop()
     const setting = this.setting
     for (const key of await this.kv.keys()) {
       if (key !== LEASE_KEY && key !== SETTINGS_KEY) await this.kv.delete(key)
@@ -508,10 +519,30 @@ class GameSession implements GameHandle {
     await this.pending
   }
 
+  /** Takes the lease if another session holds it, and waits for the promotion: the commands act on its engine. */
   async claim(): Promise<void> {
     if (this.role === 'primary') return
     await this.followSetting()
     if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+  }
+
+  /**
+   * The player's own prompt: it takes the lease without waiting for the promotion, so a hanging
+   * server holds nothing, and rests the party once this session's engine has started.
+   */
+  async prompt(at: number): Promise<void> {
+    if (this.role !== 'primary') {
+      await this.followSetting()
+      if (await claim(this.kv, this.owner, await this.io.now())) {
+        // Not awaited, so nothing reports a rejection: the engine's start rides out a failed
+        // bootstrap itself, and a failed publish or poll start leaves the next one to try.
+        this.becomePrimary().catch(() => undefined)
+        // The promotion's start is queued on its engine's lock by now.
+        void this.engine.idle().then(() => this.apply({ t: 'rest' }, at))
+        return
+      }
+    }
+    this.apply({ t: 'rest' }, at)
   }
 
   /** The server setting is machine-wide: a session that is not primary follows a switch made elsewhere. */
@@ -558,9 +589,10 @@ class GameSession implements GameHandle {
 
   private async becomeSecondary(): Promise<void> {
     if (this.role === 'primary') {
-      // Its retry timers and publishes must not outlive the lease.
-      this.engine.stop()
+      // Its retry timers, publishes and notice must not outlive the lease.
+      const discarded = this.engine
       this.engine = this.makeEngine()
+      await discarded.stop()
     }
     this.role = 'secondary'
     await this.io.publish({ mode: this.mode() })
@@ -623,6 +655,9 @@ class GameSession implements GameHandle {
     // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
     const now = at ?? this.lastAt
     const cadence = this.cadence || TURN_CADENCE_MS
+    // A monster the tick brought acts in it: the timeline knows it before the effects play, not
+    // only from the next redraw (the desktop's is a round away).
+    if (view) this.stage.timeline.admit(view, now)
     const starts = this.stage.timeline.onEffects(effects, now, cadence)
     if (view) {
       this.stage.gauges.onTick(view, now, cadence, this.stage.timeline)
@@ -869,8 +904,7 @@ export const register: Register = (on) => {
     // The player's own prompts rest the party: typed here, or sent through the Remote Control bridge.
     if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
       // The player is here: this session plays, even if another one took the lease.
-      await game?.claim()
-      game?.apply({ t: 'rest' }, at)
+      await game?.prompt(at)
     }
     return next(e)
   })

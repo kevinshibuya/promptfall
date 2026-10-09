@@ -1,6 +1,6 @@
 import { atom, type On, read, update } from 'claude-code'
 import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
-import type { GameHandle } from './engine'
+import { type GameHandle, PAUSED_LINE } from './engine'
 import { runSandbox, SANDBOX_PINS_SERVER } from './sandbox'
 import {
   BOARDS_DEFAULT,
@@ -115,6 +115,7 @@ export function registerCommand(
     if (arg === 'farm') {
       const view = await read($, viewAtom)
       const running = game()
+      if (running?.isPaused()) return { text: PAUSED_LINE }
       if (!view || !running?.canApply())
         return { text: 'Promptfall is not playing in this session' }
       running.apply({ t: 'set_farm', on: !view.farm }, await $.clock.now())

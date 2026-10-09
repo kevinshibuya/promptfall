@@ -1,4 +1,5 @@
 import type { GameView, WorldState } from '../../types'
+import { PAUSED_LINE } from '../engine'
 import {
   CHAT_BUCKET_CAPACITY,
   CHAT_MAX_CHARS,
@@ -34,6 +35,8 @@ export function refusalText(reason: MarketRefusal, remaining?: string): string {
       return 'Not enough gold'
     case 'no_space':
       return 'No free slot'
+    case 'buyer_full':
+      return "The buyer's inventory is full"
     case 'in_cooldown':
       return remaining ? `Tradeable in ${remaining}` : 'Not tradeable yet'
     default:
@@ -64,6 +67,7 @@ export function chatRefusalText(reason: ChatRefusal): string {
 /** A thrown market call, in words. */
 export function errorText(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
+  if (message === 'paused') return PAUSED_LINE
   if (message === 'not_primary' || message === 'not_started') return 'Playing in another session'
   if (message === 'unreachable') return 'Server unreachable'
   return message

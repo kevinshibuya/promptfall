@@ -1,4 +1,4 @@
-import type { LedgerFlag } from '@promptfall/ledger'
+import { type LedgerFlag, PLAYER_NAME_MAX } from '@promptfall/ledger'
 
 export const LEDGER_FLAGS: readonly LedgerFlag[] = [
   'market.enabled',
@@ -24,4 +24,12 @@ export function parseFlags(values: string[]): Partial<Record<LedgerFlag, boolean
     out[flag] = value === 'true'
   }
   return out
+}
+
+/** `--player-name`, the login every link approves as: 1 to 64 characters, as the wire takes it. */
+export function parsePlayerName(raw: string): string {
+  if (raw.length < 1 || raw.length > PLAYER_NAME_MAX) {
+    throw new Error(`--player-name wants 1 to ${PLAYER_NAME_MAX} characters; got ${raw.length}`)
+  }
+  return raw
 }

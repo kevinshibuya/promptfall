@@ -9,7 +9,8 @@ const day = {
   restEveryTurns: 1,
 }
 
-describe('balance targets', () => {
+// A 40 hour run takes over 10 s: past vitest's 5 s default on a loaded machine.
+describe('balance targets', { timeout: 60_000 }, () => {
   it('an 8 hour day clears zone 1 and stalls at zone 2 or 3', () => {
     const r = runScenario({ ...day, hours: 8 })
     expect(r.highestZone).toBeGreaterThanOrEqual(2)

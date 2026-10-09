@@ -1,6 +1,7 @@
 import type { On } from 'claude-code'
-import { expect, type Mounted, mock, type TestBody, test } from 'claude-code/testing'
+import { expect, type Mounted, mock, type TestBody } from 'claude-code/testing'
 import type { GameView } from '../types'
+import { test } from './testing'
 import { paneText } from './ui/pane/testing'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
@@ -230,6 +231,8 @@ async function marketHarness(
     heroListing?: boolean
     /** The listed items carry two affixes, so a listing's detail is long. */
     affixed?: boolean
+    /** The bot's inventory has no free slot once its items are listed. */
+    botFull?: boolean
   } = {},
 ) {
   let now = 1_000_000
@@ -269,6 +272,7 @@ async function marketHarness(
         options.heroListing && spare
           ? [...botState.roster, { ...spare, id: 'hB', rarity: 'rare' as const }]
           : botState.roster,
+      ...(options.botFull ? { inventoryCap: 0 } : {}),
     },
     name: 'Brindle',
     linked: true,
@@ -423,6 +427,19 @@ test('the sell window lists matching orders with nets, then Set a price; a typed
   // An order accepted from the window fills it.
   const accept = (states.get('dialog') as { sell: { matching: { id: string }[] } }).sell.matching
   expect(accept.length).toBeGreaterThan(0)
+  await ui.unmount()
+})
+
+test('an order whose buyer has no free slot says the buyer is full', async ($, on) => {
+  const { player } = await marketHarness(on, { botFull: true })
+  const { ui } = await startOnTest($, on, player)
+  await ui.press({ key: 'row:iR' })
+  await hot(ui, 's')
+  expect(await paneText(ui)).toMatch(/300G, you get 285G/)
+  await ui.press({ key: 'menu:0' })
+  const text = await paneText(ui)
+  expect(text).toMatch(/The buyer's inventory is full/)
+  expect(text).not.toMatch(/No free slot/)
   await ui.unmount()
 })
 
@@ -815,7 +832,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'row:sound' })
     await ui.press({ key: 'row:motion' })
     await ui.press({ key: 'row:renderer' })
-    const next = { sound: true, motion: 'still', renderer: 'image' }
+    const next = { sound: true, motion: 'still', renderer: 'image', probed: null }
     expect(data.get('promptfall:settings')).toEqual(next)
     expect(states.get('settings')).toEqual(next)
     const after = await paneText(ui)
@@ -838,6 +855,7 @@ test('an Account press merges into the stored settings, not an older copy in thi
     sound: true,
     motion: 'still',
     renderer: 'auto',
+    probed: null,
   })
   await ui.unmount()
 })

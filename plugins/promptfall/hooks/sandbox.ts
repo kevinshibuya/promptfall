@@ -1,10 +1,13 @@
-import type { GameHandle } from './engine'
+import { type GameHandle, PAUSED_LINE } from './engine'
 import { content, RARITIES, type Rarity, type SandboxEvent } from './vendor/sim.js'
 
 export const SANDBOX_OFF = 'Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.'
 export const SANDBOX_PINS_SERVER =
   'The sandbox pins the server: Promptfall plays in-process while PROMPTFALL_SANDBOX=1'
 const NOT_PLAYING = 'Promptfall is not playing in this session'
+
+/** Why `game` takes no grant now: paused, or not this session's to play. */
+const notPlaying = (game: GameHandle) => (game.isPaused() ? PAUSED_LINE : NOT_PLAYING)
 
 type SandboxVerb = {
   verb: string
@@ -21,7 +24,7 @@ async function gold(game: GameHandle, args: string): Promise<string> {
     return 'Usage: /promptfall sandbox gold <n>'
   const host = game.host()
   const accountId = game.accountId()
-  if (!host || !accountId || !game.canApply()) return NOT_PLAYING
+  if (!host || !accountId || !game.canApply()) return notPlaying(game)
   await host.credit(accountId, n, 'sandbox')
   await game.sync()
   await game.settled()
@@ -107,7 +110,7 @@ async function grant(
 ): Promise<string | null> {
   const host = game.host()
   const accountId = game.accountId()
-  if (!host || !accountId || !game.canApply()) return NOT_PLAYING
+  if (!host || !accountId || !game.canApply()) return notPlaying(game)
   await game.sync()
   const outcome = await host.sandbox(accountId, event)
   if (outcome.ok) {
@@ -153,7 +156,7 @@ async function level(game: GameHandle, args: string): Promise<string> {
   if (words.length < 2 || !Number.isSafeInteger(n) || n < 1)
     return 'Usage: /promptfall sandbox level <hero> <n>'
   const view = await game.view()
-  if (!view) return NOT_PLAYING
+  if (!view) return notPlaying(game)
   const hero = pick('hero', 'Heroes', words.slice(0, -1).join(' '), view.roster)
   if (typeof hero === 'string') return hero
   const cap = isRarity(hero.rarity) ? content.rarity[hero.rarity].levelCap : n
@@ -202,7 +205,7 @@ async function worldboss(game: GameHandle, args: string): Promise<string> {
   const end = args.toLowerCase()
   if (end !== '' && end !== 'end') return 'Usage: /promptfall sandbox worldboss [end]'
   const host = game.host()
-  if (!host || !game.canApply()) return NOT_PLAYING
+  if (!host || !game.canApply()) return notPlaying(game)
   await game.sync()
   const outcome = end ? await host.settleBoss() : await host.spawnBoss()
   if (!outcome.ok) {

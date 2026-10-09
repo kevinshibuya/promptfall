@@ -1,60 +1,14 @@
-import type { On } from 'claude-code'
-import { expect, mock, type TestBody, test } from 'claude-code/testing'
-import type { GameView, WorldState } from '../types'
+import { expect } from 'claude-code/testing'
+import type { WorldState } from '../types'
+import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { bandKey, stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
 import { Ledger } from './vendor/ledger.js'
-import { BOSS_WINDOW_MS } from './vendor/protocol.js'
-import { content } from './vendor/sim.js'
+import { content, createInitialState } from './vendor/sim.js'
 import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
-
-const RUN = {
-  origin: { kind: 'composer' },
-  presentation: { isFullscreen: false, columns: 120 },
-} as const
-
-function harness(
-  on: On,
-  seed: Record<string, unknown> = {},
-  env: Record<string, string> = {},
-  now = 1_000_000,
-) {
-  const data = new Map<string, unknown>(Object.entries(seed))
-  const states = new Map<string, unknown>()
-  const opened: { id: string; title?: string }[] = []
-  const toasts: string[] = []
-  on('store.get', (_$, e) => ({ value: data.get(e.key) }))
-  on('store.set', (_$, e) => {
-    data.set(e.key, JSON.parse(JSON.stringify(e.value)))
-    return { value: undefined }
-  })
-  on('store.delete', (_$, e) => {
-    data.delete(e.key)
-    return { value: undefined }
-  })
-  on('store.keys', () => ({ value: [...data.keys()] }))
-  on('state.set', async (_$, e, next) => {
-    states.set(e.key, e.value)
-    return next(e)
-  })
-  on('session.start', (_$, e) => ({ cwd: e.cwd }))
-  // The sandbox switch reads the environment: unset unless a test turns the sandbox on.
-  mock.env(on, env)
-  on('ui.toast', (_$, e) => {
-    toasts.push(e.text)
-    return { value: undefined }
-  })
-  on('command.register', (_$, e) => ({ value: { command: e.name } }))
-  on('ui.open', (_$, e) => {
-    opened.push({ id: e.id, ...(e.title ? { title: e.title } : {}) })
-    return { value: { isPlaced: true } }
-  })
-  const clock = mock.clock(on, { now })
-  const view = () => states.get('view') as GameView
-  return { data, states, opened, toasts, clock, view }
-}
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
   const { states, clock } = harness(on)
@@ -111,6 +65,38 @@ test('/promptfall in a secondary session takes the lease', async ($, on) => {
   expect(states.get('mode')).toBe('primary')
 })
 
+/** A save from an older sim version under `prefix`: the session takes the lease and its engine pauses. */
+function oldSave(prefix: string): Record<string, unknown> {
+  return {
+    [`${prefix}deviceToken`]: 'token-1',
+    [`${prefix}pf:token:token-1`]: 'acct-1',
+    [`${prefix}pf:acct:acct-1:record`]: {
+      account: { accountId: 'acct-1', seed: 5, createdAt: 0, displayName: null, linked: null },
+      state: { ...createInitialState(5), v: 1 },
+      seq: 3,
+      refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      committed: [],
+    },
+  }
+}
+
+test('a paused primary answers farm and the sandbox verbs as paused, not as another session', async ($, on) => {
+  const { states } = harness(on, oldSave(SANDBOX_PREFIX), { PROMPTFALL_SANDBOX: '1' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('paused')
+  const zoneBoss = content.zones[0]?.boss ?? ''
+  const base = Object.values(content.itemBases)[0]?.id ?? ''
+  const verbs = ['farm', 'sandbox gold 100', `sandbox boss ${zoneBoss}`, `sandbox item ${base}`]
+  verbs.push('sandbox level Aria 5', 'sandbox zone 2', 'sandbox recruit', 'sandbox wipe')
+  verbs.push('sandbox worldboss')
+  for (const args of verbs) {
+    const r = await $.command.run({ ...RUN, command: 'promptfall', args })
+    expect({ args, text: r.text }).toEqual({ args, text: 'Promptfall is paused' })
+  }
+  expect(states.get('mode')).toBe('paused')
+})
+
 test('the settings commands write the store and the atom, and answer', async ($, on) => {
   const { data, states } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -120,7 +106,7 @@ test('the settings commands write the store and the atom, and answer', async ($,
   expect((await run('renderer raster')).text).toBe(
     'Renderer: raster (applies at the next session start)',
   )
-  const stored = { sound: true, motion: 'still', renderer: 'raster' }
+  const stored = { sound: true, motion: 'still', renderer: 'raster', probed: null }
   expect(data.get('promptfall:settings')).toEqual(stored)
   expect(states.get('settings')).toEqual(stored)
   expect((await run('sound off')).text).toBe('Sound off')
@@ -149,18 +135,6 @@ test('a settings command claims the lease, so this session is the one that plays
 
 // ---------------------------------------------------------------------------
 // The sandbox verbs, with the sandbox on. Each reads the view right after the command returns.
-
-const SANDBOX_ON = { PROMPTFALL_SANDBOX: '1' }
-/** The sandbox runs the world boss grid: past the first grid window, so no grid boss engages the party. */
-const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
-
-async function sandboxOn(on: On, $: Parameters<TestBody>[0], seed: Record<string, unknown> = {}) {
-  const h = harness(on, seed, SANDBOX_ON, PAST_GRID_BOSS)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const run = async (args: string) =>
-    (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
-  return { ...h, run }
-}
 
 test('sandbox boss treant moves the party to its zone and the next tick spawns it', async ($, on) => {
   const { run, view, clock } = await sandboxOn(on, $)
@@ -355,28 +329,6 @@ async function bandRaster(ui: Finder): Promise<Found | undefined> {
   const row = await ui.find({ key: 'row-band' })
   return ((row?.children ?? []) as Found[]).find((c) => c.type === 'Raster')
 }
-
-/** What the band's strip says: its Raster's cells as text, or the band Raster's strip rows. */
-async function stripText(ui: Finder): Promise<string> {
-  const band = await bandRaster(ui)
-  const strip = band ?? (await ui.find({ key: 'strip' }))
-  if (!strip) return ''
-  const lines = rasterCells(strip).map((row) => row.map((c) => c.ch).join(''))
-  return (band ? lines.slice(-STRIP_ROWS) : lines).join('\n')
-}
-
-const BAND = {
-  component: 'AbovePrompt',
-  requestId: 'band-test',
-  props: {
-    hasSurvey: false,
-    isWorking: false,
-    maxRows: 30,
-    bodyColumns: 150,
-    scroll: { offset: 0, bodyRows: 30 },
-    view: {},
-  },
-} as const
 
 test('sandbox worldboss engages the party in boss mode; worldboss end pays it and the boss is down', async ($, on) => {
   const { run, view, states, toasts } = await sandboxOn(on, $, {
@@ -687,13 +639,18 @@ test('in play, the strip’s hero HP trails the state until the hit lands, never
     return [...line.matchAll(/H\s+(\d+)/g)].map((m) => Number(m[1]))
   }
   let trailed = 0
+  // Each hero's state HP over the last two ticks: a heal still to land holds the strip at one.
+  const recent: number[][] = []
   for (let step = 0; step < 600; step++) {
     await clock.advance(50)
     const state = view().heroes.map((h) => h.hp)
+    recent.push(state)
+    if (recent.length > 80) recent.shift()
     const strip = await shown()
     if (strip.length !== state.length) continue
-    // Never below the state: the strip only holds back HP a hit has not yet taken on the stage.
-    for (const [i, hp] of strip.entries()) expect(hp).toBeGreaterThanOrEqual(state[i] ?? 0)
+    // Never below what the state was: the strip only holds back a hit or a heal not yet landed.
+    for (const [i, hp] of strip.entries())
+      expect(hp).toBeGreaterThanOrEqual(Math.min(...recent.map((s) => s[i] ?? 0)))
     if (strip.some((hp, i) => hp > (state[i] ?? 0))) trailed++
   }
   // Over 30 s of play some hit was ticked before it landed, and the strip waited for it.

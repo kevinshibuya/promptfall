@@ -12,9 +12,10 @@ Common grey to Legendary gold.
 
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
-Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at the next zone
-change, and the stage draws the party in the list's order. A new save starts with one Common hero
-of each class, three of them already in the party.
+Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
+the next zone boss kill or wipe, farm restarts and wipes in zone 1 included (on a fresh save,
+before the first kill, at once), and the stage draws the party in the list's order. A new save
+starts with one Common hero of each class, three of them already in the party.
 
 **Recruiting.** The Heroes tab's last row recruits a hero at the tavern for gold, at the odds the
 Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bosses less often,
@@ -29,7 +30,7 @@ fallen heroes get up at 30%.
 **Encounters and waves.** Each tool call Claude makes spawns an enemy into the encounter: at most
 three fight at once and up to ten more wait. When nobody is left to fight, the next enemy of the
 current wave walks in, so an idle session still plays. A zone is ten waves of one to three of its
-own enemies, and clearing a wave heals every hero 15%.
+own enemies, and clearing a wave heals every hero 15% and gets the fallen back up at 15%.
 
 **Action gauge and action queue.** Every hero and enemy has an action gauge that fills with
 battle time, faster with more speed, and a full gauge joins the action queue. Units act one at a
@@ -38,14 +39,14 @@ hits them all, the Archer shoots the weakest, and the White Mage attacks or heal
 ally. The party window shows each hero's gauge filling and turning gold when full, with ▶ beside
 the hero who is acting; enemies' gauges never show.
 
-**Zone bosses.** After the tenth wave the zone's boss takes the stage, and the stage grows taller
-for it. Beating it moves the party on to the next of twelve zones, from Greenmeadow Road to The
-Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a boss with its HP
+**Zone bosses.** After the tenth wave the zone's boss takes the stage, standing at its full size
+over the small party. Beating it moves the party on to the next of twelve zones, from Greenmeadow
+Road to The Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a boss with its HP
 percentage.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
-better drops and a chance of a recruit contract, separate from the zone's own boss. The stage
-grows for it too, less than for a zone boss.
+better drops and a chance of a recruit contract, separate from the zone's own boss. One that
+arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
 
 **Wipe.** When every hero falls, the party retreats one zone (never below zone 1) to wave 1 at
 full health, and nothing is lost. The combat log says so, and a toast names the zone it fell back
@@ -98,7 +99,9 @@ gold and a free slot, and a bought hero arrives at level 1.
 **Buy orders.** A buy order asks for a base type, a minimum rarity, at most one affix and a
 maximum price, with the gold held in escrow. The Orders tab's New buy order opens a form window
 to place one. A seller fills an order by choosing it in the sell window; an order fills once,
-expires after seven days, and cancelling it refunds the escrow in full.
+expires after seven days, and cancelling it refunds the escrow in full. An order names a real
+base and affix or is refused, and a fill the buyer has no free slot for is refused with "The
+buyer's inventory is full", leaving the order open.
 
 **Orders and returns.** The Orders tab shows the count waiting in returns, then your listings and
 your buy orders, and Enter on one asks to cancel it, saying what happens to the fee or the held
@@ -130,9 +133,12 @@ damage this week, your own rows in gold.
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
-percentage and time left, waves pause and tool calls spawn nothing. A wipe in boss mode heals the
-party in place with no retreat, and the boss itself drops nothing. It needs a server; the default
-in-process fake runs none.
+percentage and time left, the bar dropping as the party's hits land, waves pause and tool calls
+spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
+boss's time left. A wipe in boss mode empties
+every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
+needs a server; the default in-process fake runs none, and with the boss off the World tab's
+records row says so in place when it has room.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
@@ -142,9 +148,12 @@ reward, and the top three damage dealers of a kill get one bonus roll each. Each
 
 **The band.** The game draws in a band above the prompt with three tabs, Party, Loot and World,
 on the letter hotkeys `p`, `l` and `w`, and `c` collapses it. The Party tab is the stage over the
-strip; Loot and World are the strip alone. On short or narrow terminals the band drops to a
-compact stage beside one party window, then to a single row, and it hides while Claude asks a
-question.
+strip; Loot and World are the strip alone. The Party tab is 22 rows in every fight, the 17-row
+stage over the 5-row strip, and never more than Claude Code gives it. With fewer rows a terminal
+that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
+terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
+115 columns wide, the band drops to a compact stage beside one party window, then to a single row
+under 100 columns, and it hides while Claude asks a question.
 
 **The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
 field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
@@ -160,17 +169,31 @@ the desktop. The compact band is the same: its small stage and its party window 
 on the shell. Only the one-row collapsed band stays plain text.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
-the party on the right, side-on, on a ground strip coloured per zone. Actors bob between two idle
+the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a
+boss lands at its full size. Actors bob between two idle
 drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
-rising damage number, heals rise green, the dead dissolve and drops pop out. It is 17 rows in
-every fight, the party small on the zone's painting, so a boss lands at its full size. It draws inside the band's picture, as described
-under the playfield above.
+rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
+fights until the blow that kills him lands, then dims, and the party window's HP drops with each
+hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never
+changes height, the party small on the zone's painting, so a boss lands at its full size. A
+monster that steps on partway through a tick plays its first actions animated, on the desktop
+too. It draws inside the band's picture, as described under the playfield above. A terminal
+session asks which picture it can draw, and lays the band out with the last session's answer
+while it waits, so the band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
 come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
 the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox).
+and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The stage
+and every window draw the staged state, the fight as the stage has played it so far, so they never
+run ahead of the picture: a killed monster keeps its row until its death has played, a wiped hero
+falls on his blow and is up at full only once the field has cleared, a monster that leaves alive
+keeps its HP through its fade, the title
+stays on the wave or zone being watched until its last monster has dissolved, the backdrop changes
+zone only then, so a zone boss dies against its own painting, and the world boss bar drops as the
+party's hits land, the boss standing at an empty bar until the server lets it go. On the desktop, which redraws once
+a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
@@ -199,12 +222,19 @@ or `server local` points the machine at an HTTP server or back at the in-process
 its own account. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
-**Primary session.** One session per account plays; running a gameplay verb in another session
-makes that one the primary. Every other session draws read-only and says "playing in another
-session".
+**Primary session.** One session per account plays; running a gameplay verb or typing a prompt in
+another session makes that one the primary. A prompt goes through at once and the band catches up
+when the server answers. Every other session draws read-only and says "playing in another
+session"; on the in-process save it writes nothing either, so expired listings and the world boss
+wait for the primary. A primary that has paused (an update to install, a save to reset) answers
+trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
+what the old one already toasted, nor leaves out what arrived after the old one last looked.
 
-**Server status.** When the server stops answering, the band says "server unreachable, retrying"
-and play goes on for two minutes, then pauses until the server answers again.
+**Server status.** When the server stops answering or refuses a batch, the band says "server
+unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
+again. The first answer sends everything played during the outage at once. When the server runs a
+newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
+older game, it asks for a reset from the Account tab.
 
 ## Notifications and cues
 
@@ -215,9 +245,11 @@ for lack of room. Everyday toasts last four seconds and the weighty ones (a lege
 recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Routine combat,
-farming clears and chat never toast, the open pane holds toasts until it closes, and a first
-launch toasts a welcome that points at the Heroes tab.
+legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Toasts follow the
+game, not the stage, so a wipe toast can show up to one cadence before the last hero falls on the
+stage. A world boss already up when the session first polls toasts its arrival with no cue.
+Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
+and a first launch toasts a welcome that points at the Heroes tab.
 
 **Cues.** Four toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up and a
 world boss appearing. A burst plays each of its cues once, after its toasts. Only the primary

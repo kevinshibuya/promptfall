@@ -1,5 +1,6 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
+import { WORLD_DEFAULT } from '../state'
 import { accountPane, noViewPane } from '../ui/pane/account'
 import { chatPane } from '../ui/pane/chat'
 import {
@@ -36,6 +37,7 @@ import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
+import { stagedState } from './staged'
 import { renderSvg, stageSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
@@ -107,8 +109,11 @@ const withoutFront = (): GameView => {
 function staged(view: GameView, t: StageTimeline, box: Box, compact = false): Staged {
   const opts = { compact, motion: 'full' as const }
   return {
-    model: stageAt(view, t, NOW, box, opts),
-    hires: stageAt(view, t, NOW, box, { ...opts, scale: HIRES_SCALE }),
+    model: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, opts),
+    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, {
+      ...opts,
+      scale: HIRES_SCALE,
+    }),
     motions: t.active(NOW),
     now: NOW,
   }
@@ -300,7 +305,15 @@ function stripInput(
   const gauges = new GaugeTrack()
   const log = new MessageLog()
   const t0 = NOW - 1300
-  timeline.observe(view, t0 - 1)
+  // `view` is the tick's end: before it, every actor held the HP the burst's hits took too.
+  const taken = new Map<string, number>()
+  for (const e of effects)
+    if (e.k === 'hit') taken.set(e.target, (taken.get(e.target) ?? 0) + e.amount)
+  const hp = <A extends { id: string; hp: number }>(a: A): A => ({
+    ...a,
+    hp: a.hp + (taken.get(a.id) ?? 0),
+  })
+  timeline.observe({ ...view, heroes: view.heroes.map(hp), enemies: view.enemies.map(hp) }, t0 - 1)
   const starts = timeline.onEffects(effects, t0, 2000)
   timeline.observe(view, NOW)
   log.onEffects(effects, starts, view, t0, 2000, timeline)
