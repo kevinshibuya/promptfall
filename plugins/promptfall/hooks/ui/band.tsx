@@ -4,7 +4,7 @@ import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
-import { bandCells, bandFrame, bandKey, stageFrame, stageKey } from '../stage/loop'
+import { bandCells, bandFrame, bandKey } from '../stage/loop'
 import { altText } from '../stage/model'
 import { svgFit } from '../stage/playfield'
 import { stageSvg } from '../stage/svg'
@@ -26,8 +26,6 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
-import { windowKey, windowSource } from '../windows/image'
-import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
 import { STRIP_MAX_COLUMNS } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
@@ -229,7 +227,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         // As the stage's: a redraw of the site the loop is drawing reuses the picture it last
         // sent, the loop's next frame a beat away; anything new composes the first frame here.
         const source =
-          loop?.stageSource(key, layout) ??
+          loop?.stageSource(key, layout, tab) ??
           bandFrame(view, timeline, now, layout, settings.motion, box, scene)
         element = (
           <Image
@@ -267,7 +265,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     let renderer: 'raster' | 'image' | 'svg' | 'unknown' = 'svg'
     if (terminal && 'Raster' in els) {
       renderer = await read($, rendererAtom)
-      const { Raster, Image } = els
       if (renderer === 'unknown') {
         // Empty rows while the probe decides, so the band's height does not jump when it lands.
         strip = (
@@ -294,24 +291,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             })()
           })
         }
-      } else if (renderer === 'raster') {
-        strip = (
-          <Raster key="strip" columns={scene.columns} rows={scene.rows} cells={sceneCells(scene)} />
-        )
-      } else {
-        strip = (
-          <Box key="strip-windows" flexDirection="row">
-            {scene.windows.map((w) => (
-              <Image
-                key={windowKey(w)}
-                source={windowSource(w)}
-                columns={w.columns}
-                rows={w.rows}
-                alt={w.alt}
-              />
-            ))}
-          </Box>
-        )
       }
     } else if (!terminal && 'Svg' in els) {
       const { Svg } = els
@@ -348,65 +327,19 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       stage = (
         <Svg key="stage" source={source} alt={altText(view)} isInteractive={SVG_INTERACTIVE} />
       )
-    } else if (box && terminal && 'Raster' in els) {
-      const { Raster, Image } = els
-      if (renderer === 'unknown') {
-        stage = (
-          <Box key="stage-empty" flexDirection="column">
-            {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
-              <Text key={`stage-empty-${i}`}> </Text>
-            ))}
-          </Box>
-        )
-      } else {
-        const cells = cellsOf(layout) ?? box
-        // A redraw of the site the loop is drawing reuses the picture it last sent: the engine
-        // sends nothing for a source it already drew, and the loop's next frame is at most a beat
-        // away. A new size or layout, a stage drawn again, or no loop yet, composes once.
-        const reused =
-          renderer === 'image' ? (loop?.stageSource(stageKey(cells), layout) ?? null) : null
-        const frame =
-          reused !== null
-            ? { source: reused }
-            : stageFrame(
-                view,
-                timeline,
-                now,
-                layout,
-                renderer === 'raster' ? 'raster' : 'image',
-                settings.motion,
-              )
-        if ('cells' in frame) {
-          // The cells the stage shows: the box, or its bottom rows on a short band (ADR 0010).
-          stage = (
-            <Raster key="stage" columns={cells.columns} rows={cells.rows} cells={frame.cells} />
-          )
-        } else {
-          stage = (
-            <Image
-              key={stageKey(cells)}
-              source={frame.source}
-              columns={cells.columns}
-              rows={cells.rows}
-              alt={altText(view)}
-            />
-          )
-        }
-      }
+    } else if (box && terminal && renderer === 'unknown') {
+      // Empty rows while the probe decides; a known renderer drew the band as one picture above.
+      stage = (
+        <Box key="stage-empty" flexDirection="column">
+          {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
+            <Text key={`stage-empty-${i}`}> </Text>
+          ))}
+        </Box>
+      )
     }
 
-    // The loop: terminals blit the stage and the strip; the desktop runs on SMIL.
-    if (terminal && (renderer === 'raster' || renderer === 'image')) {
-      loop?.mount({
-        requestId: e.requestId,
-        key: box ? (renderer === 'image' ? stageKey(cellsOf(layout) ?? box) : 'stage') : '',
-        layout,
-        renderer,
-        props: e.props,
-        surface: e.surface,
-        strip: { kind, columns: stripColumns, tab, extra },
-      })
-    } else if (!terminal && !SVG_SMIL) {
+    // The loop: the terminals' band picture mounts it above; the desktop runs on SMIL.
+    if (!terminal && !SVG_SMIL) {
       loop?.mount({
         requestId: e.requestId,
         key: 'stage',

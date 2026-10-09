@@ -5,9 +5,7 @@
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
 import { stripScene } from '../ui/strip'
-import { windowKey, windowSource } from '../windows/image'
 import type { Scene } from '../windows/kit'
-import { sceneCells } from '../windows/raster'
 import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame, cropBottom, type Frame } from './compose'
 import type { GaugeTrack } from './gauges'
@@ -15,7 +13,7 @@ import { pngImage } from './image'
 import { type Box, cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { type StageModel, type StageNumber, stageAt } from './model'
-import { composeBand, composeBandCells } from './playfield'
+import { composeBand, composeBandCells, headsOf } from './playfield'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
@@ -143,11 +141,16 @@ function shown(model: StageModel, layout: Layout, frame: Frame): Frame {
 }
 
 /** The Raster's stage: the rows shown, its numbers moved up with them (one clamped to the top stays visible). */
-function rasterShown(model: StageModel, layout: Layout): { frame: Frame; numbers: StageNumber[] } {
+function rasterShown(
+  model: StageModel,
+  layout: Layout,
+): { frame: Frame; numbers: StageNumber[]; heads: boolean[] } {
   const frame = shown(model, layout, composeFrame(model, { numbers: false }))
   const cut = Math.ceil(model.box.rows * 2 * model.scale) - frame.height
   const numbers = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
-  return { frame, numbers }
+  // The actors alone, cropped the same: where their art reaches the top cell row.
+  const art = shown(model, layout, composeFrame({ ...model, backdrop: null }, { numbers: false }))
+  return { frame, numbers, heads: headsOf(art) }
 }
 
 /**
@@ -195,8 +198,8 @@ export function bandCells(
     motion,
     scale: 1,
   })
-  const { frame, numbers } = rasterShown(model, layout)
-  return { cells: composeBandCells(band, frame, numbers, strip) }
+  const { frame, numbers, heads } = rasterShown(model, layout)
+  return { cells: composeBandCells(band, frame, numbers, strip, heads) }
 }
 
 export class StageLoop {
@@ -217,7 +220,12 @@ export class StageLoop {
    * The stage picture last sent, by element key and layout, for a redraw of the same site to
    * reuse; dropped once the stage goes away, so a stage drawn again never shows an old picture.
    */
-  private lastStage: { key: string; layout: Layout; source: { png: string } } | null = null
+  private lastStage: {
+    key: string
+    layout: Layout
+    tab: BandTab
+    source: { png: string }
+  } | null = null
   /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
   private beat: number | null = null
 
@@ -257,10 +265,15 @@ export class StageLoop {
     }
   }
 
-  /** The picture the loop last sent to the stage Image keyed `key` in `layout`, or null. */
-  stageSource(key: string, layout: Layout): { png: string } | null {
+  /**
+   * The picture the loop last sent to the Image keyed `key` in `layout` on `tab`, or null. Loot
+   * and World share a key and a layout: the tab tells their pictures apart.
+   */
+  stageSource(key: string, layout: Layout, tab: BandTab): { png: string } | null {
     const last = this.lastStage
-    return last?.key === key && sameLayout(last.layout, layout) ? last.source : null
+    return last?.key === key && last.tab === tab && sameLayout(last.layout, layout)
+      ? last.source
+      : null
   }
 
   /** New effects landed: draw the next frame now. */
@@ -376,6 +389,7 @@ export class StageLoop {
     const box = layout.box
     const cells = cellsOf(layout)
     // A band site with no strip to compose draws nothing: the stage alone is not the band's size.
+    // A site without a band (the loop's own tests) draws the stage alone.
     const drawn = band ? band.box : !site.band ? cells : null
     if (drawn) {
       const actors = [
@@ -426,51 +440,16 @@ export class StageLoop {
         }
         if (band) this.sent.set('band', band.json)
         if ('source' in frame) {
-          this.lastStage = { key: site.key, layout: site.layout, source: frame.source }
+          this.lastStage = {
+            key: site.key,
+            layout: site.layout,
+            tab: site.strip.tab,
+            source: frame.source,
+          }
         }
       }
     }
 
-    if (scene && !band) {
-      const sends: UiBlitArgs[] = []
-      if (site.renderer === 'raster') {
-        const cells = sceneCells(scene)
-        if (this.sent.get('strip') !== cells) {
-          this.sent.set('strip', cells)
-          sends.push({
-            requestId: site.requestId,
-            key: 'strip',
-            columns: scene.columns,
-            rows: scene.rows,
-            cells,
-          })
-        }
-      } else {
-        for (const win of scene.windows) {
-          const key = windowKey(win)
-          const json = JSON.stringify(win)
-          if (this.sent.get(key) === json) continue
-          this.sent.set(key, json)
-          const source = windowSource(win)
-          sends.push({
-            requestId: site.requestId,
-            key,
-            columns: win.columns,
-            rows: win.rows,
-            source,
-          })
-        }
-      }
-      for (const args of sends) {
-        const result = await this.io.blit(args)
-        this.blitCount += 1
-        if (gen !== this.gen) return null
-        if (result.deny !== undefined) {
-          this.stopped = true
-          return null
-        }
-      }
-    }
     if (busy) {
       // Overrun: the next frame runs at once and the beat starts over from it, never a burst.
       const next = slot + EVENT_FRAME_MS

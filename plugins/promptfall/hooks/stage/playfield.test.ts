@@ -8,7 +8,7 @@ import { BORDER_RGB, FIELD_RGB } from '../windows/tuning'
 import type { Frame } from './compose'
 import { composeBand, composeBandCells, playfieldOf } from './playfield'
 import { CLEAR } from './raster'
-import { strip } from './scenarios'
+import { band, bandPicture, strip } from './scenarios'
 
 const WHITE = BORDER_RGB
 const SHELL = FIELD_RGB
@@ -360,4 +360,36 @@ test('a damage number over the Raster band is never under the line', () => {
   expect(text(g, 1).slice(1, 3)).toBe('12')
   expect(text(g, 15).slice(156, 159)).toBe('345')
   expect([text(g, 0)[1], text(g, 15)[159]]).toEqual(['─', '│'])
+})
+
+test('compact beside its stage at 170 columns: one line on the right, the window’s own', () => {
+  const pic = bandPicture(band('band-compact-wide'))
+  // Across a row through the window, white runs past the playfield's centre: its lines only.
+  const runs: number[] = []
+  for (let x = pic.width / 2; x < pic.width; x++) {
+    const white = at(pic, x, 48) === WHITE
+    if (white && at(pic, x - 1, 48) !== WHITE) runs.push(x)
+  }
+  // The window's right line, and shell from there to the band's edge.
+  const last = runs.at(-1) ?? 0
+  for (let x = last + 2; x < pic.width; x++) expect(at(pic, x, 48)).toBe(SHELL)
+  expect(last).toBeLessThan(((170 - 160) / 2 + 160) * 8)
+})
+
+test('the Raster band opens its top line where an actor’s art reaches the stage’s top cell', () => {
+  const heads = Array.from({ length: 160 }, (_, x) => x >= 40 && x < 44)
+  const g = grid(
+    composeBandCells({ columns: 160, rows: 22 }, stage1x(17), [], stripOf(160), heads),
+    160,
+  )
+  // Cells 40 to 43 keep the stage's art; the line runs on either side of them.
+  expect(g[0]?.[40]).toEqual({ ch: '▀', fg: art(40, 0), bg: art(40, 1) })
+  expect(g[0]?.[43]).toEqual({ ch: '▀', fg: art(43, 0), bg: art(43, 1) })
+  expect([g[0]?.[39], g[0]?.[44]]).toEqual([line('─'), line('─')])
+  // Without heads the line is whole.
+  const whole = grid(
+    composeBandCells({ columns: 160, rows: 22 }, stage1x(17), [], stripOf(160)),
+    160,
+  )
+  expect(text(whole, 0).slice(1, 159)).toBe('─'.repeat(158))
 })

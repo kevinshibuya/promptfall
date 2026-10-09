@@ -190,16 +190,18 @@ test('the last stage picture the loop sent is there for a redraw of the same sit
   const h = harness(clock)
   const s = { ...site('image'), key: 'stage-120x8' }
   h.loop.mount(s)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
   h.timeline.onEffects(hit, 1_000_000)
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
   const sent = h.blits.filter((b) => b.key === 'stage-120x8').at(-1)
   expect(sent && 'source' in sent ? sent.source : null).not.toBe(null)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(
     sent && 'source' in sent ? sent.source : null,
   )
-  expect(h.loop.stageSource('stage-130x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-130x8', s.layout, 'party')).toBe(null)
+  // Another tab under the same key and layout (Loot and World share both) is another picture.
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'world')).toBe(null)
 })
 
 test('a stage picture is not reused once the stage went away, after a deny, or for another layout', async () => {
@@ -211,20 +213,20 @@ test('a stage picture is not reused once the stage went away, after a deny, or f
     h.timeline.onEffects(hit, await clock.now())
     h.loop.wake()
     await clock.advance(EVENT_FRAME_MS)
-    expect(h.loop.stageSource('stage-120x8', s.layout)).not.toBe(null)
+    expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).not.toBe(null)
   }
   await draw()
   // The same cells under another layout (a scaled boss stage) is another picture.
   const box = s.layout.box ?? { columns: 120, rows: 8 }
   const scaled = { kind: 'full' as const, box: { ...box, rows: 13 }, cells: box, bandRows: 18 }
-  expect(h.loop.stageSource('stage-120x8', scaled)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', scaled, 'party')).toBe(null)
   h.loop.mount(null)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
   await draw()
   h.state.answer = { deny: 'not mounted' }
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
 })
 
 test('a wake during a frame runs the next at once, and the beat starts over from it', async () => {
@@ -415,50 +417,6 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
 function extras() {
   return { world: WORLD_DEFAULT, notice: null, gauges: new GaugeTrack(), log: new MessageLog() }
 }
-
-test('the image strip blits each window on the first frame, then only the window that changed', async () => {
-  const clock = fakeClock()
-  const h = harness(clock)
-  h.state.strip = extras()
-  h.loop.mount(site('image'))
-  await clock.advance(EVENT_FRAME_MS + 1)
-  const first = h.blits.filter((b) => b.key.startsWith('win-')).map((b) => b.key)
-  expect(first.sort()).toEqual([
-    'win-enemy-25x5',
-    'win-message-40x5',
-    'win-party-42x5',
-    'win-purse-13x5',
-  ])
-  const before = h.blits.length
-  await clock.advance(IDLE_FRAME_MS * 2)
-  expect(h.blits.slice(before).filter((b) => b.key.startsWith('win-'))).toHaveLength(0)
-  const v = wave()
-  v.gold = 1240
-  h.state.view = v
-  const mid = h.blits.length
-  await clock.advance(IDLE_FRAME_MS * 2)
-  expect(
-    h.blits
-      .slice(mid)
-      .filter((b) => b.key.startsWith('win-'))
-      .map((b) => b.key),
-  ).toEqual(['win-purse-13x5'])
-})
-
-test('the raster strip blits one strip Raster when it changes', async () => {
-  const clock = fakeClock()
-  const h = harness(clock)
-  h.state.strip = extras()
-  h.loop.mount(site('raster'))
-  await clock.advance(EVENT_FRAME_MS + 1)
-  const v = wave()
-  v.farm = true
-  h.state.view = v
-  await clock.advance(IDLE_FRAME_MS * 2)
-  const strip = h.blits.find((b) => b.key === 'strip')
-  expect(strip && 'cells' in strip).toBe(true)
-  expect([strip?.columns, strip?.rows]).toEqual([120, 5])
-})
 
 test('with only a gauge filling the loop re-arms at the gauge rate, capped by the bob', async () => {
   const clock = fakeClock(1_000_000)

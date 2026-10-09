@@ -191,11 +191,14 @@ function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
  * compact) its top sits over the strip windows' top lines, as its bottom does over their bottom
  * ones.
  */
-function drawLine(band: Frame, at: Placement, full: Box, stage: boolean): void {
+function drawLine(band: Frame, at: Placement, full: Box, stage: boolean, beside: boolean): void {
   const pfLeft = at.x * CELL_W
   const pfRight = (at.x + at.columns) * CELL_W - 1
   const left = at.x > 0 ? pfLeft - BORDER_PX : pfLeft + LINE_IN
-  const right = at.x + at.columns < full.columns ? pfRight + BORDER_PX : pfRight - LINE_IN
+  // Beside compact's stage the window's own right line is the line's: it sits where a playfield
+  // meeting the band's edge would put it, whatever shell lies past it.
+  const right =
+    !beside && at.x + at.columns < full.columns ? pfRight + BORDER_PX : pfRight - LINE_IN
   const top = at.y * CELL_H + (stage ? LINE_IN : LINE_IN_STRIP)
   const bottom = (at.y + at.rows) * CELL_H - 1 - LINE_IN_STRIP
   const dst = words(band)
@@ -244,11 +247,11 @@ export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame
   const sx = x0 + parts.strip.x * CELL_W
   const sy = y0 + parts.strip.y * CELL_H
   if (parts.strip.x > 0) {
-    drawLine(out, at, band, false)
+    drawLine(out, at, band, false, true)
     drawStrip(out, strip, sx, sy)
   } else {
     drawStrip(out, strip, sx, sy)
-    drawLine(out, at, band, stage !== null)
+    drawLine(out, at, band, stage !== null, false)
   }
   return out
 }
@@ -358,6 +361,18 @@ function lay(
   }
 }
 
+/** For each column of a 1x frame drawn without its backdrop: whether its top cell (art rows 0 and 1) holds art. */
+export function headsOf(art: Frame): boolean[] {
+  const px = words(art)
+  const out: boolean[] = []
+  for (let x = 0; x < art.width; x++) {
+    const top = (px[x] ?? 0) & ALPHA
+    const next = art.height > 1 ? (px[art.width + x] ?? 0) & ALPHA : 0
+    out.push(top !== 0 || next !== 0)
+  }
+  return out
+}
+
 /**
  * The band as Raster cells, `band` columns by rows, base64: the shell's cells, and on them the
  * playfield at `playfieldOf`, `stage` (a 1x frame of the stage rows shown, its sky cropped on a
@@ -373,6 +388,7 @@ export function composeBandCells(
   stage: Frame | null,
   numbers: readonly StageNumber[],
   strip: Scene,
+  heads: readonly boolean[] = [],
 ): string {
   const cells = new Uint32Array(band.columns * band.rows * 3)
   for (let i = 0; i < cells.length; i += 3) cells.set([SPACE, FIELD_RGB, FIELD_RGB], i)
@@ -403,10 +419,12 @@ export function composeBandCells(
   const under = (x: number, y: number) => cells[(y * band.columns + x) * 3]
   // Beside compact's stage the window's own top, bottom and right lines are the line's.
   const end = beside ? stripX + 1 : right
+  // Over the stage's top row the line opens where an actor's art reaches it: a boss's head.
+  const stageX = stage && parts.stage.y === 0 ? at.x + parts.stage.x : null
   for (let x = left + 1; x < end; x++) {
     // A window's side comes up to meet the top line (no stage) and down to meet the bottom one.
     const above = under(x, top) === cp('╭') || under(x, top) === cp('╮')
-    put(x, top, above ? '┬' : '─')
+    if (stageX === null || !heads[x - stageX]) put(x, top, above ? '┬' : '─')
     const below = under(x, bottom) === cp('╰') || under(x, bottom) === cp('╯')
     put(x, bottom, below ? '┴' : '─')
   }

@@ -24,7 +24,7 @@ import { windowFrame } from '../windows/image'
 import type { Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
-import { CELL_H, CELL_W, WINDOW_SCALE } from '../windows/tuning'
+import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame, type Frame } from './compose'
 import { boss, empty, fallen, wave, worldBoss } from './fixtures'
 import { GaugeTrack } from './gauges'
@@ -642,6 +642,7 @@ export const BAND_SCENARIOS = [
   'band-wide',
   'band-zoomed',
   'band-compact',
+  'band-compact-wide',
   'band-loot',
   'band-world',
 ] as const
@@ -738,10 +739,10 @@ function bandSvgs(
  * Image and the Raster. The desktop never goes compact (ADR 0004): its Svgs are the band it draws
  * at the same size, the full stage fitted over the strip.
  */
-function compactInput(view: GameView, input: StripInput, columns: number): BandInput {
+function compactInput(view: GameView, input: StripInput, columns: number, maxRows = 22): BandInput {
   const t = new StageTimeline()
   t.observe(view, NOW)
-  const props = { bodyColumns: columns, maxRows: 22 }
+  const props = { bodyColumns: columns, maxRows }
   const layout = layoutFor(t.rowsAt(view, NOW), props, 'terminal', {
     tab: 'party',
     extra: 0,
@@ -749,7 +750,11 @@ function compactInput(view: GameView, input: StripInput, columns: number): BandI
   })
   if (layout.kind !== 'compact') throw new Error(`a ${columns}-column band is not compact`)
   const box = { columns, rows: layout.bandRows }
-  const scene = stripScene({ ...input, kind: 'compact', columns }).scene
+  const scene = stripScene({
+    ...input,
+    kind: 'compact',
+    columns: Math.min(columns, STRIP_MAX_COLUMNS),
+  }).scene
   const model = stageAt(view, t, NOW, layout.box, { compact: true, motion: 'full' })
   return {
     box,
@@ -805,6 +810,10 @@ export function band(name: BandScenario): BandInput {
     // Compact at 110 columns, as strip-compact: the stage's 52 columns, the window's 58.
     case 'band-compact':
       return compactInput(wave(), strip('strip-compact'), 110)
+    // Compact under a tall prompt at 170 columns: shell beside the playfield, the window's own right
+    // line the line's, no second one in the margin.
+    case 'band-compact-wide':
+      return compactInput(wave(), strip('strip-compact'), 170, 7)
     // Loot at the Party tab's 160 columns: the line all round, over the windows' outer lines.
     case 'band-loot':
       return bareInput(strip('strip-loot'), 160)
