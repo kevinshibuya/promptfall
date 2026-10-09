@@ -10,7 +10,7 @@ import type { Frame } from './compose'
 import type { Box } from './layout'
 import type { StageNumber } from './model'
 import { CLEAR, rasterWords } from './raster'
-import { HIRES_SCALE, STAGE_MAX_COLUMNS } from './tuning'
+import { DESKTOP_COLUMN_PX, DESKTOP_ROW_PX, HIRES_SCALE, STAGE_MAX_COLUMNS } from './tuning'
 
 /** The playfield within the band's box, in cells: its column and row offsets and its size. */
 export type Placement = { x: number; y: number; columns: number; rows: number }
@@ -208,6 +208,68 @@ export function composeBand(band: Box, stage: Frame, strip: Scene): Frame {
   drawStrip(out, strip, x0, y0 + stageRows * CELL_H)
   drawLine(out, at, band)
   return out
+}
+
+// The Svg band: the desktop, VS Code and mobile keep two Svgs, the stage's and the strip's, since
+// one of both would pass the host's character cap. Each is the band's width on the windows' grid
+// and draws its share of the shell and the line, so stacked they read as one of each.
+
+const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
+
+/**
+ * The share of its natural height the stage Svg draws its stage at (ADR 0004): at the band's
+ * width the stage can be taller than the rows the strip leaves, and the desktop scrolls the rest
+ * away, so the whole stage scales down to them, the zoomed-out view of ADR 0010; under two rows
+ * left it does not. The stage Svg keeps the band's width, so a fitted stage sits on the shell.
+ */
+export function svgFit(
+  props: { bodyColumns: number; maxRows: number },
+  box: Box,
+  strip: { columns: number; rows: number },
+  extra: number,
+): number {
+  const stripPx =
+    (props.bodyColumns * DESKTOP_COLUMN_PX * strip.rows * CELL_H) / (strip.columns * CELL_W)
+  const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
+  const cap = (props.maxRows - stripRows) * DESKTOP_ROW_PX
+  const natural = (props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
+  return natural > cap && cap >= DESKTOP_ROW_PX * 2 ? cap / natural : 1
+}
+
+/**
+ * One Svg's share of the band's frame, `w × h` pixels on the windows' grid: `under`, the shell
+ * behind everything it draws, and `over`, the shell outside the line and the line, drawn last.
+ * The stage's share (`top`) is the line's top and sides, open at its bottom edge; the strip's
+ * (`bottom`) the sides from its top edge down to the bottom line, over the outer windows' own.
+ * The line sits where `composeBand` draws it when the playfield fills the band: 2 pixels wide,
+ * LINE_IN from each side, LINE_IN from the top and LINE_IN_STRIP from the bottom, corners cut.
+ */
+export function svgFrame(
+  w: number,
+  h: number,
+  edge: 'top' | 'bottom',
+): { under: string; over: string } {
+  const l = LINE_IN
+  const r = w - LINE_IN
+  const b = BORDER_PX
+  // The line's outer outline, and the line itself: the outline less its inside.
+  let outline: string
+  let line: string
+  if (edge === 'top') {
+    const t = LINE_IN
+    outline = `M${l + 1} ${t}H${r - 1}V${t + 1}H${r}V${h}H${l}V${t + 1}H${l + 1}Z`
+    line = `M${l + 1} ${t}H${r - 1}V${t + 1}H${r}V${h}H${r - b}V${t + b}H${l + b}V${h}H${l}V${t + 1}H${l + 1}Z`
+  } else {
+    const e = h - LINE_IN_STRIP
+    outline = `M${l} 0H${r}V${e - 1}H${r - 1}V${e}H${l + 1}V${e - 1}H${l}Z`
+    line = `M${l} 0H${l + b}V${e - b}H${r - b}V0H${r}V${e - 1}H${r - 1}V${e}H${l + 1}V${e - 1}H${l}Z`
+  }
+  return {
+    under: `<rect width="${w}" height="${h}" fill="${hex(FIELD_RGB)}"/>`,
+    over:
+      `<path fill="${hex(FIELD_RGB)}" fill-rule="evenodd" d="M0 0H${w}V${h}H0Z${outline}"/>` +
+      `<path fill="${hex(BORDER_RGB)}" d="${line}"/>`,
+  }
 }
 
 // The Raster's band: the same placement in cells, the line in the strip windows' box-drawing text.

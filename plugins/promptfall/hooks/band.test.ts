@@ -4,18 +4,13 @@ import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
 import { bandKey } from './stage/loop'
-import {
-  DESKTOP_COLUMN_PX,
-  DESKTOP_COLUMN_PX_CEILING,
-  DESKTOP_ROW_PX,
-  SVG_INTERACTIVE,
-} from './stage/tuning'
+import { DESKTOP_COLUMN_PX_CEILING, SVG_INTERACTIVE, SVG_MAX_CHARS } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { shownBoss, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
-import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS } from './windows/tuning'
+import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS, STRIP_SVG_MAX_CHARS } from './windows/tuning'
 import { WORLD_STALE_MS } from './world'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -783,6 +778,37 @@ test('the desktop draws the stage Svg and the strip Svg, each with its alt', asy
   await ui.unmount()
 })
 
+test('the Svg band draws the shell behind the stage and the strip, and the line around both', async ($, on) => {
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+  const { stage, strip } = await svgs(ui)
+  const s = String(stage?.props.source)
+  const t = String(strip?.props.source)
+  // Both on the windows' grid at the band's 120 columns, 8 by 16 a cell, drawn at its width.
+  expect(s).toMatch(/^<svg [^>]*viewBox="0 0 960 272" width="1920" height="544"/)
+  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
+  // The shell first, under everything; the 1.5x stage scaled onto the grid over it.
+  expect(s).toContain(
+    '</defs><rect width="960" height="272" fill="#303028"/><g transform="translate(0 0) scale(5.3333)">',
+  )
+  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
+  // The stage Svg ends on the line's top and sides, the shell outside them over its outermost
+  // pixels; the strip Svg on its sides and bottom, over the outer windows' own lines. Stacked,
+  // the sides meet: 2 pixels wide, 2 in from each edge, the corners cut.
+  expect(s).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V272H0ZM3 2H957V3H958V272H2V3H3Z"\/><path fill="#f0f0e8" d="M3 2H957V3H958V272H956V4H4V272H2V3H3Z"\/><\/svg>$/,
+  )
+  expect(t).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM2 0H958V69H957V70H3V69H2Z"\/><path fill="#f0f0e8" d="M2 0H4V68H956V0H958V69H957V70H3V69H2Z"\/><\/svg>$/,
+  )
+  // The SMIL stays in each: the actors' idle clock runs inside the scaled stage.
+  expect(s).toMatch(/scale\(5\.3333\)">.*repeatCount="indefinite".*<\/g><path fill="#303028"/)
+  expect(s.length).toBeLessThan(SVG_MAX_CHARS)
+  expect(t.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
+  await ui.unmount()
+})
+
 for (const [columns, art] of [
   [95, 116],
   [60, 116],
@@ -794,7 +820,9 @@ for (const [columns, art] of [
     const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(columns, 20) })
     const { stage } = await svgs(ui)
     const source = String(stage?.props.source)
-    expect(source).toContain(`viewBox="0 0 ${art * 1.5} 51"`)
+    // On the windows' grid, 8 pixels a column; the 1.5x art scaled on at 16/3 an art pixel.
+    expect(source).toContain(`viewBox="0 0 ${art * CELL_W} 272"`)
+    expect(source).toContain('<g transform="translate(0 0) scale(5.3333)">')
     expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
     // No width prop: the markup is wider than the band and the desktop scales it down to fit.
     expect(stage?.props.width).toBeUndefined()
@@ -809,7 +837,7 @@ test('the desktop draws the 17-row stage for a zone boss, never the compact one 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 30) })
   const { stage, strip } = await svgs(ui)
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
+  expect(String(stage?.props.source)).toContain('viewBox="0 0 928 272"')
   expect(await ui.find({ key: 'compact-stage' })).toBeUndefined()
   expect(String(strip?.props.alt)).toContain('Boss')
   await ui.unmount()
@@ -919,24 +947,28 @@ test('on the desktop the stage sits in a column, so its frame takes the band wid
   await ui.unmount()
 })
 
-test('on a short desktop band the whole stage scales down to the rows the strip leaves; a tall one shows it whole', async ($, on) => {
+test('on a short desktop band the whole stage scales down to the rows the strip leaves, centred on the shell; a tall one shows it whole', async ($, on) => {
   const { shown } = harness(on)
   shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
-  const { stage } = await svgs(ui)
-  // 12 rows of 19 points, less the strip at the band's width (no hotkey row on the desktop).
-  const stripPx = (95 * DESKTOP_COLUMN_PX * STRIP_ROWS * CELL_H) / (116 * CELL_W)
-  const cap = (12 - Math.ceil(stripPx / DESKTOP_ROW_PX)) * DESKTOP_ROW_PX
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
-  expect(stage?.props.height).toBe(Math.round(cap))
-  expect(stage?.props.width).toBe(Math.floor((cap * 116) / 34))
+  const { stage, strip } = await svgs(ui)
+  // 12 rows of 19 points less the strip's 4 at the band's width: 152 points for a stage that
+  // would take 222.8, so it draws at 0.68 of its size. The Svg keeps the band's width: 760
+  // points, its markup 1520 wide and 304 tall, so 152 drawn; the 928 × 185.6 grid around it.
+  for (const v of [stage?.props.width, stage?.props.height]) expect(v).toBeUndefined()
+  const source = String(stage?.props.source)
+  expect(source).toContain('viewBox="0 0 928 185.6" width="1520" height="304"')
+  // The 174 × 51 art at 3.6392 a pixel is 633.2 wide: 147.39 of shell each side, inside the line.
+  expect(source).toContain('<g transform="translate(147.39 0) scale(3.6392)">')
+  expect(source).toMatch(/d="M3 2H925V3H926V185.6H924V4H4V185.6H2V3H3Z"\/><\/svg>$/)
+  // The strip keeps the band's width and its rows.
+  expect(String(strip?.props.source)).toMatch(/viewBox="0 0 928 80" width="1520"/)
   await ui.unmount()
   const tall = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
-  const whole = (await svgs(tall)).stage
-  expect(String(whole?.props.source)).toContain('viewBox="0 0 174 51"')
-  expect(whole?.props.height).toBeUndefined()
-  expect(whole?.props.width).toBeUndefined()
+  const whole = String((await svgs(tall)).stage?.props.source)
+  expect(whole).toContain('viewBox="0 0 928 272"')
+  expect(whole).toContain('<g transform="translate(0 0) scale(5.3333)">')
   await tall.unmount()
 })
 

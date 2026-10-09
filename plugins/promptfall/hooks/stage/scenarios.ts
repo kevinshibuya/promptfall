@@ -34,11 +34,12 @@ import { type Box, type Layout, layoutFor } from './layout'
 import { MessageLog } from './log'
 import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
-import { composeBand } from './playfield'
+import { composeBand, svgFit } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
-import { renderSvg, svgWithFallback } from './svg'
+import { renderSvg, stageSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
+  DESKTOP_COLUMN_PX_CEILING,
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
@@ -636,12 +637,28 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
 // The band's scenarios (spec #45): the Party tab's band as one picture, the playfield on the shell.
 export const BAND_SCENARIOS = ['band-rest', 'band-wide', 'band-zoomed'] as const
 export type BandScenario = (typeof BAND_SCENARIOS)[number]
-export type BandGolden = { imageHash: string; cellsHash: string; width: number; height: number }
+export type BandGolden = {
+  imageHash: string
+  cellsHash: string
+  width: number
+  height: number
+  stageSvgHash: string
+  stageSvgChars: number
+  stripSvgHash: string
+  stripSvgChars: number
+}
 /**
- * What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene; and
- * the Raster's band at the same box, as cells.
+ * What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene; the
+ * Raster's band at the same box, as cells; and the desktop's band at the same size, its stage
+ * Svg and strip Svg.
  */
-export type BandInput = { box: Box; stage: Frame; strip: Scene; cells: string }
+export type BandInput = {
+  box: Box
+  stage: Frame
+  strip: Scene
+  cells: string
+  svg: { stage: string; strip: string }
+}
 
 /** `view` on a 160-column stage of `rows`, its strip under it, in a band of `columns` × `maxRows`. */
 function bandInput(view: GameView, input: StripInput, columns: number, maxRows: number): BandInput {
@@ -677,6 +694,32 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
     stage: composeFrame(model, { numbers: true }),
     strip: scene,
     cells: bandCells(view, t, NOW, raster, 'full', box, scene).cells,
+    svg: bandSvgs(view, t, input, columns, maxRows),
+  }
+}
+
+/** The desktop's band at `columns` × `maxRows`: its stage Svg and its strip Svg, as band.tsx draws them. */
+function bandSvgs(
+  view: GameView,
+  t: StageTimeline,
+  input: StripInput,
+  columns: number,
+  maxRows: number,
+): { stage: string; strip: string } {
+  const props = { bodyColumns: columns, maxRows }
+  const layout = layoutFor(t.rowsAt(view, NOW), props, 'desktop', { tab: 'party', extra: 0 })
+  if (!layout.box) throw new Error('the desktop band has no stage')
+  const width = columns * DESKTOP_COLUMN_PX_CEILING
+  const strip = { ...input, columns: layout.box.columns }
+  const { scene } = stripScene(strip)
+  return {
+    stage: stageSvg(view, t, NOW, layout.box, {
+      smil: true,
+      width,
+      motion: 'full',
+      fit: svgFit(props, layout.box, scene, 0),
+    }),
+    strip: sceneSvg(scene, stripTracks(strip, 3000), { smil: true, width, band: true }),
   }
 }
 
@@ -706,6 +749,18 @@ export function bandSvgOf(input: BandInput): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" style="image-rendering:pixelated" href="data:image/png;base64,${png}"/></svg>`
 }
 
+/** The desktop's two Svgs stacked as the desktop stacks them, the stage over the strip, for eyeballing. */
+export function bandDesktopSvgOf(input: BandInput): string {
+  const size = (doc: string) => {
+    const m = doc.match(/^<svg [^>]*width="(\d+)" height="(\d+)"/)
+    return { w: Number(m?.[1]), h: Number(m?.[2]) }
+  }
+  const a = size(input.svg.stage)
+  const b = size(input.svg.strip)
+  const strip = input.svg.strip.replace('<svg ', `<svg y="${a.h}" `)
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${a.w}" height="${a.h + b.h}">${input.svg.stage}${strip}</svg>`
+}
+
 export function bandGoldenOf(input: BandInput): BandGolden {
   const image = encodeImage(bandPicture(input), WINDOW_SCALE)
   return {
@@ -713,5 +768,9 @@ export function bandGoldenOf(input: BandInput): BandGolden {
     cellsHash: fnv1a64(input.cells),
     width: image.width,
     height: image.height,
+    stageSvgHash: fnv1a64(input.svg.stage),
+    stageSvgChars: input.svg.stage.length,
+    stripSvgHash: fnv1a64(input.svg.strip),
+    stripSvgChars: input.svg.strip.length,
   }
 }

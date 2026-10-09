@@ -6,12 +6,11 @@ import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
 import { bandCells, bandFrame, bandKey, stageFrame, stageKey } from '../stage/loop'
 import { altText } from '../stage/model'
+import { svgFit } from '../stage/playfield'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
-  DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
-  DESKTOP_ROW_PX,
   FULL_MIN_COLUMNS,
   IMAGE_MAX_COLUMNS,
   PROBE_DELAY_MS,
@@ -30,7 +29,7 @@ import {
 import { windowKey, windowSource } from '../windows/image'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
-import { CELL_H, CELL_W, STRIP_MAX_COLUMNS } from '../windows/tuning'
+import { STRIP_MAX_COLUMNS } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { type StripInput, stripScene, stripTracks } from './strip'
@@ -321,6 +320,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           source={sceneSvg(scene, tracks, {
             smil: SVG_SMIL,
             width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+            band: party,
           })}
           alt={scene.alt}
           isInteractive={SVG_INTERACTIVE}
@@ -332,34 +332,19 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // is never blank; the loop blits every frame after it.
     const box = layout.box
     if (box && !terminal && 'Svg' in els) {
-      // At the band's width the stage is taller than the band the desktop shows whole, and the
-      // desktop scrolls the rest away: scale the whole stage down to the rows left under it
-      // (ADR 0004), the zoomed-out view of ADR 0010; under two rows left the desktop scrolls.
-      const stripPx =
-        (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
-      const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
-      const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
-      const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
-      const fit =
-        natural > cap && cap >= DESKTOP_ROW_PX * 2
-          ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
-          : {}
+      // The band's width, its share of the shell and line drawn around the stage; on a short band
+      // the whole stage scales down to the rows the strip leaves, centred on the shell (ADR 0004).
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
       const source = stageSvg(view, timeline, now, box, {
         smil: SVG_SMIL,
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
         motion: settings.motion,
+        fit: svgFit(e.props, box, scene, extra),
       })
       const { Svg } = els
       stage = (
-        <Svg
-          key="stage"
-          source={source}
-          alt={altText(view)}
-          isInteractive={SVG_INTERACTIVE}
-          {...fit}
-        />
+        <Svg key="stage" source={source} alt={altText(view)} isInteractive={SVG_INTERACTIVE} />
       )
     } else if (box && terminal && 'Raster' in els) {
       const { Raster, Image } = els

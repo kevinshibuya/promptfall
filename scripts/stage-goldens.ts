@@ -7,6 +7,7 @@ import type { Frame } from '../plugins/promptfall/hooks/stage/compose'
 import {
   BAND_SCENARIOS,
   band,
+  bandDesktopSvgOf,
   bandGoldenOf,
   bandPicture,
   bandSvgOf,
@@ -106,6 +107,7 @@ for (const name of BAND_SCENARIOS) {
       .replace(/,/g, ', ')},`,
   )
   writeFileSync(join(OUT, `${name}.svg`), `${bandSvgOf(input)}\n`)
+  writeFileSync(join(OUT, `${name}.desktop.svg`), `${bandDesktopSvgOf(input)}\n`)
   png(name, bandPicture(input))
 }
 lines.push('}', '')

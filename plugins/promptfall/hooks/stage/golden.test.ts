@@ -7,7 +7,7 @@ import { item, listing, marketPage, paneInput, paneView } from '../ui/pane/fixtu
 import { inventoryPane } from '../ui/pane/inventory'
 import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
-import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
+import { CELL_W, PANE_SVG_MAX_CHARS, STRIP_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import { fullerFrame } from './fixtures'
 import { BAND_GOLDENS, GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
@@ -32,6 +32,7 @@ import {
 import { renderSvg, svgWithFallback } from './svg'
 import type { Motion } from './timeline'
 import {
+  DESKTOP_COLUMN_PX_CEILING,
   IMAGE_MAX_BYTES,
   IMAGE_MAX_SIDE,
   IMAGE_MAX_SOURCE_BYTES,
@@ -244,6 +245,21 @@ for (const name of BAND_SCENARIOS) {
     const input = band(name)
     expect(decode(input.cells).length).toBe(input.box.columns * input.box.rows * 12)
     expect(rasterPairs(input.cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
+  })
+  test(`band ${name}: the desktop's stage and strip Svgs are each the band's width and under their caps`, () => {
+    const { svg, box } = band(name)
+    const width = `width="${box.columns * DESKTOP_COLUMN_PX_CEILING}"`
+    for (const doc of [svg.stage, svg.strip]) expect(doc).toMatch(new RegExp(`^<svg [^>]*${width}`))
+    // One grid for both: the same viewBox width, so the line's sides meet.
+    const gridOf = (doc: string) => doc.match(/viewBox="0 0 (\d+) /)?.[1]
+    expect(gridOf(svg.stage)).toBe(gridOf(svg.strip))
+    // The SMIL plays inside the frame: the stage's motions in its scaled group, the strip's tracks.
+    expect(svg.stage).toMatch(
+      /<g transform="translate\([^)]*\) scale\([^)]*\)">.*<animate.*<\/g><path/,
+    )
+    expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
+    expect(svg.stage.length).toBeLessThan(SVG_MAX_CHARS)
+    expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
   })
 }
 
