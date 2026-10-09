@@ -106,7 +106,7 @@ contract rule 35 instead.
    between polls and corrects at each poll. No enemy spawns from the tool calls.
 6. **It withdraws.** At the 2-minute mark the status row's segment disappears, with no down
    toast. Within 20 seconds (the next poll settles it, the next flush delivers it):
-   - One toast reads `Boss reward: <item> (<rarity>)`: you passed 200 (5% of the base) about 50 s
+   - One toast reads `Your share of <name>: <gold> gold and <item>`: you passed 200 (5% of the base) about 50 s
      into the turn.
    - The item is in the Inventory tab, and the loot log has one `boss reward ...` line.
    - The band is back to waves.
@@ -120,9 +120,9 @@ contract rule 35 instead.
      2 real seconds). The bots start hitting it at once, so the first reading is already below
      full (the driven pass saw `boss 89%` on the toast's poll, `39,208/52,000` once the party
      joined at the next flush).
-   - Within 2 minutes a toast reads `<name> is down`, expected at about 75 to 95 seconds; the bar
+   - Within 2 minutes a toast reads `World boss <name> is down`, expected at about 75 to 95 seconds; the bar
      on the Party tab falls steadily between polls.
-   - Within 20 seconds after that: one `Boss reward: ...` toast and loot line if `you` passed 200
+   - Within 20 seconds after that: one `Your share of <name>: ...` toast and loot line if `you` passed 200
      before the kill. It does when the turn started before the spawn. With `you` under 200 there
      is no reward, which is the threshold working, not a red. There is no second reward (the
      bots hold the top 3). The band is back to waves.

@@ -7,10 +7,11 @@ status: accepted
 Every zone ships one backdrop painting at the full stage's largest size: 240 × 51 stage pixels at
 1.5× (`art/backdrops-hires/`) and 160 × 34 at 1× (`art/backdrops/`), 16 colours at most, baked
 into `generated.ts` beside the sprites. The composer paints it over the whole frame before the
-actors, bottom-anchored and centred: a narrower terminal crops the sides evenly, the stage shows
-all 51 rows in every fight (ADR 0010), and a band too short for it shows the bottom rows first
-(ground and the near scenery), the sky going last. A frame wider than the painting (none since ADR 0010 dropped the
-zoom-out) would continue it with mirrored copies on each side, without a seam. The compact stage and a zone without a painting keep the ground strip
+actors, bottom-anchored and centred: a narrower terminal crops the sides evenly, and the stage
+shows all 51 rows in every fight (ADR 0010). A band too short for that shows the whole painting
+smaller on the Image and the desktop; the Raster, which cannot scale, shows the bottom rows first
+(ground and the near scenery), the sky going last. A frame wider than the painting, the Image
+zoom-out's widened scene, continues it with mirrored copies on each side, without a seam. The compact stage and a zone without a painting keep the ground strip
 of `ZONE_GROUND`. The `Svg` draws it as paths like any art, never an `<image>`.
 
 Kevin asked for backdrops because the stage drew a flat strip under finished sprites

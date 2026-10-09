@@ -12,9 +12,10 @@ Common grey to Legendary gold.
 
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
-Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at the next zone
-change, and the stage draws the party in the list's order. A new save starts with one Common hero
-of each class, three of them already in the party.
+Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
+the next zone boss kill or wipe, farm restarts and wipes in zone 1 included (on a fresh save,
+before the first kill, at once), and the stage draws the party in the list's order. A new save
+starts with one Common hero of each class, three of them already in the party.
 
 **Recruiting.** The Heroes tab's last row recruits a hero at the tavern for gold, at the odds the
 Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bosses less often,
@@ -29,7 +30,7 @@ fallen heroes get up at 30%.
 **Encounters and waves.** Each tool call Claude makes spawns an enemy into the encounter: at most
 three fight at once and up to ten more wait. When nobody is left to fight, the next enemy of the
 current wave walks in, so an idle session still plays. A zone is ten waves of one to three of its
-own enemies, and clearing a wave heals every hero 15%.
+own enemies, and clearing a wave heals every hero 15% and gets the fallen back up at 15%.
 
 **Action gauge and action queue.** Every hero and enemy has an action gauge that fills with
 battle time, faster with more speed, and a full gauge joins the action queue. Units act one at a
@@ -38,15 +39,14 @@ hits them all, the Archer shoots the weakest, and the White Mage attacks or heal
 ally. The party window shows each hero's gauge filling and turning gold when full, with ▶ beside
 the hero who is acting; enemies' gauges never show.
 
-**Zone bosses.** After the tenth wave the zone's boss takes the stage, and the stage grows taller
-for it. Beating it moves the party on to the next of twelve zones, from Greenmeadow Road to The
-Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a boss with its HP
+**Zone bosses.** After the tenth wave the zone's boss takes the stage, standing at its full size
+over the small party. Beating it moves the party on to the next of twelve zones, from Greenmeadow
+Road to The Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a boss with its HP
 percentage.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
 arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
-The stage grows for it too, less than for a zone boss.
 
 **Wipe.** When every hero falls, the party retreats one zone (never below zone 1) to wave 1 at
 full health, and nothing is lost. The combat log says so, and a toast names the zone it fell back
@@ -148,17 +148,21 @@ reward, and the top three damage dealers of a kill get one bonus roll each. Each
 
 **The band.** The game draws in a band above the prompt with three tabs, Party, Loot and World,
 on the letter hotkeys `p`, `l` and `w`, and `c` collapses it. The Party tab is the stage over the
-strip; Loot and World are the strip alone. On short or narrow terminals the band drops to a
-compact stage beside one party window, then to a single row, and it hides while Claude asks a
-question.
+strip; Loot and World are the strip alone. The Party tab is 22 rows in every fight, the 17-row
+stage over the 5-row strip, and never more than Claude Code gives it. With fewer rows a terminal
+that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
+terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
+115 columns wide, the band drops to a compact stage beside one party window, then to a single row
+under 100 columns, and it hides while Claude asks a question.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
-the party on the right, side-on, on a ground strip coloured per zone. Actors bob between two idle
+the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a
+boss lands at its full size. Actors bob between two idle
 drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
 rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
 fights until the blow that kills him lands, then dims, and the party window's HP drops with each
-hit as it lands, not when the game applies it. It grows while a boss
-is on it and shrinks back after the boss falls. A monster that steps on partway through a tick
+hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never
+changes height. A monster that steps on partway through a tick
 plays its first actions animated, on the desktop too. It draws as an image on Kitty and Ghostty,
 in half-blocks on other terminals, and as vector art on the desktop. A terminal session asks which
 it can draw, and lays the band out with the last session's answer while it waits, so the band holds
@@ -168,10 +172,12 @@ its height from the second session on.
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
 come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
 the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The windows
-tell the stage's story: a killed monster keeps its row until its death has played, the title stays
-on the wave or zone being watched until its last monster has dissolved, and the backdrop changes
-zone only then, so a zone boss dies against its own painting. On the desktop, which redraws once
+and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The stage
+and every window draw the staged state, the fight as the stage has played it so far, so they never
+run ahead of the picture: a killed monster keeps its row until its death has played, the title
+stays on the wave or zone being watched until its last monster has dissolved, the backdrop changes
+zone only then, so a zone boss dies against its own painting, and the world boss bar drops as the
+party's hits land. On the desktop, which redraws once
 a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
@@ -224,9 +230,11 @@ for lack of room. Everyday toasts last four seconds and the weighty ones (a lege
 recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Routine combat,
-farming clears and chat never toast, the open pane holds toasts until it closes, and a first
-launch toasts a welcome that points at the Heroes tab.
+legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Toasts follow the
+game, not the stage, so a wipe toast can show up to one cadence before the last hero falls on the
+stage. A world boss already up when the session first polls toasts its arrival with no cue.
+Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
+and a first launch toasts a welcome that points at the Heroes tab.
 
 **Cues.** Four toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up and a
 world boss appearing. A burst plays each of its cues once, after its toasts. Only the primary

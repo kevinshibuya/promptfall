@@ -1,7 +1,8 @@
 # Promptfall, product and architecture spec
 
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
-phase 3 on 2026-10-03 and for phase 4 on 2026-10-04. Every
+phase 3 on 2026-10-03, for phase 4 on 2026-10-04 and for the staged state on
+2026-10-09. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -21,13 +22,15 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
 
 ## 2. Non-negotiables
 
-- The game never gets in the way of the work. The band is 13 rows at rest on
-  the Party tab (an 8-row stage and the 5-row window strip) and grows to at most
-  22 while a zone or world boss is on the stage (ADR 0003); it drops to a 6-row
-  compact band when the terminal is too short or 100 to 115 columns wide,
-  collapses to 1 row under 100 columns or 6 rows, hides while Claude asks a
-  question, and switches off per session with one command. Loot and World are
-  the strip alone, 5 rows. VS Code and mobile add a row of hotkeys.
+- The game never gets in the way of the work. The band on the Party tab is 22
+  rows in every fight, the 17-row stage over the 5-row window strip (ADR 0010),
+  and never takes more than the engine's `maxRows`. A shorter band shows the
+  whole stage smaller where it can (the Image zooms out, the Svg scales) and
+  crops the Raster's sky down to the tallest actor on the stage; past that it
+  drops to a 6-row compact band, as it does at 100 to 115 columns, collapses to
+  1 row under 100 columns or 6 rows, hides while Claude asks a question, and
+  switches off per session with one command. Loot and World are the strip
+  alone, 5 rows. VS Code and mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
   drop. Every drop, trade and hero exists because the server rolled it or
@@ -110,7 +113,8 @@ Checked against Claude Code v2.1.287's mods API.
   very long turn cannot create a death wall.
 - `turn.complete` after a turn with 10 or more tool calls spawns a turn boss: a
   mini-boss with raised drop rates and a hero contract chance. It is not the
-  zone boss.
+  zone boss. One that spawns mid-wave joins the wave's encounter and leaves its
+  progress alone: the wave clears, with its heal, when its last monster is gone.
 - `prompt.submit` is a short rest: every hero heals 30% of max HP, fallen heroes
   revive at 30%.
 - When no enemy is present a tick spawns the next enemy of the current wave, so
@@ -134,8 +138,10 @@ Checked against Claude Code v2.1.287's mods API.
 ### 4.3 Heroes
 
 - Four classes: Knight, Black Mage, White Mage, Archer. Party of three from the
-  roster, chosen in the dialog's Heroes tab at any time, applied at the next
-  zone change (advance or retreat), so swaps happen between zones.
+  roster, chosen in the dialog's Heroes tab at any time, applied at the
+  next zone boss kill or wipe (a farm restart and a wipe in zone 1 included), so
+  swaps happen between zones. A pick on a fresh save, before the first kill,
+  applies at once.
 - A hero is a template (class, name, portrait) times a rarity times rolled
   traits. Trait count by rarity: Common 0, Uncommon 1, Rare 2, Epic 3,
   Legendary 4. Level cap by rarity: 20, 30, 40, 45, 50.
@@ -238,8 +244,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   TTL. Its zone is the committed state's zone on the server, never a client claim.
   Presence is keyed by account, so a secondary session polling adds nothing. It
   lives in the ledger's memory on the fakes and in Redis in phase 5; a restart
-  loses it and the next polls rebuild it. The World tab shows the count online,
-  the count per zone and the names in your zone.
+  loses it and the next polls rebuild it. The World tab shows the count online
+  and the names in your zone; the Leaderboards pane shows the count per zone.
 - Leaderboards: highest zone reached (all time) and world boss damage (weekly,
   reset Monday 00:00 UTC on the server clock). Both come from the ledger's own
   records, never from client claims, maintained incrementally at each commit and
@@ -274,8 +280,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 ## 7. Simulation and authority
 
 - Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. Any change to the
-  sim bumps it, and a state behind the server's sim version is reset (phase 3
-  bumps it to 3, the combat flow to 4). API: create an initial state from a seed, step a state with one
+  sim bumps it, and the plugin's version moves with it; a state behind the
+  client's sim version is reset (phase 3 bumps it to 3, the combat flow to 4,
+  the staged-state set to 5). API: create an initial state from a seed, step a state with one
   event into a new state plus effects, hash a state. Effects are UI notifications
   and carry no authority.
 - The client runs the sim locally for instant feedback, buffers the events it
@@ -456,31 +463,41 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   toggles farm. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
   zero-width Box; VS Code and mobile show them as a row under the strip.
-- Party tab (phase 4): the stage, 8 rows at rest, the encounter's enemies on the
-  left and the party on the right, side-on, standing on a one-row ground strip
-  coloured per zone; under it the window strip (ADR 0005), Dragon Quest V's
+- Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010), the
+  encounter's enemies on the left and the party on the right, side-on, small
+  against the zone's backdrop painting, bottom-anchored and centred (ADR 0009),
+  so a zone or world boss lands at its full size; the compact stage and a zone
+  with no painting stand on a one-row ground strip coloured per zone. Under it
+  the window strip (ADR 0005), Dragon Quest V's
   windows in its pixel font: the enemy window (titled with the zone and wave,
   one row per enemy with an HP bar, a boss with its percentage), the message
   window (the command line, then the combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
   fills between ticks and turns gold when full) and the purse window (gold and
   the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
-  and red at 0. The stage grows to 12 rows for a turn boss and 17 for a
-  zone or world boss, at the boss's spawn, and shrinks back after its death
-  dissolve and drop pop. Kitty and Ghostty draw it as an Image, every other
+  and red at 0. The band is 22 rows and never changes height for a fight.
+  Kitty and Ghostty draw it as an Image, every other
   terminal as a half-block Raster, desktop, VS Code and mobile as an Svg: one
   art geometry for all, in cells on terminals and scaled on the Svg surfaces
   (ADR 0004). The strip is one Image per window on kitty and Ghostty, one Raster
-  of box-drawing text elsewhere, a second Svg on the desktop. On terminals:
-  compact (the 4-row stage, sprites downsampled, beside one 6-row party window:
-  three hero rows, the front enemy, the command line in its border) when
-  `maxRows` is under what the full band needs or `bodyColumns` is 100 to 115;
-  one line when `bodyColumns` is under 100 or `maxRows` is under 6. On the Svg surfaces:
-  always the full stage, the art `clamp(bodyColumns, 116, 160)` pixels wide
-  scaled to the band's width, growing to the boss heights whatever `maxRows`
-  says, scaled down where a boss stage would pass the rows the surface shows
-  whole once the strip and the hotkey row are counted (the desktop scrolls the
-  rest); the band collapses only by hand or as a secondary. Hidden while
+  of box-drawing text elsewhere, a second Svg on the desktop. On terminals,
+  with 116 columns or more and fewer than 22 rows of `maxRows`, the band takes
+  `maxRows` and the stage fits the rows left over the strip: the Image zooms
+  out, the whole scene widened so that, scaled into those rows, it still spans
+  the band, down to 4 rows; the Raster cannot scale, so it keeps its art size
+  and shows the stage's bottom rows, the sky cropped, down to the tallest actor
+  on it (8 rows for the party, 12 with a turn boss, 17 with a zone or world
+  boss, held through a departed boss's dissolve). Past that, or at 100 to 115
+  columns, compact: the 4-row stage, sprites downsampled, beside one 6-row
+  party window (three hero rows, the front enemy, the command line in its
+  border). One line when `bodyColumns` is under 100 or `maxRows` is under 6.
+  On the Svg surfaces: always the full stage, the art
+  `clamp(bodyColumns, 116, 160)` pixels wide scaled to the band's width,
+  17 rows whatever `maxRows` says, scaled down where it would pass the rows the
+  surface shows whole once the strip and the hotkey row are counted (the
+  desktop scrolls the rest); the band collapses only by hand or as a
+  secondary. While the renderer probe is pending the band lays out with the
+  verdict the last session recorded, the half-block rules before any. Hidden while
   `hasSurvey`. Loot and World tabs are the strip alone: the message window
   shows the last two drops, or the World rows. Every Image and Svg has an alt
   that carries its text.
@@ -499,16 +516,42 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or
   sales. The desktop
-  redraws once a tick with the tick's motion as SMIL. Account setting "Motion:
-  full / still", default full; still drops the idle bob.
+  redraws once a tick with the tick's motion as SMIL, the action gauges and
+  the HP bars both keyed from the tick's landings, so a bar drops at its hit's
+  impact without a redraw. A monster that enters mid-tick plays its first
+  actions animated on every surface. Account setting "Motion: full / still",
+  default full; still drops the idle bob.
+- The staged state: what the band shows during a fight is the **staged
+  state**, the fight as the stage has played it so far: the sim's state less
+  every hit, heal and death the stage has not landed yet (GLOSSARY). One
+  producer (`stage/staged.ts`) builds it from the view and the stage's
+  timeline, in the view's shape, and is the only reader of the timeline's
+  landings. A hero's HP is the view's less the landings still pending for him,
+  and he stands, lunges and flashes while that HP is above zero, even when the
+  view says he is dead. The enemies are the timeline's line in arrival order,
+  a killed one kept with its row until its death has played, each with its HP
+  staged the same way. The encounter's zone, wave and title stay on the wave
+  or zone a held enemy was seen in, and newcomers stay out until the timeline
+  admits them, so the next wave enters after the last of the previous one has
+  gone, and the backdrop changes zone when the zone boss's row leaves. The
+  stage (and its alt text), the enemy window, the party window, the strip's
+  titles, the compact window and its front enemy, and the world boss bar on
+  every tab read the staged state. The sim, the server, the pane and the
+  toasts read the state, so a toast may lead what the stage shows (see the
+  wipe row below). The strip's hero HP trails the state and never leads it.
 - World tab rows (phase 3), in the message window: the count online and the
   names in your zone, you excluded; then the latest chat message as a ticker,
-  or highest zone, kills and wipes when chat is closed or quiet. The world boss
-  shows in the enemy window instead.
+  or highest zone, kills and wipes when chat is closed or quiet, ending in
+  `world boss is off` when the server's flag has the boss off and the row has
+  room for it. The world boss shows in the enemy window instead.
 - World boss display (phase 3): in boss mode the enemy window shows the boss
   with the global HP bar and its percentage, its title the time left, on every
-  tab. Between polls the bar shows the last
-  polled HP less the damage this party dealt since. No other surface.
+  tab. Under 116 columns, where the Party tab is the compact window and has no
+  enemy window, the compact window's title carries `World boss` and the time
+  left in the wave's place. Between polls the bar shows the last polled HP less
+  the damage this party has landed since the poll's baseline, so it drops as
+  the stage lands the party's hits; damage still in the air is subtracted from
+  a fresh poll too. No other surface.
 - World poll failures (phase 3): a thrown poll is ignored and the World tab dims
   as stale after 45 seconds without a fresh snapshot; only a thrown submit or
   bootstrap is an outage. Chat posting during an outage answers the unreachable
@@ -589,6 +632,18 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 | returned | money moved | short | `Ironwood Staff returned, unsold` | `3 items returned, unsold` | none |
 | world boss down | rare good news | short | `World boss Gorvax is down` | n/a | none |
 
+  Two toasts sit outside the table, raised by the session rather than from a
+  burst. The welcome: a first launch toasts `Welcome to Promptfall. /promptfall
+  heroes to meet your party` at the host's default length, and the band holds
+  it as a notice for 20 seconds. A boss already up at the first world poll
+  toasts the world boss appeared row's text and tier with no cue: the boss is
+  news, not a fight starting.
+
+  The toasts read the state, not the staged state, so the wipe toast may lead
+  the last hero's fall on the stage by at most one cadence: the tick that
+  wipes the party toasts as it lands, while the stage plays that tick's blows
+  over the cadence that follows.
+
   Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
   and the log show it), a party change the player made, a farming clear, a
@@ -642,8 +697,11 @@ Style reference is early Final Fantasy; its own sprites and signature designs
 are excluded (no black mage with a shadowed face and glowing eyes under a wide
 brim, no white mage with red triangle trim, no archer in a green pointed cap).
 
-- Heroes, monsters and items in the NES style: 16 × 16, the NES master palette,
-  at most 4 colours a sprite including the black outline. One sprite per hero
+- Heroes, monsters and items in the NES style. A sprite may use 16 colours: its
+  1.5× art, for the stage on Image and Svg, fits 24 × 24 with at most 16
+  colours from a shared 128-colour master; its 1× art, for the Raster, the
+  compact stage and the list windows, fits 16 × 16 with at most 4 colours from
+  the NES master palette, the black outline included. One sprite per hero
   class plus an attack or cast pose; one palette slot takes the hero's rarity
   colour (Common grey, Uncommon green, Rare blue, Epic magenta, Legendary gold).
 - Zone, turn and world bosses in the SNES style, each its own art: up to 48 ×
@@ -684,9 +742,11 @@ Each phase gets its own implementation plan when its turn comes.
 
 ## 13. Tooling and repository
 
-- pnpm workspaces, TypeScript everywhere, tsup to bundle `@promptfall/sim` and
-  `@promptfall/protocol` into the plugin folder (bundles committed so the plugin
-  installs from git without a build; CI fails when they are stale), vitest for
+- pnpm workspaces, TypeScript everywhere, tsup to bundle `@promptfall/sim`,
+  `@promptfall/protocol`, `@promptfall/ledger` (the in-process ledger) and the
+  zlib part of `fflate` (the stage's PNG frames) into `hooks/vendor/` (bundles
+  committed so the plugin installs from git without a build; CI fails when they
+  are stale), vitest for
   packages and servers, the official plugin test runner for the mod, Biome for
   lint and format.
 - Generated files are committed and CI regenerates each one, failing on a

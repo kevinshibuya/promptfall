@@ -28,7 +28,7 @@ one zone at full health and costs nothing else.
 | --- | --- |
 | `/promptfall` | Opens the dialog on the Inventory tab |
 | `/promptfall heroes` | Opens it on Heroes (also `inventory`, `market`, `orders`, `account`, `odds`) |
-| `/promptfall chat` | Opens it on Chat, the cursor in the compose box |
+| `/promptfall chat` | Opens it on Chat; Enter on a row moves to the compose field |
 | `/promptfall leaderboards` | Opens it on Leaderboards and loads the boards |
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
@@ -40,7 +40,7 @@ one zone at full health and costs nothing else.
 
 Each server keeps its own account: nothing moves between them, so the first switch to a server
 starts a fresh one there. The setting is machine-wide and a session that is not playing follows
-it within 10 seconds. When the server stops answering, the status row reads
+it within 10 seconds. When the server stops answering, or refuses a batch, the message window reads
 `Promptfall: server unreachable, retrying`, the band keeps ticking and buffering for two minutes,
 then it reads `Promptfall: server unreachable` and progress stops until the server is back. A
 switch during an outage drops what could not be sent, and the reply says how many events.
@@ -100,13 +100,15 @@ minutes or until it dies. Its HP is 4,000 for each account online when it spawns
 server turns presence off). Every account
 online is engaged at the spawn, and one that comes online later is engaged on its first poll.
 Engaged, the party fights the boss instead of waves: tool calls spawn nothing (they still count
-toward the turn boss), a wiped party is healed in place with no retreat, and nothing drops, since
+toward the turn boss), a wiped party has every gauge emptied and is healed in place with no
+retreat, and nothing drops, since
 the boss never dies on your side. The server counts the damage your committed batches dealt.
 
-The band shows it: the Party tab's enemy column is the boss, its name on the first row and its bar
-on the second (the server's HP, less what your party dealt since the last poll), the status row ends in `boss 62% · 11m`, and the World
-tab's second row reads `World boss <name> <bar> 62% · 11m left · you <damage>`. Toasts say when a
-boss appears and when it is down. While a boss is live every session polls the world every 5
+The band shows it in the enemy window on every tab: the boss with its bar and percentage, the
+window titled `World boss · 11m`. The bar is the server's HP less the damage your party has landed
+on the stage since the last poll, so it drops with the hits you watch. Under 116 columns, where the
+compact window has no enemy window, its title reads `World boss 11m` in the wave's place. Toasts
+say when a boss appears and when it is down. While a boss is live every session polls the world every 5
 seconds.
 
 Rewards land when the boss dies, or when its window ends: a guaranteed boss-rarity item for 200
@@ -116,9 +118,11 @@ in the loot log. An item with no free slot toasts `Your share of <boss>: <gold> 
 queue, and arrives as a `returned` loot line when a slot frees. The boss
 board counts every hit, past the boss's remaining HP too.
 
-The world boss changed the sim, so the game is at sim version 3. A store or a fake snapshot from
-phase 2 is behind it: the band reads the older-version notice, and `/promptfall account`,
-`Reset this machine's data` starts a fresh account. The in-process ledger has no world boss.
+The game is at sim version 5 (`SIM_VERSION` in `packages/sim/src/types.ts`), and the plugin's
+version moves with it. A store or a fake snapshot from an older sim is behind it: the band reads
+the older-version notice, and `/promptfall account`, `Reset this machine's data` starts a fresh
+account. A server whose sim is newer than the plugin's pauses play with `Update Promptfall:
+/plugin update promptfall`. The in-process ledger runs no world boss outside the sandbox.
 
 ### Account tab
 
@@ -162,7 +166,7 @@ columns), and a message window at the foot saying what the keys do.
 | `q` | Back out of a command window, a pick, a Yes/No, the sell window or the order form |
 
 Vendor, Dismiss, Buy, the two cancels and Reset ask Yes or No first. Party picks three heroes one at a time; the third sends
-the new party, which takes the field at the next zone change. The last row of Heroes recruits.
+the new party, which takes the field at the next zone boss kill or wipe. The last row of Heroes recruits.
 On the desktop, VS Code and mobile a `▲ ▼ ok back` row under the picture does the moving.
 
 The windows need 16 rows with the tab window and 14 without it. A short pane drops the tab
@@ -171,13 +175,22 @@ At 80 × 24 it gets 7 rows and asks for more room; in fullscreen from 110 column
 beside the conversation at full height.
 
 Esc closes the dialog, from a sub-window too. The band collapses to one row by itself under 100 columns or when fewer
-than 4 rows are free, and hides while Claude asks you a question.
+than 6 rows are free, and hides while Claude asks you a question.
 
 ### Stage
 
 The band's Party tab draws the battle as pixel art: enemies on the left, the party on the right,
 lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a pop when
-it drops loot.
+it drops loot. Behind them hangs the zone's backdrop, one painting per zone, bottom-anchored and
+centred (ADR 0009); the compact stage, and a zone without a painting, stand on a one-row ground
+strip in the zone's colour.
+
+Every window of the band draws the staged state (`hooks/stage/staged.ts`): the fight as the stage
+has played it, the game's state less the hits, heals and deaths still to land. A hero stands until
+the blow that kills him lands, a killed monster keeps its row until its dissolve has played, the
+enemy window's title and the backdrop stay on the wave and zone being watched, and the world boss
+bar drops as your party's hits land. Toasts read the game's state, so a wipe toast can come up to
+one cadence before the last hero falls on the stage.
 
 - **Choreography.** One action, from its start, in ms. Every actor winds up for 120 and strikes
   from there; at impact the target shows its hit frame for 160 (`FLASH_MS`), and the number rises
@@ -234,10 +247,11 @@ it drops loot.
   it out into the rows left. A `Raster` cannot scale, so it keeps the art size and shows the
   stage's bottom rows, the sky cut, down to the tallest actor on it (8 rows for the party, 12
   with a turn boss, 17 with a boss), then goes compact.
-- **Compact and collapsed.** On terminals, the full stage needs 116 columns and 8 rows above the
-  strip. With 100 to 115 columns, or fewer rows, the band keeps the three hero rows and the status row and draws a
-  52-column, 4-row stage beside them. Under 100 columns it is one row. Loot and World keep their
-  four rows and draw no stage.
+- **Compact and collapsed.** On terminals, the full stage needs 116 columns, and rows above the
+  strip: 4 for an `Image`, the tallest actor's height for a `Raster`. With 100 to 115 columns, or
+  fewer rows, the band is 6 rows: a 52-column, 4-row stage beside one party window with the three
+  hero rows, the front enemy and the command line in its border. Under 100 columns or 6 rows it is
+  one row. Loot and World keep their five rows and draw no stage.
 - **Override.** `/promptfall renderer image|raster` forces a renderer on this machine and
   `/promptfall renderer auto` returns to the probe. It applies at the next session start.
 - **Frames.** The render hook draws the first frame; a timer per surface blits the rest, about 12
@@ -264,7 +278,7 @@ them.
 ### What phase 1 has
 
 Combat, waves, zones, bosses, loot with rarities and affixes, equipping, vendoring, reforging,
-a tavern, hero contracts from bosses, party swaps that apply at the next zone change, inventory
+a tavern, hero contracts from bosses, party swaps that apply at the next zone boss kill or wipe, inventory
 and roster expansions, and published odds. Progress lives in the Claude Code store on this
 machine. One session at a time plays: another session shows `playing in another session` and
 takes over within about 10 seconds of the first one quitting. Typing a prompt or `/promptfall` in a
@@ -281,8 +295,13 @@ has no bots, so its market is yours alone and its chat is closed.
 A `--plugin-dir` folder reloads on save. The game packages live in `packages/`, and a mod can
 import only files inside its own folder, so `pnpm vendor` bundles them into `hooks/vendor/`.
 Run it after changing `packages/sim`, `packages/protocol` or `packages/ledger` and commit the
-result. CI fails when
+result; it also bundles the zlib part of `fflate` for the stage's PNG frames. CI fails when
 the bundles are stale (`pnpm vendor:check`).
+
+The `promptfall-content` skill's reference, `.claude/skills/promptfall-content/reference/content.md`,
+is generated from the sim's content registry. Run `pnpm content` after changing a zone, enemy, item
+or hero in `packages/sim` and commit the result; CI fails when it is stale (`pnpm content:check`).
+The pixel font's glyphs work the same way (`pnpm font`, `pnpm font:check`).
 
 Two rules of the mods runtime shape the code. A hook may not pass `$` or `$.store` on, so
 `register.tsx` hands the rest of the code closures written at the hook. And `claude plugin
