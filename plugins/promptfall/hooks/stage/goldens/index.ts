@@ -24,14 +24,14 @@ export const GOLDENS: Record<Scenario, Golden> = {
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
-  'strip-rest': {imageHash: "3efd38767438cb52", cellsHash: "d0581ceff5edbfa1", svgHash: "cba6848954a5fdcc", svgChars: 18914},
-  'strip-boss': {imageHash: "765a6f63c96f8466", cellsHash: "0d3624e54a50862b", svgHash: "80cffc646927cf78", svgChars: 18065},
-  'strip-world-boss': {imageHash: "7fb61e1e57e53c24", cellsHash: "7c253a252f53133d", svgHash: "b9dcc08be1afc4da", svgChars: 18245},
-  'strip-low-hp': {imageHash: "8209e8a9dadf29a7", cellsHash: "803d9719a74cb6ce", svgHash: "349aff0b79ce5c1f", svgChars: 18813},
-  'strip-compact': {imageHash: "c94afcec06972b00", cellsHash: "dee8eebdf8b01389", svgHash: "ea7b9fc25e10d976", svgChars: 10067},
-  'strip-loot': {imageHash: "703157b8ad1db1e9", cellsHash: "cd5c51ebd50f8f89", svgHash: "5e9a3bd9179f7628", svgChars: 16148},
-  'strip-world': {imageHash: "e1fda47ddda98a59", cellsHash: "3ab65c6c2e7c9b1d", svgHash: "365f1eef19af5fa6", svgChars: 16832},
-  'strip-notice': {imageHash: "86a1a646e80b9217", cellsHash: "025a7f298a79df8c", svgHash: "1773f381581b9ee9", svgChars: 16261},
+  'strip-rest': {imageHash: "3efd38767438cb52", cellsHash: "d0581ceff5edbfa1", svgHash: "2491694b711d6863", svgChars: 19169},
+  'strip-boss': {imageHash: "765a6f63c96f8466", cellsHash: "0d3624e54a50862b", svgHash: "2d32e96a277d1169", svgChars: 18320},
+  'strip-world-boss': {imageHash: "7fb61e1e57e53c24", cellsHash: "7c253a252f53133d", svgHash: "0168c1b426a5cd41", svgChars: 18500},
+  'strip-low-hp': {imageHash: "8209e8a9dadf29a7", cellsHash: "803d9719a74cb6ce", svgHash: "0f28bd71d3abf846", svgChars: 19068},
+  'strip-compact': {imageHash: "c94afcec06972b00", cellsHash: "dee8eebdf8b01389", svgHash: "8a51e3770946ed5f", svgChars: 10322},
+  'strip-loot': {imageHash: "703157b8ad1db1e9", cellsHash: "cd5c51ebd50f8f89", svgHash: "82627cf5b705bbe3", svgChars: 16403},
+  'strip-world': {imageHash: "e1fda47ddda98a59", cellsHash: "3ab65c6c2e7c9b1d", svgHash: "9b7b9d0c8194e115", svgChars: 17087},
+  'strip-notice': {imageHash: "86a1a646e80b9217", cellsHash: "025a7f298a79df8c", svgHash: "51c5a6ca5fe989d4", svgChars: 16516},
 }
 
 export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {

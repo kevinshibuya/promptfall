@@ -1,5 +1,6 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
+import { WORLD_DEFAULT } from '../state'
 import { accountPane, noViewPane } from '../ui/pane/account'
 import { chatPane } from '../ui/pane/chat'
 import {
@@ -34,6 +35,7 @@ import type { Box } from './layout'
 import { MessageLog } from './log'
 import { type StageModel, stageAt } from './model'
 import { encodeRaster, rasterPairs } from './raster'
+import { stagedState } from './staged'
 import { renderSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
@@ -102,8 +104,11 @@ const withoutFront = (): GameView => {
 function staged(view: GameView, t: StageTimeline, box: Box, compact = false): Staged {
   const opts = { compact, motion: 'full' as const }
   return {
-    model: stageAt(view, t, NOW, box, opts),
-    hires: stageAt(view, t, NOW, box, { ...opts, scale: HIRES_SCALE }),
+    model: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, opts),
+    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, {
+      ...opts,
+      scale: HIRES_SCALE,
+    }),
     motions: t.active(NOW),
     now: NOW,
   }

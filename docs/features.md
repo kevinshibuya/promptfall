@@ -133,9 +133,12 @@ damage this week, your own rows in gold.
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
-percentage and time left, waves pause and tool calls spawn nothing. A wipe in boss mode empties
+percentage and time left, the bar dropping as the party's hits land, waves pause and tool calls
+spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
+boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
-needs a server; the default in-process fake runs none.
+needs a server; the default in-process fake runs none, and with the boss off the World tab's
+records row says so in place when it has room.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
@@ -152,7 +155,9 @@ question.
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, on a ground strip coloured per zone. Actors bob between two idle
 drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
-rising damage number, heals rise green, the dead dissolve and drops pop out. It grows while a boss
+rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
+fights until the blow that kills him lands, then dims, and the party window's HP drops with each
+hit as it lands, not when the game applies it. It grows while a boss
 is on it and shrinks back after the boss falls. It draws as an image on Kitty and Ghostty, in
 half-blocks on other terminals, and as vector art on the desktop.
 
@@ -160,7 +165,11 @@ half-blocks on other terminals, and as vector art on the desktop.
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
 come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
 the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox).
+and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The windows
+tell the stage's story: a killed monster keeps its row until its death has played, the title stays
+on the wave or zone being watched until its last monster has dissolved, and the backdrop changes
+zone only then, so a zone boss dies against its own painting. On the desktop, which redraws once
+a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
@@ -193,7 +202,8 @@ machine's settings.
 another session makes that one the primary. A prompt goes through at once and the band catches up
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
-wait for the primary. A session that stops playing drops its banner, and the new primary does not toast again
+wait for the primary. A primary that has paused (an update to install, a save to reset) answers
+trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server

@@ -4,6 +4,7 @@
 import type { BandTab, GameView, HeroView, Settings, WorldState } from '../../types'
 import type { GaugeTrack } from '../stage/gauges'
 import type { MessageLog } from '../stage/log'
+import { landingsWithin, stagedState } from '../stage/staged'
 import type { StageTimeline } from '../stage/timeline'
 import { COMPACT_STAGE_COLUMNS, RARITY_RGB } from '../stage/tuning'
 import { GAUGE_FULL } from '../vendor/sim.js'
@@ -32,10 +33,9 @@ import {
   TEXT_RGB,
   WARN_RGB,
 } from '../windows/tuning'
-import { shownBoss } from './boss'
 import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
-import { worldRows } from './world-rows'
+import { recordsRow, worldRows } from './world-rows'
 
 export type StripInput = {
   view: GameView
@@ -66,7 +66,9 @@ type Slots = {
   cursor: { line: number; span: number }
   gauge: { line: number; span: number }
 }
-type Built = { win: Win; hotspots: Hotspot[]; slots: Slots[] }
+/** Where an actor's HP bar sits in a window, for the desktop's HP tracks. */
+type HpSlot = { id: string; line: number; span: number }
+type Built = { win: Win; hotspots: Hotspot[]; slots: Slots[]; hp: HpSlot[] }
 
 const FULL_MIN = 116
 const pad = (n: number): Span => ({ gap: n })
@@ -114,34 +116,41 @@ export function wrap(line: string, n: number): string[] {
   return rows
 }
 
-function enemyLabel(input: StripInput): { title: string; boss: boolean } {
+/**
+ * The world boss's time left while the staged enemies hold its row: '' without a clock or a
+ * polled boss, null when no world boss is up.
+ */
+function worldBossLeft(input: StripInput): string | null {
   const { view, world, now } = input
-  if (view.enemies.some((e) => e.kind === 'world_boss')) {
-    const shown = shownBoss(view, world)
-    const left =
-      shown && world.clock
-        ? ` · ${formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))}`
-        : ''
-    return { title: `World boss${left}`, boss: true }
-  }
+  if (!view.enemies.some((e) => e.kind === 'world_boss')) return null
+  const boss = world.snapshot?.boss
+  return boss && world.clock ? formatRemaining(remainingRealMs(boss.endsAt, world.clock, now)) : ''
+}
+
+function enemyLabel(input: StripInput): { title: string; boss: boolean } {
+  const { view } = input
+  const left = worldBossLeft(input)
+  if (left !== null) return { title: left ? `World boss · ${left}` : 'World boss', boss: true }
   if (view.wave >= 11 || view.enemies.some((e) => e.kind === 'zone_boss' || e.kind === 'turn_boss'))
     return { title: `Zone ${view.zone} · Boss`, boss: true }
   return { title: `Zone ${view.zone} · Wave ${view.wave}`, boss: false }
 }
 
-/** The live enemies in line order, each with the HP it shows (the world boss's predicted bar). */
-function enemies(input: StripInput): { name: string; hp: number; maxHp: number; boss: boolean }[] {
-  const { view, world, timeline } = input
-  const slot = new Map(timeline.known().map((k, place) => [k.id, place]))
-  const shown = shownBoss(view, world)
-  return [...view.enemies]
-    .sort((a, b) => (slot.get(a.id) ?? 9) - (slot.get(b.id) ?? 9))
-    .map((e) => {
-      const hp = e.kind === 'world_boss' && shown ? shown.shownHp : e.hp
-      const maxHp = e.kind === 'world_boss' && shown ? shown.boss.maxHp : e.maxHp
-      return { name: e.name, hp, maxHp, boss: e.kind !== 'wave' }
-    })
+/** The staged enemies in line order, each with its staged HP, the world boss's bar included. */
+function enemies(
+  input: StripInput,
+): { id: string; name: string; hp: number; maxHp: number; boss: boolean }[] {
+  return input.view.enemies.map((e) => ({
+    id: e.id,
+    name: e.name,
+    hp: e.hp,
+    maxHp: e.maxHp,
+    boss: e.kind !== 'wave',
+  }))
 }
+
+/** The bar's span in `enemyRow`'s spans. */
+const ENEMY_BAR_SPAN = 2
 
 /** One enemy row in `n` cells: name, gap, bar; a boss: name, gap, bar, percentage in 4. */
 function enemyRow(
@@ -172,6 +181,7 @@ function enemyWindow(input: StripInput, x: number): Built {
   const inner = ENEMY_COLUMNS - 2
   const lines: Line[] = list.map((e) => ({ spans: [pad(1), ...enemyRow(e, inner - 2), pad(1)] }))
   const alt = `${title}. ${list.map((e) => `${e.name} ${e.hp} of ${e.maxHp} HP`).join(', ') || 'No enemies'}.`
+  const hp = list.map((e, line) => ({ id: e.id, line, span: 1 + ENEMY_BAR_SPAN }))
   return {
     win: {
       key: 'enemy',
@@ -184,6 +194,7 @@ function enemyWindow(input: StripInput, x: number): Built {
     },
     hotspots: [],
     slots: [],
+    hp,
   }
 }
 
@@ -231,8 +242,7 @@ function tabRows(input: StripInput, n: number, at = input.now): Line[] {
   }
   if (tab === 'world') {
     const [presence, , chat] = worldRows(view, world, at)
-    const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
-    const second = chat && !chat.dim ? chat.text : records
+    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n)
     return [
       { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
       { spans: [text(clip(second, n))] },
@@ -283,7 +293,12 @@ function messageWindow(input: StripInput, x: number, columns: number): Built {
     )
     .filter(Boolean)
   const alt = `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab. ${shown.join(' ')}`.trim()
-  return { win: { key: 'message', x, columns, rows: STRIP_ROWS, lines, alt }, hotspots, slots: [] }
+  return {
+    win: { key: 'message', x, columns, rows: STRIP_ROWS, lines, alt },
+    hotspots,
+    slots: [],
+    hp: [],
+  }
 }
 
 function gaugeOf(input: StripInput, h: HeroView): { fill: number; rgb: number } {
@@ -304,6 +319,7 @@ function partyWindow(input: StripInput, x: number): Built {
   const hp: Span[] = [pad(1)]
   const gauge: Span[] = [pad(1)]
   const slots: Slots[] = []
+  const bars: HpSlot[] = []
   for (const [i, h] of input.view.heroes.slice(0, 3).entries()) {
     if (i > 0) {
       header.push(pad(1))
@@ -315,6 +331,7 @@ function partyWindow(input: StripInput, x: number): Built {
     const name = clip(h.shortName, Math.max(1, 11 - chars(level).length))
     const cursor = { line: 0, span: header.length }
     header.push({ cursor: acting === h.id }, text(padTo(name + level, 11), rgb))
+    bars.push({ id: h.id, line: 1, span: hp.length + 3 })
     hp.push(text('H', rgb), text(right(String(h.hp), 4), rgb), pad(1), {
       bar: fill(h.hp, h.maxHp),
       cells: 6,
@@ -331,6 +348,7 @@ function partyWindow(input: StripInput, x: number): Built {
     win: { key: 'party', x, columns: PARTY_COLUMNS, rows: STRIP_ROWS, lines, alt },
     hotspots: [],
     slots,
+    hp: bars,
   }
 }
 
@@ -356,18 +374,27 @@ function purseWindow(input: StripInput, x: number): Built {
     },
     hotspots: [{ hotkey: 'f', label: tactics, x: x + 2, y: 2, columns: 9 }],
     slots: [],
+    hp: [],
   }
 }
 
 function compactWindow(input: StripInput, x: number, columns: number): Built {
   const { view } = input
   const inner = columns - 2
-  const wave = view.wave >= 11 ? 'Boss' : `W${view.wave}`
+  // Under 116 columns there is no enemy window: the world boss's time left takes the wave's place.
+  const left = worldBossLeft(input)
+  const wave =
+    left !== null
+      ? `World boss${left ? ` ${left}` : ''}`
+      : view.wave >= 11
+        ? 'Boss'
+        : `W${view.wave}`
   let title = `Z${view.zone} · ${wave} · ${formatCount(view.gold)}G`
   if (view.farm && chars(`${title} · Farm`).length <= inner - 3) title = `${title} · Farm`
   const acting = input.timeline.acting(input.now)
   const lines: Line[] = []
   const slots: Slots[] = []
+  const bars: HpSlot[] = []
   for (const h of view.heroes.slice(0, 3)) {
     const rgb = heroRgb(h)
     const level = ` L${h.level}`
@@ -387,6 +414,7 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
       { bar: fill(h.hp, h.maxHp), cells: hpBar, rgb: HP_BAR_RGB },
       pad(1),
     ]
+    bars.push({ id: h.id, line: lines.length, span: spans.length - 2 })
     const gauge = { line: lines.length, span: spans.length }
     spans.push({ bar: g.fill, cells: rest - hpBar, rgb: g.rgb })
     slots.push({ hero: h, cursor: { line: lines.length, span: 1 }, gauge })
@@ -394,7 +422,10 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
   }
   const front = enemies(input)[0]
   if (input.notice) lines[3] = { spans: [pad(1), text(clip(input.notice, inner - 2))] }
-  else if (front) lines[3] = { spans: [pad(1), ...enemyRow(front, Math.min(inner - 2, 27))] }
+  else if (front) {
+    lines[3] = { spans: [pad(1), ...enemyRow(front, Math.min(inner - 2, 27))] }
+    bars.push({ id: front.id, line: 3, span: 1 + ENEMY_BAR_SPAN })
+  }
   const cmd = commandLine(input.tab, null)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
@@ -418,26 +449,17 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     },
     hotspots,
     slots,
+    hp: bars,
   }
 }
 
 /**
- * The view as the stage shows it: each hero's and enemy's HP before the hits and heals still to
- * land (#20), so a bar drops with the hit frame and its number. The world boss keeps its
- * predicted bar.
+ * The view as the stage shows it: the staged state (stage/staged.ts). A hero is down once his
+ * killing blow lands (#20); a killed monster keeps its row, and the encounter its wave and zone,
+ * until its death has played; the world boss's bar drops as the hits land.
  */
 function asStaged(input: StripInput): StripInput {
-  const { view, timeline, now } = input
-  const staged = <T extends { id: string; hp: number; maxHp: number }>(a: T): T => {
-    const hp = timeline.shownHp(a.id, a.hp, a.maxHp, now)
-    return hp === a.hp ? a : { ...a, hp }
-  }
-  const heroes = view.heroes.map((h) => {
-    const s = staged(h)
-    return s === h ? h : { ...s, alive: h.alive || s.hp > 0 }
-  })
-  const enemies = view.enemies.map((e) => (e.kind === 'world_boss' ? e : staged(e)))
-  return { ...input, view: { ...view, heroes, enemies } }
+  return { ...input, view: stagedState(input.view, input.world, input.timeline, input.now) }
 }
 
 function build(raw: StripInput): { scene: Scene; built: Built[] } {
@@ -481,13 +503,46 @@ export function stripScene(input: StripInput): { scene: Scene; hotspots: readonl
   return { scene, hotspots: built.flatMap((b) => b.hotspots) }
 }
 
-/** The desktop's motion over the next `horizonMs`: gauges, the ▶, the message window's lines. */
+/** The desktop's motion over the next `horizonMs`: HP bars, gauges, the ▶, the message window's lines. */
 export function stripTracks(input: StripInput, horizonMs: number): Track[] {
   const { built } = build(input)
   const tracks: Track[] = []
   const now = input.now
   const actions = input.timeline.actions()
+  const landings = landingsWithin(input.timeline, now, horizonMs)
+  // The staged state just after each landing: a bar steps to it at the impact, the way the
+  // next redraw would draw it, so a landing past the horizon waits for that redraw.
+  const after = new Map<number, GameView>()
+  const hpAt = (id: string, at: number) => {
+    let view = after.get(at)
+    if (!view) {
+      view = stagedState(input.view, input.world, input.timeline, at)
+      after.set(at, view)
+    }
+    const a = view.heroes.find((h) => h.id === id) ?? view.enemies.find((e) => e.id === id)
+    return a ? fill(a.hp, a.maxHp) : 0
+  }
   for (const b of built) {
+    for (const s of b.hp) {
+      const list = landings.get(s.id)
+      if (!list) continue
+      let last = hpAt(s.id, now)
+      const keys = [{ at: 0, fill: last }]
+      for (const l of list) {
+        const next = hpAt(s.id, l.at)
+        keys.push({ at: l.at - now, fill: last }, { at: l.at - now, fill: next })
+        last = next
+      }
+      keys.push({ at: horizonMs, fill: last })
+      tracks.push({
+        kind: 'bar',
+        window: b.win.key,
+        line: s.line,
+        span: s.span,
+        keys,
+        fullRgb: HP_BAR_RGB,
+      })
+    }
     for (const s of b.slots) {
       tracks.push({
         kind: 'bar',

@@ -305,6 +305,10 @@ class GameSession implements GameHandle {
     return this.off ? 'off' : this.engine.isPaused() ? 'paused' : this.role
   }
 
+  isPaused(): boolean {
+    return this.role === 'primary' && this.engine.isPaused()
+  }
+
   isPrimary(): boolean {
     return this.role === 'primary'
   }

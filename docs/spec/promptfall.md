@@ -336,6 +336,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - One primary session per account ticks. Phase 1 elects it with a lease in the
   local store; phase 5 with a server lease. Other sessions show "playing in
   another session" and render read-only.
+- A paused primary refuses trades, farm and the sandbox verbs with a reason of
+  its own, shown as "Promptfall is paused", never as "playing in another
+  session".
 
 ## 8. Server (phase 5)
 
