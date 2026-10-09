@@ -5,6 +5,7 @@ var __export = (target, all) => {
 };
 
 // packages/protocol/src/client.ts
+var MIN_CLIENT_VERSION = "0.1.0";
 var BUDGETS = {
   tick: { refillMs: 2e3, capacity: 70 },
   tool_call: { refillMs: 1e3, capacity: 140 },
@@ -4677,6 +4678,7 @@ export {
   ListingQuerySchema,
   ListingSchema,
   MARKET_REFUSALS,
+  MIN_CLIENT_VERSION,
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MemoryKeyValue,

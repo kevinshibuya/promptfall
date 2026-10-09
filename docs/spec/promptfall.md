@@ -324,8 +324,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   drop raises a toast; repeated revocations flag the account.
 - Hard version gate: a client below the server's minimum version shows an update
   banner and the sim pauses. No multi-version replay on the server, and no
-  state migration between sim versions: a state behind the server's sim version
-  is reset from the Account tab.
+  state migration between sim versions: a state behind the client's sim version
+  raises the reset notice and is reset from the Account tab; a state ahead of
+  it raises the update notice. Only the version-gate and sim-version acks pause
+  a submit with the update notice.
 - Server unreachable: the banner shows at once; the sim keeps ticking and
   buffering for 2 minutes of wall clock from the first failure, then pauses;
   retries back off from 1 to 30 seconds with jitter; the first success flushes

@@ -19,7 +19,7 @@ import {
   type NewOrder,
   type ServerClient,
 } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState, SIM_VERSION } from './vendor/sim.js'
 
 type Patch = Partial<PluginState['promptfall']>
 type Timer = { ms: number; fn: () => void; done: boolean }
@@ -328,12 +328,12 @@ test('a cursor_mismatch adopts the state and cursor', async () => {
   expect(client.acks[1]).toMatchObject({ ok: true, seq: 1 })
 })
 
-test('a v1 state at bootstrap pauses with the reset notice and publishes no view', async () => {
+/** A store whose account `old` holds a state at sim version `v`, its token saved as the device's. */
+async function savedAt(v: number): Promise<MemoryKeyValue> {
   const kv = new MemoryKeyValue()
-  const old = { ...createInitialState(3), v: 1 }
   await kv.set('pf:acct:old:record', {
     account: { accountId: 'old', seed: 3, createdAt: 1, displayName: null, linked: null },
-    state: old,
+    state: { ...createInitialState(3), v },
     seq: 2,
     refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
     buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
@@ -341,14 +341,39 @@ test('a v1 state at bootstrap pauses with the reset notice and publishes no view
   })
   await kv.set('pf:token:t-old', 'old')
   await kv.set('deviceToken', 't-old')
-  const { engine, patches, client, at } = setup(kv)
+  return kv
+}
+
+test('an older save raises the reset notice, pauses and publishes no view', async () => {
+  const { engine, patches, client, at, notices } = setup(await savedAt(1))
   await engine.start()
   expect(engine.isPaused()).toBe(true)
   expect(patches).toContainEqual({ view: null, mode: 'paused', notice: OLD_VERSION_NOTICE })
+  expect(notices()).not.toContain(UPDATE_NOTICE)
   expect(patches.some((p) => p.view)).toBe(false)
   engine.apply({ t: 'tick' }, at())
   await engine.flush()
   expect(client.batches).toHaveLength(0)
+})
+
+test('a newer server raises the update notice, never the reset notice', async () => {
+  const { engine, patches, client, at, notices } = setup(await savedAt(SIM_VERSION + 1))
+  await engine.start()
+  expect(engine.isPaused()).toBe(true)
+  expect(patches).toContainEqual({ view: null, mode: 'paused', notice: UPDATE_NOTICE })
+  expect(notices()).not.toContain(OLD_VERSION_NOTICE)
+  expect(patches.some((p) => p.view)).toBe(false)
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  expect(client.batches).toHaveLength(0)
+})
+
+test('a save at the client sim version raises no version notice', async () => {
+  const { engine, notices } = setup(await savedAt(SIM_VERSION))
+  await engine.start()
+  expect(engine.isPaused()).toBe(false)
+  expect(notices()).not.toContain(UPDATE_NOTICE)
+  expect(notices()).not.toContain(OLD_VERSION_NOTICE)
 })
 
 test('a thrown submit keeps the batch and retries it verbatim on the backoff', async () => {
@@ -372,13 +397,12 @@ test('a thrown submit keeps the batch and retries it verbatim on the backoff', a
   expect(timers.map((x) => x.ms)).toContain(2000)
   advance(61_000)
   await fire(2000)
-  // Answered on the third attempt: the same batch both times, then the rest.
-  expect(client.batches).toHaveLength(3)
-  expect(new Set(client.batches.map((b) => b.batchId)).size).toBe(1)
+  // Answered on the third attempt: the same batch every time, then the buffer at once.
+  expect(client.batches).toHaveLength(4)
+  expect(new Set(client.batches.slice(0, 3).map((b) => b.batchId)).size).toBe(1)
   expect(client.batches[2]?.events).toHaveLength(1)
   expect(client.acks[0]).toMatchObject({ ok: true })
   expect(notices().at(-1)).toBeNull()
-  await engine.flush()
   expect(client.batches[3]?.events).toHaveLength(1)
   expect(client.acks[1]).toMatchObject({ ok: true, seq: 2 })
 })
@@ -550,17 +574,84 @@ test('a server event that invalidates a buffered event re-steps it as rejected',
   expect(client.acks.at(-1)).toMatchObject({ ok: false, reason: 'cursor_mismatch' })
 })
 
-test('a submit the server refuses with a 4xx pauses with the update notice, not an outage', async () => {
-  const { engine, client, at, notices, timers } = setup()
+test('a submit the server refuses with a 4xx is an outage, retried on the backoff', async () => {
+  const { engine, client, at, notices, timers, fire } = setup()
   await engine.start()
   engine.apply({ t: 'tick' }, at())
   client.refuseNextSubmit = 400
   await engine.flush()
   await engine.settled()
-  expect(engine.isPaused()).toBe(true)
+  expect(engine.isPaused()).toBe(false)
+  expect(engine.isUnreachable()).toBe(true)
+  expect(notices().at(-1)).toBe(RETRYING_NOTICE)
+  expect(notices()).not.toContain(UPDATE_NOTICE)
+  expect(timers.map((x) => x.ms)).toContain(1000)
+  await fire(1000)
+  expect(client.batches).toHaveLength(2)
+  expect(client.acks[0]).toMatchObject({ ok: true })
   expect(engine.isUnreachable()).toBe(false)
-  expect(notices().at(-1)).toBe(UPDATE_NOTICE)
-  expect(timers).toHaveLength(0)
+  expect(notices().at(-1)).toBeNull()
+})
+
+test('a version-gate ack and a sim-version ack pause with the update notice', async () => {
+  for (const ack of [
+    { ok: false, reason: 'version_gate', minClientVersion: '9.0.0' },
+    { ok: false, reason: 'sim_version', simVersion: SIM_VERSION + 1 },
+  ] as const) {
+    const { engine, client, at, notices, timers } = setup()
+    await engine.start()
+    engine.apply({ t: 'tick' }, at())
+    client.fakeNextAck = ack
+    await engine.flush()
+    await engine.settled()
+    expect(engine.isPaused()).toBe(true)
+    expect(engine.isUnreachable()).toBe(false)
+    expect(notices().at(-1)).toBe(UPDATE_NOTICE)
+    expect(timers).toHaveLength(0)
+  }
+})
+
+test('the first success after an outage flushes the buffer, before the next scheduled flush', async () => {
+  const { engine, client, at, advance, fire } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.failSubmits = 1
+  await engine.flush()
+  expect(engine.isUnreachable()).toBe(true)
+  // Buffered during the outage.
+  advance(5_000)
+  engine.apply({ t: 'tick' }, at())
+  engine.apply({ t: 'tool_call' }, at())
+  await fire(1000)
+  // The retried batch, then the buffer at once: no 15-second wait.
+  expect(client.batches).toHaveLength(3)
+  expect(client.batches[1]?.batchId).toBe(client.batches[0]?.batchId)
+  expect(client.batches[1]?.events).toHaveLength(1)
+  expect(client.batches[2]?.events.map((e) => e.t)).toEqual(['tick', 'tool_call'])
+  expect(client.acks).toMatchObject([
+    { ok: true, seq: 1 },
+    { ok: true, seq: 2 },
+  ])
+  expect(engine.unsentCount()).toBe(0)
+})
+
+test('a success outside an outage leaves the buffer to the next scheduled flush', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  // Buffered while the batch is in flight.
+  engine.apply({ t: 'tick' }, at())
+  release()
+  client.hold = null
+  await flushed
+  expect(client.batches).toHaveLength(1)
+  expect(engine.unsentCount()).toBe(1)
 })
 
 test('a 5xx on submit stays an outage', async () => {

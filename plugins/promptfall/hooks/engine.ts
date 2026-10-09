@@ -228,9 +228,12 @@ export class GameEngine {
     await this.rememberConfig(boot.config)
     this.clearOutage()
     if (boot.state.v !== SIM_VERSION) {
-      this.paused = OLD_VERSION_NOTICE
+      // By direction: a save from a newer sim means this plugin is behind, so update; one from an
+      // older sim is this machine's to reset. An outdated plugin is never told to reset in a loop.
+      const notice = boot.state.v > SIM_VERSION ? UPDATE_NOTICE : OLD_VERSION_NOTICE
+      this.paused = notice
       this.noticeGen += 1
-      await this.publish({ view: null, mode: 'paused', notice: OLD_VERSION_NOTICE })
+      await this.publish({ view: null, mode: 'paused', notice })
       return
     }
     if (this.paused !== null) {
@@ -291,6 +294,7 @@ export class GameEngine {
       this.sent = { batch: this.build(), result: this.local }
       this.buffer = []
     }
+    const recovering = this.outage !== null
     let stuck = 0
     for (;;) {
       // Stopped between passes: a discarded engine never submits again.
@@ -300,14 +304,9 @@ export class GameEngine {
       let ack: BatchAck
       try {
         ack = await this.deps.client.submit(sent.batch, { deviceToken: this.token })
-      } catch (error) {
-        // A 4xx says this request will never succeed: the client and server disagree, so update.
-        // Everything else (unreachable, a timeout, a 5xx, an unreadable body) is an outage.
-        const status = (error as { name?: string; status?: number } | null)?.status
-        if ((error as { name?: string } | null)?.name === 'ServerError' && status && status < 500) {
-          this.setPaused(UPDATE_NOTICE)
-          return
-        }
+      } catch {
+        // Any thrown submit, a 4xx included, is an outage: only the version-gate and sim-version
+        // acks pause with the update notice.
         await this.enterOutage(() => this.doFlush())
         return
       }
@@ -324,6 +323,9 @@ export class GameEngine {
         this.seq = ack.seq
         this.sent = null
         this.receive(ack.delivery)
+        // The first success after an outage sends what buffered during it now, not at the next
+        // scheduled flush.
+        if (recovering && this.buffer.length > 0) await this.doFlush()
         return
       }
       if (ack.reason === 'cursor_behind') {
