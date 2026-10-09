@@ -145,11 +145,17 @@ export class StageTimeline {
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
   /** Every action still held, in start order, each kept until 2 × its cadence after its start. */
   private actions_: (Action & { keep: number })[] = []
+  /** The HP each actor had at the last observe: the state a burst starts from. */
+  private seenHp = new Map<string, number>()
+  /** Each hit's or heal's HP change, kept until it lands on the stage (#20). */
+  private landing: { actor: string; delta: number; at: number }[] = []
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
+    this.seenHp = new Map([...view.heroes, ...view.enemies].map((a) => [a.id, a.hp]))
+    this.landing = this.landing.filter((l) => l.at > now)
     const live = new Set(view.enemies.map((e) => e.id))
 
     for (const [id, known] of this.entries) {
@@ -241,6 +247,8 @@ export class StageTimeline {
     this.motions = this.motions.filter((m) => m.from < cut || !ACTION_KINDS.has(m.kind))
     this.actions_ = this.actions_.filter((a) => a.start < cut)
     this.actionEnd = Math.min(this.actionEnd, cut)
+    // The dropped hits land at once: the bars catch up with the state.
+    this.landing = this.landing.filter((l) => l.at < cut)
     for (const id of this.departed) {
       const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
       if (dissolve === undefined) continue
@@ -347,6 +355,8 @@ export class StageTimeline {
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
     const starts: number[] = []
+    // The HP each actor holds as the burst plays: what a hit can take, an overkill no more.
+    const hp = new Map(this.seenHp)
     for (const group of groups(effects)) {
       const offset = group.act ? Math.floor((group.act.at * cadenceMs) / TICK_MS) : 0
       if (this.actionEnd - (now + offset) > BACKLOG_ROUNDS * cadenceMs) this.dropQueued(now)
@@ -427,6 +437,7 @@ export class StageTimeline {
       }
       let last: { target: string; flashEnd: number } | null = null
       for (const effect of group.effects) {
+        if (effect.k === 'hit' || effect.k === 'heal') this.land(effect, impact, hp)
         if (effect.k === 'hit') {
           if (this.isActor(effect.target)) {
             effectOn(effect.target)
@@ -482,6 +493,7 @@ export class StageTimeline {
       if (shown) this.actionEnd = start + ACTION_MS
     }
     this.actions_.sort((a, b) => a.start - b.start)
+    this.seenHp = hp
     return starts
   }
 
@@ -489,6 +501,26 @@ export class StageTimeline {
    * The hero or enemy whose action is playing: from its start until the next action starts or its
    * `until`, whichever is first.
    */
+  /** Records a hit's or heal's HP change, as far as the actor's HP allows, to land at `at`. */
+  private land(
+    effect: Extract<Effect, { k: 'hit' } | { k: 'heal' }>,
+    at: number,
+    hp: Map<string, number>,
+  ): void {
+    const before = hp.get(effect.target)
+    const delta =
+      effect.k === 'heal' ? effect.amount : -Math.min(effect.amount, before ?? effect.amount)
+    if (before !== undefined) hp.set(effect.target, before + delta)
+    this.landing.push({ actor: effect.target, delta, at })
+  }
+
+  /** `hp` as the stage shows it at `now`: the hits and heals still to land undone (#20). */
+  shownHp(actor: string, hp: number, maxHp: number, now: number): number {
+    let shown = hp
+    for (const l of this.landing) if (l.actor === actor && l.at > now) shown -= l.delta
+    return Math.max(0, Math.min(maxHp, shown))
+  }
+
   acting(now: number): string | null {
     let current: Action | null = null
     for (const a of this.actions_) {
