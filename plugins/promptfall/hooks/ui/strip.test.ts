@@ -225,3 +225,66 @@ test('the world boss bar drops as the hits land, in the enemy window and the Wor
   expect(bar(impact - 1)).toEqual(['55800', '62'])
   expect(bar(impact)).toEqual(['54900', '61'])
 })
+
+/** The HP bar tracks of a window's line, in span order. */
+const hpBars = (i: StripInput, horizonMs: number, window: string, line: number) =>
+  stripTracks(i, horizonMs)
+    .filter(
+      (t): t is Extract<Track, { kind: 'bar' }> =>
+        t.kind === 'bar' && t.window === window && t.line === line,
+    )
+    .sort((a, b) => a.span - b.span)
+
+test('a landing yields an HP bar keyframe at its impact time', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(wave(), now - 1)
+  // The Goblin Scout hits Aldric (50 of 50) for 20: the view already has him at 30.
+  const impact = strike(t, 'e1', 'h1', 20, now)
+  const view: GameView = {
+    ...wave(),
+    heroes: wave().heroes.map((h) => (h.id === 'h1' ? { ...h, hp: 30 } : h)),
+  }
+  t.observe(view, now)
+  const input = { ...strip('strip-rest'), view, timeline: t, now }
+  const at = impact - now
+  expect(at).toBeGreaterThan(0)
+  const [aldric] = hpBars(input, 6000, 'party', 1)
+  expect(aldric?.keys).toEqual([
+    { at: 0, fill: 10000 },
+    { at, fill: 10000 },
+    { at, fill: 6000 },
+    { at: 6000, fill: 6000 },
+  ])
+  // The compact window's bar drops at the same moment.
+  const compact = { ...input, kind: 'compact' as const, columns: 110 }
+  expect(hpBars(compact, 6000, 'compact', 0)[0]?.keys).toEqual(aldric?.keys)
+})
+
+test('an enemy row’s HP bar drops at the impact; a landing past the horizon waits for the redraw', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(wave(), now - 1)
+  // Aldric hits the Goblin Scout (42 of 60) for 30: the view already has it at 12.
+  const impact = strike(t, 'h1', 'e1', 30, now)
+  const view: GameView = {
+    ...wave(),
+    enemies: wave().enemies.map((e) => (e.id === 'e1' ? { ...e, hp: 12 } : e)),
+  }
+  t.observe(view, now)
+  const input = { ...strip('strip-rest'), view, timeline: t, now }
+  const at = impact - now
+  expect(hpBars(input, 6000, 'enemy', 0)[0]?.keys).toEqual([
+    { at: 0, fill: 7000 },
+    { at, fill: 7000 },
+    { at, fill: 2000 },
+    { at: 6000, fill: 2000 },
+  ])
+  const compact = { ...input, kind: 'compact' as const, columns: 110 }
+  expect(hpBars(compact, 6000, 'compact', 3)[0]?.keys.at(-1)).toEqual({ at: 6000, fill: 2000 })
+  // A horizon that ends before the impact keys nothing: the bar holds the staged 42 until the
+  // next tick's redraw draws what has landed by then.
+  expect(hpBars(input, at - 1, 'enemy', 0)).toEqual([])
+  const row = win(stripScene(input).scene, 'enemy').lines[0]?.spans.find((s) => 'bar' in s)
+  expect(row && 'bar' in row ? row.bar : null).toBe(7000)
+})

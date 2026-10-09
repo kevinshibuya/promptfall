@@ -166,7 +166,8 @@ the party window (each hero's name, level, HP bar and action gauge, the text ora
 and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The windows
 tell the stage's story: a killed monster keeps its row until its death has played, the title stays
 on the wave or zone being watched until its last monster has dissolved, and the backdrop changes
-zone only then, so a zone boss dies against its own painting.
+zone only then, so a zone boss dies against its own painting. On the desktop, which redraws once
+a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
