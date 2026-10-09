@@ -416,7 +416,7 @@ test('the World tab shows who is here and the last chat line, and dims a stale s
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(140, 20) })
   await ui.press({ key: 'hot-w' })
   const presence = async () => {
-    const { text, fg } = cellsOf(await ui.find({ key: 'strip' }))
+    const { text, fg } = cellsOf(await bandRaster(ui))
     const y = text.findIndex((t) => t.includes('13 online'))
     const x = text[y]?.indexOf('13 online') ?? -1
     return { text, colour: fg[y]?.[x] }
@@ -843,7 +843,7 @@ test('the desktop draws the 17-row stage for a zone boss, never the compact one 
   await ui.unmount()
 })
 
-test('Loot and World are the strip alone: 5 rows, no stage; the loop blits the strip there', async ($, on) => {
+test('Loot and World are the strip alone on the shell: 5 rows, no stage; the loop blits the band there', async ($, on) => {
   const { data, blits, clock } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -853,12 +853,12 @@ test('Loot and World are the strip alone: 5 rows, no stage; the loop blits the s
     expect(await ui.find({ key: 'stage' })).toBeUndefined()
     expect(await height(ui)).toBe(5)
   }
-  // Ticks keep changing the party window: the strip blits, the stage never does.
+  // Ticks keep changing the party window: the band, the strip alone, blits; the stage never does.
   const before = blits.length
   await clock.advance(20_000)
   const later = blits.slice(before)
-  expect(later.some((b) => b.key === 'strip')).toBe(true)
-  expect(later.some((b) => b.key === 'stage')).toBe(false)
+  expect(later.some((b) => b.key === bandKey({ columns: 120, rows: 5 }))).toBe(true)
+  expect(later.some((b) => b.key === 'stage' || b.key === 'strip')).toBe(false)
   await ui.unmount()
 })
 
@@ -871,6 +871,14 @@ test('on the desktop the World tab draws the strip Svg alone, its hotkeys hidden
   const { strip } = await svgs(ui)
   expect(strip?.type).toBe('Svg')
   expect(String(strip?.props.alt)).toContain('World tab')
+  // The strip is the whole playfield: the shell under it, the line all round, 2 pixels in from
+  // each side and over the windows' top and bottom lines.
+  const t = String(strip?.props.source)
+  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
+  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
+  expect(t).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM3 10H957V11H958V69H957V70H3V69H2V11H3Z"\/><path fill="#f0f0e8" fill-rule="evenodd" d="M3 10H957V11H958V69H957V70H3V69H2V11H3ZM4 12V68H956V12Z"\/><\/svg>$/,
+  )
   expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
   expect(await ui.find({ key: 'hotkeys' })).toBeDefined()
   await ui.unmount()

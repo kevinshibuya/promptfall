@@ -208,13 +208,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
     // strip composed on the shell, the band's box up to the host's widest element, centred past it.
     // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
+    // Loot and World are the strip alone on the same shell, the playfield as wide and centred.
     const picture =
       rendererNow === 'image' && 'Image' in els
         ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
         : rendererNow === 'raster' && 'Raster' in els
           ? { renderer: 'raster' as const, max: RASTER_MAX_COLUMNS }
           : null
-    if (terminal && picture && layout.kind === 'full') {
+    if (terminal && picture && (layout.kind === 'full' || layout.kind === 'bare')) {
       const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
       const key = bandKey(box)
       let element = null
@@ -235,7 +236,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             source={source}
             columns={box.columns}
             rows={box.rows}
-            alt={`${altText(view)}\n${scene.alt}`}
+            alt={party ? `${altText(view)}\n${scene.alt}` : scene.alt}
           />
         )
       }
@@ -320,7 +321,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           source={sceneSvg(scene, tracks, {
             smil: SVG_SMIL,
             width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
-            band: party,
+            band: party ? 'bottom' : 'both',
           })}
           alt={scene.alt}
           isInteractive={SVG_INTERACTIVE}

@@ -479,30 +479,57 @@ test('with only a gauge filling the loop re-arms at the gauge rate, capped by th
   expect(Math.max(...gaps)).toBeLessThanOrEqual(GAUGE_FRAME_MS)
 })
 
-test('a bare site (World) blits the strip and no stage; a boss arriving is not a layout change', async () => {
+/** The World tab's band site (spec #45): the strip alone, drawn as one picture at the band key. */
+function worldSite(renderer: StageSite['renderer'] = 'image'): StageSite {
+  const layout = layoutFor(0, PROPS, 'terminal', { tab: 'world', extra: 0 })
+  const band = { columns: PROPS.bodyColumns, rows: layout.bandRows }
+  return {
+    requestId: 'band-1',
+    key: bandKey(band),
+    layout,
+    band,
+    renderer,
+    props: PROPS,
+    surface: 'terminal',
+    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
+  }
+}
+
+test('a bare band site (World) blits the band, 5 rows, and no stage; a boss arriving is not a layout change', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.state.strip = extras()
-  const props = PROPS
-  h.loop.mount({
-    requestId: 'band-1',
-    key: '',
-    layout: layoutFor(0, props, 'terminal', { tab: 'world', extra: 0 }),
-    renderer: 'image',
-    props,
-    surface: 'terminal',
-    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
-  })
+  h.loop.mount(worldSite())
   await clock.advance(EVENT_FRAME_MS + 1)
   const v = wave()
   v.highestZone = 4
   h.state.view = v
   await clock.advance(IDLE_FRAME_MS * 2)
-  expect(h.blits.some((b) => b.key === 'win-message-40x5')).toBe(true)
-  expect(h.blits.some((b) => b.key === 'stage' || b.key.startsWith('stage-'))).toBe(false)
+  expect(h.blits.length).toBeGreaterThanOrEqual(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
+  const first = h.blits[0]
+  if (!first || !('source' in first) || !first.source || !('png' in first.source))
+    throw new Error('expected a PNG source')
+  expect(pngSize(first.source)).toEqual([960, 80])
   h.state.view = boss()
   await clock.advance(IDLE_FRAME_MS * 3)
   expect(h.invalidations).toHaveLength(0)
+})
+
+test('a bare band site redraws only when its strip changes, whatever the motion setting', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(worldSite('raster'))
+  await clock.advance(5_000)
+  expect(h.blits).toHaveLength(1)
+  expect(cellText(h.blits[0] as UiBlitArgs)[0]).toMatch(/^╭─+┬/)
+  const v = wave()
+  v.gold = 1240
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits).toHaveLength(2)
+  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
 })
 
 /** A PNG source's width and height, from its IHDR. */

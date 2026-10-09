@@ -249,7 +249,16 @@ for (const name of BAND_SCENARIOS) {
   test(`band ${name}: the desktop's stage and strip Svgs are each the band's width and under their caps`, () => {
     const { svg, box } = band(name)
     const width = `width="${box.columns * DESKTOP_COLUMN_PX_CEILING}"`
-    for (const doc of [svg.stage, svg.strip]) expect(doc).toMatch(new RegExp(`^<svg [^>]*${width}`))
+    expect(svg.strip).toMatch(new RegExp(`^<svg [^>]*${width}`))
+    expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
+    if (svg.stage === null) {
+      // Loot and World: the strip's Svg is the whole band, the shell under it and the line all
+      // round, its tracks inside.
+      expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
+      expect(svg.strip).toMatch(/<path fill="#f0f0e8" fill-rule="evenodd" d="[^"]*Z"\/><\/svg>$/)
+      return
+    }
+    expect(svg.stage).toMatch(new RegExp(`^<svg [^>]*${width}`))
     // One grid for both: the same viewBox width, so the line's sides meet.
     const gridOf = (doc: string) => doc.match(/viewBox="0 0 (\d+) /)?.[1]
     expect(gridOf(svg.stage)).toBe(gridOf(svg.strip))
@@ -259,7 +268,6 @@ for (const name of BAND_SCENARIOS) {
     )
     expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
     expect(svg.stage.length).toBeLessThan(SVG_MAX_CHARS)
-    expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
   })
 }
 

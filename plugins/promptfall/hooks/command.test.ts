@@ -558,6 +558,65 @@ test(
   },
 )
 
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+for (const renderer of ['image', 'raster'] as const) {
+  test(
+    `in play, switching tabs keeps the band one element on the shell (${renderer})`,
+    { timeoutMs: 15_000 },
+    async ($, on) => {
+      await sandboxOn(on, $, {
+        'promptfall:settings': { sound: false, motion: 'full', renderer },
+      })
+      const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+      const type = renderer === 'image' ? 'Image' : 'Raster'
+      for (const [key, rows] of [
+        ['hot-p', 22],
+        ['hot-l', STRIP_ROWS],
+        ['hot-w', STRIP_ROWS],
+        ['hot-p', 22],
+      ] as const) {
+        await ui.press({ key })
+        const band = await ui.find({ key: 'band' })
+        expect(((band?.children ?? []) as Found[]).map((c) => c.props.key)).toEqual(['row-band'])
+        const row = await ui.find({ key: 'row-band' })
+        const children = (row?.children ?? []) as Found[]
+        // One element at the band's width, the Party tab's; beside it only the hotkeys.
+        expect(children.map((c) => [c.type, c.props.key])).toEqual([
+          [type, bandKey({ columns: 165, rows })],
+          ['Box', 'hotkeys'],
+        ])
+        expect(children[0]?.props).toMatchObject({ columns: 165, rows })
+        for (const k of ['strip', 'strip-windows', 'row-strip'])
+          expect(await ui.find({ key: k })).toBeUndefined()
+        if (renderer === 'image') {
+          const picture = pixels(children[0]?.props.source as { png: string } | undefined)
+          expect([picture.width, picture.height]).toEqual([165 * CELL_W, rows * CELL_H])
+          // The shell at the band's edges, the line just outside the playfield's 160 columns,
+          // which sit 2 columns in: the same width and centre on every tab.
+          const y = rows * CELL_H - 30
+          expect([picture.at(0, y), picture.at(14, y), picture.at(15, y)]).toEqual([
+            FIELD_RGB,
+            BORDER_RGB,
+            BORDER_RGB,
+          ])
+          expect([picture.at(162 * CELL_W, y), picture.at(164 * CELL_W + 7, y)]).toEqual([
+            BORDER_RGB,
+            FIELD_RGB,
+          ])
+        } else {
+          const g = rasterCells(children[0] as Found)
+          const at = (x: number, y: number) => g[y]?.[x]?.ch
+          // The line in the shell beside the playfield, its corners at the band's top and bottom.
+          expect([at(0, 0), at(1, 0), at(162, 0), at(164, rows - 1)]).toEqual([' ', '╭', '╮', ' '])
+          expect([at(1, rows - 1), at(162, rows - 1), at(1, 2)]).toEqual(['╰', '╯', '│'])
+        }
+      }
+      await ui.unmount()
+    },
+  )
+}
+
 test('in play, the strip’s hero HP trails the state until the hit lands, never leads it (#20)', async ($, on) => {
   const { view, clock } = await sandboxOn(on, $, {
     'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },

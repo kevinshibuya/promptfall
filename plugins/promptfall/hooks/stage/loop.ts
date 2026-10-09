@@ -29,8 +29,9 @@ export type StageSite = {
   key: string
   layout: Layout
   /**
-   * The band's box in cells when the band is one picture (the full layout, spec #45):
-   * each frame composes the stage and the strip into it, and no strip element is blitted.
+   * The band's box in cells when the band is one picture (the full layout and Loot and World,
+   * spec #45): each frame composes the stage, if any, and the strip into it, and no strip element
+   * is blitted.
    */
   band?: Box
   /** The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row. */
@@ -151,7 +152,8 @@ function rasterShown(model: StageModel, layout: Layout): { frame: Frame; numbers
 
 /**
  * The Image band's picture (spec #45): the full stage's 1.5x frame and the strip's scene composed
- * into `band` on the windows' grid, the playfield on the shell.
+ * into `band` on the windows' grid, the playfield on the shell; on Loot and World (`bare`) the
+ * strip alone.
  */
 export function bandFrame(
   view: GameView,
@@ -162,7 +164,8 @@ export function bandFrame(
   band: Box,
   strip: Scene,
 ): { png: string } {
-  if (layout.kind !== 'full') throw new Error('the band is one picture only in the full layout')
+  if (layout.kind === 'bare') return pngImage(composeBand(band, null, strip), WINDOW_SCALE)
+  if (layout.kind !== 'full') throw new Error('the band is one picture only in full or bare')
   const model = stageAt(view, timeline, now, layout.box, {
     compact: false,
     motion,
@@ -173,7 +176,8 @@ export function bandFrame(
 
 /**
  * The Raster band's cells (#61): the full stage's 1x frame, its sky cropped on a short band (ADR
- * 0010), and the strip's scene composed into `band`, the playfield on the shell.
+ * 0010), and the strip's scene composed into `band`, the playfield on the shell; on Loot and
+ * World (`bare`) the strip alone.
  */
 export function bandCells(
   view: GameView,
@@ -184,7 +188,8 @@ export function bandCells(
   band: Box,
   strip: Scene,
 ): { cells: string } {
-  if (layout.kind !== 'full') throw new Error('the band is one picture only in the full layout')
+  if (layout.kind === 'bare') return { cells: composeBandCells(band, null, [], strip) }
+  if (layout.kind !== 'full') throw new Error('the band is one picture only in full or bare')
   const model = stageAt(view, timeline, now, layout.box, { compact: false, motion, scale: 1 })
   const { frame, numbers } = rasterShown(model, layout)
   return { cells: composeBandCells(band, frame, numbers, strip) }
@@ -367,7 +372,8 @@ export class StageLoop {
     const box = layout.box
     const cells = cellsOf(layout)
     // A band site with no strip to compose draws nothing: the stage alone is not the band's size.
-    if (box && cells && (!site.band || band)) {
+    const drawn = band ? band.box : !site.band ? cells : null
+    if (drawn) {
       const actors = [
         ...this.timeline.known().map((k) => k.id),
         ...view.heroes.map((h) => `${h.id}:${h.alive}`),
@@ -377,11 +383,9 @@ export class StageLoop {
         this.lastActors = actors
       }
       const settled = settings.motion === 'still' && !this.timeline.isBusy(now)
-      const skip =
-        settled &&
-        !this.wasBusy &&
-        actors === this.lastActors &&
-        (band === null || this.sent.get('band') === band.json)
+      const same = band === null || this.sent.get('band') === band.json
+      // With no stage in it (Loot and World) the band is its strip: it redraws when that changes.
+      const skip = box ? settled && !this.wasBusy && actors === this.lastActors && same : same
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
         const frame = !band
@@ -402,8 +406,8 @@ export class StageLoop {
         const at = {
           requestId: site.requestId,
           key: site.key,
-          columns: band ? band.box.columns : cells.columns,
-          rows: band ? band.box.rows : cells.rows,
+          columns: drawn.columns,
+          rows: drawn.rows,
         }
         const result = await this.io.blit(
           'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },

@@ -1,5 +1,5 @@
 // The band as one picture (ADR 0011): the shell over the band's whole box, the playfield centred
-// on it, the stage above the strip inside one window line. Pure; the Image path draws its bitmap,
+// on it, the stage above the strip inside one window line; on Loot and World the strip alone. Pure; the Image path draws its bitmap,
 // the Raster draws the same placement in cells, the Svg path reuses its placement.
 import { encode } from '../sprites/base64'
 import { windowFrame } from '../windows/image'
@@ -158,14 +158,15 @@ function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
  * The line: BORDER_PX white with cut corners, the shell outside it. With shell beside the
  * playfield it sits just outside it; where the playfield meets the band's edge it sits over the
  * stage's outermost art pixel (the top, a side) and over the strip's own outer line (the bottom),
- * so no stage row or column is spent on it (ADR 0010).
+ * so no stage row or column is spent on it (ADR 0010). With no stage its top sits over the strip
+ * windows' top lines, as its bottom does over their bottom ones.
  */
-function drawLine(band: Frame, at: Placement, full: Box): void {
+function drawLine(band: Frame, at: Placement, full: Box, stage: boolean): void {
   const pfLeft = at.x * CELL_W
   const pfRight = (at.x + at.columns) * CELL_W - 1
   const left = at.x > 0 ? pfLeft - BORDER_PX : pfLeft + LINE_IN
   const right = at.x + at.columns < full.columns ? pfRight + BORDER_PX : pfRight - LINE_IN
-  const top = at.y * CELL_H + LINE_IN
+  const top = at.y * CELL_H + (stage ? LINE_IN : LINE_IN_STRIP)
   const bottom = (at.y + at.rows) * CELL_H - 1 - LINE_IN_STRIP
   const dst = words(band)
   for (let y = 0; y < band.height; y++) {
@@ -191,11 +192,12 @@ function drawLine(band: Frame, at: Placement, full: Box): void {
 }
 
 /**
- * The Party tab's band as one bitmap on the windows' grid, CELL_W × CELL_H pixels a cell: the
- * shell over `band`, and on it the playfield, `stage` (a 1.5x frame) in the rows the strip leaves
- * above `strip`, inside the line. Every pixel is opaque.
+ * The band as one bitmap on the windows' grid, CELL_W × CELL_H pixels a cell: the shell over
+ * `band`, and on it the playfield, `stage` (a 1.5x frame) in the rows the strip leaves above
+ * `strip`, inside the line. Loot and World pass no stage: the playfield is the strip alone.
+ * Every pixel is opaque.
  */
-export function composeBand(band: Box, stage: Frame, strip: Scene): Frame {
+export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame {
   const width = band.columns * CELL_W
   const height = band.rows * CELL_H
   const out: Frame = { width, height, rgba: new Uint8ClampedArray(width * height * 4) }
@@ -204,9 +206,9 @@ export function composeBand(band: Box, stage: Frame, strip: Scene): Frame {
   const stageRows = at.rows - strip.rows
   const x0 = at.x * CELL_W
   const y0 = at.y * CELL_H
-  drawStage(out, stage, x0, y0, at.columns * CELL_W, stageRows * CELL_H)
+  if (stage) drawStage(out, stage, x0, y0, at.columns * CELL_W, stageRows * CELL_H)
   drawStrip(out, strip, x0, y0 + stageRows * CELL_H)
-  drawLine(out, at, band)
+  drawLine(out, at, band, stage !== null)
   return out
 }
 
@@ -241,13 +243,15 @@ export function svgFit(
  * behind everything it draws, and `over`, the shell outside the line and the line, drawn last.
  * The stage's share (`top`) is the line's top and sides, open at its bottom edge; the strip's
  * (`bottom`) the sides from its top edge down to the bottom line, over the outer windows' own.
- * The line sits where `composeBand` draws it when the playfield fills the band: 2 pixels wide,
- * LINE_IN from each side, LINE_IN from the top and LINE_IN_STRIP from the bottom, corners cut.
+ * On Loot and World the strip Svg is the whole playfield (`both`): the line all round, its top
+ * over the windows' top lines. The line sits where `composeBand` draws it when the playfield
+ * fills the band: 2 pixels wide, LINE_IN from each side, LINE_IN from the top over a stage and
+ * LINE_IN_STRIP over a strip, LINE_IN_STRIP from the bottom, corners cut.
  */
 export function svgFrame(
   w: number,
   h: number,
-  edge: 'top' | 'bottom',
+  edge: 'top' | 'bottom' | 'both',
 ): { under: string; over: string } {
   const l = LINE_IN
   const r = w - LINE_IN
@@ -259,16 +263,23 @@ export function svgFrame(
     const t = LINE_IN
     outline = `M${l + 1} ${t}H${r - 1}V${t + 1}H${r}V${h}H${l}V${t + 1}H${l + 1}Z`
     line = `M${l + 1} ${t}H${r - 1}V${t + 1}H${r}V${h}H${r - b}V${t + b}H${l + b}V${h}H${l}V${t + 1}H${l + 1}Z`
-  } else {
+  } else if (edge === 'bottom') {
     const e = h - LINE_IN_STRIP
     outline = `M${l} 0H${r}V${e - 1}H${r - 1}V${e}H${l + 1}V${e - 1}H${l}Z`
     line = `M${l} 0H${l + b}V${e - b}H${r - b}V0H${r}V${e - 1}H${r - 1}V${e}H${l + 1}V${e - 1}H${l}Z`
+  } else {
+    const t = LINE_IN_STRIP
+    const e = h - LINE_IN_STRIP
+    outline = `M${l + 1} ${t}H${r - 1}V${t + 1}H${r}V${e - 1}H${r - 1}V${e}H${l + 1}V${e - 1}H${l}V${t + 1}H${l + 1}Z`
+    // A ring: the outline less its inside, by the even-odd rule.
+    line = `${outline}M${l + b} ${t + b}V${e - b}H${r - b}V${t + b}Z`
   }
+  const ring = edge === 'both' ? ' fill-rule="evenodd"' : ''
   return {
     under: `<rect width="${w}" height="${h}" fill="${hex(FIELD_RGB)}"/>`,
     over:
       `<path fill="${hex(FIELD_RGB)}" fill-rule="evenodd" d="M0 0H${w}V${h}H0Z${outline}"/>` +
-      `<path fill="${hex(BORDER_RGB)}" d="${line}"/>`,
+      `<path fill="${hex(BORDER_RGB)}"${ring} d="${line}"/>`,
   }
 }
 
@@ -307,16 +318,17 @@ function lay(
 }
 
 /**
- * The Party tab's band as Raster cells, `band` columns by rows, base64: the shell's cells, and on
- * them the playfield at `playfieldOf`, `stage` (a 1x frame of the stage rows shown, its sky
- * cropped on a short band) above `strip`, inside one line. The line takes the shell's margin when
- * it is two cells or more a side; under that it sits over the playfield's outermost columns, so
- * 160 to 163 columns draw like 160. Its top row is over the stage's top row and its bottom row
- * over the strip's own bottom line, each window side meeting it. A damage number stays inside it.
+ * The band as Raster cells, `band` columns by rows, base64: the shell's cells, and on them the
+ * playfield at `playfieldOf`, `stage` (a 1x frame of the stage rows shown, its sky cropped on a
+ * short band) above `strip`, inside one line; Loot and World pass no stage. The line takes the
+ * shell's margin when it is two cells or more a side; under that it sits over the playfield's
+ * outermost columns, so 160 to 163 columns draw like 160. Its top row is over the stage's top
+ * row, or the strip's own top line with no stage, and its bottom row over the strip's own bottom
+ * line, each window side meeting it. A damage number stays inside it.
  */
 export function composeBandCells(
   band: Box,
-  stage: Frame,
+  stage: Frame | null,
   numbers: readonly StageNumber[],
   strip: Scene,
 ): string {
@@ -328,12 +340,14 @@ export function composeBandCells(
   const left = inside ? at.x : at.x - 1
   const right = inside ? at.x + at.columns - 1 : at.x + at.columns
   const inset = inside ? 1 : 0
-  const kept = numbers.map((n) => ({
-    ...n,
-    x: Math.max(inset, Math.min(stage.width - inset - n.text.length, n.x)),
-    y: Math.max(2, n.y),
-  }))
-  lay(cells, band, rasterWords(onShell(stage), kept), stage.width, at.x, at.y)
+  if (stage) {
+    const kept = numbers.map((n) => ({
+      ...n,
+      x: Math.max(inset, Math.min(stage.width - inset - n.text.length, n.x)),
+      y: Math.max(2, n.y),
+    }))
+    lay(cells, band, rasterWords(onShell(stage), kept), stage.width, at.x, at.y)
+  }
   lay(cells, band, sceneWords(strip), strip.columns, at.x, at.y + stageRows)
 
   const top = at.y
@@ -342,10 +356,11 @@ export function composeBandCells(
     cells.set([cp(ch), BORDER_RGB, FIELD_RGB], (y * band.columns + x) * 3)
   const under = (x: number, y: number) => cells[(y * band.columns + x) * 3]
   for (let x = left + 1; x < right; x++) {
-    put(x, top, '─')
-    // A window's side comes down to meet the bottom line.
-    const corner = under(x, bottom) === cp('╰') || under(x, bottom) === cp('╯')
-    put(x, bottom, corner ? '┴' : '─')
+    // A window's side comes up to meet the top line (no stage) and down to meet the bottom one.
+    const above = under(x, top) === cp('╭') || under(x, top) === cp('╮')
+    put(x, top, above ? '┬' : '─')
+    const below = under(x, bottom) === cp('╰') || under(x, bottom) === cp('╯')
+    put(x, bottom, below ? '┴' : '─')
   }
   for (let y = top + 1; y < bottom; y++) {
     // Over the strip's outer windows, their top lines run into the line's sides.

@@ -43,6 +43,7 @@ import {
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
+  FULL_MIN_COLUMNS,
   HIRES_SCALE,
   LUNGE_MS,
   SPAWN_MS,
@@ -634,30 +635,38 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
   }
 }
 
-// The band's scenarios (spec #45): the Party tab's band as one picture, the playfield on the shell.
-export const BAND_SCENARIOS = ['band-rest', 'band-wide', 'band-zoomed'] as const
+// The band's scenarios (spec #45): the band as one picture, the playfield on the shell; on Loot
+// and World the playfield is the strip alone.
+export const BAND_SCENARIOS = [
+  'band-rest',
+  'band-wide',
+  'band-zoomed',
+  'band-loot',
+  'band-world',
+] as const
 export type BandScenario = (typeof BAND_SCENARIOS)[number]
 export type BandGolden = {
   imageHash: string
   cellsHash: string
   width: number
   height: number
-  stageSvgHash: string
-  stageSvgChars: number
+  /** None on Loot and World: the strip's Svg is the whole band there. */
+  stageSvgHash?: string
+  stageSvgChars?: number
   stripSvgHash: string
   stripSvgChars: number
 }
 /**
- * What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene; the
- * Raster's band at the same box, as cells; and the desktop's band at the same size, its stage
- * Svg and strip Svg.
+ * What the band composer takes: the band's box, the stage's 1.5x frame (none on Loot and World),
+ * the strip's scene; the Raster's band at the same box, as cells; and the desktop's band at the
+ * same size, its stage Svg and strip Svg.
  */
 export type BandInput = {
   box: Box
-  stage: Frame
+  stage: Frame | null
   strip: Scene
   cells: string
-  svg: { stage: string; strip: string }
+  svg: { stage: string | null; strip: string }
 }
 
 /** `view` on a 160-column stage of `rows`, its strip under it, in a band of `columns` × `maxRows`. */
@@ -719,7 +728,38 @@ function bandSvgs(
       motion: 'full',
       fit: svgFit(props, layout.box, scene, 0),
     }),
-    strip: sceneSvg(scene, stripTracks(strip, 3000), { smil: true, width, band: true }),
+    strip: sceneSvg(scene, stripTracks(strip, 3000), { smil: true, width, band: 'bottom' }),
+  }
+}
+
+/** Loot or World at `columns`: the strip alone, the playfield as wide and centred as the Party tab's. */
+function bareInput(input: StripInput, columns: number): BandInput {
+  const terminal = layoutFor(0, { bodyColumns: columns, maxRows: 22 }, 'terminal', {
+    tab: input.tab,
+    extra: 0,
+  })
+  if (terminal.kind !== 'bare') throw new Error(`a ${columns}-column ${input.tab} band is not bare`)
+  const box = { columns, rows: terminal.bandRows }
+  const scene = stripScene({ ...input, columns: Math.min(columns, STAGE_MAX_COLUMNS) }).scene
+  // The desktop lays the strip out at the stage's columns and scales it to the band's width.
+  const desktop = {
+    ...input,
+    columns: Math.min(Math.max(columns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS),
+  }
+  const width = columns * DESKTOP_COLUMN_PX_CEILING
+  return {
+    box,
+    stage: null,
+    strip: scene,
+    cells: bandCells(input.view, input.timeline, NOW, terminal, 'full', box, scene).cells,
+    svg: {
+      stage: null,
+      strip: sceneSvg(stripScene(desktop).scene, stripTracks(desktop, 3000), {
+        smil: true,
+        width,
+        band: 'both',
+      }),
+    },
   }
 }
 
@@ -734,6 +774,12 @@ export function band(name: BandScenario): BandInput {
     // A boss under a tall prompt: 12 rows, so the widened scene shrinks into the 7 left.
     case 'band-zoomed':
       return bandInput(boss(), strip('strip-boss'), 160, 12)
+    // Loot at the Party tab's 160 columns: the line all round, over the windows' outer lines.
+    case 'band-loot':
+      return bareInput(strip('strip-loot'), 160)
+    // World at 165, as band-wide: the playfield centred, the line in the shell beside it.
+    case 'band-world':
+      return bareInput(strip('strip-world'), 165)
   }
 }
 
@@ -751,6 +797,7 @@ export function bandSvgOf(input: BandInput): string {
 
 /** The desktop's two Svgs stacked as the desktop stacks them, the stage over the strip, for eyeballing. */
 export function bandDesktopSvgOf(input: BandInput): string {
+  if (input.svg.stage === null) return input.svg.strip
   const size = (doc: string) => {
     const m = doc.match(/^<svg [^>]*width="(\d+)" height="(\d+)"/)
     return { w: Number(m?.[1]), h: Number(m?.[2]) }
@@ -768,8 +815,9 @@ export function bandGoldenOf(input: BandInput): BandGolden {
     cellsHash: fnv1a64(input.cells),
     width: image.width,
     height: image.height,
-    stageSvgHash: fnv1a64(input.svg.stage),
-    stageSvgChars: input.svg.stage.length,
+    ...(input.svg.stage === null
+      ? {}
+      : { stageSvgHash: fnv1a64(input.svg.stage), stageSvgChars: input.svg.stage.length }),
     stripSvgHash: fnv1a64(input.svg.strip),
     stripSvgChars: input.svg.strip.length,
   }
