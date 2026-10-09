@@ -535,7 +535,9 @@ export class StageTimeline {
     at: number,
     hp: Map<string, number>,
   ): void {
-    const before = hp.get(effect.target)
+    // The world boss never dies in the sim: its row's HP is no cap, and a hit lands whole.
+    const before =
+      this.entries.get(effect.target)?.kind === 'world_boss' ? undefined : hp.get(effect.target)
     const delta =
       effect.k === 'heal' ? effect.amount : -Math.min(effect.amount, before ?? effect.amount)
     if (before !== undefined) hp.set(effect.target, before + delta)

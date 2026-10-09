@@ -33,7 +33,6 @@ import {
   TEXT_RGB,
   WARN_RGB,
 } from '../windows/tuning'
-import { shownBoss } from './boss'
 import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
 import { worldRows } from './world-rows'
@@ -118,10 +117,10 @@ export function wrap(line: string, n: number): string[] {
 function enemyLabel(input: StripInput): { title: string; boss: boolean } {
   const { view, world, now } = input
   if (view.enemies.some((e) => e.kind === 'world_boss')) {
-    const shown = shownBoss(view, world)
+    const boss = world.snapshot?.boss
     const left =
-      shown && world.clock
-        ? ` · ${formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))}`
+      boss && world.clock
+        ? ` · ${formatRemaining(remainingRealMs(boss.endsAt, world.clock, now))}`
         : ''
     return { title: `World boss${left}`, boss: true }
   }
@@ -130,15 +129,14 @@ function enemyLabel(input: StripInput): { title: string; boss: boolean } {
   return { title: `Zone ${view.zone} · Wave ${view.wave}`, boss: false }
 }
 
-/** The live enemies in line order, each with the HP it shows (the world boss's predicted bar). */
+/** The staged enemies in line order, each with its staged HP, the world boss's bar included. */
 function enemies(input: StripInput): { name: string; hp: number; maxHp: number; boss: boolean }[] {
-  const { view, world } = input
-  const shown = shownBoss(view, world)
-  return view.enemies.map((e) => {
-    const hp = e.kind === 'world_boss' && shown ? shown.shownHp : e.hp
-    const maxHp = e.kind === 'world_boss' && shown ? shown.boss.maxHp : e.maxHp
-    return { name: e.name, hp, maxHp, boss: e.kind !== 'wave' }
-  })
+  return input.view.enemies.map((e) => ({
+    name: e.name,
+    hp: e.hp,
+    maxHp: e.maxHp,
+    boss: e.kind !== 'wave',
+  }))
 }
 
 /** One enemy row in `n` cells: name, gap, bar; a boss: name, gap, bar, percentage in 4. */
@@ -420,25 +418,12 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
 }
 
 /**
- * The view as the stage shows it: the staged heroes (stage/staged.ts), so a bar drops with the hit
- * frame and its number and a hero is down once his killing blow lands (#20). The enemy rows stay
- * the view's, each with its staged HP; the world boss keeps its predicted bar.
+ * The view as the stage shows it: the staged state (stage/staged.ts). A hero is down once his
+ * killing blow lands (#20); a killed monster keeps its row, and the encounter its wave and zone,
+ * until its death has played; the world boss's bar drops as the hits land.
  */
 function asStaged(input: StripInput): StripInput {
-  const { view } = input
-  const staged = stagedState(view, input.world, input.timeline, input.now)
-  const place = new Map(staged.enemies.map((e, i) => [e.id, i]))
-  const hp = new Map(staged.enemies.map((e) => [e.id, e.hp]))
-  // In the stage's line order; one the line has not admitted yet goes last.
-  const enemies = [...view.enemies]
-    .sort((a, b) => (place.get(a.id) ?? 9) - (place.get(b.id) ?? 9))
-    .map((e) => {
-      const shown = hp.get(e.id)
-      return e.kind === 'world_boss' || shown === undefined || shown === e.hp
-        ? e
-        : { ...e, hp: shown }
-    })
-  return { ...input, view: { ...view, heroes: staged.heroes, enemies } }
+  return { ...input, view: stagedState(input.view, input.world, input.timeline, input.now) }
 }
 
 function build(raw: StripInput): { scene: Scene; built: Built[] } {

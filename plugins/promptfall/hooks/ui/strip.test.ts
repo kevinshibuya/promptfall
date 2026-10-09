@@ -1,10 +1,15 @@
 import { expect, test } from 'claude-code/testing'
-import type { GameView } from '../../types'
+import type { GameView, WorldState } from '../../types'
+import { boss, wave, worldBoss } from '../stage/fixtures'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
+import { stagedState } from '../stage/staged'
+import { StageTimeline } from '../stage/timeline'
+import { DISSOLVE_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
 import { type StripInput, stripScene, stripTracks, wrap } from './strip'
+import { worldRows } from './world-rows'
 
 const win = (scene: Scene, key: string) => scene.windows.find((w) => w.key === key) as Win
 const lineText = (l: Line | undefined) =>
@@ -144,4 +149,79 @@ test('a hero-joined loot line drops the glyph the font lacks', () => {
   const { scene } = stripScene({ ...input, view })
   const message = win(scene, 'message')
   expect(lineText(message.lines[1]).trim()).toBe('Aldric joined (rare)')
+})
+
+/** `actor` acts at `now` and hits `target` for `amount`; answers the hit's impact. */
+function strike(t: StageTimeline, actor: string, target: string, amount: number, now: number) {
+  const [start = now] = t.onEffects(
+    [
+      { k: 'act', actor, action: 'attack', at: 0 },
+      { k: 'hit', by: actor, target, amount },
+    ],
+    now,
+    2000,
+  )
+  return t.active(start).find((m) => m.kind === 'number' && m.actor === target)?.from ?? Number.NaN
+}
+
+test('the enemy and compact windows hold a killed zone boss, and its zone, until its death has played', () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe(boss(), now - 1)
+  const impact = strike(t, 'h1', 'e9', 500, now)
+  // The boss fell: the sim moved on to zone 2, wave 1, and brought the next wave.
+  const next: GameView = { ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+  t.observe(next, now)
+  const shown = (at: number) => {
+    const base = { ...strip('strip-rest'), view: next, timeline: t, now: at }
+    const enemy = win(stripScene(base).scene, 'enemy')
+    const compact = win(stripScene({ ...base, kind: 'compact', columns: 110 }).scene, 'compact')
+    // Names from the alts: a boss's row clips its name to leave room for the percentage.
+    return {
+      title: lineText({ spans: enemy.title ?? [] }),
+      rows: [...enemy.alt.matchAll(/(?:\. |, )([A-Z][\w ]+?) \d+ of/g)].map((m) => m[1]),
+      compact: lineText({ spans: compact.title ?? [] })
+        .split(' · ')
+        .slice(0, 2)
+        .join(' · '),
+      front: compact.alt.match(/Front enemy (.+?) \d+ of/)?.[1],
+    }
+  }
+  const held = { title: 'Zone 1 · Boss', rows: ['Bandit Captain'], compact: 'Z1 · Boss' }
+  expect(shown(impact - 1)).toEqual({ ...held, front: 'Bandit Captain' })
+  expect(shown(impact + DISSOLVE_MS)).toEqual({ ...held, front: 'Bandit Captain' })
+  // Its dissolve and the pause over, the newcomers step on and the windows take the view's zone.
+  const later = impact + 1_000 + DISSOLVE_MS + WAVE_GAP_MS
+  t.observe(next, later)
+  expect(shown(later)).toEqual({
+    title: 'Zone 2 · Wave 1',
+    rows: ['Goblin Scout', 'Field Rat', 'Road Slime'],
+    compact: 'Z2 · W1',
+    front: 'Goblin Scout',
+  })
+})
+
+test('the world boss bar drops as the hits land, in the enemy window and the World rows', () => {
+  const input = strip('strip-world-boss')
+  const now = input.now
+  const polled = input.world.snapshot?.boss
+  if (!polled) throw new Error('the scenario polls a boss')
+  // Polled at 55,800 with nothing committed; the party then deals 900 in one blow.
+  const world: WorldState = { ...input.world, committedDealt: { bossId: polled.bossId, dealt: 0 } }
+  const t = new StageTimeline()
+  t.observe(worldBoss(), now - 1)
+  const impact = strike(t, 'h1', 'e7', 900, now)
+  const view: GameView = {
+    ...worldBoss(),
+    boss: { bossId: polled.bossId, name: polled.name, glyph: polled.glyph, dealt: 900 },
+  }
+  t.observe(view, now)
+  const bar = (at: number) => {
+    const { scene } = stripScene({ ...input, view, world, timeline: t, now: at })
+    const enemy = win(scene, 'enemy')
+    const records = worldRows(stagedState(view, world, t, at), world, at)[1]?.text ?? ''
+    return [enemy.alt.match(/The Promptwyrm (\d+) of/)?.[1], records.match(/ (\d+)% /)?.[1]]
+  }
+  expect(bar(impact - 1)).toEqual(['55800', '62'])
+  expect(bar(impact)).toEqual(['54900', '61'])
 })

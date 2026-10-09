@@ -146,6 +146,27 @@ test('the world boss bar is the poll less what this party has landed since its b
   expect(bar(fresh, impact)).toEqual([55_500, 90_000])
 })
 
+test('a hit on the world boss lands whole on its bar, past the local row’s HP', () => {
+  const t = new StageTimeline()
+  // The sim's world boss row is an undying 630 HP; the party's tally counts every hit whole.
+  t.observe(worldBoss(), NOW - 1)
+  const effects: Effect[] = [
+    { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'h1', target: 'e7', amount: 500 },
+    { k: 'hit', by: 'h1', target: 'e7', amount: 400 },
+  ]
+  t.onEffects(effects, NOW, 2000)
+  const impact = t.active(NOW).find((m) => m.kind === 'number' && m.actor === 'e7')?.from ?? 0
+  const view: GameView = {
+    ...worldBoss(),
+    boss: { bossId: 'wb1', name: 'The Promptwyrm', glyph: '☠', dealt: 900 },
+  }
+  t.observe(view, NOW)
+  const bar = (now: number) =>
+    stagedState(view, polled(55_800, 0), t, now).enemies.find((e) => e.kind === 'world_boss')?.hp
+  expect([bar(impact - 1), bar(impact)]).toEqual([55_800, 54_900])
+})
+
 test('a hero’s HP drops when the hit lands on the stage, not when the sim applies it (#20)', () => {
   const hpAround = (before: number, amount: number) => {
     const t = new StageTimeline()

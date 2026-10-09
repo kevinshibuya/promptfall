@@ -122,7 +122,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // the desktop (rung a′), a row of their own on VS Code and mobile, untested there (rung c).
     const hiddenKeys = terminal || e.surface === 'desktop'
     const extra: 0 | 1 = hiddenKeys ? 0 : 1
-    if (party) timeline.observe(view, now)
+    // Every tab: the strip's enemy window reads the staged state the timeline holds.
+    timeline.observe(view, now)
     const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,

@@ -18,7 +18,10 @@ function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
   return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
 }
 
-/** The World tab's three rows: who is around, the account's records or the boss, the chat ticker. */
+/**
+ * The World tab's three rows: who is around, the account's records or the boss, the chat ticker.
+ * `view` is the staged state, so the boss's bar drops as the hits land.
+ */
 export function worldRows(
   view: GameView,
   world: WorldState,
