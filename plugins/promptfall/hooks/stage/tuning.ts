@@ -66,6 +66,10 @@ export const PROBE_DELAY_MS = 300
 /** The smallest pre-upscale that reads crisp in Ghostty (spike findings, 2026-10-04). */
 export const IMAGE_SCALE = 6
 export const IMAGE_MAX_BYTES = 1_048_576
+/** The host's widest or tallest Image picture, in pixels. */
+export const IMAGE_MAX_SIDE = 2048
+/** The fewest pixels a column a zoomed-out stage drops to: the 1.5x art still gets more than one. */
+export const IMAGE_MIN_SCALE = 2
 /** The desktop runs SMIL in the stage Svg (desktop pass, 2026-10-04: the bob, lunge, flash and numbers play). */
 export const SVG_SMIL = true
 /**

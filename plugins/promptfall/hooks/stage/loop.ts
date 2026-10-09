@@ -11,18 +11,12 @@ import { GAUGE_FRAME_MS } from '../windows/tuning'
 import { composeFrame, cropBottom, type Frame } from './compose'
 import type { GaugeTrack } from './gauges'
 import { pngImage } from './image'
-import { cellsOf, type Layout, layoutFor, sameLayout } from './layout'
+import { cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { stageAt } from './model'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
-import {
-  EVENT_FRAME_MS,
-  HIRES_SCALE,
-  IDLE_FRAME_MS,
-  IMAGE_SCALE,
-  SVG_FALLBACK_FRAME_MS,
-} from './tuning'
+import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
 export type StageSite = {
   requestId: string
@@ -122,7 +116,10 @@ export function stageFrame(
     return { cells: encodeRaster(frame, numbers) }
   }
   return {
-    source: pngImage(shown(composeFrame(model, { numbers: true })), IMAGE_SCALE / model.scale),
+    source: pngImage(
+      shown(composeFrame(model, { numbers: true })),
+      imageScaleFor(layout.box.columns) / model.scale,
+    ),
   }
 }
 
