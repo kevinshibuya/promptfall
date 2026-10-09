@@ -36,6 +36,10 @@ class Recorder implements ServerClient {
   refuseNextSubmit: number | null = null
   failBootstraps = 0
   fakeNextAck: BatchAck | null = null
+  /** Every submit answers `cursor_behind` with nothing new: the loop that waits for a resync. */
+  alwaysBehind = false
+  /** Called with each submit's count as it goes out. */
+  onSubmit: (count: number) => void = () => undefined
   hold: Promise<void> | null = null
   holdBootstrap: Promise<void> | null = null
   constructor(readonly inner: Ledger) {}
@@ -59,6 +63,7 @@ class Recorder implements ServerClient {
     this.corruptNextSeq = false
     this.corruptNextCursor = false
     this.batches.push(sent)
+    this.onSubmit(this.batches.length)
     if (this.hold) await this.hold
     if (this.failSubmits > 0) {
       this.failSubmits -= 1
@@ -71,6 +76,15 @@ class Recorder implements ServerClient {
       })
       this.refuseNextSubmit = null
       throw error
+    }
+    if (this.alwaysBehind) {
+      const ack: BatchAck = {
+        ok: false,
+        reason: 'cursor_behind',
+        delivery: { cursor: batch.cursor, events: [] },
+      }
+      this.acks.push(ack)
+      return ack
     }
     if (this.fakeNextAck) {
       const fake = this.fakeNextAck
@@ -586,6 +600,78 @@ test('the effects dep fires on every applied tick, an effect-less one too, with 
   a.engine.apply({ t: 'tick' }, a.at())
   expect(a.calls).toHaveLength(1)
   expect(a.calls[0]).toEqual({ count: 0, view: true })
+})
+
+// ---------------------------------------------------------------------------
+// A discarded engine: its notice clears, its flush goes quiet
+
+test('a discarded engine clears its notice', async () => {
+  const { engine, client, at, fire, notices, patches } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.failSubmits = 100
+  await engine.flush()
+  expect(notices().at(-1)).toBe(RETRYING_NOTICE)
+  engine.stop()
+  await engine.settled()
+  expect(notices().at(-1)).toBeNull()
+  // Its retries and its notice timers publish nothing more, and it takes no event.
+  expect(engine.accepting()).toBe(false)
+  const before = patches.length
+  await fire()
+  expect(patches).toHaveLength(before)
+})
+
+test("a stopped engine's flush submits and toasts nothing", async () => {
+  const { engine, client, ledger, effects, toasts, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  // The server holds gold the engine has not seen: the submit answers cursor_behind with it.
+  await ledger.host.credit(engine.accountId() ?? '', 99, 'behind')
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  expect(client.batches).toHaveLength(1)
+  engine.stop()
+  release()
+  await flushed
+  expect(client.acks.map((a) => (a.ok ? 'ok' : a.reason))).toEqual(['cursor_behind'])
+  expect(client.batches).toHaveLength(1)
+  expect(effects).not.toContain('gold')
+  expect(toasts).toEqual([])
+})
+
+test('a stopped engine caught in a cursor-behind loop stops looping', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.alwaysBehind = true
+  client.onSubmit = (count) => {
+    if (count === 2) engine.stop()
+  }
+  await engine.flush()
+  // Without the stop, five stuck answers end in a resync: a second bootstrap.
+  expect(client.batches).toHaveLength(2)
+  expect(client.bootstraps).toBe(1)
+})
+
+test("a promotion's bootstrap delivery does not toast", async () => {
+  const a = setup()
+  await a.engine.start()
+  await a.ledger.host.credit(a.engine.accountId() ?? '', 40, 'gift')
+  // A promotion: the session's previous primary already toasted what the delivery holds.
+  const promoted = setup(a.kv)
+  await promoted.engine.start({ promotion: true })
+  expect(gold(promoted.engine.state())).toBe(40)
+  expect(promoted.effects).toEqual([])
+  expect(promoted.patches.some((p) => p.view)).toBe(true)
+  // A session's first start hands the same delivery on, so it toasts.
+  const first = setup(a.kv)
+  await first.engine.start()
+  expect(first.effects).toContain('gold')
 })
 
 // ---------------------------------------------------------------------------

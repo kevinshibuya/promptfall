@@ -190,12 +190,17 @@ export class GameEngine {
   // ---------------------------------------------------------------------------
   // Start and resync
 
-  /** Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries. */
-  start(): Promise<void> {
-    return this.lock(() => this.doStart())
+  /**
+   * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries.
+   * A promotion applies the bootstrap's delivery without handing its effects on: the session's
+   * previous primary already toasted those events.
+   */
+  start(options: { promotion?: boolean } = {}): Promise<void> {
+    const promotion = options.promotion ?? false
+    return this.lock(() => this.doStart(promotion))
   }
 
-  private async doStart(): Promise<void> {
+  private async doStart(promotion = false): Promise<void> {
     const stored = await this.deps.kv.get(this.tokenKey)
     const token = typeof stored === 'string' ? stored : null
     let boot: Awaited<ReturnType<ServerClient['bootstrap']>>
@@ -203,7 +208,7 @@ export class GameEngine {
       boot = await this.deps.client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: token })
     } catch {
       if (this.stopped) return
-      await this.enterOutage('start')
+      await this.enterOutage(() => this.doStart(promotion))
       return
     }
     // Replaced (a reset or a switch) while the bootstrap was in flight: write nothing.
@@ -232,7 +237,7 @@ export class GameEngine {
       this.paused = null
       void this.publish({ mode: 'primary', notice: null })
     }
-    this.receive(boot.delivery, false)
+    this.receive(boot.delivery, false, !promotion)
     await this.publish({ view: this.view() })
     // Only the minted account's first view says firstRun; every later view says no.
     this.firstRun = false
@@ -249,7 +254,7 @@ export class GameEngine {
   /** Steps locally, buffers the event, publishes the view and hands the effects on. */
   apply(event: PlayerEvent, at: number): void {
     const local = this.local
-    if (!local || this.paused !== null) return
+    if (!local || this.stopped || this.paused !== null) return
     if (this.outage && at - this.outage.since >= OUTAGE_BUFFER_MS) return
     const r = step(local, event)
     this.local = r.state
@@ -262,7 +267,7 @@ export class GameEngine {
 
   /** Whether `apply` takes events now: not paused, and not past the outage's buffer window. */
   accepting(): boolean {
-    return this.local !== null && this.paused === null && !this.outage?.expired
+    return this.local !== null && !this.stopped && this.paused === null && !this.outage?.expired
   }
 
   // ---------------------------------------------------------------------------
@@ -288,6 +293,8 @@ export class GameEngine {
     }
     let stuck = 0
     for (;;) {
+      // Stopped between passes: a discarded engine never submits again.
+      if (this.stopped) return
       const sent: Sent | null = this.sent
       if (!sent) return
       let ack: BatchAck
@@ -301,9 +308,11 @@ export class GameEngine {
           this.setPaused(UPDATE_NOTICE)
           return
         }
-        await this.enterOutage('flush')
+        await this.enterOutage(() => this.doFlush())
         return
       }
+      // Stopped during the submit: the ack is the next primary's business, and nothing toasts.
+      if (this.stopped) return
       this.clearOutage()
       if (ack.ok) {
         if (ack.duplicate && ack.hash !== hashState(sent.result)) {
@@ -408,9 +417,10 @@ export class GameEngine {
 
   /**
    * Applies the delivered events not seen yet, then re-steps what is in flight
-   * and buffered on top. Called only under the lock.
+   * and buffered on top. Called only under the lock. `handOn` false applies the
+   * events without handing their effects on, so they never toast.
    */
-  private receive(delivery: Delivery, publish = true): void {
+  private receive(delivery: Delivery, publish = true, handOn = true): void {
     const fresh = delivery.events.filter((e) => e.n > this.cursor).sort((a, b) => a.n - b.n)
     const last = fresh.at(-1)?.n ?? 0
     this.cursor = Math.max(this.cursor, delivery.cursor, last)
@@ -436,10 +446,12 @@ export class GameEngine {
     }
     restep(this.buffer)
     this.local = s
-    if (!publish && effects.length === 0) return
+    // A stopped engine's effects never toast.
+    if (this.stopped) return
+    if (!publish && (effects.length === 0 || !handOn)) return
     const view = this.view()
     if (publish) void this.publish({ view })
-    this.deps.onEffects(effects, undefined, view)
+    if (handOn) this.deps.onEffects(effects, undefined, view)
   }
 
   // ---------------------------------------------------------------------------
@@ -510,11 +522,18 @@ export class GameEngine {
     void this.publish({ view: this.view() })
   }
 
-  /** This engine is replaced: its retries stop and it publishes nothing more. */
-  stop(): void {
+  /**
+   * This engine is replaced: it clears its notice, as a restart does, so no banner outlives
+   * it; then its retries stop and it publishes nothing more. Resolves once the clear has landed.
+   */
+  stop(): Promise<void> {
+    if (this.stopped) return this.queue
+    this.noticeGen += 1
+    const cleared = this.publish({ notice: null })
     this.stopped = true
     this.outage = null
     this.outageGen += 1
+    return cleared
   }
 
   // ---------------------------------------------------------------------------
@@ -524,7 +543,7 @@ export class GameEngine {
    * A thrown submit or bootstrap. The banner shows at once; the attempt
    * retries on a backoff of `1 s × 2^n`, capped at 30 s, plus up to 50% jitter.
    */
-  private async enterOutage(retry: 'flush' | 'start'): Promise<void> {
+  private async enterOutage(retry: () => Promise<void>): Promise<void> {
     const now = await this.deps.now()
     if (!this.outage) {
       const gen = ++this.outageGen
@@ -545,7 +564,7 @@ export class GameEngine {
     const gen = this.outageGen
     this.deps.after(delay, () => {
       if (gen !== this.outageGen || !this.outage || this.stopped) return
-      void this.lock(() => (retry === 'start' ? this.doStart() : this.doFlush()))
+      void this.lock(retry)
     })
   }
 

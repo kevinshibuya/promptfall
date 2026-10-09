@@ -257,7 +257,7 @@ class GameSession implements GameHandle {
 
   /** Points the session at a server: a fresh client and engine; the old engine stops. */
   private useServer(setting: string | null): void {
-    this.engine.stop()
+    void this.engine.stop()
     this.linkGen += 1
     this.orphanToken = null
     this.setting = setting
@@ -469,7 +469,7 @@ class GameSession implements GameHandle {
   /** Deletes every Promptfall key but the lease, then starts over on the same server. */
   async reset(): Promise<void> {
     await this.claim()
-    this.engine.stop()
+    await this.engine.stop()
     const setting = this.setting
     for (const key of await this.kv.keys()) {
       if (key !== LEASE_KEY && key !== SETTINGS_KEY) await this.kv.delete(key)
@@ -508,10 +508,28 @@ class GameSession implements GameHandle {
     await this.pending
   }
 
+  /** Takes the lease if another session holds it, and waits for the promotion: the commands act on its engine. */
   async claim(): Promise<void> {
     if (this.role === 'primary') return
     await this.followSetting()
-    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary(true)
+  }
+
+  /**
+   * The player's own prompt: it takes the lease without waiting for the promotion, so a hanging
+   * server holds nothing, and rests the party once this session's engine has started.
+   */
+  async prompt(at: number): Promise<void> {
+    if (this.role !== 'primary') {
+      await this.followSetting()
+      if (await claim(this.kv, this.owner, await this.io.now())) {
+        void this.becomePrimary(true)
+        // The promotion's start is queued on its engine's lock by now.
+        void this.engine.idle().then(() => this.apply({ t: 'rest' }, at))
+        return
+      }
+    }
+    this.apply({ t: 'rest' }, at)
   }
 
   /** The server setting is machine-wide: a session that is not primary follows a switch made elsewhere. */
@@ -543,9 +561,10 @@ class GameSession implements GameHandle {
     this.engine.apply({ t: 'tick' }, await this.io.now())
   }
 
-  private async becomePrimary(): Promise<void> {
+  /** `promotion`: this session was secondary, so another primary already toasted what the bootstrap delivers. */
+  private async becomePrimary(promotion = false): Promise<void> {
     this.role = 'primary'
-    await this.engine.start()
+    await this.engine.start({ promotion })
     await this.io.publish({ mode: this.mode() })
     await this.poller.start()
     if (this.firstRun) {
@@ -558,9 +577,10 @@ class GameSession implements GameHandle {
 
   private async becomeSecondary(): Promise<void> {
     if (this.role === 'primary') {
-      // Its retry timers and publishes must not outlive the lease.
-      this.engine.stop()
+      // Its retry timers, publishes and notice must not outlive the lease.
+      const discarded = this.engine
       this.engine = this.makeEngine()
+      await discarded.stop()
     }
     this.role = 'secondary'
     await this.io.publish({ mode: this.mode() })
@@ -571,7 +591,7 @@ class GameSession implements GameHandle {
   private async renew(): Promise<void> {
     if (this.role === 'secondary') await this.followSetting()
     const ok = await acquire(this.kv, this.owner, await this.io.now())
-    if (ok && this.role === 'secondary') await this.becomePrimary()
+    if (ok && this.role === 'secondary') await this.becomePrimary(true)
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
     else if (!ok) await this.refresh()
   }
@@ -869,8 +889,7 @@ export const register: Register = (on) => {
     // The player's own prompts rest the party: typed here, or sent through the Remote Control bridge.
     if (e.origin.kind === 'composer' || e.origin.kind === 'bridge') {
       // The player is here: this session plays, even if another one took the lease.
-      await game?.claim()
-      game?.apply({ t: 'rest' }, at)
+      await game?.prompt(at)
     }
     return next(e)
   })

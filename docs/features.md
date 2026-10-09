@@ -189,9 +189,11 @@ or `server local` points the machine at an HTTP server or back at the in-process
 its own account. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
-**Primary session.** One session per account plays; running a gameplay verb in another session
-makes that one the primary. Every other session draws read-only and says "playing in another
-session".
+**Primary session.** One session per account plays; running a gameplay verb or typing a prompt in
+another session makes that one the primary. A prompt goes through at once and the band catches up
+when the server answers. Every other session draws read-only and says "playing in another
+session". A session that stops playing drops its banner, and the new primary does not toast again
+what the old one already toasted.
 
 **Server status.** When the server stops answering, the band says "server unreachable, retrying"
 and play goes on for two minutes, then pauses until the server answers again.
