@@ -258,12 +258,10 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
     return
   }
 
+  // A turn boss spawned mid-wave joined the wave's encounter: its death is checked like a
+  // wave monster's, so the wave keeps its progress and clears when its last monster is gone.
   const current = s.encounter
   if (!current || current.enemies.length > 0 || current.queue.length > 0) return
-  if (enemy.kind === 'turn_boss') {
-    s.encounter = null
-    return
-  }
   if (current.waveSize > 0 && current.spawnedInWave >= current.waveSize) {
     healParty(s, 1500)
     effects.push({ k: 'wave_cleared', zone: s.zone, wave: s.wave })
@@ -277,14 +275,15 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {
   if (livingParty(s).length > 0) return false
+  s.battle = { gauges: [], queue: [], busy: 0 }
   if (s.boss) {
-    // Boss mode: healed in place. No retreat, no wipe, the encounter and the pending party kept.
+    // Boss mode: the battle resets, the party heals in place. No retreat, no wipe, the
+    // encounter and the pending party kept.
     fullHealParty(s)
     return true
   }
   const retreatedTo = Math.max(1, s.zone - 1)
   effects.push({ k: 'wipe', retreatedTo })
-  s.battle = { gauges: [], queue: [], busy: 0 }
   s.encounter = null
   s.pendingTurnBoss = false
   s.stats.wipes += 1

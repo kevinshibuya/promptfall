@@ -608,7 +608,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "0343e76688254278";
+var GOLDEN_HASH = "ea7e36dbcb84b67d";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -882,10 +882,6 @@ function onEnemyKilled(s, enemy, effects) {
   }
   const current = s.encounter;
   if (!current || current.enemies.length > 0 || current.queue.length > 0) return;
-  if (enemy.kind === "turn_boss") {
-    s.encounter = null;
-    return;
-  }
   if (current.waveSize > 0 && current.spawnedInWave >= current.waveSize) {
     healParty(s, 1500);
     effects.push({ k: "wave_cleared", zone: s.zone, wave: s.wave });
@@ -897,13 +893,13 @@ function onEnemyKilled(s, enemy, effects) {
 }
 function checkWipe(s, effects) {
   if (livingParty(s).length > 0) return false;
+  s.battle = { gauges: [], queue: [], busy: 0 };
   if (s.boss) {
     fullHealParty(s);
     return true;
   }
   const retreatedTo = Math.max(1, s.zone - 1);
   effects.push({ k: "wipe", retreatedTo });
-  s.battle = { gauges: [], queue: [], busy: 0 };
   s.encounter = null;
   s.pendingTurnBoss = false;
   s.stats.wipes += 1;
@@ -973,7 +969,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 4;
+var SIM_VERSION = 5;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",

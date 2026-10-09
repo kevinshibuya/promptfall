@@ -44,8 +44,9 @@ Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a bo
 percentage.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
-better drops and a chance of a recruit contract, separate from the zone's own boss. The stage
-grows for it too, less than for a zone boss.
+better drops and a chance of a recruit contract, separate from the zone's own boss. One that
+arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
+The stage grows for it too, less than for a zone boss.
 
 **Wipe.** When every hero falls, the party retreats one zone (never below zone 1) to wave 1 at
 full health, and nothing is lost. The combat log says so, and a toast names the zone it fell back
@@ -130,9 +131,9 @@ damage this week, your own rows in gold.
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
-percentage and time left, waves pause and tool calls spawn nothing. A wipe in boss mode heals the
-party in place with no retreat, and the boss itself drops nothing. It needs a server; the default
-in-process fake runs none.
+percentage and time left, waves pause and tool calls spawn nothing. A wipe in boss mode empties
+every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
+needs a server; the default in-process fake runs none.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
