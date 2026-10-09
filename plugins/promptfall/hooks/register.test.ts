@@ -314,8 +314,9 @@ test('the session the player uses takes the lease back; Claude working elsewhere
   // Claude's own tool calls do not claim it.
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(last.get('mode')).toBe('secondary')
-  // The player typing here does.
+  // The player typing here does; the promotion lands after the prompt has gone through.
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
 })
@@ -549,6 +550,31 @@ test('a primary demoted during an outage never submits the batch it held', async
   expect(last.get('mode')).toBe('secondary')
 })
 
+test("a demoted primary's notice clears; the re-promoted engine's own notice shows", async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  // Another session takes the lease: the discarded engine's banner goes with it.
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(last.get('notice')).toBeNull()
+  // The lease comes back while the server is still down: the new engine raises its own.
+  data.delete(LEASE)
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+})
+
 test('a server that never answers is an outage after 15 s', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   store(on, { 'promptfall:server': URL_A })
@@ -567,7 +593,7 @@ test('a server that never answers is an outage after 15 s', async ($, on) => {
 })
 
 test("the player's claim follows a server switch made in another session", async ($, on) => {
-  mock.clock(on, { now: 1_000_000 })
+  const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, { [LEASE]: { owner: 'other', until: 9_999_999_999_999 } })
   const last = states(on)
   engineBottom(on)
@@ -577,6 +603,7 @@ test("the player's claim follows a server switch made in another session", async
   expect(last.get('mode')).toBe('secondary')
   data.set('promptfall:server', URL_A)
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect(last.get('server')).toBe(URL_A)
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
