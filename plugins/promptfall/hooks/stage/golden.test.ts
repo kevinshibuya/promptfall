@@ -10,11 +10,15 @@ import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import { fullerFrame } from './fixtures'
-import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
-import { imageBytes } from './image'
+import { BAND_GOLDENS, GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
+import { imageBytes, pngImage } from './image'
 import { type StageActor, type StageModel, samePoses } from './model'
+import { composeBand } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
 import {
+  BAND_SCENARIOS,
+  band,
+  bandGoldenOf,
   goldenOf,
   PANE_SCENARIOS,
   pane,
@@ -29,6 +33,8 @@ import { renderSvg, svgWithFallback } from './svg'
 import type { Motion } from './timeline'
 import {
   IMAGE_MAX_BYTES,
+  IMAGE_MAX_SIDE,
+  IMAGE_MAX_SOURCE_BYTES,
   IMAGE_SCALE,
   RASTER_MAX_PAIRS,
   SVG_MAX_CHARS,
@@ -229,6 +235,29 @@ for (const name of PANE_SCENARIOS) {
     expect(paneGoldenOf(pane(name))).toEqual(PANE_GOLDENS[name])
   })
 }
+
+for (const name of BAND_SCENARIOS) {
+  test(`band golden: ${name}`, () => {
+    expect(bandGoldenOf(band(name))).toEqual(BAND_GOLDENS[name])
+  })
+}
+
+test('the band at 255 × 22 on the 8 by 16 grid is 2040 pixels wide and its PNG fits the host', () => {
+  // The rest band's strip, and a stage frame of noise: no run for deflate to find but the 16/3
+  // upscale's own.
+  const { strip } = band('band-rest')
+  const rgba = new Uint8ClampedArray(240 * 51 * 4)
+  let seed = 1
+  for (let i = 0; i < rgba.length; i++) {
+    seed = (seed * 1_103_515_245 + 12_345) >>> 0
+    rgba[i] = i % 4 === 3 ? 255 : seed >>> 24
+  }
+  const picture = composeBand({ columns: 255, rows: 22 }, { width: 240, height: 51, rgba }, strip)
+  expect([picture.width, picture.height]).toEqual([2040, 352])
+  expect(Math.max(picture.width, picture.height)).toBeLessThanOrEqual(IMAGE_MAX_SIDE)
+  const { png } = pngImage(picture, 1)
+  expect(Math.ceil((png.length * 3) / 4)).toBeLessThanOrEqual(IMAGE_MAX_SOURCE_BYTES)
+})
 
 test('the fullest pane fits the Svg budget', () => {
   // Wide, 120 × 24, 15 rows of 30-character names with sprites, a full detail window, a command

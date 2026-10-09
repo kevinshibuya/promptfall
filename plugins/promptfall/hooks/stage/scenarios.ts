@@ -29,10 +29,11 @@ import { composeFrame, type Frame } from './compose'
 import { boss, empty, fallen, wave, worldBoss } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { fnv1a64 } from './hash'
-import { encodeImage } from './image'
-import type { Box } from './layout'
+import { encodeImage, pngImage } from './image'
+import { type Box, layoutFor } from './layout'
 import { MessageLog } from './log'
 import { type StageModel, stageAt } from './model'
+import { composeBand } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
 import { renderSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
@@ -43,6 +44,7 @@ import {
   HIRES_SCALE,
   LUNGE_MS,
   SPAWN_MS,
+  STAGE_MAX_COLUMNS,
   STAGE_ROWS,
   WINDUP_HOLD_MS,
 } from './tuning'
@@ -628,4 +630,66 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
     svgHash: fnv1a64(svg),
     svgChars: svg.length,
   }
+}
+
+// The band's scenarios (spec #45): the Party tab's band as one picture, the playfield on the shell.
+export const BAND_SCENARIOS = ['band-rest', 'band-wide', 'band-zoomed'] as const
+export type BandScenario = (typeof BAND_SCENARIOS)[number]
+export type BandGolden = { imageHash: string; width: number; height: number }
+/** What the band composer takes: the band's box, the stage's 1.5x frame, the strip's scene. */
+export type BandInput = { box: Box; stage: Frame; strip: Scene }
+
+/** `view` on a 160-column stage of `rows`, its strip under it, in a band of `columns` × `maxRows`. */
+function bandInput(view: GameView, input: StripInput, columns: number, maxRows: number): BandInput {
+  const t = new StageTimeline()
+  t.observe(view, NOW)
+  const rows = t.rowsAt(view, NOW)
+  const layout = layoutFor(rows, { bodyColumns: columns, maxRows }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    scalable: true,
+  })
+  if (layout.kind !== 'full') throw new Error(`a ${columns} × ${maxRows} band is not full`)
+  const model = stageAt(view, t, NOW, layout.box, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
+  const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
+  return {
+    box: { columns, rows: layout.bandRows },
+    stage: composeFrame(model, { numbers: true }),
+    strip: stripScene({ ...input, columns: playfield }).scene,
+  }
+}
+
+export function band(name: BandScenario): BandInput {
+  switch (name) {
+    // The playfield fills the band: the line over the stage's outermost pixels.
+    case 'band-rest':
+      return bandInput(wave(), strip('strip-rest'), 160, 22)
+    // Two columns of shell on the left, three on the right, the line in them.
+    case 'band-wide':
+      return bandInput(wave(), strip('strip-rest'), 165, 22)
+    // A boss under a tall prompt: 12 rows, so the widened scene shrinks into the 7 left.
+    case 'band-zoomed':
+      return bandInput(boss(), strip('strip-boss'), 160, 12)
+  }
+}
+
+export function bandPicture(input: BandInput): Frame {
+  return composeBand(input.box, input.stage, input.strip)
+}
+
+/** The band's bitmap, its PNG set in an Svg at twice its size, for eyeballing. */
+export function bandSvgOf(input: BandInput): string {
+  const pic = bandPicture(input)
+  const { png } = pngImage(pic, WINDOW_SCALE)
+  const [w, h] = [pic.width, pic.height]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" style="image-rendering:pixelated" href="data:image/png;base64,${png}"/></svg>`
+}
+
+export function bandGoldenOf(input: BandInput): BandGolden {
+  const image = encodeImage(bandPicture(input), WINDOW_SCALE)
+  return { imageHash: fnv1a64(image.rgba), width: image.width, height: image.height }
 }
