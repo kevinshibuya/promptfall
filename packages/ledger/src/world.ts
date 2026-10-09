@@ -67,12 +67,13 @@ function prune(ctx: WorldContext): void {
 
 /**
  * The world poll: stamps the caller present (in memory) and answers the snapshot. It writes to the
- * store only to engage the caller with a live boss.
+ * store only to engage the caller with a live boss; with `engageCaller` off it writes nothing.
  */
 export async function world(
   ctx: WorldContext,
   record: AccountRecord,
   since: number,
+  engageCaller = true,
 ): Promise<WorldSnapshot> {
   const presenceOn = ctx.flags['presence.enabled'] !== false
   const id = record.account.accountId
@@ -105,6 +106,7 @@ export async function world(
   // off nobody is ever stamped, so the poll itself counts as being online.
   const boss = await loadBoss(ctx.books.kv)
   if (
+    engageCaller &&
     boss &&
     ctx.flags['worldboss.enabled'] !== false &&
     isLive(ctx, boss) &&

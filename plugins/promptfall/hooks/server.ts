@@ -4,8 +4,17 @@ import { CLIENT_VERSION } from './version'
 
 export const IN_PROCESS = 'in-process'
 
+/** What a secondary session asks the server: the market reads and the world poll. */
+export type SecondaryReads = Pick<ServerClient, 'browse' | 'myOrders' | 'matchingOrders' | 'world'>
+
 export type ResolvedServer = {
   client: ServerClient
+  /**
+   * The client as a secondary reads through it. In process it writes nothing to the shared
+   * store: expiries and the world boss are the primary's, under its lease. A remote server
+   * keeps its own lock, so there it is the client.
+   */
+  reads: SecondaryReads
   /** The store key of this server's device token. */
   tokenKey: string
   label: string
@@ -41,14 +50,22 @@ export function resolveClient(
     })
     return {
       client: ledger,
+      reads: {
+        browse: (auth, query) => ledger.browse(auth, query, { expire: false }),
+        myOrders: (auth) => ledger.myOrders(auth, { expire: false }),
+        matchingOrders: (auth, itemId) => ledger.matchingOrders(auth, itemId, { expire: false }),
+        world: (auth, since) => ledger.world(auth, since, { advance: false }),
+      },
       tokenKey: 'deviceToken',
       label: IN_PROCESS,
       host: ledger.host,
       sandbox,
     }
   }
+  const client = new HttpClient({ baseUrl: setting, fetch: io.fetch })
   return {
-    client: new HttpClient({ baseUrl: setting, fetch: io.fetch }),
+    client,
+    reads: client,
     tokenKey: `token:${setting}`,
     label: setting,
     host: null,

@@ -13,7 +13,7 @@ export async function loadMarket(
 ): Promise<void> {
   await upd((s) => ({ ...s, query, busy: true }))
   try {
-    // The read expires what is due; the sync after it brings the returns and refunds home.
+    // The primary's read expires what is due; the sync after it brings the returns and refunds home.
     const r = await game.market.browse(query)
     if ('reason' in r) throw new Error('Playing in another session')
     await game.sync()
