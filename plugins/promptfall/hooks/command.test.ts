@@ -4,9 +4,11 @@ import type { GameView, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { unzlibSync } from './vendor/fflate.js'
 import { Ledger } from './vendor/ledger.js'
 import { BOSS_WINDOW_MS } from './vendor/protocol.js'
 import { content } from './vendor/sim.js'
+import { CELL_H, CELL_W, FIELD_RGB } from './windows/tuning'
 
 const RUN = {
   origin: { kind: 'composer' },
@@ -396,7 +398,38 @@ test('sandbox worldboss twice answers that one is live; worldboss end with none 
   expect(await run('worldboss later')).toBe('Usage: /promptfall sandbox worldboss [end]')
 })
 
-test('in play, a boss under a tall prompt draws the Image stage the band’s full width (#21)', async ($, on) => {
+/** A PNG the stage's writer made (8-bit RGBA, filter 0): its size and its pixels as 0xRRGGBB. */
+function pixels(source: { png: string } | undefined): {
+  width: number
+  height: number
+  at: (x: number, y: number) => number
+} {
+  const png = decode(source?.png ?? '')
+  const view = new DataView(png.buffer, png.byteOffset, png.byteLength)
+  const width = view.getUint32(16)
+  const height = view.getUint32(20)
+  const idat: Uint8Array[] = []
+  for (let at = 8; at < png.length; ) {
+    const length = view.getUint32(at)
+    if (String.fromCharCode(...png.subarray(at + 4, at + 8)) === 'IDAT')
+      idat.push(png.subarray(at + 8, at + 8 + length))
+    at += 12 + length
+  }
+  const zipped = new Uint8Array(idat.reduce((n, c) => n + c.length, 0))
+  let o = 0
+  for (const c of idat) {
+    zipped.set(c, o)
+    o += c.length
+  }
+  const raw = unzlibSync(zipped)
+  const at = (x: number, y: number) => {
+    const i = y * (width * 4 + 1) + 1 + x * 4
+    return ((raw[i] ?? 0) << 16) | ((raw[i + 1] ?? 0) << 8) | (raw[i + 2] ?? 0)
+  }
+  return { width, height, at }
+}
+
+test("in play, a boss under a tall prompt draws the band as one picture the band's full width (#21)", async ($, on) => {
   const { run, view, clock } = await sandboxOn(on, $, {
     'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
   })
@@ -407,18 +440,36 @@ test('in play, a boss under a tall prompt draws the Image stage the band’s ful
   // A tall prompt leaves the band 10 rows: 5 for the stage over the 5-row strip.
   const short = { ...BAND, props: { ...BAND.props, maxRows: 10, bodyColumns: 144 } }
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
-  const stage = await ui.find({ key: stageKey({ columns: 144, rows: 5 }) })
-  expect(stage?.props).toMatchObject({ columns: 144, rows: 5 })
-  // The picture stays within the host's 2048 px a side: its PNG header's width and height.
-  const source = stage?.props.source as { png: string } | undefined
-  const png = decode(source?.png ?? '')
-  const be = (at: number) =>
-    ((png[at] ?? 0) << 24) |
-    ((png[at + 1] ?? 0) << 16) |
-    ((png[at + 2] ?? 0) << 8) |
-    (png[at + 3] ?? 0)
-  expect(be(16)).toBeLessThanOrEqual(2048)
-  expect(be(20)).toBeLessThanOrEqual(2048)
+  const band = await ui.find({ key: 'band-144x10' })
+  expect(band?.type).toBe('Image')
+  expect(band?.props).toMatchObject({ columns: 144, rows: 10 })
+  expect(await ui.find({ key: stageKey({ columns: 144, rows: 5 }) })).toBeUndefined()
+  // The picture stays within the host's 2048 px a side, 8 by 16 pixels a cell.
+  const picture = pixels(band?.props.source as { png: string } | undefined)
+  expect([picture.width, picture.height]).toEqual([144 * CELL_W, 10 * CELL_H])
+  // The zoomed-out stage spans the playfield: inside the line, no shell across the stage's rows.
+  for (const y of [20, 40, 60]) {
+    for (let x = 4; x < picture.width - 4; x++) expect(picture.at(x, y)).not.toBe(FIELD_RGB)
+  }
+  await ui.unmount()
+})
+
+test('in play, one band element at 165 columns: the strip is inside the picture, not beside it', async ($, on) => {
+  await sandboxOn(on, $, {
+    'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+  })
+  const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+  const root = await ui.find({ key: 'band' })
+  const rows = (root?.children ?? []) as { props: Record<string, unknown>; children: unknown[] }[]
+  expect(rows).toHaveLength(1)
+  const children = (rows[0]?.children ?? []) as { type?: string; props: Record<string, unknown> }[]
+  // One picture at the band's width; beside it only the zero-width hotkey box.
+  const pictures = children.filter((c) => c.type === 'Image')
+  expect(pictures).toHaveLength(1)
+  expect(pictures[0]?.props).toMatchObject({ columns: 165, rows: 22 })
+  expect(children.filter((c) => c.type !== 'Image').map((c) => c.props.key)).toEqual(['hotkeys'])
+  expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
   await ui.unmount()
 })
 

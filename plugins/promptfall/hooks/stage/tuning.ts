@@ -70,6 +70,8 @@ export const IMAGE_MAX_BYTES = 1_048_576
 export const IMAGE_MAX_SOURCE_BYTES = 2_097_152
 /** The host's widest or tallest Image picture, in pixels. */
 export const IMAGE_MAX_SIDE = 2048
+/** The host's widest Image, in columns: a wider band's picture stops here, centred (spec #45). */
+export const IMAGE_MAX_COLUMNS = 255
 /** The fewest pixels a column a zoomed-out stage drops to: the 1.5x art still gets more than one. */
 export const IMAGE_MIN_SCALE = 2
 /** The desktop runs SMIL in the stage Svg (desktop pass, 2026-10-04: the bob, lunge, flash and numbers play). */

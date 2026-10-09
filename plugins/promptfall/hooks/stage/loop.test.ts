@@ -8,7 +8,7 @@ import { boss, wave } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { layoutFor } from './layout'
 import { MessageLog } from './log'
-import { type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
+import { bandKey, type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
 import { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
@@ -527,4 +527,44 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   const compact = stageFrame(wave(), t, 0, narrow, 'image', 'full')
   if (!('source' in compact)) throw new Error('expected an Image source')
   expect(pngSize(compact.source)).toEqual([312, 48])
+})
+
+/** The Image band's site (spec #45): the band's box, drawn as one picture at its key. */
+function bandSite(props: StageSite['props'] = PROPS, view = wave()): StageSite {
+  const s = site('image', view, props)
+  const band = { columns: props.bodyColumns, rows: s.layout.bandRows }
+  return { ...s, key: bandKey(band), band }
+}
+
+test('an Image band site blits one picture at the band key, 8 by 16 pixels a cell, and no window', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(bandSite())
+  await clock.advance(IDLE_FRAME_MS * 3)
+  expect(h.blits.length).toBeGreaterThan(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+  const first = h.blits[0]
+  if (!first || !('source' in first) || !first.source || !('png' in first.source))
+    throw new Error('expected a PNG source')
+  expect(pngSize(first.source)).toEqual([960, 352])
+})
+
+test('with motion still, a change in the strip alone redraws the band through the loop', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.settings = { ...SETTINGS_DEFAULT, motion: 'still' }
+  h.state.strip = extras()
+  h.loop.mount(bandSite())
+  await clock.advance(5_000)
+  const settled = h.blits.length
+  await clock.advance(5_000)
+  expect(h.blits.length).toBe(settled)
+  // The purse changes; nothing on the stage does.
+  const v = wave()
+  v.gold = 1240
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits.slice(settled)).toHaveLength(1)
+  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
 })

@@ -6,23 +6,33 @@ import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
 import { stripScene } from '../ui/strip'
 import { windowKey, windowSource } from '../windows/image'
+import type { Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
-import { GAUGE_FRAME_MS } from '../windows/tuning'
+import { GAUGE_FRAME_MS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame, cropBottom, type Frame } from './compose'
 import type { GaugeTrack } from './gauges'
 import { pngImage } from './image'
-import { cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './layout'
+import { type Box, cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } from './layout'
 import type { MessageLog } from './log'
 import { stageAt } from './model'
+import { composeBand } from './playfield'
 import { encodeRaster } from './raster'
 import type { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
 export type StageSite = {
   requestId: string
-  /** The element's key: `stage` for the Raster, `stageKey(box)` for the Image; '' with no stage. */
+  /**
+   * The element's key: `stage` for the Raster, `stageKey(box)` for the Image, `bandKey(band)` for
+   * the Image band; '' with no stage.
+   */
   key: string
   layout: Layout
+  /**
+   * The band's box in cells when the band is one picture (the Image's full layout, spec #45):
+   * each frame composes the stage and the strip into it, and no strip element is blitted.
+   */
+  band?: Box
   /** The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row. */
   strip: { kind: 'full' | 'compact' | 'bare'; columns: number; tab: BandTab; extra: 0 | 1 }
   renderer: 'raster' | 'image' | 'svg'
@@ -57,6 +67,11 @@ export function stageKey(box: { columns: number; rows: number }): string {
   return `stage-${box.columns}x${box.rows}`
 }
 
+/** The Image band's key, one per size, as the stage's: only a resize mounts a new picture. */
+export function bandKey(box: Box): string {
+  return `band-${box.columns}x${box.rows}`
+}
+
 /** Past a bob boundary by this much, so a tick never samples the phase it just drew. */
 const PHASE_SLACK_MS = 15
 
@@ -73,6 +88,8 @@ function same(a: StageSite, b: StageSite): boolean {
     a.requestId === b.requestId &&
     a.key === b.key &&
     a.renderer === b.renderer &&
+    a.band?.columns === b.band?.columns &&
+    a.band?.rows === b.band?.rows &&
     sameLayout(a.layout, b.layout) &&
     a.strip.kind === b.strip.kind &&
     a.strip.columns === b.strip.columns &&
@@ -121,6 +138,28 @@ export function stageFrame(
       imageScaleFor(layout.box.columns) / model.scale,
     ),
   }
+}
+
+/**
+ * The Image band's picture (spec #45): the full stage's 1.5x frame and the strip's scene composed
+ * into `band` on the windows' grid, the playfield on the shell.
+ */
+export function bandFrame(
+  view: GameView,
+  timeline: StageTimeline,
+  now: number,
+  layout: Layout,
+  motion: Settings['motion'],
+  band: Box,
+  strip: Scene,
+): { png: string } {
+  if (layout.kind !== 'full') throw new Error('the band is one picture only in the full layout')
+  const model = stageAt(view, timeline, now, layout.box, {
+    compact: false,
+    motion,
+    scale: HIRES_SCALE,
+  })
+  return pngImage(composeBand(band, composeFrame(model, { numbers: true }), strip), WINDOW_SCALE)
 }
 
 export class StageLoop {
@@ -279,9 +318,28 @@ export class StageLoop {
       return busy ? SVG_FALLBACK_FRAME_MS : IDLE_FRAME_MS
     }
 
+    const scene = extras
+      ? stripScene({
+          view,
+          world: extras.world,
+          tab: site.strip.tab,
+          kind: site.strip.kind,
+          columns: site.strip.columns,
+          now,
+          notice: extras.notice,
+          motion: settings.motion,
+          timeline: this.timeline,
+          gauges: extras.gauges,
+          log: extras.log,
+        }).scene
+      : null
+    // The Image band draws the strip inside its picture: a change in the strip alone redraws it.
+    const band = site.band && scene ? { box: site.band, scene, json: JSON.stringify(scene) } : null
+
     const box = layout.box
     const cells = cellsOf(layout)
-    if (box && cells) {
+    // A band site with no strip to compose draws nothing: the stage alone is not the band's size.
+    if (box && cells && (!site.band || band)) {
       const actors = [
         ...this.timeline.known().map((k) => k.id),
         ...view.heroes.map((h) => `${h.id}:${h.alive}`),
@@ -291,15 +349,31 @@ export class StageLoop {
         this.lastActors = actors
       }
       const settled = settings.motion === 'still' && !this.timeline.isBusy(now)
-      const skip = settled && !this.wasBusy && actors === this.lastActors
+      const skip =
+        settled &&
+        !this.wasBusy &&
+        actors === this.lastActors &&
+        (band === null || this.sent.get('band') === band.json)
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
-        const frame = stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
+        const frame = band
+          ? {
+              source: bandFrame(
+                view,
+                this.timeline,
+                now,
+                layout,
+                settings.motion,
+                band.box,
+                band.scene,
+              ),
+            }
+          : stageFrame(view, this.timeline, now, layout, site.renderer, settings.motion)
         const at = {
           requestId: site.requestId,
           key: site.key,
-          columns: cells.columns,
-          rows: cells.rows,
+          columns: band ? band.box.columns : cells.columns,
+          rows: band ? band.box.rows : cells.rows,
         }
         const result = await this.io.blit(
           'cells' in frame ? { ...at, cells: frame.cells } : { ...at, source: frame.source },
@@ -312,26 +386,14 @@ export class StageLoop {
           this.lastStage = null
           return null
         }
+        if (band) this.sent.set('band', band.json)
         if ('source' in frame) {
           this.lastStage = { key: site.key, layout: site.layout, source: frame.source }
         }
       }
     }
 
-    if (extras) {
-      const { scene } = stripScene({
-        view,
-        world: extras.world,
-        tab: site.strip.tab,
-        kind: site.strip.kind,
-        columns: site.strip.columns,
-        now,
-        notice: extras.notice,
-        motion: settings.motion,
-        timeline: this.timeline,
-        gauges: extras.gauges,
-        log: extras.log,
-      })
+    if (scene && !band) {
       const sends: UiBlitArgs[] = []
       if (site.renderer === 'raster') {
         const cells = sceneCells(scene)

@@ -4,7 +4,7 @@ import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
-import { stageFrame, stageKey } from '../stage/loop'
+import { bandFrame, bandKey, stageFrame, stageKey } from '../stage/loop'
 import { altText } from '../stage/model'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
@@ -13,6 +13,7 @@ import {
   DESKTOP_COLUMN_PX_CEILING,
   DESKTOP_ROW_PX,
   FULL_MIN_COLUMNS,
+  IMAGE_MAX_COLUMNS,
   PROBE_DELAY_MS,
   STAGE_MAX_COLUMNS,
   SVG_INTERACTIVE,
@@ -203,6 +204,43 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         {buttons}
       </Box>
     )
+
+    // The Party tab's full layout on the Image is one picture (spec #45): the stage and the strip
+    // composed on the shell, the band's box up to the host's widest Image, centred past it.
+    if (terminal && rendererNow === 'image' && layout.kind === 'full' && 'Image' in els) {
+      const { Image } = els
+      const box = { columns: Math.min(width, IMAGE_MAX_COLUMNS), rows: layout.bandRows - extra }
+      const key = bandKey(box)
+      // As the stage's: a redraw of the site the loop is drawing reuses the picture it last sent,
+      // the loop's next frame a beat away; anything new composes the first frame here.
+      const source =
+        loop?.stageSource(key, layout) ??
+        bandFrame(view, timeline, now, layout, settings.motion, box, scene)
+      loop?.mount({
+        requestId: e.requestId,
+        key,
+        band: box,
+        layout,
+        renderer: 'image',
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
+      return (
+        <Box key="band" flexDirection="column">
+          <Box key="row-band" flexDirection="row" justifyContent="center">
+            <Image
+              key={key}
+              source={source}
+              columns={box.columns}
+              rows={box.rows}
+              alt={`${altText(view)}\n${scene.alt}`}
+            />
+            {hidden}
+          </Box>
+        </Box>
+      )
+    }
 
     let stage = null
     let strip = null
