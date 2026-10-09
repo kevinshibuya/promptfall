@@ -180,3 +180,40 @@ test(
     await ui.unmount()
   },
 )
+
+test(
+  'in play, a sandbox wipe: the enemy window keeps each monster its HP through its fade, then shows the retreat',
+  { timeoutMs: 60_000 },
+  async ($, on) => {
+    const { run, view, clock } = await sandboxOn(on, $)
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...BAND })
+    // A wave on the field with every monster standing in the band, nothing dying.
+    for (let step = 0; step < 2000; step++) {
+      await clock.advance(50)
+      const shown = await band(ui)
+      if (view().enemies.length > 0 && shown.rows.length > 0 && shown.rows.every((r) => r.hp > 0))
+        break
+    }
+    const fought = view().enemies.map((e) => e.name)
+    expect(fought.length).toBeGreaterThan(0)
+    expect(await run('wipe')).toMatch(/^Sandbox: the party fell, retreating to zone \d+$/)
+    let held = 0
+    let caughtUp = 0
+    for (let step = 0; step < 600 && caughtUp === 0; step++) {
+      await clock.advance(50)
+      const v = view()
+      const shown = await band(ui)
+      const leaving = shown.rows.filter((r) => fought.includes(r.name))
+      if (v.enemies.length === 0 && leaving.length > 0) {
+        held++
+        // They left alive: no row reads as killed.
+        for (const r of leaving) expect(r.hp, `${r.name} drawn killed`).toBeGreaterThan(0)
+      } else if (held > 0 && shown.rank === viewRank(v)) {
+        caughtUp++
+      }
+    }
+    expect(held, 'the monsters kept their rows through their fade').toBeGreaterThan(0)
+    expect(caughtUp, 'the band moved on to the retreat').toBeGreaterThan(0)
+    await ui.unmount()
+  },
+)

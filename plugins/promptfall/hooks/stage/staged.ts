@@ -33,7 +33,8 @@ function worldBossRow(
 
 /**
  * The staged state at `now`, in the view's shape. The caller has observed `view` on `timeline`
- * first. A hero carries his HP less the landings still pending and stands while it is above zero.
+ * first. A hero carries his HP less the landings still pending and stands while it is above zero;
+ * a change the state made without a blow (a wipe's heal, a revive) is one of those landings.
  * The enemies are the timeline's line in arrival order, a departed one kept while it is held,
  * each with its HP staged the same way. The zone and wave hold the previous ones while a departed
  * enemy seen in them is held. The world boss is staged like any enemy, its bar from the poll.
@@ -53,12 +54,13 @@ export function stagedState(
   })
   const line = timeline.lineup()
   const live = new Map(view.enemies.map((e) => [e.id, e]))
-  // A departed enemy is dead in the state: its row is what its hits still to land leave it.
+  // A departed row carries the HP the timeline predicts it left with: 0 for a kill, its last HP
+  // when it left alive.
   const enemies = line.map(({ row, departed }) => {
     const current = departed ? row : (live.get(row.id) ?? row)
     const bar = worldBossRow(current, view, world, -(pending.get(current.id) ?? 0))
     if (bar) return bar
-    const hp = staged(departed ? 0 : current.hp, current.maxHp, current.id)
+    const hp = staged(current.hp, current.maxHp, current.id)
     return hp === current.hp ? current : { ...current, hp }
   })
   // The encounter stays on the earliest wave or zone a held enemy was seen in.

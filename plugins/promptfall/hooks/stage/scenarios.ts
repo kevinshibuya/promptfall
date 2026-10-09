@@ -300,7 +300,15 @@ function stripInput(
   const gauges = new GaugeTrack()
   const log = new MessageLog()
   const t0 = NOW - 1300
-  timeline.observe(view, t0 - 1)
+  // `view` is the tick's end: before it, every actor held the HP the burst's hits took too.
+  const taken = new Map<string, number>()
+  for (const e of effects)
+    if (e.k === 'hit') taken.set(e.target, (taken.get(e.target) ?? 0) + e.amount)
+  const hp = <A extends { id: string; hp: number }>(a: A): A => ({
+    ...a,
+    hp: a.hp + (taken.get(a.id) ?? 0),
+  })
+  timeline.observe({ ...view, heroes: view.heroes.map(hp), enemies: view.enemies.map(hp) }, t0 - 1)
   const starts = timeline.onEffects(effects, t0, 2000)
   timeline.observe(view, NOW)
   log.onEffects(effects, starts, view, t0, 2000, timeline)

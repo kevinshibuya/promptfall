@@ -211,3 +211,114 @@ test('the landings inside a horizon, per actor, in time order', () => {
   expect(landingsWithin(t, first, third - first).get('h1')).toEqual([{ at: second, delta: -4 }])
   expect(landingsWithin(t, first, third - first).get('h2')).toEqual([{ at: third, delta: 6 }])
 })
+
+/** When `actor`'s `kind` motion ends; NaN when it has none. */
+const endOf = (t: StageTimeline, actor: string, kind: string, now = NOW) =>
+  t.active(now).find((m) => m.actor === actor && m.kind === kind)?.until ?? Number.NaN
+
+test('a wipe: each hero stands until his blow lands, lies fallen while the field clears, and is up at full once it has', () => {
+  const before = withHero(withHero(withHero(wave(), 'h1', 7), 'h2', 5), 'h3', 3)
+  const t = new StageTimeline()
+  t.observe(before, NOW - 1)
+  const impacts = [strike(t, 'e1', 'h1', 20), strike(t, 'e2', 'h2', 20), strike(t, 'e3', 'h3', 20)]
+  // The sim wiped: the party is healed in place and the encounter is gone.
+  const view: GameView = { ...wave(), enemies: [] }
+  t.observe(view, NOW)
+  const heroes = (now: number) =>
+    stagedState(view, WORLD_DEFAULT, t, now).heroes.map((h) => [h.hp, h.alive])
+  const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).enemies.map((e) => e.hp)
+  const [i1 = 0, i2 = 0, i3 = 0] = impacts
+  expect(heroes(i1 - 1)).toEqual([
+    [7, true],
+    [5, true],
+    [3, true],
+  ])
+  expect(heroes(i2 - 1)).toEqual([
+    [0, false],
+    [5, true],
+    [3, true],
+  ])
+  expect(heroes(i3)).toEqual([
+    [0, false],
+    [0, false],
+    [0, false],
+  ])
+  // The monsters left alive: their rows keep their HP through the fade, the last one's after its blow.
+  const cleared = endOf(t, 'e3', 'dissolve')
+  expect(rows(i3)).toEqual([42, 10, 30])
+  expect(heroes(cleared - 1)).toEqual([
+    [0, false],
+    [0, false],
+    [0, false],
+  ])
+  expect(heroes(cleared)).toEqual([
+    [50, true],
+    [50, true],
+    [50, true],
+  ])
+})
+
+test('a wave clear: the hero killed in the clearing tick is down from his blow until the killer has faded and dropped, then up at 15%', () => {
+  const lone: GameView = { ...wave(), enemies: wave().enemies.slice(0, 1) }
+  const t = new StageTimeline()
+  t.observe(withHero(lone, 'h3', 5), NOW - 1)
+  const felled = strike(t, 'e1', 'h3', 20)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e1', amount: 50 },
+      {
+        k: 'drop',
+        item: {
+          id: 'i1',
+          base: 'iron_sword',
+          rarity: 'rare',
+          affixes: [],
+          equippedBy: null,
+          tradeableAt: null,
+        },
+      },
+    ],
+    NOW,
+    2000,
+  )
+  const killed = t.active(NOW).find((m) => m.kind === 'number' && m.actor === 'e1')?.from ?? 0
+  // The wave is clear: the fallen hero is revived at 15% (7 of 50).
+  const view: GameView = withHero({ ...lone, enemies: [] }, 'h3', 7)
+  t.observe(view, NOW)
+  const dropped = endOf(t, 'e1', 'drop')
+  const h3 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).heroes[2]
+  const e1 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).enemies[0]?.hp
+  expect(h3(felled - 1)).toMatchObject({ hp: 5, alive: true })
+  expect(h3(felled)).toMatchObject({ hp: 0, alive: false })
+  expect(e1(killed - 1)).toBe(42)
+  expect(e1(killed)).toBe(0)
+  expect(h3(dropped - 1)).toMatchObject({ hp: 0, alive: false })
+  expect(h3(dropped)).toMatchObject({ hp: 7, alive: true })
+})
+
+test('an enemy cleared alive keeps its last HP through its fade, and fades after its own last blow', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  const hit = strike(t, 'h1', 'e1', 10)
+  strike(t, 'e1', 'h1', 5)
+  const lunged = endOf(t, 'e1', 'lunge')
+  // A sandbox wipe of the encounter: every monster leaves the view alive.
+  const view: GameView = { ...withHero(wave(), 'h1', 45), enemies: [] }
+  t.observe(view, NOW)
+  const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).enemies.map((e) => e.hp)
+  expect(rows(hit - 1)).toEqual([42, 10, 30])
+  expect(rows(hit)).toEqual([32, 10, 30])
+  const dissolve = t.active(NOW).find((m) => m.actor === 'e1' && m.kind === 'dissolve')
+  expect(dissolve?.from).toBe(lunged)
+  expect(rows((dissolve?.until ?? 0) - 1)[0]).toBe(32)
+})
+
+test('a state change with nothing in flight lands at once', () => {
+  const t = new StageTimeline()
+  t.observe(withHero(wave(), 'h1', 7), NOW - 1)
+  // A rest: the sim healed the hero, and no blow is on the timeline.
+  const view = wave()
+  t.observe(view, NOW)
+  expect(stagedState(view, WORLD_DEFAULT, t, NOW).heroes[0]).toMatchObject({ hp: 50, alive: true })
+})
