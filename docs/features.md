@@ -156,8 +156,11 @@ drawings and wind up and strike; fireballs, arrows and light bursts fly, hits fl
 rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
 fights until the blow that kills him lands, then dims, and the party window's HP drops with each
 hit as it lands, not when the game applies it. It grows while a boss
-is on it and shrinks back after the boss falls. It draws as an image on Kitty and Ghostty, in
-half-blocks on other terminals, and as vector art on the desktop.
+is on it and shrinks back after the boss falls. A monster that steps on partway through a tick
+plays its first actions animated, on the desktop too. It draws as an image on Kitty and Ghostty,
+in half-blocks on other terminals, and as vector art on the desktop. A terminal session asks which
+it can draw, and lays the band out with the last session's answer while it waits, so the band holds
+its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right

@@ -1106,24 +1106,29 @@ test('the probe settles on image when the blit is taken', async ($, on) => {
 })
 
 test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
-  const { time, last } = probing(on, {
+  const { time, last, data } = probing(on, {
     deny: `${PROBE_ALT_DENY} (env: terminal=Apple_Terminal, not asked yet, no answer)`,
   })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
   expect(last.get('renderer')).toBe('raster')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'raster' })
   await ui.unmount()
 })
 
 test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
-  const { time, last, blits } = probing(on, {
+  const { time, last, blits, data } = probing(on, {
     deny: 'no Image of its own is mounted under key "probe" in band-probe',
   })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
   expect(last.get('renderer') ?? 'unknown').toBe('unknown')
+  // Nothing settled, nothing recorded.
+  expect(
+    (data.get('promptfall:settings') as { probed?: unknown } | undefined)?.probed ?? null,
+  ).toBe(null)
   await ui.unmount()
   const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
   await time.advance(PROBE_DELAY_MS)
@@ -1133,7 +1138,7 @@ test('any other deny leaves the renderer unknown, and a later render probes agai
 
 test('a pane drawn while the renderer is unknown probes too, and a taken blit settles on image', async ($, on) => {
   // A docked pane collapses the band, which then never probes (UI PR 3).
-  const { time, last, blits } = probing(on, {})
+  const { time, last, blits, data } = probing(on, {})
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   const probe = await ui.find({ key: 'probe' })
@@ -1141,6 +1146,7 @@ test('a pane drawn while the renderer is unknown probes too, and a taken blit se
   await time.advance(PROBE_DELAY_MS)
   expect(blits.filter((b) => b.key === 'probe').map((b) => b.requestId)).toEqual(['promptfall'])
   expect(last.get('renderer')).toBe('image')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'image' })
   await ui.unmount()
 })
 

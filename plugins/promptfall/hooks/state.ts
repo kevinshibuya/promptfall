@@ -42,7 +42,12 @@ export const WORLD_DEFAULT: WorldState = {
 }
 export const CHAT_DEFAULT: ChatState = { draft: '', busy: false, error: null }
 export const BOARDS_DEFAULT: BoardsState = { boards: null, busy: false, error: null }
-export const SETTINGS_DEFAULT: Settings = { sound: false, motion: 'full', renderer: 'auto' }
+export const SETTINGS_DEFAULT: Settings = {
+  sound: false,
+  motion: 'full',
+  renderer: 'auto',
+  probed: null,
+}
 /** The store key of the settings, under `promptfall:`; `reset()` keeps it as it keeps the lease. */
 export const SETTINGS_KEY = 'settings'
 
@@ -58,6 +63,7 @@ export function parseSettings(raw: unknown): Settings {
       r.renderer === 'image' || r.renderer === 'raster' || r.renderer === 'auto'
         ? r.renderer
         : SETTINGS_DEFAULT.renderer,
+    probed: r.probed === 'image' || r.probed === 'raster' ? r.probed : SETTINGS_DEFAULT.probed,
   }
 }
 

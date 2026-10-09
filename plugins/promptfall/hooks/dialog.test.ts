@@ -832,7 +832,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'row:sound' })
     await ui.press({ key: 'row:motion' })
     await ui.press({ key: 'row:renderer' })
-    const next = { sound: true, motion: 'still', renderer: 'image' }
+    const next = { sound: true, motion: 'still', renderer: 'image', probed: null }
     expect(data.get('promptfall:settings')).toEqual(next)
     expect(states.get('settings')).toEqual(next)
     const after = await paneText(ui)
@@ -855,6 +855,7 @@ test('an Account press merges into the stored settings, not an older copy in thi
     sound: true,
     motion: 'still',
     renderer: 'auto',
+    probed: null,
   })
   await ui.unmount()
 })

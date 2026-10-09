@@ -125,11 +125,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // Every tab: the strip's enemy window reads the staged state the timeline holds.
     timeline.observe(view, now)
     const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
+    // While the probe is pending, the verdict the last session recorded, else the half-block
+    // rules: from the second session on the band keeps its height when the probe lands.
+    const laidOut = rendererNow === 'unknown' ? (settings.probed ?? 'raster') : rendererNow
     const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
       tab,
       extra,
       minRows: party ? timeline.minRowsAt(view, now) : undefined,
-      scalable: rendererNow === 'image',
+      scalable: laidOut === 'image',
     })
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
@@ -235,7 +238,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
                 (error: unknown) => String(error),
               )
               const verdict = probeVerdict(deny)
-              if (verdict) await update($, rendererAtom, () => verdict)
+              if (verdict === null) return
+              await update($, rendererAtom, () => verdict)
+              // For the next session's band while its own probe is pending; the player's choice stays.
+              const key = `promptfall:${SETTINGS_KEY}`
+              await $.store.set(key, { ...parseSettings(await $.store.get(key)), probed: verdict })
             })()
           })
         }

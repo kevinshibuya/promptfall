@@ -85,7 +85,7 @@ const REAL_SAVE = {
   'promptfall:pf:token:real-token': 'real-acct',
   'promptfall:pf:acct:real-acct:record': { account: { accountId: 'real-acct' }, gold: 123 },
   'promptfall:lease': { owner: 'real-session', until: 9_999_999_999_999 },
-  'promptfall:settings': { sound: true, motion: 'still', renderer: 'auto' },
+  'promptfall:settings': { sound: true, motion: 'still', renderer: 'auto', probed: null },
 }
 
 test('the sandbox save lives under its own prefix; the real save is never touched', async ($, on) => {

@@ -262,6 +262,12 @@ export type Settings = {
   sound: boolean
   motion: 'full' | 'still'
   renderer: 'auto' | 'image' | 'raster'
+  /**
+   * The verdict the last probe on this machine landed on, null before the first: what the band
+   * lays out with while this session's probe is pending. Not the player's choice, so a probe
+   * still runs and a changed terminal is found out.
+   */
+  probed: 'image' | 'raster' | null
 }
 
 // Inside the augmentation below, `Settings` names the engine's own export: alias ours outside it.

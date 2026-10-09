@@ -224,7 +224,10 @@ it drops loot.
 - **The probe.** Nothing says which terminals draw pictures, so the band asks: its status row draws
   a one-pixel `Image` and, 300 ms later, swaps it with `$.ui.blit`. A swap that is taken means
   pictures; a deny naming the alt means half-blocks; any other answer asks again on a later draw.
-  Until the answer lands the stage rows stay empty, so the band does not change height.
+  Until the answer lands the stage rows stay empty, laid out by the verdict the last probe on this
+  machine recorded (`probed` in the settings, apart from the player's `renderer`), or by the
+  half-block rules before any. So the band holds its height from the second session on, and may
+  change it once on a first run or after a terminal change.
 - **Heights.** The Party tab is 22 rows in every fight: 17 for the stage, the boss height, so the
   party stands small on the zone's painting and a boss lands at its full size (ADR 0010), and the
   5-row window strip. A band too short for that shows the whole scene smaller: an `Image` zooms

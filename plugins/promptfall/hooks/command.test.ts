@@ -104,7 +104,7 @@ test('the settings commands write the store and the atom, and answer', async ($,
   expect((await run('renderer raster')).text).toBe(
     'Renderer: raster (applies at the next session start)',
   )
-  const stored = { sound: true, motion: 'still', renderer: 'raster' }
+  const stored = { sound: true, motion: 'still', renderer: 'raster', probed: null }
   expect(data.get('promptfall:settings')).toEqual(stored)
   expect(states.get('settings')).toEqual(stored)
   expect((await run('sound off')).text).toBe('Sound off')

@@ -7,6 +7,7 @@ import {
   DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
   DESKTOP_ROW_PX,
+  PROBE_DELAY_MS,
   SVG_INTERACTIVE,
 } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
@@ -169,8 +170,14 @@ async function height(ui: Finder) {
     if (n.props.rows !== undefined) return Number(n.props.rows)
     return n.children.filter((c) => typeof c === 'object').length
   }
-  const stage = (await count('stage')) || (await count('stage-empty'))
-  const strip = (await count('strip')) || (await count('strip-empty'))
+  // The Images keep keys of their own: the stage's by its size, each window's by its own.
+  const first = async (key: string) => {
+    const n = ((await ui.find({ key }))?.children ?? [])[0] as Node | undefined
+    return Number(n?.props.rows ?? 0)
+  }
+  const stage = (await count('stage')) || (await count('stage-empty')) || (await first('row-stage'))
+  const strip =
+    (await count('strip')) || (await count('strip-empty')) || (await first('strip-windows'))
   return stage + strip + ((await ui.find({ key: 'row-hotkeys' })) ? 1 : 0)
 }
 
@@ -713,6 +720,36 @@ test('while the renderer is unknown the stage and strip rows are empty and the s
   await ui.unmount()
 })
 
+test('lays out with the remembered renderer while the probe is pending', async ($, on) => {
+  const { data, clock } = harness(on)
+  settings(data, { probed: 'image' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // 11 rows: an Image zooms the stage into the 6 over the strip, where half-blocks go compact.
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 11) })
+  expect(await ui.find({ key: 'probe' })).toBeDefined()
+  expect(await ui.find({ key: 'compact-stage' })).toBeUndefined()
+  expect(await height(ui)).toBe(11)
+  // The harness takes the blit: the probe lands on image and the band keeps its height.
+  await clock.advance(PROBE_DELAY_MS)
+  expect(await ui.find({ key: 'probe' })).toBeUndefined()
+  expect(await height(ui)).toBe(11)
+  await ui.unmount()
+})
+
+test('with no remembered renderer the band lays out by the half-blocks, and the landing verdict is recorded', async ($, on) => {
+  const { data, clock } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 11) })
+  expect(await ui.find({ key: 'probe' })).toBeDefined()
+  expect(await height(ui)).toBe(6)
+  // The first session's band changes height once, when the probe lands.
+  await clock.advance(PROBE_DELAY_MS)
+  expect(await height(ui)).toBe(11)
+  // The verdict has a field of its own: the player's choice stays auto, so the next session probes.
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'image' })
+  await ui.unmount()
+})
+
 test('the probe arms on the World tab too: Loot and World need the renderer', async ($, on) => {
   const { data } = harness(on)
   data.set('promptfall:prefs', { bandTab: 'world', collapsed: false })
@@ -844,7 +881,9 @@ test('with motion still and nothing moving on the stage, the stage never blits',
   shown.notice = null
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  await clock.advance(5_000)
+  // Nine idle beats, up to the engine's first tick at the 5 s idle cadence: that tick brings the
+  // session's own monster on, which enters the stage's timeline with a spawn under the shown view.
+  await clock.advance(4_999)
   // The session's own fight still feeds the log under the shown view: the strip may blit a new line.
   expect(blits.filter((b) => b.key === 'stage')).toHaveLength(0)
   await ui.unmount()

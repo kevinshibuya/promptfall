@@ -276,6 +276,61 @@ test('survivors keep their places and a newcomer joins the end of the line after
   ])
 })
 
+test('a monster that enters mid-tick is known to the timeline before the next redraw', () => {
+  const two = wave()
+  two.enemies = two.enemies.filter((e) => e.id !== 'e3')
+  const t = observed(two)
+  // The tick refilled the line from the queue, then the newcomer struck: the engine hands the
+  // tick's view over with its effects, and no redraw has observed the newcomer yet.
+  const tick = wave()
+  tick.enemies = [
+    ...two.enemies,
+    { id: 'e4', def: 'road_slime', name: 'Road Slime', glyph: 'T', hp: 9, maxHp: 9, kind: 'wave' },
+  ]
+  t.admit(tick, NOW)
+  t.onEffects([act('e4', 0), hit('e4', 'h1'), act('h1', 500), hit('h1', 'e4')], NOW)
+  expect(t.known().map((k) => [k.id, k.slot])).toEqual([
+    ['e1', 0],
+    ['e2', 1],
+    ['e4', 2],
+  ])
+  const m = t.active(NOW)
+  expect(of(m, 'spawn')).toEqual([{ kind: 'spawn', actor: 'e4', from: NOW, until: NOW + SPAWN_MS }])
+  // Its first action plays animated, and the hit on it flashes.
+  expect(of(m, 'lunge').map((x) => x.actor)).toEqual(['e4', 'h1'])
+  expect(of(m, 'flash').map((x) => x.actor)).toEqual(['h1', 'e4'])
+  // Admitting departs nothing: an enemy missing from the tick's view waits for the redraw.
+  const kill = wave()
+  kill.enemies = kill.enemies.filter((e) => e.id !== 'e1')
+  t.admit(kill, NOW + 10)
+  expect(t.isDeparted('e1')).toBe(false)
+  expect(of(t.active(NOW + 10), 'dissolve')).toEqual([])
+})
+
+test('a newcomer the pause after a kill holds back is not admitted with the tick', () => {
+  const t = observed()
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id !== 'e1')
+  t.observe(v, NOW)
+  v.enemies.push({
+    id: 'e4',
+    def: 'road_slime',
+    name: 'Road Slime',
+    glyph: 'T',
+    hp: 9,
+    maxHp: 9,
+    kind: 'wave',
+  })
+  t.admit(v, NOW + 10)
+  expect(t.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
+  expect(of(t.active(NOW + 10), 'spawn')).toEqual([])
+  // A kill no redraw has seen yet has no pause on the timeline: the newcomer waits for that redraw.
+  const unseen = observed()
+  unseen.admit(v, NOW + 10)
+  expect(unseen.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
+  expect(of(unseen.active(NOW + 10), 'spawn')).toEqual([])
+})
+
 test('rowsAt is the boss height in every fight, with the boss and after it (ADR 0010)', () => {
   const t = observed(boss())
   expect(t.rowsAt(boss(), NOW)).toBe(STAGE_ROWS)

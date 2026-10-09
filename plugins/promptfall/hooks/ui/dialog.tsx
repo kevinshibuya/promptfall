@@ -273,7 +273,11 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             (error: unknown) => String(error),
           )
           const verdict = probeVerdict(deny)
-          if (verdict) await update($, rendererAtom, () => verdict)
+          if (verdict === null) return
+          await update($, rendererAtom, () => verdict)
+          // For the next session's band while its own probe is pending; the player's choice stays.
+          const key = `promptfall:${SETTINGS_KEY}`
+          await $.store.set(key, { ...parseSettings(await $.store.get(key)), probed: verdict })
         })()
       })
     }

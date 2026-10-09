@@ -654,6 +654,9 @@ class GameSession implements GameHandle {
     // A tick's battle time plays stretched over the cadence: 2 s ticks at real speed, 5 s slower.
     const now = at ?? this.lastAt
     const cadence = this.cadence || TURN_CADENCE_MS
+    // A monster the tick brought acts in it: the timeline knows it before the effects play, not
+    // only from the next redraw (the desktop's is a round away).
+    if (view) this.stage.timeline.admit(view, now)
     const starts = this.stage.timeline.onEffects(effects, now, cadence)
     if (view) {
       this.stage.gauges.onTick(view, now, cadence, this.stage.timeline)

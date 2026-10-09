@@ -229,19 +229,7 @@ export class StageTimeline {
         }
         continue
       }
-      if (this.observed && now < this.enterAfter()) continue
-      const slot = this.freeSlot(now)
-      if (slot === null) continue
-      this.entries.set(enemy.id, {
-        id: enemy.id,
-        spriteId,
-        kind: enemy.kind,
-        slot,
-        name: enemy.name,
-      })
-      if (this.observed) {
-        this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
-      }
+      this.enter(enemy, now)
     }
     for (const enemy of view.enemies) {
       if (!this.entries.has(enemy.id)) continue
@@ -255,6 +243,54 @@ export class StageTimeline {
     for (const id of this.seen.keys()) if (!this.entries.has(id)) this.seen.delete(id)
     this.observed = true
     this.settlePlaces(now)
+  }
+
+  /**
+   * Enters the view's newcomers, with their spawn, and nothing else: no enemy departs and no HP
+   * moves, since the view is the tick's end and the kills in its effects have not played. The
+   * engine calls it as it hands over a tick's effects, so a monster that entered since the last
+   * observe has a place for its first actions before any redraw observes it (the desktop redraws
+   * once a round). Before the first observe it does nothing: that observe places the line. Nor
+   * while a live entry is missing from the view: that kill's pause is not on the timeline until a
+   * redraw departs it, and a newcomer let in now would stand beside a death still to play.
+   */
+  admit(view: GameView, now: number): void {
+    if (!this.observed) return
+    const live = new Set(view.enemies.map((e) => e.id))
+    for (const id of this.entries.keys()) if (!live.has(id) && !this.departed.has(id)) return
+    let entered = false
+    for (const enemy of view.enemies) {
+      if (this.entries.has(enemy.id) || !this.enter(enemy, now)) continue
+      this.seen.set(enemy.id, {
+        row: enemy,
+        zone: view.zone,
+        zoneName: view.zoneName,
+        wave: view.wave,
+      })
+      entered = true
+    }
+    if (entered) this.settlePlaces(now)
+  }
+
+  /**
+   * An enemy the timeline does not know steps on at `now` with a spawn, once the last kill's pause
+   * is over and a slot is free; true when it did.
+   */
+  private enter(enemy: EnemyView, now: number): boolean {
+    if (this.observed && now < this.enterAfter()) return false
+    const slot = this.freeSlot(now)
+    if (slot === null) return false
+    this.entries.set(enemy.id, {
+      id: enemy.id,
+      spriteId: enemySpriteId(enemy),
+      kind: enemy.kind,
+      slot,
+      name: enemy.name,
+    })
+    if (this.observed) {
+      this.motions.push({ kind: 'spawn', actor: enemy.id, from: now, until: now + SPAWN_MS })
+    }
+    return true
   }
 
   /** When the last kill's pause is over: no newcomer steps on before it. */
