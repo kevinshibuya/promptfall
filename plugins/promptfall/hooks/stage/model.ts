@@ -237,9 +237,10 @@ export function stageAt(
     const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
     nextFree = Math.max(nextFree, baseX + art.width + gap)
     // Departed: whole until its dissolve starts, then fading; gone once the dissolve is over and
-    // only its drop holds it, dead in the staged state.
+    // only its drop holds it, dead in the staged state. A live row at 0 stands whole: a world boss
+    // whose bar this party has emptied waits for the server to disengage it.
     const dissolve = all.find((m) => m.actor === known.id && m.kind === 'dissolve')
-    let alpha = known.hp > 0 ? 1 : 0
+    let alpha = known.hp > 0 || !timeline.isDeparted(known.id) ? 1 : 0
     if (dissolve !== undefined) alpha = now < dissolve.from ? 1 : 1 - progress(dissolve, now)
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
