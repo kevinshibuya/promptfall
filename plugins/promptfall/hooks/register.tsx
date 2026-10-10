@@ -3,7 +3,14 @@ import { atom, read, update } from 'claude-code'
 import type { GameView, Mode, Settings, WorldState } from '../types'
 import { commandSpec, registerCommand } from './command'
 import { CUE_ASSET, type Cue } from './cues'
-import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
+import {
+  DELETED_NOTICE,
+  type EnginePublish,
+  GameEngine,
+  type GameHandle,
+  NOT_DELETED,
+  type TradeCall,
+} from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
 import {
   LOCAL,
@@ -524,6 +531,24 @@ class GameSession implements GameHandle {
     await this.restart(this.setting)
   }
 
+  async deleteAccount(): Promise<void> {
+    let deleted = false
+    try {
+      await this.claim()
+      const answer = await this.engine.call((client, auth) => client.deleteAccount(auth))
+      deleted = !('reason' in answer)
+    } catch {
+      // Unreachable, not started, or a ban, which has paused play with its own message.
+    }
+    if (!deleted) {
+      this.refuseInPane(NOT_DELETED)
+      return
+    }
+    await this.reset()
+    // Over the welcome: the fresh account's first notice says why it is fresh.
+    this.engine.notice(DELETED_NOTICE, WELCOME_MS)
+  }
+
   setCadence(ms: number): void {
     if (ms === this.cadence && this.tickTimer) return
     this.cadence = ms
@@ -684,6 +709,15 @@ class GameSession implements GameHandle {
     await this.io.publish({ view: toGameView(state, boot.account.accountId, false, account) })
   }
 
+  /** A refusal in the pane's message window for five seconds. */
+  private refuseInPane(reason: string): void {
+    const gen = ++this.paneNoticeGen
+    this.pending = this.pending.then(() => this.io.paneNotice(reason)).catch(() => undefined)
+    this.io.after(5000, () => {
+      if (gen === this.paneNoticeGen) void this.io.paneNotice(null)
+    })
+  }
+
   private onEffects(effects: Effect[], at: number | undefined, view: GameView | null): void {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
@@ -701,16 +735,7 @@ class GameSession implements GameHandle {
       this.stage.log.onEffects(effects, starts, view, now, cadence, this.stage.timeline)
     }
     for (const loop of this.loops.values()) loop.wake()
-    for (const effect of effects) {
-      if (effect.k === 'rejected') {
-        const reason = effect.reason
-        const gen = ++this.paneNoticeGen
-        this.pending = this.pending.then(() => this.io.paneNotice(reason)).catch(() => undefined)
-        this.io.after(5000, () => {
-          if (gen === this.paneNoticeGen) void this.io.paneNotice(null)
-        })
-      }
-    }
+    for (const effect of effects) if (effect.k === 'rejected') this.refuseInPane(effect.reason)
     const toasts = toastsFor(effects, view, { bossName: (id) => this.bossNames.get(id) ?? null })
     for (const toast of toasts) this.io.toast(toast.text, toast.timeoutMs)
     // After the toasts: each cue the burst earned, once.

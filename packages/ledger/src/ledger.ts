@@ -1,4 +1,5 @@
 import {
+  type AccountDeleted,
   type AccountInfo,
   type AdoptReason,
   type Auth,
@@ -414,6 +415,26 @@ export class Ledger implements ServerClient {
         config: await this.config(),
         delivery: deliveryOf(record),
       }
+    })
+  }
+
+  /**
+   * Deletes the caller's account. Its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   */
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
+      const id = record.account.accountId
+      await market.closeAllOf(await this.marketContext(), id)
+      await world.dropFromBoards(this.kv, id)
+      if (this.presence.delete(id)) this.memo.presenceChanged()
+      await this.books.remove(record, auth.deviceToken)
+      return { deleted: true } as const
     })
   }
 

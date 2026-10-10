@@ -1,4 +1,4 @@
-import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
 import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
@@ -227,6 +227,12 @@ declare class Ledger implements ServerClient {
     knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
     account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
+    /**
+     * Deletes the caller's account. Its open listings and orders close with nothing returned or
+     * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+     * else is settled: a counterparty, the boss record and the chat history are untouched.
+     */
+    deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
     /** A state-carrying refusal: the client adopts the effective state, so the committed point moves there. */
     private adopt;

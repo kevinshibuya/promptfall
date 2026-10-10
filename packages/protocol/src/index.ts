@@ -1,5 +1,6 @@
 export {
   type Account,
+  type AccountDeleted,
   type AccountInfo,
   type AdoptReason,
   type Auth,
@@ -46,6 +47,7 @@ export {
   UnauthorizedSchema,
 } from './market'
 export {
+  AccountDeletedResponseSchema,
   AccountInfoSchema,
   AccountResponseSchema,
   AccountSchema,

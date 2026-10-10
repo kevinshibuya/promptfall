@@ -86,6 +86,9 @@ export type Bootstrap = {
  */
 export type BootstrapRefused = { refusal: 'rate_limited' | 'banned'; message: string }
 
+/** The account delete's answer: the account, its token and its rows are gone. */
+export type AccountDeleted = { deleted: true }
+
 export type LinkStart = { code: string; url: string; intervalMs: number }
 /** A host that cannot link now: a `github` host without a client id, or GitHub not answering. */
 export type LinkRefused = { refusal: 'link_unavailable'; message: string }
@@ -108,6 +111,11 @@ export interface ServerClient {
   }): Promise<Bootstrap | BootstrapRefused>
   submit(batch: Batch, auth: Auth): Promise<BatchAck>
   account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>
+  /**
+   * Deletes the caller's account: its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its token is unknown from then on.
+   */
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>
   linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>
   linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>
   browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned>

@@ -231,6 +231,92 @@ describe('Ledger bans', () => {
   })
 })
 
+describe('Ledger account delete', () => {
+  it('delete cancels listings and orders, clears the boards and kills the token', async () => {
+    const { ledger, kv } = makeLedger()
+    const store = kv as MemoryKeyValue
+    const order = { base: 'steel_longsword', minRarity: 'rare' as const, affixId: null }
+    const leaver = await ledger.host.mint({
+      state: {
+        ...createInitialState(5),
+        gold: 10_000,
+        highestZone: 9,
+        inventory: [rareItem('l-1')],
+      },
+      name: 'Leaver',
+      linked: true,
+    })
+    const other = await ledger.host.mint({
+      state: {
+        ...createInitialState(6),
+        gold: 10_000,
+        highestZone: 4,
+        inventory: [rareItem('o-1'), rareItem('o-2')],
+      },
+      name: 'Stayer',
+      linked: true,
+    })
+    const mine = { deviceToken: leaver.deviceToken }
+    const theirs = { deviceToken: other.deviceToken }
+    expect((await ledger.list(mine, { kind: 'item', id: 'l-1', price: 100 })).ok).toBe(true)
+    expect((await ledger.placeOrder(mine, { ...order, maxPrice: 500 })).ok).toBe(true)
+    expect((await ledger.list(theirs, { kind: 'item', id: 'o-1', price: 200 })).ok).toBe(true)
+    expect((await ledger.placeOrder(theirs, { ...order, maxPrice: 300 })).ok).toBe(true)
+    // A row on this week's damage board, as a boss commit would leave it.
+    const boards = (await store.get('pf:boards')) as { week: { damage: object } }
+    boards.week.damage = {
+      [leaver.accountId]: { name: 'Leaver', value: 900 },
+      [other.accountId]: { name: 'Stayer', value: 100 },
+    }
+    await store.set('pf:boards', boards)
+    await ledger.world(mine, 0)
+    expect(await ledger.world(theirs, 0)).toMatchObject({ online: 2, here: ['Leaver'] })
+    expect(await ledger.matchingOrders(theirs, 'o-2')).toMatchObject([
+      { buyerId: leaver.accountId },
+    ])
+    const before = await record(store, other.accountId)
+
+    expect(await ledger.deleteAccount(mine)).toEqual({ deleted: true })
+
+    // The token is dead: every call is unauthorized, and a bootstrap with it mints anew.
+    expect(await ledger.account(mine)).toEqual({ reason: 'unauthorized' })
+    expect(await ledger.deleteAccount(mine)).toEqual({ reason: 'unauthorized' })
+    expect(await ledger.knowsToken(leaver.deviceToken)).toBe(false)
+    expect(await store.get(`pf:acct:${leaver.accountId}:record`)).toBeUndefined()
+    expect(await store.get(`pf:token:${leaver.deviceToken}`)).toBeUndefined()
+    // Its listing and order are gone from the market; the counterpart's stay.
+    const page = await ledger.browse(theirs, { kind: 'item', sort: 'price', page: 0 })
+    expect(page).toMatchObject({ total: 1, listings: [{ sellerId: other.accountId }] })
+    expect(await ledger.matchingOrders(theirs, 'o-2')).toEqual([])
+    expect(await ledger.myOrders(theirs)).toMatchObject({
+      listings: [{ sellerId: other.accountId }],
+      orders: [{ buyerId: other.accountId }],
+    })
+    // Off both boards and out of presence.
+    expect(await ledger.leaderboards(theirs)).toMatchObject({
+      highestZone: [{ accountId: other.accountId }],
+      damage: [{ accountId: other.accountId }],
+    })
+    const stored = (await store.get('pf:boards')) as { zone: unknown[]; week: { damage: object } }
+    expect(stored.zone).toHaveLength(1)
+    expect(Object.keys(stored.week.damage)).toEqual([other.accountId])
+    expect(await ledger.world(theirs, 0)).toMatchObject({ online: 1, here: [] })
+    // Nothing settled on the counterpart: no item back, no refund, no event.
+    expect(await record(store, other.accountId)).toEqual(before)
+  })
+
+  it('a banned account cannot delete itself', async () => {
+    const { ledger, kv } = makeLedger()
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    await ledger.host.ban(m.accountId, 'cheating')
+    expect(await ledger.deleteAccount({ deviceToken: m.deviceToken })).toEqual({
+      reason: 'banned',
+      message: 'Promptfall: this account is banned: cheating',
+    })
+    expect(await record(kv as MemoryKeyValue, m.accountId)).toBeTruthy()
+  })
+})
+
 describe('Ledger host guards', () => {
   it('credit refuses what the wire would refuse, and writes nothing', async () => {
     const { ledger, kv } = makeLedger()

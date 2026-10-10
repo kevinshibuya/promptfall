@@ -195,6 +195,32 @@ for (const surface of SURFACES) {
     expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(true)
     await ui.unmount()
   })
+
+  test(`deleting the account resets this machine and bootstraps a fresh one on ${surface}`, async ($, on) => {
+    const { states, data } = harness(on, seeded())
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await ui.press({ key: 'tab-account' })
+    await ui.press({ key: 'row:delete' })
+    expect(await paneText(ui)).toMatch(/Delete your account on this server\?/)
+    // No deletes nothing.
+    await ui.press({ key: 'no' })
+    expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(true)
+    await ui.press({ key: 'row:delete' })
+    await ui.press({ key: 'yes' })
+    const view = states.get('view') as GameView
+    expect(view.accountId).not.toBe('acct-1')
+    expect(view.inventory).toHaveLength(0)
+    expect(states.get('mode')).toBe('primary')
+    // The ledger dropped the account and its token; the machine's reset dropped the rest.
+    expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
+    expect(data.has('promptfall:pf:token:token-1')).toBe(false)
+    expect(data.get('promptfall:deviceToken')).not.toBe('token-1')
+    // The same server, and the message window says what happened.
+    expect(data.get('promptfall:server')).toBe('local')
+    expect(states.get('notice')).toMatch(/account on this server is deleted/)
+    await ui.unmount()
+  })
 }
 
 // ---------------------------------------------------------------------------

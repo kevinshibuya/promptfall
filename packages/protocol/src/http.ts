@@ -1,6 +1,7 @@
 import type { TradeKind } from '@promptfall/sim'
 import type { z } from 'zod'
 import type {
+  AccountDeleted,
   AccountInfo,
   Auth,
   BatchAck,
@@ -22,6 +23,7 @@ import type {
   Unauthorized,
 } from './market'
 import {
+  AccountDeletedResponseSchema,
   AccountResponseSchema,
   BatchAckSchema,
   BoardsResponseSchema,
@@ -50,6 +52,7 @@ export const ROUTES = {
   bootstrap: { method: 'POST', path: '/v1/bootstrap' },
   submit: { method: 'POST', path: '/v1/batches' },
   account: { method: 'GET', path: '/v1/account' },
+  deleteAccount: { method: 'DELETE', path: '/v1/account' },
   linkStart: { method: 'POST', path: '/v1/link/github' },
   linkPoll: { method: 'POST', path: '/v1/link/github/poll' },
   browse: { method: 'GET', path: '/v1/listings' },
@@ -167,6 +170,10 @@ export class HttpClient implements ServerClient {
 
   account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned> {
     return this.call('account', AccountResponseSchema, { auth })
+  }
+
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
+    return this.call('deleteAccount', AccountDeletedResponseSchema, { auth })
   }
 
   linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned> {

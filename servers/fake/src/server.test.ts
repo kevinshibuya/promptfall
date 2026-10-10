@@ -248,6 +248,23 @@ describe('HTTP fake', () => {
     // The client agrees: it parses the same bodies.
     expect(await http.account({ deviceToken: token })).toMatchObject({ returns: 0 })
   })
+
+  it('DELETE /v1/account deletes the caller, whose token is unauthorized from then on', async () => {
+    const http = new HttpClient({ baseUrl: base, fetch: nodeFetch })
+    const token = await freshToken()
+    const other = await freshToken()
+    expect(await raw('DELETE', '/v1/account', { token: 'forged' })).toEqual({
+      status: 200,
+      body: { reason: 'unauthorized' },
+    })
+    expect(await http.deleteAccount({ deviceToken: token })).toEqual({ deleted: true })
+    expect(await http.account({ deviceToken: token })).toEqual({ reason: 'unauthorized' })
+    expect(await raw('DELETE', '/v1/account', { token })).toEqual({
+      status: 200,
+      body: { reason: 'unauthorized' },
+    })
+    expect(await http.account({ deviceToken: other })).toMatchObject({ returns: 0 })
+  })
 })
 
 describe('HTTP host binding', () => {

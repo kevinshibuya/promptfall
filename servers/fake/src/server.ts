@@ -281,6 +281,7 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     },
     submit: (r) => ledger.submit(parse(BatchSchema, r.body), r.auth),
     account: (r) => ledger.account(r.auth),
+    deleteAccount: (r) => ledger.deleteAccount(r.auth),
     linkStart: (r) => ledger.linkStart(r.auth),
     linkPoll: (r) => ledger.linkPoll(r.auth, parse(CodeBody, r.body).code),
     browse: (r) => ledger.browse(r.auth, parse(ListingQuerySchema, listingQuery(r.query))),

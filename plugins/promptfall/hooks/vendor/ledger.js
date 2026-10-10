@@ -131,6 +131,13 @@ var Books = class {
   async save(record) {
     await this.kv.set(recordKey(record.account.accountId), record);
   }
+  /** Deletes the record, its token and its place on the returns queue: an account delete. */
+  async remove(record, token) {
+    record.returns = [];
+    await this.syncReturnsQueue(record);
+    await this.kv.delete(recordKey(record.account.accountId));
+    await this.kv.delete(tokenKey(token));
+  }
   async accountFor(token) {
     const raw = await this.kv.get(tokenKey(token));
     return typeof raw === "string" ? raw : null;
@@ -458,6 +465,14 @@ async function leaderboards(ctx) {
 async function isPlaying(books, accountId) {
   const record = await books.load(accountId);
   return record !== null && isCurrent(record);
+}
+async function dropFromBoards(kv, accountId) {
+  const boards = await kv.get(BOARDS_KEY);
+  if (!boards) return;
+  const zone = boards.zone.filter((r) => r.accountId !== accountId);
+  const { [accountId]: dropped, ...damage } = boards.week.damage;
+  if (zone.length === boards.zone.length && !dropped) return;
+  await kv.set(BOARDS_KEY, { zone, week: { ...boards.week, damage } });
 }
 async function offerZone(kv, now, row, keep = async () => true) {
   const boards = await loadBoards(kv, now);
@@ -800,6 +815,14 @@ async function expireDue(ctx) {
     author(buyer, { t: "order_refunded", orderId: order.id, escrow: order.maxPrice });
     await ctx.books.save(buyer);
     await closeOrder(ctx, order.id);
+  }
+}
+async function closeAllOf(ctx, accountId) {
+  for (const listing of await openListings(ctx)) {
+    if (listing.sellerId === accountId) await closeListing(ctx, listing.id);
+  }
+  for (const order of await openOrders(ctx)) {
+    if (order.buyerId === accountId) await closeOrder(ctx, order.id);
   }
 }
 async function browse(ctx, _record, query) {
@@ -1166,6 +1189,25 @@ var Ledger = class {
         config: await this.config(),
         delivery: deliveryOf(record)
       };
+    });
+  }
+  /**
+   * Deletes the caller's account. Its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   */
+  deleteAccount(auth) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
+      const id = record.account.accountId;
+      await closeAllOf(await this.marketContext(), id);
+      await dropFromBoards(this.kv, id);
+      if (this.presence.delete(id)) this.memo.presenceChanged();
+      await this.books.remove(record, auth.deviceToken);
+      return { deleted: true };
     });
   }
   // ---------------------------------------------------------------------------

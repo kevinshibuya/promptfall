@@ -102,6 +102,9 @@ class Recorder implements ServerClient {
     this.accounts += 1
     return this.inner.account(auth)
   }
+  deleteAccount(auth: Auth) {
+    return this.inner.deleteAccount(auth)
+  }
   linkStart(auth: Auth) {
     return this.inner.linkStart(auth)
   }

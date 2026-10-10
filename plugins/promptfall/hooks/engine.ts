@@ -107,6 +107,11 @@ export type GameHandle = {
   link: () => Promise<void>
   /** Deletes this machine's Promptfall data but the lease, then starts over on the same server. */
   reset: () => Promise<void>
+  /**
+   * Deletes the account on its server; on the server's word, resets this machine as `reset`
+   * does. The message window says which. Never rejects.
+   */
+  deleteAccount: () => Promise<void>
   /** Market reads: no flush first, reads need none. Throw `unreachable`, `not_started` or a ban's message. */
   market: {
     browse: (query: ListingQuery) => Promise<ListingPage | Unauthorized>
@@ -141,6 +146,10 @@ export const OLD_VERSION_NOTICE =
   "Promptfall: this machine's data is from an older version, reset it in /promptfall account"
 export const RETRYING_NOTICE = 'Promptfall: server unreachable, retrying'
 export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
+export const DELETED_NOTICE =
+  'Promptfall: your account on this server is deleted. A fresh one plays here now.'
+/** The pane's refusal when the server did not confirm a delete: nothing was reset. */
+export const NOT_DELETED = 'the server did not delete the account'
 /** A paused primary's refusal, on every surface: the band's notice says why. */
 export const PAUSED_LINE = 'Promptfall is paused'
 

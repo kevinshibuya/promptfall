@@ -201,6 +201,14 @@ export class Books {
     await this.kv.set(recordKey(record.account.accountId), record)
   }
 
+  /** Deletes the record, its token and its place on the returns queue: an account delete. */
+  async remove(record: AccountRecord, token: string): Promise<void> {
+    record.returns = []
+    await this.syncReturnsQueue(record)
+    await this.kv.delete(recordKey(record.account.accountId))
+    await this.kv.delete(tokenKey(token))
+  }
+
   async accountFor(token: string): Promise<string | null> {
     const raw = await this.kv.get(tokenKey(token))
     return typeof raw === 'string' ? raw : null

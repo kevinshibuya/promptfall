@@ -38,6 +38,7 @@ export type PaneAction =
   | { t: 'off' } // game()?.setOff(true)
   | { t: 'link' } // game()?.link()
   | { t: 'reset' } // game()?.reset(); closes the menu
+  | { t: 'delete' } // game()?.deleteAccount(); closes the menu
 
 export type Stop = {
   /** The hidden Button's key: what ui.focus and ui.press name. Unique in the pane. */

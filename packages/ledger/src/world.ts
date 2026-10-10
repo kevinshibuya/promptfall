@@ -297,6 +297,16 @@ export async function isPlaying(books: Books, accountId: string): Promise<boolea
   return record !== null && isCurrent(record)
 }
 
+/** Takes an account's rows off both boards: an account delete. Writes only when it held one. */
+export async function dropFromBoards(kv: KeyValue, accountId: string): Promise<void> {
+  const boards = (await kv.get(BOARDS_KEY)) as StoredBoards | undefined
+  if (!boards) return
+  const zone = boards.zone.filter((r) => r.accountId !== accountId)
+  const { [accountId]: dropped, ...damage } = boards.week.damage
+  if (zone.length === boards.zone.length && !dropped) return
+  await kv.set(BOARDS_KEY, { zone, week: { ...boards.week, damage } } satisfies StoredBoards)
+}
+
 /**
  * Offers a row to the highest-zone board: an account's row takes the new name
  * and the higher value; a new one goes in when there is room or it beats the

@@ -4485,6 +4485,7 @@ var HealthSchema = external_exports.object({
   now: count4
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
+var AccountDeletedResponseSchema = orUnauthorized(external_exports.object({ deleted: external_exports.literal(true) }));
 var LinkStartResponseSchema = orUnauthorized(external_exports.union([LinkRefusedSchema, LinkStartSchema]));
 var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
 var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
@@ -4504,6 +4505,7 @@ var ROUTES = {
   bootstrap: { method: "POST", path: "/v1/bootstrap" },
   submit: { method: "POST", path: "/v1/batches" },
   account: { method: "GET", path: "/v1/account" },
+  deleteAccount: { method: "DELETE", path: "/v1/account" },
   linkStart: { method: "POST", path: "/v1/link/github" },
   linkPoll: { method: "POST", path: "/v1/link/github/poll" },
   browse: { method: "GET", path: "/v1/listings" },
@@ -4588,6 +4590,9 @@ var HttpClient = class {
   account(auth) {
     return this.call("account", AccountResponseSchema, { auth });
   }
+  deleteAccount(auth) {
+    return this.call("deleteAccount", AccountDeletedResponseSchema, { auth });
+  }
   linkStart(auth) {
     return this.call("linkStart", LinkStartResponseSchema, { auth });
   }
@@ -4657,6 +4662,7 @@ var MemoryKeyValue = class {
 // packages/protocol/src/index.ts
 var PROTOCOL_VERSION = 1;
 export {
+  AccountDeletedResponseSchema,
   AccountInfoSchema,
   AccountResponseSchema,
   AccountSchema,

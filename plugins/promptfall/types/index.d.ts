@@ -182,8 +182,8 @@ export type PaneMenu =
   | { kind: 'reforge'; itemId: string; at: number }
   | {
       kind: 'confirm'
-      action: 'vendor' | 'dismiss' | 'buy' | 'cancel-listing' | 'cancel-order' | 'reset'
-      /** The item, hero, listing or order; '' for reset. */
+      action: 'vendor' | 'dismiss' | 'buy' | 'cancel-listing' | 'cancel-order' | 'reset' | 'delete'
+      /** The item, hero, listing or order; '' for reset and delete. */
       id: string
       /** 0 Yes, 1 No. */
       at: number

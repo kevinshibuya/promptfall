@@ -157,6 +157,17 @@ the market, the world poll, chat, the boards, the link) answers `banned` with
 message window, as it shows the update notice; it does not ask again until the next session, which
 shows it again. There is no unban.
 
+**Deleting an account.** Delete my account on this server, on the Account tab, asks Yes or No, then
+calls `DELETE /v1/account` with the machine's token. The server closes the account's open listings
+and buy orders without returning the goods or refunding the escrow, which leave with the account,
+takes its rows off both leaderboards and out of the online count, and deletes its record and its
+token; nothing of any other player's changes. From then on that token is unknown to the server.
+On the server's confirmation the plugin resets this machine's data, as the reset does, starts a
+fresh account on the same server, and says so in the message window. When the server does not
+confirm, nothing on the machine changes and the pane says the account was not deleted. The row is
+not on the sandbox save, nor in a session that is not playing; a banned account cannot delete
+itself. The in-process server deletes the same way.
+
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
@@ -234,8 +245,9 @@ command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cance
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
 **Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer), the band
-shown or collapsed, Band off, Link GitHub and a reset of this machine's data that asks Yes or No.
-Its detail window names the server, the client, the mode and the session.
+shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on
+this server, each of the last two asking Yes or No. Its detail window names the server, the client,
+the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions.

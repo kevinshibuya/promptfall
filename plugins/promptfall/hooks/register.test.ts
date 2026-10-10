@@ -1,7 +1,7 @@
 import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
-import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
 import { SANDBOX_PINS_SERVER } from './sandbox'
 import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
@@ -398,6 +398,8 @@ function remote(on: On) {
       result = net.refusal ?? (await ledger.bootstrap(body))
     else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
+    else if (method === 'DELETE' && path === '/v1/account')
+      result = await ledger.deleteAccount(auth)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })
@@ -516,6 +518,43 @@ test('a banned account is refused on bootstrap and the plugin pauses with the re
   expect(last.get('notice')).toBe(message)
   // The token stays: the ban is the account's, and this machine keeps it.
   expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+})
+
+test('deleting the account on a remote server starts a fresh one there, and only on its word', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+
+  // Unconfirmed: the server did not answer, so nothing on this machine is reset.
+  await ui.press({ key: 'row:delete' })
+  net.down = true
+  await ui.press({ key: 'yes' })
+  expect(await paneText(ui)).toContain(`Refused: ${NOT_DELETED}`)
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+  net.down = false
+  expect(await net.ledger.knowsToken(token)).toBe(true)
+
+  await ui.press({ key: 'row:delete' })
+  await ui.press({ key: 'yes' })
+  const deletes = net.requests.filter((r) => r.method === 'DELETE' && r.path === '/v1/account')
+  expect(deletes.map((r) => r.origin)).toEqual([URL_A])
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  // A fresh account on the same server, and the message window says why.
+  const fresh = data.get(`promptfall:token:${URL_A}`)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe(token)
+  expect(await net.ledger.knowsToken(fresh as string)).toBe(true)
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
 })
 
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {

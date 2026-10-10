@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type {
   Account,
+  AccountDeleted,
   AccountInfo,
   BatchAck,
   Bootstrap,
@@ -144,6 +145,8 @@ export const HealthSchema = z.object({
 export type Health = z.infer<typeof HealthSchema>
 
 export const AccountResponseSchema = orUnauthorized(AccountInfoSchema)
+export const AccountDeletedResponseSchema: z.ZodType<AccountDeleted | Unauthorized | Banned> =
+  orUnauthorized(z.object({ deleted: z.literal(true) }))
 export const LinkStartResponseSchema = orUnauthorized(z.union([LinkRefusedSchema, LinkStartSchema]))
 export const LinkPollResponseSchema = orUnauthorized(LinkPollSchema)
 export const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized | Banned> =
