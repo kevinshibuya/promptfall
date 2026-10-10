@@ -45,6 +45,8 @@ export type AccountRecord = {
   chat?: { tokens: number; refillAt: number }
   /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
   bot?: true
+  /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
+  banned?: { reason: string; at: number }
 }
 
 export const BATCH_RING = 200

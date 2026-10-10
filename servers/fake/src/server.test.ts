@@ -613,6 +613,110 @@ describe('HTTP host admin flags', () => {
   })
 })
 
+describe('HTTP host admin ban', () => {
+  it('a ban over the admin route refuses every call of that account, and logs one line', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+      flags: { 'chat.enabled': true },
+    })
+    try {
+      const http = new HttpClient({ baseUrl: h.at, fetch: nodeFetch })
+      const boot = await booted(http, { clientVersion: '0.3.0', deviceToken: null })
+      const other = await booted(http, { clientVersion: '0.3.0', deviceToken: null })
+      const accountId = boot.account.accountId
+      const auth = { deviceToken: boot.deviceToken }
+
+      const unauthorized = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId, reason: 'spam' },
+        token: boot.deviceToken,
+      })
+      expect(unauthorized).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      expect(await http.account(auth)).toMatchObject({ account: { accountId } })
+
+      const ban = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId, reason: 'spam in chat' },
+        token: ADMIN,
+      })
+      expect(ban).toEqual({
+        status: 200,
+        body: { accountId, banned: { reason: 'spam in chat', at: T0 } },
+      })
+
+      const message = 'Promptfall: this account is banned: spam in chat'
+      const refused = { ok: false, reason: 'banned', message }
+      expect(
+        await http.bootstrap({ clientVersion: '0.3.0', deviceToken: boot.deviceToken }),
+      ).toEqual({ refusal: 'banned', message })
+      const events = [{ t: 'tick' as const }]
+      const batch = {
+        batchId: crypto.randomUUID(),
+        accountId,
+        seq: boot.seq,
+        clientVersion: '0.3.0',
+        simVersion: SIM_VERSION,
+        cursor: boot.cursor,
+        baseHash: hashState(boot.state),
+        resultHash: hashState(replay(boot.state, events).state),
+        events: events.map((e) => ({ ...e, at: T0 })),
+      }
+      expect(await http.submit(batch, auth)).toEqual(refused)
+      expect(await http.browse(auth, { kind: 'item', sort: 'price', page: 0 })).toEqual({
+        reason: 'banned',
+        message,
+      })
+      expect(await http.buy(auth, 'any')).toEqual(refused)
+      expect(await http.world(auth, 0)).toEqual({ reason: 'banned', message })
+      expect(await http.chat(auth, 'hello')).toEqual(refused)
+      // Another account plays on.
+      expect(await http.chat({ deviceToken: other.deviceToken }, 'hello')).toMatchObject({
+        ok: false,
+        reason: 'not_linked',
+      })
+
+      expect(lines).toEqual([
+        expect.stringMatching(/^admin \S+Z ban - unauthorized$/),
+        expect.stringMatching(new RegExp(`^admin \\S+Z ban ${accountId} ok$`)),
+      ])
+      expect(lines.join('\n')).not.toContain(boot.deviceToken)
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('an unknown account is a 404 and a bad body a 400, each logged', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+    })
+    try {
+      const unknown = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId: 'nobody', reason: 'spam' },
+        token: ADMIN,
+      })
+      expect(unknown).toEqual({ status: 404, body: { error: 'account' } })
+      for (const body of [
+        {},
+        { accountId: 'nobody' },
+        { accountId: 'nobody', reason: '' },
+        { accountId: 'nobody', reason: 'r'.repeat(121) },
+        { accountId: 'nobody', reason: 'two\nlines' },
+        { accountId: 'no body', reason: 'spam' },
+      ]) {
+        const r = await h.call('POST', '/v1/admin/ban', { body, token: ADMIN })
+        expect(r.status).toBe(400)
+      }
+      expect(lines[0]).toMatch(/^admin \S+Z ban nobody unknown$/)
+      expect(lines.slice(1)).toHaveLength(6)
+      for (const line of lines.slice(1)) expect(line).toMatch(/^admin \S+Z ban - refused$/)
+    } finally {
+      await h.close()
+    }
+  })
+})
+
 describe('HTTP host mint cap', () => {
   it('the sixth mint from one address in an hour is refused and a known token passes', async () => {
     let now = T0

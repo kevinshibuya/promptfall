@@ -70,6 +70,7 @@ describe('Ledger host', () => {
     const state = { ...createInitialState(42), gold: 50_000 }
     const { accountId, deviceToken } = await ledger.host.mint({ state, name: 'Grim', linked: true })
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken })
+    if ('refusal' in boot) throw new Error(boot.refusal)
     expect(boot.account.accountId).toBe(accountId)
     expect(boot.account.displayName).toBe('Grim')
     expect(boot.account.linked).toEqual({ provider: 'github', login: 'Grim' })
@@ -112,6 +113,7 @@ describe('Ledger host', () => {
     expect(r.committedState).toEqual(r.state)
     expect(r.committedHash).toBe(hashState(r.state))
     const again = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: boot.deviceToken })
+    if ('refusal' in again) throw new Error(again.refusal)
     expect(again.cursor).toBe(2)
     expect(again.state.gold).toBe(boot.state.gold + 11)
     expect(again.delivery).toEqual({ cursor: 2, events: [] })
@@ -162,6 +164,70 @@ describe('Ledger flags', () => {
     expect(await ledger.knowsToken(boot.deviceToken)).toBe(true)
     expect(await ledger.knowsToken('forged')).toBe(false)
     expect((kv as CountingKeyValue).writes).toBe(writes)
+  })
+})
+
+describe('Ledger bans', () => {
+  it('a banned account is refused on every call', async () => {
+    const { ledger, kv } = makeLedger({ flags: { 'chat.enabled': true } })
+    const state = { ...createInitialState(5), gold: 1000, inventory: [rareItem('it-1')] }
+    const m = await ledger.host.mint({ state, name: 'Grim', linked: true })
+    const auth = { deviceToken: m.deviceToken }
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    if ('refusal' in boot) throw new Error(boot.refusal)
+    const listed = await ledger.list(auth, { kind: 'item', id: 'it-1', price: 100 })
+    expect(listed.ok).toBe(true)
+
+    const done = await ledger.host.ban(m.accountId, 'spam in chat')
+    expect(done).toEqual({ reason: 'spam in chat', at: 1_700_000_000_000 })
+    // Record-only: the account on the wire never carries it.
+    expect((await record(kv as MemoryKeyValue, m.accountId)).banned).toEqual(done)
+
+    const message = 'Promptfall: this account is banned: spam in chat'
+    const banned = { reason: 'banned', message }
+    const refused = { ok: false, reason: 'banned', message }
+    expect(await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })).toEqual({
+      refusal: 'banned',
+      message,
+    })
+    expect(await ledger.submit(batchFor(boot, boot.state, 0), auth)).toEqual(refused)
+    expect(await ledger.account(auth)).toEqual(banned)
+    expect(await ledger.linkStart(auth)).toEqual(banned)
+    expect(await ledger.linkPoll(auth, 'ABCDEFGH')).toEqual(banned)
+    expect(await ledger.browse(auth, { kind: 'item', sort: 'price', page: 0 })).toEqual(banned)
+    expect(await ledger.myOrders(auth)).toEqual(banned)
+    expect(await ledger.matchingOrders(auth, 'it-1')).toEqual(banned)
+    expect(await ledger.list(auth, { kind: 'item', id: 'it-1', price: 100 })).toEqual(refused)
+    expect(await ledger.cancelListing(auth, 'any')).toEqual(refused)
+    expect(await ledger.buy(auth, 'any')).toEqual(refused)
+    const order = {
+      base: 'steel_longsword',
+      minRarity: 'rare' as const,
+      affixId: null,
+      maxPrice: 1,
+    }
+    expect(await ledger.placeOrder(auth, order)).toEqual(refused)
+    expect(await ledger.cancelOrder(auth, 'any')).toEqual(refused)
+    expect(await ledger.fillOrder(auth, 'any', 'it-1')).toEqual(refused)
+    expect(await ledger.world(auth, 0)).toEqual(banned)
+    expect(await ledger.chat(auth, 'hello')).toEqual(refused)
+    expect(await ledger.leaderboards(auth)).toEqual(banned)
+    // Still known: the mint cap lets the token past, and the bootstrap refuses it.
+    expect(await ledger.knowsToken(m.deviceToken)).toBe(true)
+  })
+
+  it('a ban names an account the ledger holds; another account plays on', async () => {
+    const { ledger } = makeLedger()
+    expect(await ledger.host.ban('nobody', 'x')).toBeNull()
+    const other = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    await ledger.host.ban(m.accountId, 'cheating')
+    const again = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: other.deviceToken })
+    if ('refusal' in again) throw new Error(again.refusal)
+    expect(again).toMatchObject({ deviceToken: other.deviceToken })
+    expect(await ledger.account({ deviceToken: other.deviceToken })).toMatchObject({
+      account: { accountId: other.account.accountId },
+    })
   })
 })
 
@@ -267,6 +333,7 @@ describe('Ledger returns', () => {
     if ('reason' in info) throw new Error('unauthorized')
     expect(info.returns).toBe(1)
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken })
+    if ('refusal' in boot) throw new Error(boot.refusal)
     const local = replay(
       boot.state,
       boot.delivery.events.map((e) => e.event),
@@ -314,6 +381,7 @@ describe('Ledger with a v1 record', () => {
     await mem.set('pf:acct:old:record', v1)
     await mem.set('pf:token:oldtoken', 'old')
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: 'oldtoken' })
+    if ('refusal' in boot) throw new Error(boot.refusal)
     expect(boot.state).toEqual(old)
     expect(boot.seq).toBe(4)
     expect(boot.hash).toBe(hashState(old))

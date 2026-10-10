@@ -92,6 +92,24 @@ set this way is stored under `pf:flags` and wins over the start flags at every l
 undo it the same way. Each call logs `admin <time> flags <name>=<value> ok` (or `unauthorized`,
 `refused`) in `docker compose logs`, never the token.
 
+## Bans
+
+The same token bans an account by its id:
+
+```sh
+curl -sS -X POST https://promptfall.kevinshibuya.com/v1/admin/ban \
+  -H "authorization: Bearer $PROMPTFALL_ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"accountId": "<id>", "reason": "spam in chat"}'
+```
+
+It answers `{"accountId", "banned": {"reason", "at"}}`, or 404 for an id no account has. The reason
+is one line of at most 120 characters, and the player reads it: from the next call on, every call
+of that account answers `banned` with `Promptfall: this account is banned: <reason>`, and the
+plugin pauses with that line. Banning again replaces the reason. There is no unban route. Each call
+logs `admin <time> ban <id> ok` (or `unknown`, `unauthorized`, `refused`), never the reason or the
+token.
+
 ## Backups
 
 The host is started with `--backup-dir /backups` and writes a consistent copy of its SQLite file

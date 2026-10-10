@@ -475,6 +475,49 @@ test('a refused bootstrap shows its message and the session retries later', asyn
   expect(typeof data.get(`promptfall:token:${URL_A}`)).toBe('string')
 })
 
+test('a banned account is refused on bootstrap and the plugin pauses with the reason', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('primary')
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const info = await net.ledger.account({ deviceToken: token })
+  if (!('account' in info)) throw new Error(info.reason)
+  await net.ledger.host.ban(info.account.accountId, 'spam in chat')
+  const message = 'Promptfall: this account is banned: spam in chat'
+
+  // Mid-session: the next batch is refused, and play pauses with the reason.
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(16_000)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  const batches = () => net.requests.filter((r) => r.path === '/v1/batches').length
+  const sent = batches()
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(60_000)
+  expect(batches()).toBe(sent)
+
+  // A new session asks once, is refused, shows the reason and does not ask again.
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  const before = boots()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(boots()).toBe(before + 1)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  await time.advance(60 * 60_000)
+  expect(boots()).toBe(before + 1)
+  expect(last.get('notice')).toBe(message)
+  // The token stays: the ban is the account's, and this machine keeps it.
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+})
+
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)

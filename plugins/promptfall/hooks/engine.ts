@@ -9,6 +9,7 @@ import type { LedgerHost } from './vendor/ledger.js'
 import type {
   Account,
   Auth,
+  Banned,
   Batch,
   BatchAck,
   Boards,
@@ -93,8 +94,11 @@ export type GameHandle = {
   /** The player is using this session: take the lease if another session holds it. */
   claim: () => Promise<void>
   settled: () => Promise<void>
-  /** A market call after a flush, its delivery applied. Throws `not_primary`, `paused` or `unreachable`. */
-  trade: <R extends MarketResult>(fn: TradeCall<R>) => Promise<R>
+  /**
+   * A market call after a flush, its delivery applied. Throws `not_primary`, `paused` or
+   * `unreachable`, or the ban's message once it pauses for a ban.
+   */
+  trade: <R extends MarketResult>(fn: TradeCall<R>) => Promise<Exclude<R, Banned>>
   /** Flushes, then applies what `account()` delivers. Throws `unreachable` during an outage. */
   sync: () => Promise<void>
   /** Moves the machine to another server (`null`: the in-process ledger). */
@@ -103,7 +107,7 @@ export type GameHandle = {
   link: () => Promise<void>
   /** Deletes this machine's Promptfall data but the lease, then starts over on the same server. */
   reset: () => Promise<void>
-  /** Market reads: no flush first, reads need none. Throw `unreachable` or `not_started`. */
+  /** Market reads: no flush first, reads need none. Throw `unreachable`, `not_started` or a ban's message. */
   market: {
     browse: (query: ListingQuery) => Promise<ListingPage | Unauthorized>
     myOrders: () => Promise<MyOrders | Unauthorized>
@@ -113,9 +117,9 @@ export type GameHandle = {
   clock: () => { serverNow: number; clientNow: number; speed: number } | null
   /** The Chat tab drew at `now`: the world poll runs fast for a while. Publishes nothing. */
   chatSeen: (now: number) => void
-  /** Posts a chat line with the stored token. Throws `unreachable` in an outage or on a thrown call. */
-  chat: (text: string) => Promise<ChatResult>
-  /** The boards, with the stored token. Throws `unreachable` or `not_started`. */
+  /** Posts a chat line with the stored token. Throws `unreachable` in an outage or on a thrown call, or a ban's message. */
+  chat: (text: string) => Promise<Exclude<ChatResult, Banned>>
+  /** The boards, with the stored token. Throws `unreachable`, `not_started` or a ban's message. */
   leaderboards: () => Promise<Boards | Unauthorized>
   /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
   host: () => LedgerHost | null
@@ -140,7 +144,10 @@ export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
 /** A paused primary's refusal, on every surface: the band's notice says why. */
 export const PAUSED_LINE = 'Promptfall is paused'
 
-/** How long a refused bootstrap waits before it asks again: the mint cap counts by the hour. */
+/**
+ * How long a bootstrap refused by the mint cap waits before it asks again: the cap counts by the
+ * hour. A ban is not asked again until the next session.
+ */
 export const REFUSED_RETRY_MS = 300_000
 
 /** How long the sim keeps ticking and buffering after the first failure. */
@@ -217,7 +224,8 @@ export class GameEngine {
 
   /**
    * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries,
-   * and a refused one pauses with the host's message and asks again after REFUSED_RETRY_MS.
+   * and a refused one pauses with the host's message: a rate limit asks again after
+   * REFUSED_RETRY_MS, a ban never does.
    * The bootstrap's delivery hands on only the events past the cursor a primary of this account
    * has shown: what one already toasted does not toast again, and what nobody saw still does.
    */
@@ -241,6 +249,7 @@ export class GameEngine {
     if ('refusal' in boot) {
       this.clearOutage()
       this.setPaused(boot.message)
+      if (boot.refusal === 'banned') return
       const gen = ++this.refusedGen
       this.deps.after(REFUSED_RETRY_MS, () => {
         if (gen !== this.refusedGen || this.stopped) return
@@ -424,6 +433,9 @@ export class GameEngine {
       case 'unauthorized':
         this.setPaused(MISMATCH_NOTICE)
         return
+      case 'banned':
+        this.setPaused(ack.message)
+        return
     }
   }
 
@@ -506,7 +518,7 @@ export class GameEngine {
   // ---------------------------------------------------------------------------
   // Market and account
 
-  trade<R extends MarketResult>(fn: TradeCall<R>): Promise<R> {
+  trade<R extends MarketResult>(fn: TradeCall<R>): Promise<Exclude<R, Banned>> {
     if (this.paused !== null) return Promise.reject(new Error('paused'))
     return this.lock(async () => {
       if (this.outage) throw new Error('unreachable')
@@ -522,7 +534,7 @@ export class GameEngine {
         throw new Error('unreachable')
       }
       if (r.ok) this.receive(r.delivery)
-      return r
+      return this.unbanned(r)
     })
   }
 
@@ -540,7 +552,7 @@ export class GameEngine {
         throw new Error('unreachable')
       }
       if ('reason' in info) {
-        this.setPaused(MISMATCH_NOTICE)
+        this.setPaused(info.reason === 'banned' ? info.message : MISMATCH_NOTICE)
         return
       }
       this.returns = info.returns
@@ -551,18 +563,33 @@ export class GameEngine {
     })
   }
 
-  /** A call to the server under the lock, no flush first: the link flow. */
-  call<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<T> {
+  /** A call to the server under the lock, no flush first: the link flow and the market reads. */
+  call<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<Exclude<T, Banned>> {
     return this.lock(async () => {
       if (this.outage) throw new Error('unreachable')
       const token = this.token
       if (!token) throw new Error('not_started')
+      let r: T
       try {
-        return await fn(this.deps.client, { deviceToken: token })
+        r = await fn(this.deps.client, { deviceToken: token })
       } catch {
         throw new Error('unreachable')
       }
+      return this.unbanned(r)
     })
+  }
+
+  /**
+   * An answer that is not a ban. A ban pauses play with its message, as a refused bootstrap
+   * does, and throws the message for the surface that asked.
+   */
+  unbanned<T>(answer: T): Exclude<T, Banned> {
+    const a = answer as { reason?: unknown; message?: unknown }
+    if (a.reason === 'banned' && typeof a.message === 'string') {
+      this.setPaused(a.message)
+      throw new Error(a.message)
+    }
+    return answer as Exclude<T, Banned>
   }
 
   /** The account changed on the server (a link): the view shows it. */

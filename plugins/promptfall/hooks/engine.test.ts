@@ -13,6 +13,7 @@ import {
   type Batch,
   type BatchAck,
   type Bootstrap,
+  type BootstrapRefused,
   type ListingQuery,
   type MarketResult,
   MemoryKeyValue,
@@ -47,7 +48,7 @@ class Recorder implements ServerClient {
   async bootstrap(input: {
     clientVersion: string
     deviceToken: string | null
-  }): Promise<Bootstrap> {
+  }): Promise<Bootstrap | BootstrapRefused> {
     this.bootstraps += 1
     if (this.holdBootstrap) await this.holdBootstrap
     if (this.failBootstraps > 0) {
@@ -297,6 +298,7 @@ test('cursor_behind keeps the batch, applies the delivery and resubmits with the
     clientVersion: '0.1.0',
     deviceToken: String(await kv.get('deviceToken')),
   })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   expect(boot.seq).toBe(1)
   expect(boot.cursor).toBe(1)
   expect(boot.state).toEqual(engine.state())

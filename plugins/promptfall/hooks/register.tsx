@@ -35,6 +35,7 @@ import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
   Auth,
+  Banned,
   Boards,
   ChatResult,
   FetchLike,
@@ -197,11 +198,14 @@ class GameSession implements GameHandle {
         return io.publish({ world })
       },
       load: io.readWorld,
-      // A secondary's poll leaves the world boss to the primary.
+      // A secondary's poll leaves the world boss to the primary. A ban pauses the primary and
+      // throws, and a thrown poll is ignored.
       fetch: async (since) =>
-        (this.role === 'primary' ? this.server.client : this.server.reads).world(
-          await this.storedAuth(),
-          since,
+        this.unbanned(
+          await (this.role === 'primary' ? this.server.client : this.server.reads).world(
+            await this.storedAuth(),
+            since,
+          ),
         ),
       // A secondary's view is the committed state: nothing to subtract.
       committedDealt: () => (this.role === 'primary' ? this.engine.committedBoss() : null),
@@ -224,6 +228,17 @@ class GameSession implements GameHandle {
     const settings = await this.io.settings()
     if (!settings.sound || this.role !== 'primary') return
     this.io.play(CUE_ASSET[cue], CUE_GAIN).catch(() => undefined)
+  }
+
+  /**
+   * An answer outside the engine that is not a ban. On the primary the engine pauses for a ban;
+   * any session throws its message for the surface that asked.
+   */
+  private unbanned<T>(answer: T): Exclude<T, Banned> {
+    if (this.role === 'primary') return this.engine.unbanned(answer)
+    const a = answer as { reason?: unknown; message?: unknown }
+    if (a.reason === 'banned' && typeof a.message === 'string') throw new Error(a.message)
+    return answer as Exclude<T, Banned>
   }
 
   /** The stored device token of the current server; reads and chat use it outside the engine. */
@@ -327,7 +342,7 @@ class GameSession implements GameHandle {
     if (this.canApply()) this.engine.apply(event, at)
   }
 
-  trade<R extends MarketResult>(fn: TradeCall<R>): Promise<R> {
+  trade<R extends MarketResult>(fn: TradeCall<R>): Promise<Exclude<R, Banned>> {
     if (this.role !== 'primary') return Promise.reject(new Error('not_primary'))
     return this.engine.trade(fn)
   }
@@ -434,15 +449,19 @@ class GameSession implements GameHandle {
    * A market read: through the engine when playing, expiring what is due; with the stored token
    * otherwise, through the reads that leave expiries to the primary.
    */
-  private async read<T>(fn: (client: SecondaryReads, auth: Auth) => Promise<T>): Promise<T> {
+  private async read<T>(
+    fn: (client: SecondaryReads, auth: Auth) => Promise<T>,
+  ): Promise<Exclude<T, Banned>> {
     if (this.role === 'primary') return this.engine.call(fn)
     const token = await this.kv.get(this.server.tokenKey)
     if (typeof token !== 'string') throw new Error('not_started')
+    let r: T
     try {
-      return await fn(this.server.reads, { deviceToken: token })
+      r = await fn(this.server.reads, { deviceToken: token })
     } catch {
       throw new Error('unreachable')
     }
+    return this.unbanned(r)
   }
 
   clock(): ReturnType<GameHandle['clock']> {
@@ -454,15 +473,16 @@ class GameSession implements GameHandle {
   }
 
   /** Any session posts: no flush, no lease. A primary in an outage answers unreachable without a call. */
-  async chat(text: string): Promise<ChatResult> {
+  async chat(text: string): Promise<Exclude<ChatResult, Banned>> {
     if (this.role === 'primary' && this.engine.isUnreachable()) throw new Error('unreachable')
     const auth = await this.storedAuth()
-    let result: ChatResult
+    let answer: ChatResult
     try {
-      result = await this.server.client.chat(auth, text)
+      answer = await this.server.client.chat(auth, text)
     } catch {
       throw new Error('unreachable')
     }
+    const result = this.unbanned(answer)
     if (result.ok) await this.poller.insert(result.message)
     return result
   }
@@ -485,11 +505,13 @@ class GameSession implements GameHandle {
 
   async leaderboards(): Promise<Boards | Unauthorized> {
     const auth = await this.storedAuth()
+    let r: Boards | Unauthorized | Banned
     try {
-      return await this.server.client.leaderboards(auth)
+      r = await this.server.client.leaderboards(auth)
     } catch {
       throw new Error('unreachable')
     }
+    return this.unbanned(r)
   }
 
   /** Deletes every Promptfall key but the lease and the settings, then starts over on the same server. */

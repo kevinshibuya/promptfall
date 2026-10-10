@@ -2,10 +2,12 @@ import {
   type AccountInfo,
   type AdoptReason,
   type Auth,
+  type Banned,
   type BatchAck,
   BatchSchema,
   type Boards,
   type Bootstrap,
+  type BootstrapRefused,
   BUDGETS,
   type BudgetKind,
   type ChatResult,
@@ -143,6 +145,11 @@ export type LedgerHost = {
    * loads them too. Answers the resolved flags.
    */
   setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>
+  /**
+   * Bans an account: from the next call on, every authenticated call it makes is refused with
+   * `reason`. Answers the ban as stored, or null when no account has the id.
+   */
+  ban(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
 }
 
 /**
@@ -196,6 +203,21 @@ const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
 const sandboxOff: SandboxOutcome = { ok: false, reason: 'sandbox_off' }
 
+/** A banned record's refusal, or null for one that plays: the reason is the message. */
+function bannedOf(record: AccountRecord): Banned | null {
+  if (!record.banned) return null
+  return {
+    reason: 'banned',
+    message: `Promptfall: this account is banned: ${record.banned.reason}`,
+  }
+}
+
+/** `bannedOf` where the call's refusals carry `ok: false`. */
+function refusedBanned(record: AccountRecord): ({ ok: false } & Banned) | null {
+  const banned = bannedOf(record)
+  return banned ? { ok: false, ...banned } : null
+}
+
 /**
  * The account ledger: records, batch replay, server events and the market.
  * Every operation, `host` included, runs through one in-process mutex and
@@ -230,6 +252,7 @@ export class Ledger implements ServerClient {
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
       setFlags: (flags) => this.run(() => this.setFlags(flags)),
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
     }
   }
 
@@ -272,6 +295,17 @@ export class Ledger implements ServerClient {
     return this.flags()
   }
 
+  private async ban(
+    accountId: string,
+    reason: string,
+  ): Promise<{ reason: string; at: number } | null> {
+    const record = await this.books.load(accountId)
+    if (!record) return null
+    record.banned = { reason, at: await this.options.now() }
+    await this.books.save(record)
+    return record.banned
+  }
+
   private async config(): Promise<ServerConfig> {
     return {
       minClientVersion: this.options.minClientVersion,
@@ -304,11 +338,22 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // Accounts
 
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap> {
-    return this.run(async () => {
+  /** A null token always mints, so only a known token can be refused. */
+  bootstrap(input: { clientVersion: string; deviceToken: null }): Promise<Bootstrap>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused> {
+    return this.run(async (): Promise<Bootstrap | BootstrapRefused> => {
       if (input.deviceToken) {
         // A known token writes nothing: a secondary session bootstraps every few seconds.
         const record = await this.books.authenticate({ deviceToken: input.deviceToken })
+        const banned = record && bannedOf(record)
+        if (banned) return { refusal: 'banned', message: banned.message }
         if (record) return this.bootFor(input.deviceToken, record)
       }
       const now = await this.options.now()
@@ -357,10 +402,12 @@ export class Ledger implements ServerClient {
     }
   }
 
-  account(auth: Auth): Promise<AccountInfo | Unauthorized> {
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       return {
         account: record.account,
         returns: isCurrent(record) ? record.returns.length : 0,
@@ -383,6 +430,8 @@ export class Ledger implements ServerClient {
       if (!owner || owner !== batch.accountId) return { ok: false, reason: 'unauthorized' }
       const record = await this.books.load(owner)
       if (!record) return { ok: false, reason: 'unauthorized' }
+      const banned = refusedBanned(record)
+      if (banned) return banned
 
       // 4. Versions.
       const { minClientVersion } = this.options
@@ -499,11 +548,14 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // GitHub link: the approver's round trips sit between two short locked steps.
 
-  async linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized> {
-    const accountId = await this.run(
-      async () => (await this.books.authenticate(auth))?.account.accountId ?? null,
-    )
-    if (accountId === null) return unauthorized
+  async linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned> {
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      return bannedOf(record) ?? record.account.accountId
+    })
+    if (typeof found !== 'string') return found
+    const accountId = found
     const started = await this.options.linkApprover.start(this.linkCode())
     if ('refusal' in started) return started
     const { deviceCode, ...start } = started
@@ -514,10 +566,12 @@ export class Ledger implements ServerClient {
     })
   }
 
-  async linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+  async linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned> {
     const found = await this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       const link = (await this.kv.get(linkKey(code))) as Link | undefined
       if (!link || link.accountId !== record.account.accountId) return pending
       return link
@@ -528,6 +582,8 @@ export class Ledger implements ServerClient {
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       const link = (await this.kv.get(linkKey(code))) as Link | undefined
       // A poll that raced this one already settled the link.
       if (!link || link.accountId !== record.account.accountId) {
@@ -565,10 +621,11 @@ export class Ledger implements ServerClient {
     auth: Auth,
     expire: boolean,
     fn: (ctx: market.MarketContext, record: AccountRecord) => Promise<T>,
-  ): Promise<T | Unauthorized> {
+  ): Promise<T | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire)
       if (!record) return unauthorized
+      if ('message' in record) return record
       return fn(record.ctx, record.record)
     })
   }
@@ -581,6 +638,7 @@ export class Ledger implements ServerClient {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire)
       if (!record) return refusedUnauthorized
+      if ('message' in record) return { ok: false, ...record }
       return fn(record.ctx, record.record)
     })
   }
@@ -588,15 +646,17 @@ export class Ledger implements ServerClient {
   /**
    * The caller's current record, after expiring what is due. Expiry runs only
    * for an authenticated caller, and the record is read after it, since
-   * expiring the caller's own listing changes the caller's record.
+   * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
    */
   private async authenticated(
     auth: Auth,
     expire: boolean,
-  ): Promise<{ ctx: market.MarketContext; record: AccountRecord } | null> {
+  ): Promise<{ ctx: market.MarketContext; record: AccountRecord } | Banned | null> {
     const ctx = await this.marketContext()
     const caller = await this.books.authenticate(auth)
     if (!caller || !isCurrent(caller)) return null
+    const banned = bannedOf(caller)
+    if (banned) return banned
     if (!expire) return { ctx, record: caller }
     await market.expireDue(ctx)
     const record = await this.books.load(caller.account.accountId)
@@ -607,7 +667,7 @@ export class Ledger implements ServerClient {
     auth: Auth,
     query: ListingQuery,
     { expire = true }: ReadOptions = {},
-  ): Promise<ListingPage | Unauthorized> {
+  ): Promise<ListingPage | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) => market.browse(ctx, record, query))
   }
 
@@ -625,7 +685,10 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.buy(ctx, record, listingId))
   }
 
-  myOrders(auth: Auth, { expire = true }: ReadOptions = {}): Promise<MyOrders | Unauthorized> {
+  myOrders(
+    auth: Auth,
+    { expire = true }: ReadOptions = {},
+  ): Promise<MyOrders | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) => market.myOrders(ctx, record))
   }
 
@@ -641,7 +704,7 @@ export class Ledger implements ServerClient {
     auth: Auth,
     itemId: string,
     { expire = true }: ReadOptions = {},
-  ): Promise<Order[] | Unauthorized> {
+  ): Promise<Order[] | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) =>
       market.matchingOrders(ctx, record, itemId),
     )
@@ -660,7 +723,7 @@ export class Ledger implements ServerClient {
     auth: Auth,
     since: number,
     { advance = true }: ReadOptions = {},
-  ): Promise<WorldSnapshot | Unauthorized> {
+  ): Promise<WorldSnapshot | Unauthorized | Banned> {
     return this.run(async () => {
       const ctx = await this.worldContext()
       // Before any record loads: the caller's record is read fresh after it. Once a second: a
@@ -668,6 +731,9 @@ export class Ledger implements ServerClient {
       if (advance && this.memo.advanceDue(ctx.now)) await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      // Banned: no heartbeat either, so the account leaves the online count.
+      const banned = bannedOf(record)
+      if (banned) return banned
       return world.world(ctx, record, since, advance)
     })
   }
@@ -677,15 +743,19 @@ export class Ledger implements ServerClient {
       const ctx = await this.worldContext()
       const record = await this.books.authenticate(auth)
       if (!record) return chatUnauthorized
+      const banned = refusedBanned(record)
+      if (banned) return banned
       return world.chat(ctx, record, text)
     })
   }
 
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned> {
     return this.run(async () => {
       const ctx = await this.worldContext()
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       return world.leaderboards(ctx)
     })
   }

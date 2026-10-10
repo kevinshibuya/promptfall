@@ -355,6 +355,7 @@ describe('the ledger', () => {
     advance(2_000)
     await ledger.world(auth, 0)
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    if ('refusal' in boot) throw new Error(boot.refusal)
     const local = replay(
       boot.state,
       boot.delivery.events.map((e) => e.event),

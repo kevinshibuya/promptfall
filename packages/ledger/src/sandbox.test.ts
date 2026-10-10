@@ -87,6 +87,7 @@ describe('host.sandbox', () => {
     expect(r.committedCursor).toBe(0)
     expect(r.log).toEqual([{ n: 1, event: zone2 }])
     const again = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: boot.deviceToken })
+    if ('refusal' in again) throw new Error(again.refusal)
     expect(again.delivery).toEqual({ cursor: 1, events: [{ n: 1, event: zone2 }] })
   })
 

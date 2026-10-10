@@ -4284,9 +4284,19 @@ var MARKET_REFUSALS = [
   "no_match",
   "unauthorized"
 ];
+var BannedSchema = external_exports.object({
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
+var RefusedBannedSchema = external_exports.object({
+  ok: external_exports.literal(false),
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
 var MarketResultSchema = external_exports.union([
   external_exports.object({ ok: external_exports.literal(true), delivery: DeliverySchema }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) })
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) }),
+  RefusedBannedSchema
 ]);
 var NewOrderSchema = external_exports.object({
   base: id2,
@@ -4343,7 +4353,8 @@ var ChatResultSchema = external_exports.union([
       "blocked",
       "unauthorized"
     ])
-  })
+  }),
+  RefusedBannedSchema
 ]);
 var ChatBodySchema = external_exports.object({ text: external_exports.string().max(2e3) });
 var BossViewSchema = external_exports.object({
@@ -4427,6 +4438,7 @@ var BatchAckSchema = external_exports.union([
     delivery: DeliverySchema
   }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("unauthorized") }),
+  RefusedBannedSchema,
   external_exports.object({
     ok: external_exports.literal(false),
     reason: external_exports.literal("version_gate"),
@@ -4439,7 +4451,7 @@ var BatchAckSchema = external_exports.union([
   external_exports.object({ ...adopt, reason: external_exports.literal("rate_capped"), kind: PlayerEventKindSchema })
 ]);
 function orUnauthorized(schema) {
-  return external_exports.union([UnauthorizedSchema, schema]);
+  return external_exports.union([UnauthorizedSchema, BannedSchema, schema]);
 }
 var AccountInfoSchema = external_exports.object({
   account: AccountSchema,
@@ -4477,9 +4489,7 @@ var LinkStartResponseSchema = orUnauthorized(external_exports.union([LinkRefused
 var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
 var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
 var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
-var MatchingOrdersResponseSchema = orUnauthorized(
-  external_exports.array(OrderSchema)
-);
+var MatchingOrdersResponseSchema = orUnauthorized(external_exports.array(OrderSchema));
 var WorldResponseSchema = orUnauthorized(WorldSnapshotSchema);
 var BoardsResponseSchema = orUnauthorized(BoardsSchema);
 var ErrorBodySchema = external_exports.union([
@@ -4657,6 +4667,7 @@ export {
   BOSS_TOP_BONUS,
   BOSS_WINDOW_MS,
   BUDGETS,
+  BannedSchema,
   BatchAckSchema,
   BatchSchema,
   BoardRowSchema,
@@ -4708,6 +4719,7 @@ export {
   PRESENCE_TTL_MS,
   PROTOCOL_VERSION,
   ROUTES,
+  RefusedBannedSchema,
   ServerConfigSchema,
   ServerEventSchema,
   StatsSchema,

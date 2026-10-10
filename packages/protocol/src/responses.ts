@@ -11,6 +11,8 @@ import type {
   ServerConfig,
 } from './client'
 import {
+  type Banned,
+  BannedSchema,
   DeliverySchema,
   type ListingPage,
   ListingPageSchema,
@@ -19,6 +21,7 @@ import {
   MyOrdersSchema,
   type Order,
   OrderSchema,
+  RefusedBannedSchema,
   type Unauthorized,
   UnauthorizedSchema,
 } from './market'
@@ -86,6 +89,7 @@ export const BatchAckSchema: z.ZodType<BatchAck> = z.union([
     delivery: DeliverySchema,
   }),
   z.object({ ok: z.literal(false), reason: z.literal('unauthorized') }),
+  RefusedBannedSchema,
   z.object({
     ok: z.literal(false),
     reason: z.literal('version_gate'),
@@ -98,8 +102,8 @@ export const BatchAckSchema: z.ZodType<BatchAck> = z.union([
   z.object({ ...adopt, reason: z.literal('rate_capped'), kind: PlayerEventKindSchema }),
 ])
 
-function orUnauthorized<T>(schema: z.ZodType<T>): z.ZodType<T | Unauthorized> {
-  return z.union([UnauthorizedSchema, schema])
+function orUnauthorized<T>(schema: z.ZodType<T>): z.ZodType<T | Unauthorized | Banned> {
+  return z.union([UnauthorizedSchema, BannedSchema, schema])
 }
 
 export const AccountInfoSchema: z.ZodType<AccountInfo> = z.object({
@@ -142,16 +146,16 @@ export type Health = z.infer<typeof HealthSchema>
 export const AccountResponseSchema = orUnauthorized(AccountInfoSchema)
 export const LinkStartResponseSchema = orUnauthorized(z.union([LinkRefusedSchema, LinkStartSchema]))
 export const LinkPollResponseSchema = orUnauthorized(LinkPollSchema)
-export const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized> =
+export const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized | Banned> =
   orUnauthorized(ListingPageSchema)
-export const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized> =
+export const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized | Banned> =
   orUnauthorized(MyOrdersSchema)
-export const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized> = orUnauthorized(
-  z.array(OrderSchema),
-)
-export const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized> =
+export const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized | Banned> =
+  orUnauthorized(z.array(OrderSchema))
+export const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized | Banned> =
   orUnauthorized(WorldSnapshotSchema)
-export const BoardsResponseSchema: z.ZodType<Boards | Unauthorized> = orUnauthorized(BoardsSchema)
+export const BoardsResponseSchema: z.ZodType<Boards | Unauthorized | Banned> =
+  orUnauthorized(BoardsSchema)
 export { ChatResultSchema, MarketResultSchema }
 
 /** The error bodies of non-200 answers. */

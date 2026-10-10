@@ -12,6 +12,7 @@ import type {
   ServerClient,
 } from './client'
 import type {
+  Banned,
   ListingPage,
   ListingQuery,
   MarketResult,
@@ -164,19 +165,19 @@ export class HttpClient implements ServerClient {
     return this.call('submit', BatchAckSchema, { auth, body: batch })
   }
 
-  account(auth: Auth): Promise<AccountInfo | Unauthorized> {
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned> {
     return this.call('account', AccountResponseSchema, { auth })
   }
 
-  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized> {
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned> {
     return this.call('linkStart', LinkStartResponseSchema, { auth })
   }
 
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned> {
     return this.call('linkPoll', LinkPollResponseSchema, { auth, body: { code } })
   }
 
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized> {
+  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned> {
     const { kind, base, cls, minRarity, sort, page } = query
     return this.call('browse', ListingPageResponseSchema, {
       auth,
@@ -196,7 +197,7 @@ export class HttpClient implements ServerClient {
     return this.call('buy', MarketResultSchema, { auth, id: listingId })
   }
 
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized> {
+  myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned> {
     return this.call('myOrders', MyOrdersResponseSchema, { auth })
   }
 
@@ -208,7 +209,7 @@ export class HttpClient implements ServerClient {
     return this.call('cancelOrder', MarketResultSchema, { auth, id: orderId })
   }
 
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized> {
+  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned> {
     return this.call('matchingOrders', MatchingOrdersResponseSchema, { auth, query: { itemId } })
   }
 
@@ -216,7 +217,7 @@ export class HttpClient implements ServerClient {
     return this.call('fillOrder', MarketResultSchema, { auth, id: orderId, body: { itemId } })
   }
 
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned> {
     return this.call('world', WorldResponseSchema, { auth, query: { since } })
   }
 
@@ -224,7 +225,7 @@ export class HttpClient implements ServerClient {
     return this.call('chat', ChatResultSchema, { auth, body: { text } })
   }
 
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned> {
     return this.call('leaderboards', BoardsResponseSchema, { auth })
   }
 }

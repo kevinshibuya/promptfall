@@ -1,5 +1,6 @@
 import type { GameState, PlayerEventKind, ServerEvent, TradeKind } from '@promptfall/sim'
 import type {
+  Banned,
   ListingPage,
   ListingQuery,
   MarketResult,
@@ -32,6 +33,7 @@ export type AdoptReason = 'seq_mismatch' | 'cursor_mismatch' | 'hash_mismatch' |
 export type BatchAck =
   | { ok: true; seq: number; hash: string; duplicate: boolean; delivery: Delivery }
   | { ok: false; reason: 'unauthorized' }
+  | ({ ok: false } & Banned)
   | { ok: false; reason: 'version_gate'; minClientVersion: string }
   | { ok: false; reason: 'sim_version'; simVersion: number }
   /** Apply the delivery, re-step, resubmit; nothing is adopted. */
@@ -94,28 +96,33 @@ export type LinkPoll =
   | { status: 'linked'; account: Account }
   | { status: 'ended'; reason: LinkEnd; message: string }
 
+/**
+ * Every authenticated call of a banned account answers `banned` with the operator's reason as the
+ * message: `{ reason: 'banned', message }`, with `ok: false` where the call's refusals carry it,
+ * and `{ refusal: 'banned', message }` from the bootstrap.
+ */
 export interface ServerClient {
   bootstrap(input: {
     clientVersion: string
     deviceToken: string | null
   }): Promise<Bootstrap | BootstrapRefused>
   submit(batch: Batch, auth: Auth): Promise<BatchAck>
-  account(auth: Auth): Promise<AccountInfo | Unauthorized>
-  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>
+  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>
+  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned>
   list(auth: Auth, input: { kind: TradeKind; id: string; price: number }): Promise<MarketResult>
   cancelListing(auth: Auth, listingId: string): Promise<MarketResult>
   buy(auth: Auth, listingId: string): Promise<MarketResult>
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized>
+  myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned>
   placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>
   cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>
+  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned>
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>
   /** The world poll: stamps the caller present and answers the snapshot. `since` is the chat mark; 0 asks for the last 50. */
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>
   chat(auth: Auth, text: string): Promise<ChatResult>
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized>
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>
 }
 
 /**

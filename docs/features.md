@@ -149,6 +149,14 @@ is refused there. Each admin call logs one line with its time, the flags it set 
 never the token. A server without the token has no admin routes. A server makes at most five new
 accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
 
+**Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
+stores the ban on the account's record, never on the account the wire carries, and logs one line
+with the account id. From the next call on, every call of that account (the bootstrap, batches,
+the market, the world poll, chat, the boards, the link) answers `banned` with
+`Promptfall: this account is banned: <reason>`. The plugin pauses play and shows that line in the
+message window, as it shows the update notice; it does not ask again until the next session, which
+shows it again. There is no unban.
+
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
@@ -256,7 +264,8 @@ again. The first answer sends everything played during the outage at once. When 
 newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
 older game, it asks for a reset from the Account tab. When the server will not make this machine
 an account (too many new ones from its address this hour), the band shows the server's message
-and the plugin asks again five minutes later.
+and the plugin asks again five minutes later. A banned account's band shows the ban and its reason,
+and play stays paused until a new session asks again.
 
 ## Notifications and cues
 

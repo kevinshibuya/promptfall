@@ -95,13 +95,32 @@ const rateLimited: BootstrapRefused = {
   message: 'Too many new accounts from this address. Promptfall will try again later.',
 }
 
-/** An admin route: what it does with a body, and the target its log line names. */
+/** What an admin route did: its answer, and the target and outcome its log line names. */
+type AdminDone = { target: string; answer: unknown; status?: number; outcome?: string }
+
+/** An admin route: what it does with a body. */
 type AdminRoute = {
   method: 'POST'
   path: string
   action: string
-  run(body: unknown): Promise<{ target: string; answer: unknown }>
+  run(body: unknown): Promise<AdminDone>
 }
+
+/** `POST /v1/admin/ban`'s body: the account and the reason its player reads, on one line. */
+const BanBody = z.object({
+  // One token: it is the log line's target.
+  accountId: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[^\s\p{Cc}]+$/u),
+  reason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .refine((r) => !/\p{Cc}/u.test(r), 'the reason is one line of text'),
+})
 
 /** `POST /v1/admin/flags`'s body: settable flags to booleans, at least one. */
 function flagsBody(body: unknown): Partial<Record<SettableFlag, boolean>> {
@@ -298,6 +317,24 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
             return { target, answer: { flags: await ledger.host.setFlags(flags) } }
           },
         },
+        {
+          method: 'POST',
+          path: '/v1/admin/ban',
+          action: 'ban',
+          run: async (body) => {
+            const { accountId, reason } = parse(BanBody, body)
+            const banned = await ledger.host.ban(accountId, reason)
+            if (!banned) {
+              return {
+                target: accountId,
+                answer: { error: 'account' },
+                status: 404,
+                outcome: 'unknown',
+              }
+            }
+            return { target: accountId, answer: { accountId, banned } }
+          },
+        },
       ]
     : []
 
@@ -316,15 +353,15 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
       send(res, 401, { error: 'unauthorized' })
       return
     }
-    let done: { target: string; answer: unknown }
+    let done: AdminDone
     try {
       done = await route.run(await readBody(req))
     } catch (error) {
       write('-', error instanceof SchemaError ? 'refused' : 'failed')
       throw error
     }
-    write(done.target, 'ok')
-    send(res, 200, done.answer)
+    write(done.target, done.outcome ?? 'ok')
+    send(res, done.status ?? 200, done.answer)
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {

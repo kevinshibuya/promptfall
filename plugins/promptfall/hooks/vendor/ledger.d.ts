@@ -1,4 +1,4 @@
-import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
 import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
@@ -46,6 +46,11 @@ type AccountRecord = {
     };
     /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
     bot?: true;
+    /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
+    banned?: {
+        reason: string;
+        at: number;
+    };
 };
 declare const LOG_CAP = 500;
 
@@ -136,6 +141,14 @@ type LedgerHost = {
      * loads them too. Answers the resolved flags.
      */
     setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>;
+    /**
+     * Bans an account: from the next call on, every authenticated call it makes is refused with
+     * `reason`. Answers the ban as stored, or null when no account has the id.
+     */
+    ban(accountId: string, reason: string): Promise<{
+        reason: string;
+        at: number;
+    } | null>;
 };
 /**
  * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
@@ -197,22 +210,28 @@ declare class Ledger implements ServerClient {
     private run;
     private flags;
     private setFlags;
+    private ban;
     private config;
     private marketContext;
     private worldContext;
+    /** A null token always mints, so only a known token can be refused. */
+    bootstrap(input: {
+        clientVersion: string;
+        deviceToken: null;
+    }): Promise<Bootstrap>;
     bootstrap(input: {
         clientVersion: string;
         deviceToken: string | null;
-    }): Promise<Bootstrap>;
+    }): Promise<Bootstrap | BootstrapRefused>;
     /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
     knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
-    account(auth: Auth): Promise<AccountInfo | Unauthorized>;
+    account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
     /** A state-carrying refusal: the client adopts the effective state, so the committed point moves there. */
     private adopt;
-    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
-    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>;
+    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>;
     /** Eight uppercase letters and digits drawn from the token source. */
     private linkCode;
     private marketRead;
@@ -220,10 +239,10 @@ declare class Ledger implements ServerClient {
     /**
      * The caller's current record, after expiring what is due. Expiry runs only
      * for an authenticated caller, and the record is read after it, since
-     * expiring the caller's own listing changes the caller's record.
+     * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
      */
     private authenticated;
-    browse(auth: Auth, query: ListingQuery, { expire }?: ReadOptions): Promise<ListingPage | Unauthorized>;
+    browse(auth: Auth, query: ListingQuery, { expire }?: ReadOptions): Promise<ListingPage | Unauthorized | Banned>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -231,14 +250,14 @@ declare class Ledger implements ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth, { expire }?: ReadOptions): Promise<MyOrders | Unauthorized>;
+    myOrders(auth: Auth, { expire }?: ReadOptions): Promise<MyOrders | Unauthorized | Banned>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string, { expire }?: ReadOptions): Promise<Order[] | Unauthorized>;
+    matchingOrders(auth: Auth, itemId: string, { expire }?: ReadOptions): Promise<Order[] | Unauthorized | Banned>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
-    world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized>;
+    world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
-    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
     private mint;
     /** Offers the account's row to the highest-zone board; a bot's is never offered. */
     private offerZone;

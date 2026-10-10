@@ -48,7 +48,9 @@ type MarketResult = {
 } | {
     ok: false;
     reason: MarketRefusal;
-};
+} | ({
+    ok: false;
+} & Banned);
 type NewOrder = {
     base: string;
     minRarity: Rarity;
@@ -63,6 +65,11 @@ type MyOrders = {
 type Unauthorized = {
     reason: 'unauthorized';
 };
+/** An account the operator banned: every authenticated call answers it, the reason in the message. */
+type Banned = {
+    reason: 'banned';
+    message: string;
+};
 declare const LISTINGS_PER_PAGE = 10;
 declare const DeliverySchema: z.ZodType<Delivery>;
 declare const ListingSchema: z.ZodType<Listing>;
@@ -70,6 +77,21 @@ declare const OrderSchema: z.ZodType<Order>;
 declare const ListingQuerySchema: z.ZodType<ListingQuery>;
 declare const ListingPageSchema: z.ZodType<ListingPage>;
 declare const MARKET_REFUSALS: readonly ["market_closed", "not_linked", "unknown_goods", "not_tradeable_rarity", "in_cooldown", "in_party", "equipped", "bad_price", "not_enough_gold", "no_space", "buyer_full", "self_trade", "gone", "not_owner", "no_match", "unauthorized"];
+declare const BannedSchema: z.ZodType<Banned>;
+/** A banned answer where refusals carry `ok: false`: batches, trades and chat. */
+declare const RefusedBannedSchema: z.ZodObject<{
+    ok: z.ZodLiteral<false>;
+    reason: z.ZodLiteral<"banned">;
+    message: z.ZodString;
+}, "strip", z.ZodTypeAny, {
+    message: string;
+    reason: "banned";
+    ok: false;
+}, {
+    message: string;
+    reason: "banned";
+    ok: false;
+}>;
 declare const MarketResultSchema: z.ZodType<MarketResult>;
 /** The price is checked by the ledger (`bad_price`), so the schema only wants an integer. */
 declare const NewOrderSchema: z.ZodType<NewOrder>;
@@ -132,7 +154,9 @@ type ChatResult = {
 } | {
     ok: false;
     reason: ChatRefusal;
-};
+} | ({
+    ok: false;
+} & Banned);
 type BossView = {
     bossId: string;
     name: string;
@@ -242,7 +266,9 @@ type BatchAck = {
 } | {
     ok: false;
     reason: 'unauthorized';
-} | {
+} | ({
+    ok: false;
+} & Banned) | {
     ok: false;
     reason: 'version_gate';
     minClientVersion: string;
@@ -327,16 +353,21 @@ type LinkPoll = {
     reason: LinkEnd;
     message: string;
 };
+/**
+ * Every authenticated call of a banned account answers `banned` with the operator's reason as the
+ * message: `{ reason: 'banned', message }`, with `ok: false` where the call's refusals carry it,
+ * and `{ refusal: 'banned', message }` from the bootstrap.
+ */
 interface ServerClient {
     bootstrap(input: {
         clientVersion: string;
         deviceToken: string | null;
     }): Promise<Bootstrap | BootstrapRefused>;
     submit(batch: Batch, auth: Auth): Promise<BatchAck>;
-    account(auth: Auth): Promise<AccountInfo | Unauthorized>;
-    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
-    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
-    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
+    account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>;
+    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>;
+    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -344,15 +375,15 @@ interface ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth): Promise<MyOrders | Unauthorized>;
+    myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
+    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
     /** The world poll: stamps the caller present and answers the snapshot. `since` is the chat mark; 0 asks for the last 50. */
-    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
-    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
 }
 /**
  * The lowest client version a server lets submit: the launch version, so a pre-launch build is
@@ -467,10 +498,10 @@ declare class HttpClient implements ServerClient {
         deviceToken: string | null;
     }): Promise<Bootstrap | BootstrapRefused>;
     submit(batch: Batch, auth: Auth): Promise<BatchAck>;
-    account(auth: Auth): Promise<AccountInfo | Unauthorized>;
-    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
-    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
-    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
+    account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>;
+    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>;
+    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -478,14 +509,14 @@ declare class HttpClient implements ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth): Promise<MyOrders | Unauthorized>;
+    myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
+    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
-    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>;
+    world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
-    leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
 }
 
 interface KeyValue {
@@ -534,14 +565,14 @@ declare const HealthSchema: z.ZodObject<{
     now: number;
 }>;
 type Health = z.infer<typeof HealthSchema>;
-declare const AccountResponseSchema: z.ZodType<Unauthorized | AccountInfo, z.ZodTypeDef, Unauthorized | AccountInfo>;
-declare const LinkStartResponseSchema: z.ZodType<Unauthorized | LinkStart | LinkRefused, z.ZodTypeDef, Unauthorized | LinkStart | LinkRefused>;
-declare const LinkPollResponseSchema: z.ZodType<Unauthorized | LinkPoll, z.ZodTypeDef, Unauthorized | LinkPoll>;
-declare const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized>;
-declare const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized>;
-declare const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized>;
-declare const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized>;
-declare const BoardsResponseSchema: z.ZodType<Boards | Unauthorized>;
+declare const AccountResponseSchema: z.ZodType<Banned | Unauthorized | AccountInfo, z.ZodTypeDef, Banned | Unauthorized | AccountInfo>;
+declare const LinkStartResponseSchema: z.ZodType<Banned | Unauthorized | LinkStart | LinkRefused, z.ZodTypeDef, Banned | Unauthorized | LinkStart | LinkRefused>;
+declare const LinkPollResponseSchema: z.ZodType<Banned | Unauthorized | LinkPoll, z.ZodTypeDef, Banned | Unauthorized | LinkPoll>;
+declare const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized | Banned>;
+declare const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized | Banned>;
+declare const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized | Banned>;
+declare const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized | Banned>;
+declare const BoardsResponseSchema: z.ZodType<Boards | Unauthorized | Banned>;
 
 /** The error bodies of non-200 answers. */
 declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
@@ -569,4 +600,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };
+export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };

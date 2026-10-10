@@ -993,6 +993,17 @@ var pending = { status: "pending" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
 var sandboxOff = { ok: false, reason: "sandbox_off" };
+function bannedOf(record) {
+  if (!record.banned) return null;
+  return {
+    reason: "banned",
+    message: `Promptfall: this account is banned: ${record.banned.reason}`
+  };
+}
+function refusedBanned(record) {
+  const banned = bannedOf(record);
+  return banned ? { ok: false, ...banned } : null;
+}
 var Ledger = class {
   constructor(options) {
     this.options = options;
@@ -1010,7 +1021,8 @@ var Ledger = class {
       sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
-      setFlags: (flags) => this.run(() => this.setFlags(flags))
+      setFlags: (flags) => this.run(() => this.setFlags(flags)),
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason))
     };
   }
   options;
@@ -1058,6 +1070,13 @@ var Ledger = class {
     await this.kv.set(FLAGS_KEY, this.stored);
     return this.flags();
   }
+  async ban(accountId, reason) {
+    const record = await this.books.load(accountId);
+    if (!record) return null;
+    record.banned = { reason, at: await this.options.now() };
+    await this.books.save(record);
+    return record.banned;
+  }
   async config() {
     return {
       minClientVersion: this.options.minClientVersion,
@@ -1084,12 +1103,12 @@ var Ledger = class {
       log: this.options.log ?? (() => void 0)
     };
   }
-  // ---------------------------------------------------------------------------
-  // Accounts
   bootstrap(input) {
     return this.run(async () => {
       if (input.deviceToken) {
         const record2 = await this.books.authenticate({ deviceToken: input.deviceToken });
+        const banned = record2 && bannedOf(record2);
+        if (banned) return { refusal: "banned", message: banned.message };
         if (record2) return this.bootFor(input.deviceToken, record2);
       }
       const now = await this.options.now();
@@ -1139,6 +1158,8 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return {
         account: record.account,
         returns: isCurrent(record) ? record.returns.length : 0,
@@ -1156,6 +1177,8 @@ var Ledger = class {
       if (!owner || owner !== batch.accountId) return { ok: false, reason: "unauthorized" };
       const record = await this.books.load(owner);
       if (!record) return { ok: false, reason: "unauthorized" };
+      const banned = refusedBanned(record);
+      if (banned) return banned;
       const { minClientVersion } = this.options;
       if (compareSemver(batch.clientVersion, minClientVersion) < 0) {
         return { ok: false, reason: "version_gate", minClientVersion };
@@ -1248,10 +1271,13 @@ var Ledger = class {
   // ---------------------------------------------------------------------------
   // GitHub link: the approver's round trips sit between two short locked steps.
   async linkStart(auth) {
-    const accountId = await this.run(
-      async () => (await this.books.authenticate(auth))?.account.accountId ?? null
-    );
-    if (accountId === null) return unauthorized;
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      return bannedOf(record) ?? record.account.accountId;
+    });
+    if (typeof found !== "string") return found;
+    const accountId = found;
     const started = await this.options.linkApprover.start(this.linkCode());
     if ("refusal" in started) return started;
     const { deviceCode, ...start } = started;
@@ -1265,6 +1291,8 @@ var Ledger = class {
     const found = await this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       const link = await this.kv.get(linkKey(code));
       if (!link || link.accountId !== record.account.accountId) return pending;
       return link;
@@ -1275,6 +1303,8 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       const link = await this.kv.get(linkKey(code));
       if (!link || link.accountId !== record.account.accountId) {
         return record.account.linked ? { status: "linked", account: record.account } : pending;
@@ -1305,6 +1335,7 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire);
       if (!record) return unauthorized;
+      if ("message" in record) return record;
       return fn(record.ctx, record.record);
     });
   }
@@ -1312,18 +1343,21 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire);
       if (!record) return refusedUnauthorized;
+      if ("message" in record) return { ok: false, ...record };
       return fn(record.ctx, record.record);
     });
   }
   /**
    * The caller's current record, after expiring what is due. Expiry runs only
    * for an authenticated caller, and the record is read after it, since
-   * expiring the caller's own listing changes the caller's record.
+   * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
    */
   async authenticated(auth, expire) {
     const ctx = await this.marketContext();
     const caller = await this.books.authenticate(auth);
     if (!caller || !isCurrent(caller)) return null;
+    const banned = bannedOf(caller);
+    if (banned) return banned;
     if (!expire) return { ctx, record: caller };
     await expireDue(ctx);
     const record = await this.books.load(caller.account.accountId);
@@ -1376,6 +1410,8 @@ var Ledger = class {
       if (advance && this.memo.advanceDue(ctx.now)) await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return world(ctx, record, since, advance);
     });
   }
@@ -1384,6 +1420,8 @@ var Ledger = class {
       const ctx = await this.worldContext();
       const record = await this.books.authenticate(auth);
       if (!record) return chatUnauthorized;
+      const banned = refusedBanned(record);
+      if (banned) return banned;
       return chat(ctx, record, text);
     });
   }
@@ -1392,6 +1430,8 @@ var Ledger = class {
       const ctx = await this.worldContext();
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return leaderboards(ctx);
     });
   }
