@@ -172,7 +172,11 @@ async function svgs(ui: Finder): Promise<{ stage: Node | undefined; strip: Node 
 /** The band's height in terminal rows: the stage's rows and the strip's, or 6 for compact. */
 async function height(ui: Finder) {
   if (await ui.find({ key: 'compact-stage' })) return 6
-  const band = await bandRaster(ui)
+  // The band as one picture (#59, #61): the band row's one Image or Raster.
+  const row = await ui.find({ key: 'row-band' })
+  const band = ((row?.children ?? []) as Node[]).find(
+    (c) => c.type === 'Image' || c.type === 'Raster',
+  )
   if (band) return Number(band.props.rows)
   const count = async (key: string) => {
     const n = await ui.find({ key })
