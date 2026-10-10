@@ -152,7 +152,11 @@ export function hasRoom(state: GameState, goods: Goods): boolean {
 /** A KeyValue view that remembers whether anything was written, so a run flushes only when it wrote. */
 export class TrackedKeyValue implements KeyValue {
   dirty = false
-  constructor(private readonly inner: KeyValue) {}
+  constructor(
+    private readonly inner: KeyValue,
+    /** Told the key of every write, before it lands (the world memo). */
+    private readonly onWrite: (key: string) => void = () => undefined,
+  ) {}
 
   get(key: string): Promise<unknown> {
     return this.inner.get(key)
@@ -160,11 +164,13 @@ export class TrackedKeyValue implements KeyValue {
 
   set(key: string, value: unknown): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.set(key, value)
   }
 
   delete(key: string): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.delete(key)
   }
 

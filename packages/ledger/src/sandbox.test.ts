@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { type AccountRecord, Books, TrackedKeyValue } from './books'
 import { advanceBoss, BOSS_KEY, type BossRecord, loadBoss, settleBoss } from './boss'
 import { Ledger, type LedgerFlag } from './ledger'
-import type { WorldContext } from './world'
+import { type WorldContext, WorldMemo } from './world'
 
 const GRID = 1_700_006_400_000 // a grid point, as in the world-boss tests
 const ON = { 'sandbox.enabled': true } as const
@@ -205,6 +205,7 @@ describe('the grid beside the sandbox', () => {
       now,
       flags: {},
       presence: new Map(),
+      memo: new WorldMemo(),
       ttl: 45_000,
       speed: 1,
       seedSource: () => 7,

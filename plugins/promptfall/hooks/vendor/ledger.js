@@ -92,20 +92,24 @@ function hasRoom(state, goods) {
   return goods.kind === "item" ? state.inventory.length < state.inventoryCap : state.roster.length < state.rosterCap;
 }
 var TrackedKeyValue = class {
-  constructor(inner) {
+  constructor(inner, onWrite = () => void 0) {
     this.inner = inner;
+    this.onWrite = onWrite;
   }
   inner;
+  onWrite;
   dirty = false;
   get(key) {
     return this.inner.get(key);
   }
   set(key, value) {
     this.dirty = true;
+    this.onWrite(key);
     return this.inner.set(key, value);
   }
   delete(key) {
     this.dirty = true;
+    this.onWrite(key);
     return this.inner.delete(key);
   }
   async flush() {
@@ -284,6 +288,66 @@ import {
   HERE_MAX,
   weekStartOf
 } from './protocol.js';
+var WorldMemo = class {
+  second = Number.NaN;
+  advanced = Number.NaN;
+  counts = null;
+  boss = null;
+  messages = null;
+  slices = /* @__PURE__ */ new Map();
+  /** True on the first call in each second: the boss advance runs then, as it ran on every poll. */
+  advanceDue(now) {
+    const second = Math.floor(now / 1e3);
+    if (second === this.advanced) return false;
+    this.advanced = second;
+    return true;
+  }
+  /** Drops every part when `now` is in another second than the one they were built in. */
+  roll(now) {
+    const second = Math.floor(now / 1e3);
+    if (second === this.second) return;
+    this.second = second;
+    this.counts = null;
+    this.boss = null;
+    this.dropChat();
+  }
+  presenceChanged() {
+    this.counts = null;
+  }
+  /** The store's write hook. */
+  written(key) {
+    if (key === BOSS_KEY) this.boss = null;
+    if (key === CHAT_KEY) this.dropChat();
+  }
+  presenceCounts(presence) {
+    if (this.counts) return this.counts;
+    const counts = /* @__PURE__ */ new Map();
+    for (const entry of presence.values()) {
+      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
+    }
+    this.counts = {
+      online: presence.size,
+      zones: [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }))
+    };
+    return this.counts;
+  }
+  async bossRecord(kv) {
+    this.boss ??= { record: await loadBoss(kv) };
+    return this.boss.record;
+  }
+  async chatSince(kv, since) {
+    const cached = this.slices.get(since);
+    if (cached) return cached;
+    this.messages ??= (await loadChat(kv)).messages;
+    const slice = since <= 0 ? this.messages.slice(-CHAT_SERVE) : this.messages.filter((m) => m.id > since);
+    this.slices.set(since, slice);
+    return slice;
+  }
+  dropChat() {
+    this.messages = null;
+    this.slices.clear();
+  }
+};
 var CHAT_KEY = "pf:chat";
 var BOARDS_KEY = "pf:boards";
 async function loadChat(kv) {
@@ -295,43 +359,45 @@ async function loadBoards(kv, now) {
   return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
 }
 function prune(ctx) {
+  let dropped = false;
   for (const [id, entry] of ctx.presence) {
-    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
+    if (!(ctx.now - entry.at < ctx.ttl)) {
+      ctx.presence.delete(id);
+      dropped = true;
+    }
   }
+  return dropped;
 }
 async function world(ctx, record, since, engageCaller = true) {
   const presenceOn = ctx.flags["presence.enabled"] !== false;
   const id = record.account.accountId;
-  prune(ctx);
+  const memo = ctx.memo;
+  memo.roll(ctx.now);
+  if (prune(ctx)) memo.presenceChanged();
   if (presenceOn && isCurrent(record)) {
+    const before = ctx.presence.get(id);
     ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now });
+    if (before?.zone !== record.state.zone) memo.presenceChanged();
   }
   let online = 0;
   let zones = [];
   let here = [];
   if (presenceOn) {
-    const counts = /* @__PURE__ */ new Map();
-    for (const entry of ctx.presence.values()) {
-      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
-    }
-    online = ctx.presence.size;
-    zones = [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }));
+    ;
+    ({ online, zones } = memo.presenceCounts(ctx.presence));
     const mine = ctx.presence.get(id);
     if (mine) {
       here = [...ctx.presence.entries()].filter(([other, entry]) => other !== id && entry.zone === mine.zone).sort(([, a], [, b]) => b.at - a.at).slice(0, HERE_MAX).map(([, entry]) => entry.name);
     }
   }
-  const boss = await loadBoss(ctx.books.kv);
+  const boss = await memo.bossRecord(ctx.books.kv);
   if (engageCaller && boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
     engage(record, boss);
     await ctx.books.save(record);
     await ctx.books.kv.set(BOSS_KEY, boss);
   }
   let chat2 = [];
-  if (ctx.flags["chat.enabled"] !== false) {
-    const { messages } = await loadChat(ctx.books.kv);
-    chat2 = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since);
-  }
+  if (ctx.flags["chat.enabled"] !== false) chat2 = await memo.chatSince(ctx.books.kv, since);
   return {
     serverNow: ctx.now,
     speed: ctx.speed,
@@ -896,7 +962,7 @@ var sandboxOff = { ok: false, reason: "sandbox_off" };
 var Ledger = class {
   constructor(options) {
     this.options = options;
-    this.kv = new TrackedKeyValue(options.kv);
+    this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key));
     this.books = new Books(this.kv);
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
@@ -914,6 +980,7 @@ var Ledger = class {
   books;
   chain = Promise.resolve();
   presence = /* @__PURE__ */ new Map();
+  memo = new WorldMemo();
   /**
    * The flush runs even when `fn` threw, so an operation must validate before
    * its first `set`; `author` throws before it touches the record for that reason.
@@ -960,6 +1027,7 @@ var Ledger = class {
       now: at ?? await this.options.now(),
       flags: this.flags(),
       presence: this.presence,
+      memo: this.memo,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
       speed,
       seedSource: this.options.seedSource,
@@ -1248,7 +1316,7 @@ var Ledger = class {
   world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      if (advance) await advanceBoss(ctx);
+      if (advance && this.memo.advanceDue(ctx.now)) await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
       return world(ctx, record, since, advance);
