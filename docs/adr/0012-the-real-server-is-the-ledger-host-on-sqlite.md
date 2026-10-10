@@ -33,7 +33,8 @@ back when a measured number says the host cannot keep up, not before.
   fixed in the other, and the contract suite is the real server's suite.
 - Durability is SQLite's: nothing committed is lost on a crash; the nightly off-box copy of one
   file is the disaster backup.
-- The leaderboards scan every account; with SQLite they are recomputed on a timer, not per
-  request.
+- The store is Node's built-in SQLite, so the host has no native dependency and the image is
+  Node and one bundled file. Writes buffer until the ledger's `flush`, which commits them as one
+  transaction: one ledger operation stays one durable write, as the file store promised.
 - The glossary's **Host** already names "the real server"; the term now means this host, not a
   separate program.
