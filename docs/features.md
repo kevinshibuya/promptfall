@@ -119,8 +119,8 @@ link completing on the first poll after the player authorises, and the GitHub lo
 account's name. The server keeps the login and never the access token. A decline, an expired code
 or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
 without a client id refuses the start the same way. `--link fake`, the default, approves on the
-first poll as `--player-name`. An unlinked account or a closed market is said in the message
-window, with a hotkey to the Account tab.
+first poll as `--player-name`. The public server runs GitHub's flow. An unlinked account or a
+closed market is said in the message window, with a hotkey to the Account tab.
 
 ## World
 
@@ -139,7 +139,8 @@ damage this week, your own rows in gold.
 
 **Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
-none ever holds a row on either leaderboard.
+none ever holds a row on either leaderboard. The public server runs six during the soft wave and
+none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
 takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
@@ -181,6 +182,24 @@ records row says so in place when it has room.
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
 "Your share of …", and goods with no free slot wait in returns.
+
+## Servers
+
+**The public server.** Promptfall's own server runs at `https://promptfall.kevinshibuya.com`: the
+same rules as every other server, with the world boss on its three-hour grid, the market, chat and
+the leaderboards, on the real clock. Linking there goes through GitHub itself. During the soft wave
+six bots keep its market stocked; at the public listing it runs none. The README's privacy
+paragraph says what it keeps about an account and for how long.
+
+**The default server and `local`.** A fresh install, with no server set, plays on the public
+server. `/promptfall server local` moves this machine to the in-process fake, which plays offline
+with no chat and no world boss; `/promptfall server <url>` moves it to any other server, and
+`/promptfall server` says which one is in force. Each server has its own account on the machine,
+and nothing moves between them. The sandbox always plays on the in-process fake, whatever the
+setting.
+
+**Updates.** The public server asks for the launch version, 0.3.0, or newer. An older plugin
+pauses and the band asks for an update instead of being refused in silence.
 
 ## Interface
 

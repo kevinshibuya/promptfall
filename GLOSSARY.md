@@ -28,8 +28,9 @@ clock and store. Every server host runs the same ledger.
 _Avoid_: backend, server logic, fake logic
 
 **Host**:
-A process or module that runs the ledger and exposes it to clients: the in-process fake,
-the HTTP fake, the real server.
+A process or module that runs the ledger and exposes it to clients. There are two programs:
+the in-process fake inside the plugin, and the HTTP host in `servers/fake`, which runs as the
+HTTP fake on a laptop and as the real server on the box (ADR 0012).
 
 **In-process fake**:
 The host that runs inside the plugin on the local store, chosen by the `local` server
@@ -38,12 +39,23 @@ public server instead.
 _Avoid_: local server, LocalServer (the class name only)
 
 **HTTP fake**:
-The host that runs as a separate local process speaking the real HTTP protocol, with bots.
+The HTTP host run as a separate local process speaking the real HTTP protocol, for
+development: bots, a clock `--speed` can run fast, and a link that approves itself.
 _Avoid_: dev server, mock server
 
+**Real server**:
+The HTTP host started with the production flags: SQLite for the store, the real clock,
+GitHub's device flow for the link. One container on the box.
+_Avoid_: backend, API server, prod
+
+**Public server**:
+The real server at `promptfall.kevinshibuya.com`, where a fresh install plays.
+_Avoid_: official server, main server
+
 **Bot**:
-A seeded account inside the HTTP fake that plays and trades through the same public API as
-a player: it submits batches, lists, buys, chats and fights the world boss.
+A seeded account inside a host that plays and trades through the same public API as a
+player: it submits batches, lists, buys, chats and fights the world boss. Named so it reads as
+one, and kept off the leaderboards.
 _Avoid_: NPC, agent, simulated player
 
 **Cursor**:
@@ -52,7 +64,7 @@ client has applied.
 
 **Delivery**:
 The server events pending past a client's cursor, carried on a response.
-_Avoid_: event stream (phase 5's long-poll), pending events, push
+_Avoid_: event stream (the long-poll ADR 0012 leaves out), pending events, push
 
 **Primary session**:
 The one session per account that ticks and submits; every other session renders read-only.
@@ -70,7 +82,8 @@ affix and a maximum price, with the gold escrowed. Fulfilled only by a seller ac
 _Avoid_: bid, want, request
 
 **Escrow**:
-Gold held by the ledger for an open buy order; refunded on cancel or expiry.
+Gold held by the ledger for an open buy order; refunded on cancel or expiry, gone with the
+account when the account is deleted.
 
 **Linked account**:
 An account tied to a GitHub login. The gate on trading and chat.
@@ -89,7 +102,7 @@ _Avoid_: binding, lock
 
 **World poll**:
 The read a session makes for a world snapshot. It is also the session's heartbeat.
-_Avoid_: stream, long-poll (phase 5), sync
+_Avoid_: stream, long-poll, sync
 
 **World snapshot**:
 What the world poll answers: presence, the live world boss and the chat tail. Never sim
