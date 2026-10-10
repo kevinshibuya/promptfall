@@ -2,6 +2,8 @@ import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { SANDBOX_PINS_SERVER } from './sandbox'
+import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
@@ -28,9 +30,14 @@ import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
-/** Answers $.store from a map and records every write. */
+/**
+ * Answers $.store from a map and records every write. The machine plays in-process unless the
+ * seed names a server; a seed with `promptfall:server: undefined` is a fresh install.
+ */
 function store(on: On, seed: Record<string, unknown> = {}) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  const data = new Map<string, unknown>(
+    Object.entries({ 'promptfall:server': 'local', ...seed }).filter(([, v]) => v !== undefined),
+  )
   const writes: { key: string; value: unknown }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {
@@ -371,15 +378,16 @@ function remote(on: On) {
   const net = {
     down: false,
     calls: 0,
-    requests: [] as { method: string; path: string }[],
+    requests: [] as { origin: string; method: string; path: string }[],
     ledger,
   }
   on('http.fetch', async (_$, e) => {
     net.calls += 1
-    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] ?? ''
+    const origin = /^https?:\/\/[^/]+/.exec(e.url)?.[0] ?? ''
+    const path = e.url.slice(origin.length).split('?')[0] ?? ''
     const method = e.init?.method ?? 'GET'
     if (net.down) throw new Error('connect ECONNREFUSED')
-    net.requests.push({ method, path })
+    net.requests.push({ origin, method, path })
     const header = e.init?.headers?.authorization ?? ''
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
@@ -459,7 +467,7 @@ test('/promptfall server local during an outage drops the unsent events and says
     )
   // Three tool calls sat in the failed batch and one more in the buffer; ticks depend on cadence.
   expect(Number(m?.[1])).toBeGreaterThanOrEqual(4)
-  expect(data.has('promptfall:server')).toBe(false)
+  expect(data.get('promptfall:server')).toBe('local')
   expect(last.get('server')).toBeNull()
   expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
   expect((last.get('view') as GameView).account.server).toBe('in-process')
@@ -643,6 +651,67 @@ test('a trailing slash on the server URL is dropped', async ($, on) => {
   expect(r).toMatchObject({ text: `Promptfall now plays on ${URL_A}` })
   expect(data.get('promptfall:server')).toBe(URL_A)
   expect(data.has(`promptfall:token:${URL_A}`)).toBe(true)
+})
+
+test('a fresh install resolves to the public server and local is an explicit setting', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(data.has('promptfall:server')).toBe(false)
+  expect(last.get('server')).toBe(PUBLIC_SERVER)
+  expect((last.get('view') as GameView).account.server).toBe(PUBLIC_SERVER)
+  expect(net.requests.map((r) => r.origin)).toContain(PUBLIC_SERVER)
+  expect(typeof data.get(`promptfall:token:${PUBLIC_SERVER}`)).toBe('string')
+  const report = async () =>
+    ((await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })) as { text: string })
+      .text
+  expect(await report()).toBe(`Promptfall plays on the public server, ${PUBLIC_SERVER}`)
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect(data.get('promptfall:server')).toBe('local')
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(await report()).toBe('Promptfall plays in-process (server local)')
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(await report()).toBe(`Promptfall plays on ${URL_A}`)
+})
+
+test('a stored local setting plays in-process and survives a reset', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': 'local' })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:reset' })
+  await ui.press({ key: 'yes' })
+  await ui.unmount()
+  expect(data.get('promptfall:server')).toBe('local')
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(net.calls).toBe(0)
+})
+
+test('the sandbox plays in-process on a fresh install and never calls the public server', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on, [], { PROMPTFALL_SANDBOX: '1' })
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })
+  expect(r).toMatchObject({ text: SANDBOX_PINS_SERVER })
+  expect(net.calls).toBe(0)
 })
 
 test('a server switch clears a pending link code', async ($, on) => {

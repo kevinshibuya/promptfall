@@ -2,6 +2,7 @@ import { atom, type On, read, update } from 'claude-code'
 import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
 import { type GameHandle, PAUSED_LINE } from './engine'
 import { runSandbox, SANDBOX_PINS_SERVER } from './sandbox'
+import { SERVER_KEY, serverReport } from './server'
 import {
   BOARDS_DEFAULT,
   DIALOG_DEFAULT,
@@ -12,6 +13,7 @@ import {
   SETTINGS_KEY,
   settingCommand,
 } from './state'
+import { PREFIX } from './storage'
 import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
@@ -53,7 +55,8 @@ const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 
-const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
+const SERVER_USAGE =
+  'Usage: /promptfall server, /promptfall server <http(s) URL> or /promptfall server local'
 
 /** `server local` → null; `server <url>` → the URL; anything else → undefined. */
 function serverTarget(rest: string): string | null | undefined {
@@ -99,6 +102,7 @@ export function registerCommand(
 
     if (arg === 'server' || arg.startsWith('server ')) {
       if (sandbox()) return { text: SANDBOX_PINS_SERVER }
+      if (arg === 'server') return { text: serverReport(await $.store.get(PREFIX + SERVER_KEY)) }
       const target = serverTarget(raw.slice('server'.length).trim())
       if (target === undefined) return { text: SERVER_USAGE }
       const running = game()

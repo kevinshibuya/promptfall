@@ -336,10 +336,10 @@ interface ServerClient {
     leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
 }
 /**
- * The lowest client version a server lets submit. It stays at 0.1.0 while the plugin is 0.2.0: the
- * sim version gate already refuses a client on an older sim.
+ * The lowest client version a server lets submit: the launch version, so a pre-launch build is
+ * told to update. It moves with the plugin's version only when old clients must go.
  */
-declare const MIN_CLIENT_VERSION = "0.1.0";
+declare const MIN_CLIENT_VERSION = "0.3.0";
 type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end';
 declare const BUDGETS: Record<BudgetKind, {
     refillMs: number;

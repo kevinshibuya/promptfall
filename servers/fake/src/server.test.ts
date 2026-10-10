@@ -86,12 +86,40 @@ describe('HTTP fake', () => {
     })
   })
 
-  it('answers the protocol minimum client version, 0.1.0 for now', async () => {
+  it('answers the protocol minimum client version, the launch version', async () => {
     const r = await raw('POST', '/v1/bootstrap', {
       body: JSON.stringify({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null }),
     })
     expect(BootstrapSchema.parse(r.body).config.minClientVersion).toBe(MIN_CLIENT_VERSION)
-    expect(MIN_CLIENT_VERSION).toBe('0.1.0')
+    expect(MIN_CLIENT_VERSION).toBe('0.3.0')
+  })
+
+  it('refuses a batch from a pre-launch client with the version gate', async () => {
+    const boot = await raw('POST', '/v1/bootstrap', {
+      body: JSON.stringify({ clientVersion: '0.2.0', deviceToken: null }),
+    })
+    const b = BootstrapSchema.parse(boot.body)
+    const events = [{ t: 'tick' as const }]
+    const batch = {
+      batchId: crypto.randomUUID(),
+      accountId: b.account.accountId,
+      seq: 0,
+      clientVersion: '0.2.0',
+      simVersion: SIM_VERSION,
+      cursor: 0,
+      baseHash: b.hash,
+      resultHash: hashState(replay(b.state, events).state),
+      events: events.map((e) => ({ ...e, at: 1 })),
+    }
+    const r = await raw('POST', '/v1/batches', {
+      body: JSON.stringify(batch),
+      token: b.deviceToken,
+    })
+    expect(BatchAckSchema.parse(r.body)).toEqual({
+      ok: false,
+      reason: 'version_gate',
+      minClientVersion: MIN_CLIENT_VERSION,
+    })
   })
 
   it('answers 400 on a bad body, a non-JSON body and a bad query', async () => {
@@ -155,7 +183,7 @@ describe('HTTP fake', () => {
       batchId: crypto.randomUUID(),
       accountId: b.account.accountId,
       seq: 0,
-      clientVersion: '0.1.0',
+      clientVersion: MIN_CLIENT_VERSION,
       simVersion: SIM_VERSION,
       cursor: 0,
       baseHash: b.hash,
