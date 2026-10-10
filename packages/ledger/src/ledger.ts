@@ -145,9 +145,10 @@ export class Ledger implements ServerClient {
   private readonly books: Books
   private chain: Promise<unknown> = Promise.resolve()
   private readonly presence: world.Presence = new Map()
+  private readonly memo = new world.WorldMemo()
 
   constructor(private readonly options: LedgerOptions) {
-    this.kv = new TrackedKeyValue(options.kv)
+    this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key))
     this.books = new Books(this.kv)
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
@@ -210,6 +211,7 @@ export class Ledger implements ServerClient {
       now: at ?? (await this.options.now()),
       flags: this.flags(),
       presence: this.presence,
+      memo: this.memo,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
       speed,
       seedSource: this.options.seedSource,
@@ -570,8 +572,9 @@ export class Ledger implements ServerClient {
   ): Promise<WorldSnapshot | Unauthorized> {
     return this.run(async () => {
       const ctx = await this.worldContext()
-      // Before any record loads: the caller's record is read fresh after it.
-      if (advance) await boss.advanceBoss(ctx)
+      // Before any record loads: the caller's record is read fresh after it. Once a second: a
+      // grid point falls on a whole second, so the first poll at or past one still spawns it.
+      if (advance && this.memo.advanceDue(ctx.now)) await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
       return world.world(ctx, record, since, advance)

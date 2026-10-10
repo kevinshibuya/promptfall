@@ -153,6 +153,7 @@ declare class Ledger implements ServerClient {
     private readonly books;
     private chain;
     private readonly presence;
+    private readonly memo;
     constructor(options: LedgerOptions);
     /**
      * The flush runs even when `fn` threw, so an operation must validate before

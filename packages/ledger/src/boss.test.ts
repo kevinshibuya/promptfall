@@ -28,7 +28,7 @@ import {
 } from './boss'
 import { WORLD_BOSSES } from './boss-config'
 import { Ledger } from './ledger'
-import type { WorldContext } from './world'
+import { type WorldContext, WorldMemo } from './world'
 
 vi.mock('@promptfall/sim', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@promptfall/sim')>()
@@ -45,6 +45,7 @@ function context(now = GRID, flags: Record<string, boolean> = {}) {
     now,
     flags,
     presence: new Map(),
+    memo: new WorldMemo(),
     ttl: 45_000,
     speed: 1,
     seedSource: () => 7,
