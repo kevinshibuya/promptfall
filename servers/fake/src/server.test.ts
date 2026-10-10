@@ -8,6 +8,7 @@ import {
   BootstrapSchema,
   ChatResultSchema,
   ErrorBodySchema,
+  type FetchLike,
   HealthSchema,
   HttpClient,
   LinkPollResponseSchema,
@@ -334,6 +335,106 @@ describe('HTTP host access log', () => {
       for (const secret of [b.deviceToken, 'Bearer', 'authorization', batchId, b.hash])
         expect(all).not.toContain(secret)
     } finally {
+      await listening.close()
+    }
+  })
+})
+
+describe('HTTP host GitHub link', () => {
+  const github = (options: { clientId?: string; fetch?: FetchLike }) =>
+    createFakeServer({
+      kv: new MemoryKeyValue(),
+      now: async () => T0,
+      speed: 1,
+      flags: {},
+      seedSource: () => 5,
+      tokenSource: () => crypto.randomUUID(),
+      playerName: 'kevin',
+      seed: 9,
+      link: 'github',
+      githubClientId: options.clientId,
+      githubFetch: options.fetch ?? (async () => ({ status: 500, ok: false, text: '' })),
+    })
+
+  it('a github host without a client id refuses the link start', async () => {
+    const listening = await github({}).listen(0)
+    try {
+      const client = new HttpClient({
+        baseUrl: `http://127.0.0.1:${listening.port}`,
+        fetch: nodeFetch,
+      })
+      const boot = await client.bootstrap({ clientVersion: '0.3.0', deviceToken: null })
+      expect(await client.linkStart({ deviceToken: boot.deviceToken })).toEqual({
+        refusal: 'link_unavailable',
+        message: 'This server cannot link GitHub accounts: it has no GitHub client id.',
+      })
+    } finally {
+      await listening.close()
+    }
+  })
+
+  it('a link poll does not hold the ledger while GitHub answers', async () => {
+    let answerToken: () => void = () => undefined
+    const tokenAsked = new Promise<void>((asked) => {
+      answerToken = asked
+    })
+    let release: () => void = () => undefined
+    const released = new Promise<void>((r) => {
+      release = r
+    })
+    const json = (body: unknown) => ({ status: 200, ok: true, text: JSON.stringify(body) })
+    const fetch: FetchLike = async (url) => {
+      if (url.endsWith('/login/device/code')) {
+        return json({
+          device_code: 'dc',
+          user_code: 'WDJB-MJHT',
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        })
+      }
+      if (url.endsWith('/access_token')) {
+        answerToken()
+        await released
+        return json({ access_token: 'gho_x' })
+      }
+      return json({ login: 'octocat' })
+    }
+    const listening = await github({ clientId: 'Iv1.client', fetch }).listen(0)
+    try {
+      const client = new HttpClient({
+        baseUrl: `http://127.0.0.1:${listening.port}`,
+        fetch: nodeFetch,
+      })
+      const a = await client.bootstrap({ clientVersion: '0.3.0', deviceToken: null })
+      const b = await client.bootstrap({ clientVersion: '0.3.0', deviceToken: null })
+      const start = await client.linkStart({ deviceToken: a.deviceToken })
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+      const poll = client.linkPoll({ deviceToken: a.deviceToken }, start.code)
+      await tokenAsked
+      // GitHub is still answering a's poll: b's batch goes through meanwhile.
+      const events = [{ t: 'tick' as const }]
+      const ack = await client.submit(
+        {
+          batchId: crypto.randomUUID(),
+          accountId: b.account.accountId,
+          seq: 0,
+          clientVersion: '0.3.0',
+          simVersion: SIM_VERSION,
+          cursor: 0,
+          baseHash: b.hash,
+          resultHash: hashState(replay(b.state, events).state),
+          events: events.map((e) => ({ ...e, at: 1 })),
+        },
+        { deviceToken: b.deviceToken },
+      )
+      expect(ack.ok).toBe(true)
+      release()
+      const linked = await poll
+      if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
+      expect(linked.account.linked).toEqual({ provider: 'github', login: 'octocat' })
+    } finally {
+      release()
       await listening.close()
     }
   })

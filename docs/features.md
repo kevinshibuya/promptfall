@@ -111,9 +111,16 @@ in returns and arrives the moment a slot frees; returns are never vendored.
 **Cooldowns.** An item or hero that changes hands cannot be listed again for 24 hours.
 
 **Linking.** Browsing is open to every account, but listing, buying, ordering and posting to chat
-need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: a
-code in the detail window and the URL to enter it under the picture. An unlinked account or a
-closed market is said in the message window, with a hotkey to the Account tab.
+need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: the
+code the server gives in the detail window, the URL to enter it at under the picture, and a poll
+at the interval the server gives. A server started with `--link github` runs GitHub's own device
+flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
+link completing on the first poll after the player authorises, and the GitHub login as the
+account's name. The server keeps the login and never the access token. A decline, an expired code
+or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
+without a client id refuses the start the same way. `--link fake`, the default, approves on the
+first poll as `--player-name`. An unlinked account or a closed market is said in the message
+window, with a hotkey to the Account tab.
 
 ## World
 

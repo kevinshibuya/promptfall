@@ -639,7 +639,7 @@ export function runServerContract(name: string, make: ContractMake): void {
     it('rule 13: the link flow approves the caller only', async () => {
       const { client, mirror } = await setup()
       const start = await client.linkStart(mirror.auth())
-      if ('reason' in start) throw new Error('unauthorized')
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
       expect(start.code).toMatch(/^[0-9A-Z]{8}$/)
       expect(start.url).toBe('https://github.com/login/device')
       expect(start.intervalMs).toBe(5000)
@@ -1193,7 +1193,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         )
       expect((await row())?.name).toBe('adventurer')
       const start = await fresh.client.linkStart(mirror.auth())
-      if ('reason' in start) throw new Error('unauthorized')
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
       const linked = await fresh.client.linkPoll(mirror.auth(), start.code)
       if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
       await commit()

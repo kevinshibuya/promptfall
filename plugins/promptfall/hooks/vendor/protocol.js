@@ -4447,9 +4447,18 @@ var LinkStartSchema = external_exports.object({
   url: external_exports.string().min(1),
   intervalMs: count4
 });
+var LinkRefusedSchema = external_exports.object({
+  refusal: external_exports.literal("link_unavailable"),
+  message: external_exports.string().min(1).max(200)
+});
 var LinkPollSchema = external_exports.union([
   external_exports.object({ status: external_exports.literal("pending") }),
-  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema })
+  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema }),
+  external_exports.object({
+    status: external_exports.literal("ended"),
+    reason: external_exports.enum(["denied", "expired", "unavailable"]),
+    message: external_exports.string().min(1).max(200)
+  })
 ]);
 var HealthSchema = external_exports.object({
   ok: external_exports.literal(true),
@@ -4459,7 +4468,7 @@ var HealthSchema = external_exports.object({
   now: count4
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
-var LinkStartResponseSchema = orUnauthorized(LinkStartSchema);
+var LinkStartResponseSchema = orUnauthorized(external_exports.union([LinkRefusedSchema, LinkStartSchema]));
 var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
 var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
 var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
@@ -4671,6 +4680,7 @@ export {
   LISTINGS_PER_PAGE,
   LinkPollResponseSchema,
   LinkPollSchema,
+  LinkRefusedSchema,
   LinkStartResponseSchema,
   LinkStartSchema,
   ListingPageResponseSchema,

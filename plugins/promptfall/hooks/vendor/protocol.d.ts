@@ -302,11 +302,22 @@ type LinkStart = {
     url: string;
     intervalMs: number;
 };
+/** A host that cannot link now: a `github` host without a client id, or GitHub not answering. */
+type LinkRefused = {
+    refusal: 'link_unavailable';
+    message: string;
+};
+/** Why a link ended unlinked: declined on GitHub, its code expired, or GitHub did not answer. */
+type LinkEnd = 'denied' | 'expired' | 'unavailable';
 type LinkPoll = {
     status: 'pending';
 } | {
     status: 'linked';
     account: Account;
+} | {
+    status: 'ended';
+    reason: LinkEnd;
+    message: string;
 };
 interface ServerClient {
     bootstrap(input: {
@@ -315,7 +326,7 @@ interface ServerClient {
     }): Promise<Bootstrap>;
     submit(batch: Batch, auth: Auth): Promise<BatchAck>;
     account(auth: Auth): Promise<AccountInfo | Unauthorized>;
-    linkStart(auth: Auth): Promise<LinkStart | Unauthorized>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
     linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
     browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
     list(auth: Auth, input: {
@@ -449,7 +460,7 @@ declare class HttpClient implements ServerClient {
     }): Promise<Bootstrap>;
     submit(batch: Batch, auth: Auth): Promise<BatchAck>;
     account(auth: Auth): Promise<AccountInfo | Unauthorized>;
-    linkStart(auth: Auth): Promise<LinkStart | Unauthorized>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
     linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
     browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
     list(auth: Auth, input: {
@@ -491,6 +502,7 @@ declare const BootstrapSchema: z.ZodType<Bootstrap>;
 declare const BatchAckSchema: z.ZodType<BatchAck>;
 declare const AccountInfoSchema: z.ZodType<AccountInfo>;
 declare const LinkStartSchema: z.ZodType<LinkStart>;
+declare const LinkRefusedSchema: z.ZodType<LinkRefused>;
 declare const LinkPollSchema: z.ZodType<LinkPoll>;
 declare const HealthSchema: z.ZodObject<{
     ok: z.ZodLiteral<true>;
@@ -513,7 +525,7 @@ declare const HealthSchema: z.ZodObject<{
 }>;
 type Health = z.infer<typeof HealthSchema>;
 declare const AccountResponseSchema: z.ZodType<Unauthorized | AccountInfo, z.ZodTypeDef, Unauthorized | AccountInfo>;
-declare const LinkStartResponseSchema: z.ZodType<Unauthorized | LinkStart, z.ZodTypeDef, Unauthorized | LinkStart>;
+declare const LinkStartResponseSchema: z.ZodType<Unauthorized | LinkStart | LinkRefused, z.ZodTypeDef, Unauthorized | LinkStart | LinkRefused>;
 declare const LinkPollResponseSchema: z.ZodType<Unauthorized | LinkPoll, z.ZodTypeDef, Unauthorized | LinkPoll>;
 declare const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized>;
 declare const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized>;
@@ -547,4 +559,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };
+export { type Account, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };

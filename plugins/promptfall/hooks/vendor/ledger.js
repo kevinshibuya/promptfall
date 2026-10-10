@@ -955,7 +955,19 @@ async function fillOrder(ctx, record, orderId, itemId) {
 var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
+function approveAs(login) {
+  return {
+    start: async (code) => ({
+      code,
+      url: LINK_URL,
+      intervalMs: LINK_INTERVAL_MS,
+      deviceCode: code
+    }),
+    poll: async () => login === null ? { status: "pending" } : { status: "approved", login }
+  };
+}
 var unauthorized = { reason: "unauthorized" };
+var pending = { status: "pending" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
 var sandboxOff = { ok: false, reason: "sandbox_off" };
@@ -1201,35 +1213,47 @@ var Ledger = class {
     return { ...common, reason };
   }
   // ---------------------------------------------------------------------------
-  // GitHub link (approved by `linkApprover` until phase 5)
-  linkStart(auth) {
+  // GitHub link: the approver's round trips sit between two short locked steps.
+  async linkStart(auth) {
+    const accountId = await this.run(
+      async () => (await this.books.authenticate(auth))?.account.accountId ?? null
+    );
+    if (accountId === null) return unauthorized;
+    const started = await this.options.linkApprover.start(this.linkCode());
+    if ("refusal" in started) return started;
+    const { deviceCode, ...start } = started;
     return this.run(async () => {
-      const record = await this.books.authenticate(auth);
-      if (!record) return unauthorized;
-      const code = this.linkCode();
-      const link = {
-        accountId: record.account.accountId,
-        createdAt: await this.options.now()
-      };
-      await this.kv.set(linkKey(code), link);
-      return { code, url: LINK_URL, intervalMs: LINK_INTERVAL_MS };
+      const link = { accountId, createdAt: await this.options.now(), deviceCode };
+      await this.kv.set(linkKey(start.code), link);
+      return start;
     });
   }
-  linkPoll(auth, code) {
+  async linkPoll(auth, code) {
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      const link = await this.kv.get(linkKey(code));
+      if (!link || link.accountId !== record.account.accountId) return pending;
+      return link;
+    });
+    if (!("accountId" in found)) return found;
+    const answer = await this.options.linkApprover.poll(found.deviceCode ?? code);
+    if (answer.status === "pending") return pending;
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
       const link = await this.kv.get(linkKey(code));
-      if (!link || link.accountId !== record.account.accountId) return { status: "pending" };
-      const approved = await this.options.linkApprover(code);
-      if (!approved) return { status: "pending" };
+      if (!link || link.accountId !== record.account.accountId) {
+        return record.account.linked ? { status: "linked", account: record.account } : pending;
+      }
+      await this.kv.delete(linkKey(code));
+      if (answer.status === "ended") return answer;
       record.account = {
         ...record.account,
-        displayName: approved.login,
-        linked: { provider: "github", login: approved.login }
+        displayName: answer.login,
+        linked: { provider: "github", login: answer.login }
       };
       await this.books.save(record);
-      await this.kv.delete(linkKey(code));
       return { status: "linked", account: record.account };
     });
   }
@@ -1440,6 +1464,7 @@ export {
   MIN_PRICE,
   PLAYER_NAME_MAX,
   WORLD_BOSSES,
+  approveAs,
   isBlocked,
   listingFee,
   nextLedgerId,

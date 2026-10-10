@@ -6,7 +6,7 @@ import { bandKey, stageKey } from './stage/loop'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import { content, createInitialState } from './vendor/sim.js'
 import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
 
@@ -286,7 +286,7 @@ test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
     minClientVersion: '0.0.0',
     seedSource: () => 1,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => null,
+    linkApprover: approveAs(null),
     flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
   })
   const deviceToken = data.get(`${SANDBOX_PREFIX}deviceToken`) as string

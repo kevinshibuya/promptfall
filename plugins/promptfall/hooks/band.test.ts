@@ -13,7 +13,7 @@ import {
 import { SETTINGS_DEFAULT } from './state'
 import { test } from './testing'
 import { shownBoss, worldRows } from './ui/band'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
 import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS, STRIP_SVG_MAX_CHARS } from './windows/tuning'
@@ -366,7 +366,7 @@ function remoteWorld(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     down: false,
@@ -543,7 +543,7 @@ function bossNet(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   on('http.fetch', async (_$, e) => {
     const [full, query = ''] = e.url.split('?')

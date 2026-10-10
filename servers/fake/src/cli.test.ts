@@ -7,9 +7,10 @@ import { describe, expect, it } from 'vitest'
 const CLI = join(import.meta.dirname, 'cli.ts')
 
 /** The CLI under tsx, its stdout collected from the start. */
-function run(args: string[]) {
+function run(args: string[], env: Record<string, string | undefined> = process.env) {
   const child = spawn(process.execPath, ['--import', 'tsx', CLI, ...args], {
     cwd: import.meta.dirname,
+    env,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
   let out = ''
@@ -63,6 +64,23 @@ describe('the host CLI', () => {
       const r = await fetch(`http://127.0.0.1:${port}/v1/health`)
       expect(r.status).toBe(200)
       await cli.waitFor(/^GET \/v1\/health 200 \d+ms$/m)
+    } finally {
+      cli.child.kill('SIGTERM')
+      await cli.exit
+    }
+  })
+
+  it('--link takes github or fake; a github host names a missing client id at start', async () => {
+    const bad = run(['--link', 'gitlab'])
+    expect(await bad.exit).toBe(2)
+    const store = join(mkdtempSync(join(tmpdir(), 'pf-cli-')), 'pf.sqlite')
+    const { PROMPTFALL_GITHUB_CLIENT_ID: _, ...env } = process.env
+    const cli = run(
+      ['--port', '0', '--bots', '0', '--store', `sqlite:${store}`, '--link', 'github'],
+      env,
+    )
+    try {
+      await cli.waitFor(/ link github \(no PROMPTFALL_GITHUB_CLIENT_ID: link starts refused\)/)
     } finally {
       cli.child.kill('SIGTERM')
       await cli.exit

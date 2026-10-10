@@ -316,6 +316,13 @@ describe('HttpClient', () => {
     expect(await http.chat(auth, 'hi')).toEqual({ ok: false, reason: 'rate_limited' })
   })
 
+  it('a link refusal and an ended link pass through as values', async () => {
+    const refused = { refusal: 'link_unavailable', message: 'No client id.' }
+    expect(await client(refused).http.linkStart(auth)).toEqual(refused)
+    const ended = { status: 'ended', reason: 'expired', message: 'The code expired.' }
+    expect(await client(ended).http.linkPoll(auth, 'WDJB-MJHT')).toEqual(ended)
+  })
+
   it('leaderboards gets the boards with auth and no body', async () => {
     const boards: Boards = {
       highestZone: [{ accountId: 'a1', name: 'Ash', value: 5 }],

@@ -10,7 +10,7 @@ import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   BOSS_WINDOW_MS,
   type ChatMessage,
@@ -373,7 +373,7 @@ function remote(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     down: false,
@@ -822,7 +822,7 @@ function worldNet(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     ledger,
@@ -1071,7 +1071,7 @@ test('a boss seen in the snapshot reaches the primary through its next flush, wi
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const requests: string[] = []
   const behind: string[][] = []
@@ -1632,7 +1632,7 @@ test('a read-only sandbox session raises no world boss toast and no cue; its ban
     minClientVersion: '0.0.0',
     seedSource: () => 1,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => null,
+    linkApprover: approveAs(null),
     flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
   })
   const boot = await ledger.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })

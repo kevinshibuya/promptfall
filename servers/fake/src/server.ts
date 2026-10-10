@@ -1,10 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Ledger, type LedgerFlag } from '@promptfall/ledger'
+import { approveAs, Ledger, type LedgerFlag } from '@promptfall/ledger'
 import {
   type Auth,
   BatchSchema,
   ChatBodySchema,
+  type FetchLike,
   type KeyValue,
   ListingQuerySchema,
   MIN_CLIENT_VERSION,
@@ -14,6 +15,8 @@ import {
 } from '@promptfall/protocol'
 import { SIM_VERSION } from '@promptfall/sim'
 import { type ZodType, z } from 'zod'
+import { githubApprover } from './github'
+import { nodeFetch } from './node-fetch'
 
 export type FakeServerOptions = {
   kv: KeyValue
@@ -26,6 +29,14 @@ export type FakeServerOptions = {
   seed: number
   /** The access log: one line per request, method, path, status and milliseconds. */
   log?: (line: string) => void
+  /** Who approves a link: `fake` approves the first poll as `playerName`; `github` runs GitHub's device flow. Default `fake`. */
+  link?: 'fake' | 'github'
+  /** The GitHub OAuth app's client id; a `github` host without one refuses link starts. */
+  githubClientId?: string | undefined
+  /** How a `github` host reaches GitHub. Default Node's fetch. */
+  githubFetch?: FetchLike
+  /** Operator notes from the GitHub approver, never a code or a token. */
+  githubLog?: (line: string) => void
 }
 
 export type FakeServer = {
@@ -153,7 +164,14 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     seedSource: options.seedSource,
     tokenSource: options.tokenSource,
     flags: options.flags as Partial<Record<LedgerFlag, boolean>>,
-    linkApprover: async () => ({ login: options.playerName }),
+    linkApprover:
+      options.link === 'github'
+        ? githubApprover({
+            clientId: options.githubClientId,
+            fetch: options.githubFetch ?? nodeFetch,
+            log: options.githubLog,
+          })
+        : approveAs(options.playerName),
   })
 
   const handlers: Record<keyof typeof ROUTES, Handler> = {

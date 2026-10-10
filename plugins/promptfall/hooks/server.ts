@@ -1,4 +1,4 @@
-import { Ledger, type LedgerHost } from './vendor/ledger.js'
+import { approveAs, Ledger, type LedgerHost } from './vendor/ledger.js'
 import { type FetchLike, HttpClient, type KeyValue, type ServerClient } from './vendor/protocol.js'
 import { CLIENT_VERSION } from './version'
 
@@ -64,7 +64,7 @@ export function resolveClient(
       seedSource: () => Number.parseInt(crypto.randomUUID().slice(0, 8), 16),
       tokenSource: () => crypto.randomUUID(),
       // Nothing a sandbox account holds may reach the market or chat: it never links.
-      linkApprover: async () => (sandbox ? null : { login: 'player' }),
+      linkApprover: approveAs(sandbox ? null : 'player'),
       // Chat and the world boss need other players: off on the in-process ledger.
       // The sandbox runs the world boss so boss mode can be seen, and takes the sandbox's grants.
       flags: { 'chat.enabled': false, 'worldboss.enabled': sandbox, 'sandbox.enabled': sandbox },

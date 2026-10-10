@@ -5,6 +5,7 @@ import type {
   BatchAck,
   Bootstrap,
   LinkPoll,
+  LinkRefused,
   LinkStart,
   ServerConfig,
 } from './client'
@@ -106,9 +107,19 @@ export const LinkStartSchema: z.ZodType<LinkStart> = z.object({
   intervalMs: count,
 })
 
+export const LinkRefusedSchema: z.ZodType<LinkRefused> = z.object({
+  refusal: z.literal('link_unavailable'),
+  message: z.string().min(1).max(200),
+})
+
 export const LinkPollSchema: z.ZodType<LinkPoll> = z.union([
   z.object({ status: z.literal('pending') }),
   z.object({ status: z.literal('linked'), account: AccountSchema }),
+  z.object({
+    status: z.literal('ended'),
+    reason: z.enum(['denied', 'expired', 'unavailable']),
+    message: z.string().min(1).max(200),
+  }),
 ])
 
 export const HealthSchema = z.object({
@@ -121,7 +132,7 @@ export const HealthSchema = z.object({
 export type Health = z.infer<typeof HealthSchema>
 
 export const AccountResponseSchema = orUnauthorized(AccountInfoSchema)
-export const LinkStartResponseSchema = orUnauthorized(LinkStartSchema)
+export const LinkStartResponseSchema = orUnauthorized(z.union([LinkRefusedSchema, LinkStartSchema]))
 export const LinkPollResponseSchema = orUnauthorized(LinkPollSchema)
 export const ListingPageResponseSchema: z.ZodType<ListingPage | Unauthorized> =
   orUnauthorized(ListingPageSchema)

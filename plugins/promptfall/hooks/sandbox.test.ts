@@ -224,6 +224,7 @@ async function firstPoll(setting: string | null, sandbox: boolean) {
   const auth = { deviceToken: boot.deviceToken }
   const start = await client.linkStart(auth)
   if ('reason' in start) throw new Error(start.reason)
+  if ('refusal' in start) throw new Error(start.refusal)
   return client.linkPoll(auth, start.code)
 }
 

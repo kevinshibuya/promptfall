@@ -390,10 +390,19 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   `--seed`, `--speed`, `--player-name`, `--data`. `--speed` scales the bots'
   cadence and the ledger's clock together, so cooldowns and expiries can be
   watched. `--flag <name>=<value>`, repeatable, sets a flag for the run; a flag
-  change is a restart. The GitHub link flow is approved on the first poll with
-  `--player-name` as the login, 1 to 64 characters as the wire takes a login:
-  anything else exits at startup with the reason, and the ledger's mint holds
-  names to the same bound.
+  change is a restart. `--link github|fake` picks who approves a link. Under
+  `fake`, the default, the first poll approves with `--player-name` as the
+  login, 1 to 64 characters as the wire takes a login: anything else exits at
+  startup with the reason, and the ledger's mint holds names to the same
+  bound. Under `github` the link start answers GitHub's device flow (its user
+  code, verification URL and poll interval) for the OAuth app whose client id
+  is in `PROMPTFALL_GITHUB_CLIENT_ID`; the device code stays in the link
+  record, a poll exchanges it for a token, reads the login and drops the
+  token, so the ledger stores the login only. The GitHub round trips run
+  outside the ledger's mutex. A decline, an expired code or a GitHub call
+  that does not answer within 10 s ends the link unlinked with a message
+  (`{status: 'ended', reason, message}`); a `github` host without a client
+  id answers every link start `{refusal: 'link_unavailable', message}`.
 - Bots: 12 seeded accounts with names from a fixed list, inventories and
   rosters rolled from the sim's own loot tables, a gold stipend per tick so
   they never run dry. From phase 3 a bot is an HTTP client of the fake's own

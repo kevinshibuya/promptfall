@@ -27,7 +27,7 @@ import {
   toBossView,
 } from './boss'
 import { WORLD_BOSSES } from './boss-config'
-import { Ledger } from './ledger'
+import { approveAs, Ledger } from './ledger'
 import { type WorldContext, WorldMemo } from './world'
 
 vi.mock('@promptfall/sim', async (importOriginal) => {
@@ -287,7 +287,7 @@ describe('the ledger', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
       flags,
     })
     return {
@@ -384,7 +384,7 @@ describe('flags and edges', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
       flags: { 'presence.enabled': false },
     })
     const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
@@ -437,7 +437,7 @@ describe('flags and edges', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
     })
     const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
     await ledger.world({ deviceToken: m.deviceToken }, 0)

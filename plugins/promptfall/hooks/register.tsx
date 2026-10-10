@@ -39,6 +39,7 @@ import type {
   ChatResult,
   FetchLike,
   LinkPoll,
+  LinkRefused,
   LinkStart,
   MarketResult,
   Unauthorized,
@@ -376,7 +377,7 @@ class GameSession implements GameHandle {
     // The sandbox save never links: nothing granted may reach the market or chat.
     if (this.server.sandbox) return
     const engine = this.engine
-    let start: LinkStart | Unauthorized
+    let start: LinkStart | LinkRefused | Unauthorized
     try {
       start = await engine.call((client, auth) => client.linkStart(auth))
     } catch {
@@ -384,6 +385,11 @@ class GameSession implements GameHandle {
       return
     }
     if ('reason' in start) return
+    if ('refusal' in start) {
+      this.io.toast(start.message)
+      return
+    }
+    // The code, the URL and the interval are the server's: GitHub's on a real host.
     const gen = ++this.linkGen
     await this.io.dialogLink({ code: start.code, url: start.url })
     let polls = 0
@@ -401,6 +407,12 @@ class GameSession implements GameHandle {
         this.linkGen += 1
         engine.setAccount(r.account)
         await this.io.dialogLink(null)
+        return
+      }
+      if ('status' in r && r.status === 'ended') {
+        this.linkGen += 1
+        await this.io.dialogLink(null)
+        this.io.toast(r.message)
         return
       }
       if ('reason' in r || polls >= LINK_POLLS) {

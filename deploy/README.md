@@ -32,7 +32,8 @@ The examples below run from the repo root on the laptop unless they say "on the 
    ```
 
 2. On the box, fill `.env`: `PROMPTFALL_BOTS` (6 for the soft wave, 0 at the public listing),
-   `PROMPTFALL_GITHUB_CLIENT_ID` from the GitHub OAuth app, and a long random
+   `PROMPTFALL_GITHUB_CLIENT_ID` from the GitHub OAuth app (with "Enable Device Flow" ticked; the
+   host runs `--link github`, and without the id every link start is refused), and a long random
    `PROMPTFALL_ADMIN_TOKEN` (`openssl rand -hex 32`). `deploy.sh` writes `IMAGE` and
    `PREVIOUS_IMAGE`; leave the placeholders.
 3. While the GHCR package is private, log the box in once with a token that can read packages:

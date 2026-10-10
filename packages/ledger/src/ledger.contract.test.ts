@@ -1,6 +1,6 @@
 import { MemoryKeyValue } from '@promptfall/protocol'
 import { runServerContract } from '@promptfall/protocol/contract'
-import { Ledger } from './ledger'
+import { approveAs, Ledger } from './ledger'
 
 let counter = 0
 
@@ -12,7 +12,7 @@ runServerContract('Ledger over MemoryKeyValue', async (clock, { flags, kv }) => 
     seedSource: () => 1000 + counter++,
     tokenSource: () => crypto.randomUUID(),
     flags,
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
   })
   return { client: ledger, host: ledger.host }
 })

@@ -7,7 +7,7 @@ import {
   UNREACHABLE_NOTICE,
   UPDATE_NOTICE,
 } from './engine'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   type Auth,
   type Batch,
@@ -156,7 +156,7 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
     minClientVersion: '0.1.0',
     seedSource: () => 4242,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
     ...(flags ? { flags } : {}),
   })
   const client = new Recorder(ledger)

@@ -11,7 +11,9 @@ import {
   type ChatResult,
   compareSemver,
   type KeyValue,
+  type LinkEnd,
   type LinkPoll,
+  type LinkRefused,
   type LinkStart,
   type ListingPage,
   type ListingQuery,
@@ -82,8 +84,8 @@ export type LedgerOptions = {
   /** Device tokens, account ids and link codes. */
   tokenSource: () => string
   flags?: Partial<Record<LedgerFlag, boolean>>
-  /** Links approve on the first poll with this login (the fakes). Phase 5 replaces it with GitHub. */
-  linkApprover: (code: string) => Promise<{ login: string } | null>
+  /** Who approves a link: `approveAs` in the fakes, GitHub's device flow on a `github` host. */
+  linkApprover: LinkApprover
   /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
   presenceTtlMs?: number
   /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
@@ -127,9 +129,40 @@ export const PLAYER_NAME_MAX = 64
 export const LINK_URL = 'https://github.com/login/device'
 export const LINK_INTERVAL_MS = 5000
 
-type Link = { accountId: string; createdAt: number }
+/**
+ * The two calls of a link. Both run outside the ledger's mutex, so a slow answer stalls only
+ * the caller. `start` gets a code the ledger drew; an approver with its own codes ignores it.
+ * `deviceCode` stays in the link record and never reaches the client.
+ */
+export type LinkApprover = {
+  start(code: string): Promise<(LinkStart & { deviceCode: string }) | LinkRefused>
+  poll(
+    deviceCode: string,
+  ): Promise<
+    | { status: 'pending' }
+    | { status: 'approved'; login: string }
+    | { status: 'ended'; reason: LinkEnd; message: string }
+  >
+}
+
+/** The fakes' approver: the ledger's code, the first poll approves as `login`; `null` never does. */
+export function approveAs(login: string | null): LinkApprover {
+  return {
+    start: async (code) => ({
+      code,
+      url: LINK_URL,
+      intervalMs: LINK_INTERVAL_MS,
+      deviceCode: code,
+    }),
+    poll: async () => (login === null ? { status: 'pending' } : { status: 'approved', login }),
+  }
+}
+
+/** Keyed by the code the player sees. Records from before the device code fall back to the key. */
+type Link = { accountId: string; createdAt: number; deviceCode?: string }
 
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
+const pending: LinkPoll = { status: 'pending' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
 const sandboxOff: SandboxOutcome = { ok: false, reason: 'sandbox_off' }
@@ -419,37 +452,50 @@ export class Ledger implements ServerClient {
   }
 
   // ---------------------------------------------------------------------------
-  // GitHub link (approved by `linkApprover` until phase 5)
+  // GitHub link: the approver's round trips sit between two short locked steps.
 
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized> {
+  async linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized> {
+    const accountId = await this.run(
+      async () => (await this.books.authenticate(auth))?.account.accountId ?? null,
+    )
+    if (accountId === null) return unauthorized
+    const started = await this.options.linkApprover.start(this.linkCode())
+    if ('refusal' in started) return started
+    const { deviceCode, ...start } = started
     return this.run(async () => {
-      const record = await this.books.authenticate(auth)
-      if (!record) return unauthorized
-      const code = this.linkCode()
-      const link: Link = {
-        accountId: record.account.accountId,
-        createdAt: await this.options.now(),
-      }
-      await this.kv.set(linkKey(code), link)
-      return { code, url: LINK_URL, intervalMs: LINK_INTERVAL_MS }
+      const link: Link = { accountId, createdAt: await this.options.now(), deviceCode }
+      await this.kv.set(linkKey(start.code), link)
+      return start
     })
   }
 
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+  async linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      const link = (await this.kv.get(linkKey(code))) as Link | undefined
+      if (!link || link.accountId !== record.account.accountId) return pending
+      return link
+    })
+    if (!('accountId' in found)) return found
+    const answer = await this.options.linkApprover.poll(found.deviceCode ?? code)
+    if (answer.status === 'pending') return pending
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
       const link = (await this.kv.get(linkKey(code))) as Link | undefined
-      if (!link || link.accountId !== record.account.accountId) return { status: 'pending' }
-      const approved = await this.options.linkApprover(code)
-      if (!approved) return { status: 'pending' }
+      // A poll that raced this one already settled the link.
+      if (!link || link.accountId !== record.account.accountId) {
+        return record.account.linked ? { status: 'linked', account: record.account } : pending
+      }
+      await this.kv.delete(linkKey(code))
+      if (answer.status === 'ended') return answer
       record.account = {
         ...record.account,
-        displayName: approved.login,
-        linked: { provider: 'github', login: approved.login },
+        displayName: answer.login,
+        linked: { provider: 'github', login: answer.login },
       }
       await this.books.save(record)
-      await this.kv.delete(linkKey(code))
       return { status: 'linked', account: record.account }
     })
   }

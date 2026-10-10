@@ -8,7 +8,7 @@ services:
     container_name: promptfall
     restart: unless-stopped
     mem_limit: 512m
-    command: --host 0.0.0.0 --store sqlite:/data/promptfall.sqlite --backup-dir /backups --bots ${PROMPTFALL_BOTS} --speed 1
+    command: --host 0.0.0.0 --store sqlite:/data/promptfall.sqlite --backup-dir /backups --bots ${PROMPTFALL_BOTS} --speed 1 --link github
     environment:
       PROMPTFALL_GITHUB_CLIENT_ID: ${PROMPTFALL_GITHUB_CLIENT_ID}
       PROMPTFALL_ADMIN_TOKEN: ${PROMPTFALL_ADMIN_TOKEN}

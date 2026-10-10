@@ -6,6 +6,7 @@ import type {
   BatchAck,
   Bootstrap,
   LinkPoll,
+  LinkRefused,
   LinkStart,
   ServerClient,
 } from './client'
@@ -163,7 +164,7 @@ export class HttpClient implements ServerClient {
     return this.call('account', AccountResponseSchema, { auth })
   }
 
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized> {
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized> {
     return this.call('linkStart', LinkStartResponseSchema, { auth })
   }
 

@@ -1,4 +1,4 @@
-import { Account, BudgetKind, KeyValue, ServerClient, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkStart, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
 import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
@@ -93,10 +93,8 @@ type LedgerOptions = {
     /** Device tokens, account ids and link codes. */
     tokenSource: () => string;
     flags?: Partial<Record<LedgerFlag, boolean>>;
-    /** Links approve on the first poll with this login (the fakes). Phase 5 replaces it with GitHub. */
-    linkApprover: (code: string) => Promise<{
-        login: string;
-    } | null>;
+    /** Who approves a link: `approveAs` in the fakes, GitHub's device flow on a `github` host. */
+    linkApprover: LinkApprover;
     /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
     presenceTtlMs?: number;
     /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
@@ -142,6 +140,28 @@ declare const PLAYER_NAME_MAX = 64;
 declare const LINK_URL = "https://github.com/login/device";
 declare const LINK_INTERVAL_MS = 5000;
 /**
+ * The two calls of a link. Both run outside the ledger's mutex, so a slow answer stalls only
+ * the caller. `start` gets a code the ledger drew; an approver with its own codes ignores it.
+ * `deviceCode` stays in the link record and never reaches the client.
+ */
+type LinkApprover = {
+    start(code: string): Promise<(LinkStart & {
+        deviceCode: string;
+    }) | LinkRefused>;
+    poll(deviceCode: string): Promise<{
+        status: 'pending';
+    } | {
+        status: 'approved';
+        login: string;
+    } | {
+        status: 'ended';
+        reason: LinkEnd;
+        message: string;
+    }>;
+};
+/** The fakes' approver: the ledger's code, the first poll approves as `login`; `null` never does. */
+declare function approveAs(login: string | null): LinkApprover;
+/**
  * The account ledger: records, batch replay, server events and the market.
  * Every operation, `host` included, runs through one in-process mutex and
  * ends with one `flush` of whatever it wrote.
@@ -173,7 +193,7 @@ declare class Ledger implements ServerClient {
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
     /** A state-carrying refusal: the client adopts the effective state, so the committed point moves there. */
     private adopt;
-    linkStart(auth: Auth): Promise<LinkStart | Unauthorized>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>;
     linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
     /** Eight uppercase letters and digits drawn from the token source. */
     private linkCode;
@@ -211,4 +231,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, type SandboxOutcome, WORLD_BOSSES, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, type SandboxOutcome, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

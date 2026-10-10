@@ -11,7 +11,7 @@ import {
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, LOG_CAP } from './books'
 import { EXPIRY_MS } from './goods'
-import { Ledger, type LedgerOptions } from './ledger'
+import { approveAs, Ledger, type LedgerOptions, type LinkApprover } from './ledger'
 
 class CountingKeyValue extends MemoryKeyValue {
   flushes = 0
@@ -39,7 +39,7 @@ function makeLedger(overrides: Partial<LedgerOptions> = {}) {
     minClientVersion: '0.1.0',
     seedSource: () => 7,
     tokenSource: () => `token-${n++}`,
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
     ...overrides,
   })
   return {
@@ -293,7 +293,7 @@ describe('Ledger flush', () => {
     expect(counting.flushes).toBe(3)
     const start = await ledger.linkStart({ deviceToken: boot.deviceToken })
     expect(counting.flushes).toBe(4)
-    if ('reason' in start) throw new Error('unauthorized')
+    if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
     await ledger.linkPoll({ deviceToken: boot.deviceToken }, start.code)
     expect(counting.flushes).toBe(5)
   })
@@ -417,5 +417,101 @@ describe('Ledger reads without writes', () => {
     expect(counting.writes).toBe(writes)
     const r = await record(counting, boot.account.accountId)
     expect(r.state.boss).toBeNull()
+  })
+})
+
+describe('Ledger link', () => {
+  /** An approver shaped like GitHub's: its own code and URL, answers queued per poll. */
+  function scripted(answers: Awaited<ReturnType<LinkApprover['poll']>>[]) {
+    const polled: string[] = []
+    const approver: LinkApprover = {
+      start: async () => ({
+        code: 'WDJB-MJHT',
+        url: 'https://github.com/login/device',
+        intervalMs: 7000,
+        deviceCode: 'device-1',
+      }),
+      poll: async (deviceCode) => {
+        polled.push(deviceCode)
+        return answers.shift() ?? { status: 'pending' }
+      },
+    }
+    return { approver, polled }
+  }
+
+  async function unlinked(ledger: Ledger) {
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    return { deviceToken: boot.deviceToken }
+  }
+
+  it("answers the approver's code, URL and interval, and polls it with the device code it kept", async () => {
+    const { approver, polled } = scripted([
+      { status: 'pending' },
+      { status: 'approved', login: 'octocat' },
+    ])
+    const { ledger } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    const start = await ledger.linkStart(auth)
+    expect(start).toEqual({
+      code: 'WDJB-MJHT',
+      url: 'https://github.com/login/device',
+      intervalMs: 7000,
+    })
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
+    const linked = await ledger.linkPoll(auth, 'WDJB-MJHT')
+    if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
+    expect(linked.account.linked).toEqual({ provider: 'github', login: 'octocat' })
+    expect(linked.account.displayName).toBe('octocat')
+    expect(polled).toEqual(['device-1', 'device-1'])
+  })
+
+  it('an ended link answers its reason and message once, and leaves the account unlinked', async () => {
+    const message = 'You declined the link on GitHub.'
+    const { approver, polled } = scripted([{ status: 'ended', reason: 'denied', message }])
+    const { ledger } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    await ledger.linkStart(auth)
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({
+      status: 'ended',
+      reason: 'denied',
+      message,
+    })
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
+    expect(polled).toHaveLength(1)
+    const info = await ledger.account(auth)
+    if ('reason' in info) throw new Error('expected an account')
+    expect(info.account.linked).toBeNull()
+  })
+
+  it("a refused start answers the approver's refusal and keeps no link", async () => {
+    const refusal = { refusal: 'link_unavailable' as const, message: 'Linking is off here.' }
+    const { ledger } = makeLedger({
+      linkApprover: { start: async () => refusal, poll: async () => ({ status: 'pending' }) },
+    })
+    const auth = await unlinked(ledger)
+    expect(await ledger.linkStart(auth)).toEqual(refusal)
+  })
+
+  it('the ledger answers other calls while the approver is still answering a poll', async () => {
+    let release: (answer: { status: 'approved'; login: string }) => void = () => undefined
+    const answer = new Promise<{ status: 'approved'; login: string }>((r) => {
+      release = r
+    })
+    const { ledger } = makeLedger({
+      linkApprover: {
+        start: async (code) => ({ code, url: 'u', intervalMs: 5000, deviceCode: code }),
+        poll: () => answer,
+      },
+    })
+    const auth = await unlinked(ledger)
+    const other = await unlinked(ledger)
+    const start = await ledger.linkStart(auth)
+    if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+    const poll = ledger.linkPoll(auth, start.code)
+    const info = await ledger.account(other)
+    expect('account' in info).toBe(true)
+    release({ status: 'approved', login: 'octocat' })
+    const linked = await poll
+    expect('status' in linked && linked.status).toBe('linked')
   })
 })

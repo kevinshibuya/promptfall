@@ -24,6 +24,7 @@ const { values } = parseArgs({
     seed: { type: 'string', default: '1' },
     speed: { type: 'string', default: '1' },
     'player-name': { type: 'string', default: 'player' },
+    link: { type: 'string', default: 'fake' },
     data: { type: 'string', default: '.promptfall/fake.json' },
     bots: { type: 'string', default: '12' },
     flag: { type: 'string', multiple: true, default: [] },
@@ -42,7 +43,10 @@ if (values.help) {
   --port <n>          port to listen on (default 7777; 0 picks one)
   --seed <n>          world seed (default 1)
   --speed <x>         virtual ms per real ms (default 1)
-  --player-name <s>   the login a link approves (default player)
+  --player-name <s>   the login a fake link approves (default player)
+  --link github|fake  who approves a link: GitHub's device flow with the OAuth app's client id
+                      from PROMPTFALL_GITHUB_CLIENT_ID, or the first poll as --player-name
+                      (default fake)
   --data <path>       the JSON store file (default .promptfall/fake.json)
   --store sqlite:<path>
                       run on a SQLite file instead of the JSON store
@@ -114,6 +118,14 @@ try {
   process.exit(2)
 }
 
+if (values.link !== 'github' && values.link !== 'fake') {
+  console.error('promptfall fake: --link wants github or fake')
+  process.exit(2)
+}
+const link = values.link
+// An empty value is no client id: the compose file passes the variable through even when unset.
+const githubClientId = process.env.PROMPTFALL_GITHUB_CLIENT_ID || undefined
+
 const bossIn = values['boss-in'] === undefined ? null : positive('boss-in', values['boss-in'], true)
 
 // node:sqlite loads only for a SQLite run, so the JSON default runs as it did.
@@ -144,6 +156,9 @@ const server = createFakeServer({
   playerName,
   seed,
   log: (line) => console.log(line),
+  link,
+  githubClientId,
+  githubLog: (line) => console.error(`promptfall fake: ${line}`),
 })
 
 const listening = await server.listen(port, values.host)
@@ -157,6 +172,9 @@ const passed = Object.entries(flags).map(([name, value]) => `${name}=${value}`)
 console.log(
   `promptfall fake on http://${listening.host}:${listening.port} seed ${seed} speed ${speed} ${sqlitePath === null ? `data ${data}` : `store sqlite:${sqlitePath}`}` +
     (passed.length > 0 ? ` flags ${passed.join(',')}` : '') +
+    (link === 'github'
+      ? ` link github${githubClientId ? '' : ' (no PROMPTFALL_GITHUB_CLIENT_ID: link starts refused)'}`
+      : '') +
     (bossIn !== null ? ` boss in ${bossInSeconds()}s` : '') +
     (backupDir !== null ? ` backups ${backupDir}` : ''),
 )

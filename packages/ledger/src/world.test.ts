@@ -13,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 import { isBlocked } from './blocklist'
 import { type AccountRecord, newRecord, publicName } from './books'
 import { BOSS_KEY, type BossRecord } from './boss'
-import { Ledger, type LedgerFlag } from './ledger'
+import { approveAs, Ledger, type LedgerFlag } from './ledger'
 import { BOARDS_KEY, CHAT_KEY, offerZone, refillChat, type StoredBoards } from './world'
 
 function recordNamed(displayName: string | null): AccountRecord {
@@ -117,7 +117,7 @@ describe('names on the market', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `token-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
     })
     const item: Item = {
       id: 'i1',
@@ -150,7 +150,7 @@ describe('presence on a fast clock', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `token-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
     })
     const state = createInitialState(7)
     const a = await ledger.host.mint({ state, name: 'Ann', linked: true })
@@ -179,7 +179,7 @@ describe('the highest-zone board over an old --data', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `token-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
     })
     // A phase 2 bot left behind by a re-mint: an old record holding a high row.
     const old = recordNamed('Ashgrove')
@@ -229,7 +229,7 @@ describe('the world memo', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `token-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
       flags,
     })
     const state = createInitialState(7)

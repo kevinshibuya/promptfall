@@ -79,13 +79,20 @@ export type Bootstrap = {
 }
 
 export type LinkStart = { code: string; url: string; intervalMs: number }
-export type LinkPoll = { status: 'pending' } | { status: 'linked'; account: Account }
+/** A host that cannot link now: a `github` host without a client id, or GitHub not answering. */
+export type LinkRefused = { refusal: 'link_unavailable'; message: string }
+/** Why a link ended unlinked: declined on GitHub, its code expired, or GitHub did not answer. */
+export type LinkEnd = 'denied' | 'expired' | 'unavailable'
+export type LinkPoll =
+  | { status: 'pending' }
+  | { status: 'linked'; account: Account }
+  | { status: 'ended'; reason: LinkEnd; message: string }
 
 export interface ServerClient {
   bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap>
   submit(batch: Batch, auth: Auth): Promise<BatchAck>
   account(auth: Auth): Promise<AccountInfo | Unauthorized>
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized>
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>
   linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>
   browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>
   list(auth: Auth, input: { kind: TradeKind; id: string; price: number }): Promise<MarketResult>

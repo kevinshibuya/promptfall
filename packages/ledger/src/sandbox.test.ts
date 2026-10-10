@@ -3,7 +3,7 @@ import { createInitialState, type GameState, type SandboxEvent } from '@promptfa
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, Books, TrackedKeyValue } from './books'
 import { advanceBoss, BOSS_KEY, type BossRecord, loadBoss, settleBoss } from './boss'
-import { Ledger, type LedgerFlag } from './ledger'
+import { approveAs, Ledger, type LedgerFlag } from './ledger'
 import { type WorldContext, WorldMemo } from './world'
 
 const GRID = 1_700_006_400_000 // a grid point, as in the world-boss tests
@@ -19,7 +19,7 @@ function ledgerAt(start: number, flags: Partial<Record<LedgerFlag, boolean>> = {
     minClientVersion: '0.1.0',
     seedSource: () => 7,
     tokenSource: () => `tok-${n++}`,
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
     flags,
   })
   return {
