@@ -739,7 +739,12 @@ describe('Ledger link', () => {
     const approver: LinkApprover = {
       start: async () => {
         await held
-        return { code: 'WDJB-MJHT', url: 'https://github.com/login/device', intervalMs: 7000, deviceCode: 'd' }
+        return {
+          code: 'WDJB-MJHT',
+          url: 'https://github.com/login/device',
+          intervalMs: 7000,
+          deviceCode: 'd',
+        }
       },
       poll: async () => ({ status: 'pending' }),
     }
