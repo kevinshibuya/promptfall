@@ -336,6 +336,7 @@ To trade with bots offline, run the HTTP fake and point the plugin at it:
 pnpm fake --port 7777 --speed 10        # one terminal: the fake, with 12 bots
 # --flag chat.enabled=false (repeatable) turns a server flag off
 # --boss-in 60 brings the next world boss a minute out (a dev flag)
+# --store sqlite:.promptfall/fake.sqlite runs on a SQLite file instead of the JSON one
 /promptfall server http://127.0.0.1:7777   # in the Claude Code session
 ```
 

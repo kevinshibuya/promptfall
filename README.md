@@ -64,7 +64,7 @@ covers playing from a checkout and running the HTTP fake: [plugins/promptfall/RE
 | `packages/sim` | `@promptfall/sim`: the game rules and content, integer math only, with a balance harness (`pnpm --filter @promptfall/sim harness -- --hours 8`) |
 | `packages/protocol` | `@promptfall/protocol`: Zod schemas for batches, server events and the market, the `ServerClient` interface, `HttpClient`, and the server contract suite at `@promptfall/protocol/contract` |
 | `packages/ledger` | `@promptfall/ledger`: account records, batch replay, the server event log and deliveries, the market rules, the host privileges; run in-process by the plugin and over HTTP by the fake |
-| `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot, a virtual clock, seeded bots that play over HTTP, and server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`) |
+| `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot or a SQLite file (`--store sqlite:<path>`), a virtual clock, seeded bots that play over HTTP, and server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`) |
 | `plugins/promptfall` | The Claude Code mod, with the three packages bundled into `hooks/vendor/` |
 | `scripts/vendor.mjs` | Builds those bundles |
 | `art/` | The sprite manifest, palettes and the sprites in `art/sprites/` (1×) and `art/sprites-hires/` (1.5×) that `pnpm sprites` turns into the plugin's sprite module, `art/sheets.md` (the prompt and cut behind each sprite sheet), and the window font's source |

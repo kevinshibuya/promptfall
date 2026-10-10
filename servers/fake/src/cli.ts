@@ -9,6 +9,7 @@ import { FileKeyValue } from './file-kv'
 import { parseFlags, parsePlayerName } from './flags'
 import { nodeFetch } from './node-fetch'
 import { createFakeServer } from './server'
+import type { HostStore } from './store'
 
 // `pnpm fake -- --port 7777` passes a leading `--`; `pnpm fake --port 7777` does not.
 const argv = process.argv.slice(2)
@@ -25,9 +26,29 @@ const { values } = parseArgs({
     bots: { type: 'string', default: '12' },
     flag: { type: 'string', multiple: true, default: [] },
     'boss-in': { type: 'string' },
+    store: { type: 'string' },
+    help: { type: 'boolean', short: 'h', default: false },
   },
   strict: true,
 })
+
+if (values.help) {
+  console.log(`usage: pnpm fake [-- flags]
+
+  --port <n>          port to listen on (default 7777; 0 picks one)
+  --seed <n>          world seed (default 1)
+  --speed <x>         virtual ms per real ms (default 1)
+  --player-name <s>   the login a link approves (default player)
+  --data <path>       the JSON store file (default .promptfall/fake.json)
+  --store sqlite:<path>
+                      run on a SQLite file instead of the JSON store
+  --bots <n>          bots on the market (default 12; 0 for none)
+  --flag <name>=true|false
+                      set a server flag; repeatable
+  --boss-in <s>       move the clock so the next world boss spawns in about s real seconds
+  -h, --help          print this and exit`)
+  process.exit(0)
+}
 
 function positive(name: string, raw: string, integer: boolean): number {
   const n = Number(raw)
@@ -45,8 +66,18 @@ if (!Number.isInteger(port) || port < 0 || port > 65535) {
 }
 const seed = positive('seed', values.seed, true)
 const speed = positive('speed', values.speed, false)
-// `pnpm fake` runs in servers/fake; a relative --data is relative to where pnpm was invoked.
-const data = resolve(process.env.INIT_CWD ?? process.cwd(), values.data)
+// `pnpm fake` runs in servers/fake; a relative --data or --store path is relative to where pnpm was invoked.
+const cwd = process.env.INIT_CWD ?? process.cwd()
+const data = resolve(cwd, values.data)
+const SQLITE = 'sqlite:'
+let sqlitePath: string | null = null
+if (values.store !== undefined) {
+  if (!values.store.startsWith(SQLITE) || values.store.length === SQLITE.length) {
+    console.error('promptfall fake: --store wants sqlite:<path>')
+    process.exit(2)
+  }
+  sqlitePath = resolve(cwd, values.store.slice(SQLITE.length))
+}
 const botCount = Number(values.bots)
 if (!Number.isInteger(botCount) || botCount < 0) {
   console.error('promptfall fake: --bots wants 0 or more')
@@ -71,7 +102,11 @@ try {
 
 const bossIn = values['boss-in'] === undefined ? null : positive('boss-in', values['boss-in'], true)
 
-const kv = new FileKeyValue(data)
+// node:sqlite loads only for a SQLite run, so the JSON default runs as it did.
+const kv: HostStore =
+  sqlitePath === null
+    ? new FileKeyValue(data)
+    : new (await import('./sqlite-kv')).SqliteKeyValue(sqlitePath)
 // --boss-in: a dev flag for the manual pass. The clock only ever moves forward, so it stays
 // monotonic; the file's clock is rebased at the first flush.
 let persisted = kv.persistedClock
@@ -106,7 +141,7 @@ function bossInSeconds(): number {
 
 const passed = Object.entries(flags).map(([name, value]) => `${name}=${value}`)
 console.log(
-  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} data ${data}` +
+  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} ${sqlitePath === null ? `data ${data}` : `store sqlite:${sqlitePath}`}` +
     (passed.length > 0 ? ` flags ${passed.join(',')}` : '') +
     (bossIn !== null ? ` boss in ${bossInSeconds()}s` : ''),
 )
@@ -145,6 +180,7 @@ async function shutdown(): Promise<void> {
   bots?.stop()
   await listening.close()
   kv.flushSync()
+  kv.close()
   console.log('promptfall fake stopped')
   process.exit(0)
 }
