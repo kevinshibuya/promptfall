@@ -201,8 +201,8 @@ _Avoid_: loot box, crate, drop (that is the item)
 
 **Reveal**:
 The chest opening and the item rising out of it on a glow in its rarity colour, held longer the
-rarer the item. The combat log and the Loot rows carry a drop when its reveal ends; a toast reads
-the state, as always. The next enemy enters after it.
+rarer the item. The combat log and the Loot rows carry a drop once its item has risen; a toast
+reads the state, as always. The next enemy enters after it.
 _Avoid_: drop animation, unboxing, loot pop
 
 **Window**:
