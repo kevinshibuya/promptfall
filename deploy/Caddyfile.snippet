@@ -1,0 +1,6 @@
+# Promptfall's site block: append it to the box's Caddyfile and reload Caddy. Caddy holds TLS and
+# reaches the container by name on the web network; nothing of Promptfall's listens on the host.
+promptfall.kevinshibuya.com {
+	encode zstd gzip
+	reverse_proxy promptfall:7777
+}

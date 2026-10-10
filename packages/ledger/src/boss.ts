@@ -293,7 +293,21 @@ export async function contribute(
   const id = record.account.accountId
   boss.hp = Math.max(0, boss.hp - delta)
   boss.contributions[id] = (boss.contributions[id] ?? 0) + delta
-  const weekStart = weekStartOf(ctx.now)
+  // A bot's damage counts toward the kill and its reward, never toward the weekly board.
+  if (!record.bot) await offerDamage(kv, ctx.now, record, delta)
+  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record })
+  else await saveBoss(kv, boss)
+}
+
+/** Adds a commit's damage to the account's row on this week's board, starting the week when it turned. */
+async function offerDamage(
+  kv: KeyValue,
+  now: number,
+  record: AccountRecord,
+  delta: number,
+): Promise<void> {
+  const id = record.account.accountId
+  const weekStart = weekStartOf(now)
   const boards = ((await kv.get(BOARDS_KEY)) as StoredBoards | undefined) ?? {
     zone: [],
     week: { start: weekStart, damage: {} },
@@ -307,6 +321,4 @@ export async function contribute(
       damage: { ...week.damage, [id]: { name: publicName(record), value } },
     },
   } satisfies StoredBoards)
-  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record })
-  else await saveBoss(kv, boss)
 }

@@ -5,7 +5,7 @@ var __export = (target, all) => {
 };
 
 // packages/protocol/src/client.ts
-var MIN_CLIENT_VERSION = "0.1.0";
+var MIN_CLIENT_VERSION = "0.3.0";
 var BUDGETS = {
   tick: { refillMs: 2e3, capacity: 70 },
   tool_call: { refillMs: 1e3, capacity: 140 },
@@ -4284,9 +4284,19 @@ var MARKET_REFUSALS = [
   "no_match",
   "unauthorized"
 ];
+var BannedSchema = external_exports.object({
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
+var RefusedBannedSchema = external_exports.object({
+  ok: external_exports.literal(false),
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
 var MarketResultSchema = external_exports.union([
   external_exports.object({ ok: external_exports.literal(true), delivery: DeliverySchema }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) })
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) }),
+  RefusedBannedSchema
 ]);
 var NewOrderSchema = external_exports.object({
   base: id2,
@@ -4343,7 +4353,8 @@ var ChatResultSchema = external_exports.union([
       "blocked",
       "unauthorized"
     ])
-  })
+  }),
+  RefusedBannedSchema
 ]);
 var ChatBodySchema = external_exports.object({ text: external_exports.string().max(2e3) });
 var BossViewSchema = external_exports.object({
@@ -4406,6 +4417,11 @@ var BootstrapSchema = external_exports.object({
   cursor: count4,
   delivery: DeliverySchema
 });
+var BootstrapRefusedSchema = external_exports.object({
+  refusal: external_exports.enum(["rate_limited", "banned"]),
+  message: external_exports.string().min(1).max(200)
+});
+var BootstrapResponseSchema = external_exports.union([BootstrapRefusedSchema, BootstrapSchema]);
 var adopt = {
   ok: external_exports.literal(false),
   seq: count4,
@@ -4422,6 +4438,7 @@ var BatchAckSchema = external_exports.union([
     delivery: DeliverySchema
   }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("unauthorized") }),
+  RefusedBannedSchema,
   external_exports.object({
     ok: external_exports.literal(false),
     reason: external_exports.literal("version_gate"),
@@ -4434,7 +4451,7 @@ var BatchAckSchema = external_exports.union([
   external_exports.object({ ...adopt, reason: external_exports.literal("rate_capped"), kind: PlayerEventKindSchema })
 ]);
 function orUnauthorized(schema) {
-  return external_exports.union([UnauthorizedSchema, schema]);
+  return external_exports.union([UnauthorizedSchema, BannedSchema, schema]);
 }
 var AccountInfoSchema = external_exports.object({
   account: AccountSchema,
@@ -4447,9 +4464,18 @@ var LinkStartSchema = external_exports.object({
   url: external_exports.string().min(1),
   intervalMs: count4
 });
+var LinkRefusedSchema = external_exports.object({
+  refusal: external_exports.literal("link_unavailable"),
+  message: external_exports.string().min(1).max(200)
+});
 var LinkPollSchema = external_exports.union([
   external_exports.object({ status: external_exports.literal("pending") }),
-  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema })
+  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema }),
+  external_exports.object({
+    status: external_exports.literal("ended"),
+    reason: external_exports.enum(["denied", "expired", "unavailable"]),
+    message: external_exports.string().min(1).max(200)
+  })
 ]);
 var HealthSchema = external_exports.object({
   ok: external_exports.literal(true),
@@ -4459,13 +4485,12 @@ var HealthSchema = external_exports.object({
   now: count4
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
-var LinkStartResponseSchema = orUnauthorized(LinkStartSchema);
+var AccountDeletedResponseSchema = orUnauthorized(external_exports.object({ deleted: external_exports.literal(true) }));
+var LinkStartResponseSchema = orUnauthorized(external_exports.union([LinkRefusedSchema, LinkStartSchema]));
 var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
 var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
 var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
-var MatchingOrdersResponseSchema = orUnauthorized(
-  external_exports.array(OrderSchema)
-);
+var MatchingOrdersResponseSchema = orUnauthorized(external_exports.array(OrderSchema));
 var WorldResponseSchema = orUnauthorized(WorldSnapshotSchema);
 var BoardsResponseSchema = orUnauthorized(BoardsSchema);
 var ErrorBodySchema = external_exports.union([
@@ -4480,6 +4505,7 @@ var ROUTES = {
   bootstrap: { method: "POST", path: "/v1/bootstrap" },
   submit: { method: "POST", path: "/v1/batches" },
   account: { method: "GET", path: "/v1/account" },
+  deleteAccount: { method: "DELETE", path: "/v1/account" },
   linkStart: { method: "POST", path: "/v1/link/github" },
   linkPoll: { method: "POST", path: "/v1/link/github/poll" },
   browse: { method: "GET", path: "/v1/listings" },
@@ -4556,13 +4582,16 @@ var HttpClient = class {
     return parsed.data;
   }
   bootstrap(input) {
-    return this.call("bootstrap", BootstrapSchema, { body: input });
+    return this.call("bootstrap", BootstrapResponseSchema, { body: input });
   }
   submit(batch, auth) {
     return this.call("submit", BatchAckSchema, { auth, body: batch });
   }
   account(auth) {
     return this.call("account", AccountResponseSchema, { auth });
+  }
+  deleteAccount(auth) {
+    return this.call("deleteAccount", AccountDeletedResponseSchema, { auth });
   }
   linkStart(auth) {
     return this.call("linkStart", LinkStartResponseSchema, { auth });
@@ -4633,6 +4662,7 @@ var MemoryKeyValue = class {
 // packages/protocol/src/index.ts
 var PROTOCOL_VERSION = 1;
 export {
+  AccountDeletedResponseSchema,
   AccountInfoSchema,
   AccountResponseSchema,
   AccountSchema,
@@ -4643,11 +4673,14 @@ export {
   BOSS_TOP_BONUS,
   BOSS_WINDOW_MS,
   BUDGETS,
+  BannedSchema,
   BatchAckSchema,
   BatchSchema,
   BoardRowSchema,
   BoardsResponseSchema,
   BoardsSchema,
+  BootstrapRefusedSchema,
+  BootstrapResponseSchema,
   BootstrapSchema,
   BossViewSchema,
   CHAT_BUCKET_CAPACITY,
@@ -4671,6 +4704,7 @@ export {
   LISTINGS_PER_PAGE,
   LinkPollResponseSchema,
   LinkPollSchema,
+  LinkRefusedSchema,
   LinkStartResponseSchema,
   LinkStartSchema,
   ListingPageResponseSchema,
@@ -4691,6 +4725,7 @@ export {
   PRESENCE_TTL_MS,
   PROTOCOL_VERSION,
   ROUTES,
+  RefusedBannedSchema,
   ServerConfigSchema,
   ServerEventSchema,
   StatsSchema,

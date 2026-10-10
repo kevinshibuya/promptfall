@@ -43,6 +43,12 @@ export type AccountRecord = {
   returns: PendingReturn[]
   /** The chat token bucket; absent means full. */
   chat?: { tokens: number; refillAt: number }
+  /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
+  bot?: true
+  /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
+  banned?: { reason: string; at: number }
+  /** The code of the account's one open GitHub link, so a new start or a delete can drop its row. */
+  linkCode?: string
 }
 
 export const BATCH_RING = 200
@@ -53,6 +59,8 @@ export const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 export const tokenKey = (token: string) => `pf:token:${token}`
 export const linkKey = (code: string) => `pf:link:${code}`
 export const RETURNS_KEY = 'pf:returns'
+/** The flags set over the admin route: loaded at start over the start flags. */
+export const FLAGS_KEY = 'pf:flags'
 
 export function everyKind(value: number): Record<BudgetKind, number> {
   const out = {} as Record<BudgetKind, number>
@@ -152,7 +160,11 @@ export function hasRoom(state: GameState, goods: Goods): boolean {
 /** A KeyValue view that remembers whether anything was written, so a run flushes only when it wrote. */
 export class TrackedKeyValue implements KeyValue {
   dirty = false
-  constructor(private readonly inner: KeyValue) {}
+  constructor(
+    private readonly inner: KeyValue,
+    /** Told the key of every write, before it lands (the world memo). */
+    private readonly onWrite: (key: string) => void = () => undefined,
+  ) {}
 
   get(key: string): Promise<unknown> {
     return this.inner.get(key)
@@ -160,11 +172,13 @@ export class TrackedKeyValue implements KeyValue {
 
   set(key: string, value: unknown): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.set(key, value)
   }
 
   delete(key: string): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.delete(key)
   }
 
@@ -187,6 +201,14 @@ export class Books {
 
   async save(record: AccountRecord): Promise<void> {
     await this.kv.set(recordKey(record.account.accountId), record)
+  }
+
+  /** Deletes the record, its token and its place on the returns queue: an account delete. */
+  async remove(record: AccountRecord, token: string): Promise<void> {
+    record.returns = []
+    await this.syncReturnsQueue(record)
+    await this.kv.delete(recordKey(record.account.accountId))
+    await this.kv.delete(tokenKey(token))
   }
 
   async accountFor(token: string): Promise<string | null> {

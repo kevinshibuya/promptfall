@@ -27,8 +27,8 @@ import {
   toBossView,
 } from './boss'
 import { WORLD_BOSSES } from './boss-config'
-import { Ledger } from './ledger'
-import type { WorldContext } from './world'
+import { approveAs, Ledger } from './ledger'
+import { type WorldContext, WorldMemo } from './world'
 
 vi.mock('@promptfall/sim', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@promptfall/sim')>()
@@ -45,6 +45,7 @@ function context(now = GRID, flags: Record<string, boolean> = {}) {
     now,
     flags,
     presence: new Map(),
+    memo: new WorldMemo(),
     ttl: 45_000,
     speed: 1,
     seedSource: () => 7,
@@ -286,7 +287,7 @@ describe('the ledger', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
       flags,
     })
     return {
@@ -354,6 +355,7 @@ describe('the ledger', () => {
     advance(2_000)
     await ledger.world(auth, 0)
     const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    if ('refusal' in boot) throw new Error(boot.refusal)
     const local = replay(
       boot.state,
       boot.delivery.events.map((e) => e.event),
@@ -383,7 +385,7 @@ describe('flags and edges', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
       flags: { 'presence.enabled': false },
     })
     const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
@@ -436,7 +438,7 @@ describe('flags and edges', () => {
       minClientVersion: '0.1.0',
       seedSource: () => 7,
       tokenSource: () => `tok-${n++}`,
-      linkApprover: async () => ({ login: 'player' }),
+      linkApprover: approveAs('player'),
     })
     const m = await ledger.host.mint({ state: createInitialState(5), name: 'Ann', linked: true })
     await ledger.world({ deviceToken: m.deviceToken }, 0)

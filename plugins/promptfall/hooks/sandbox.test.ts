@@ -24,7 +24,8 @@ function harness(
   env: Record<string, string> | ((name: string) => string | undefined),
   seed: Record<string, unknown> = {},
 ) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  // The machine plays in-process unless the seed names a server.
+  const data = new Map<string, unknown>(Object.entries({ 'promptfall:server': 'local', ...seed }))
   const states = new Map<string, unknown>()
   const registered: { name: string; argumentHint?: string }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
@@ -81,6 +82,7 @@ test('with the sandbox on, the argument hint names the sandbox verb', async ($, 
 })
 
 const REAL_SAVE = {
+  'promptfall:server': 'local',
   'promptfall:deviceToken': 'real-token',
   'promptfall:pf:token:real-token': 'real-acct',
   'promptfall:pf:acct:real-acct:record': { account: { accountId: 'real-acct' }, gold: 123 },
@@ -219,9 +221,11 @@ async function firstPoll(setting: string | null, sandbox: boolean) {
     sandbox,
   )
   const boot = await client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   const auth = { deviceToken: boot.deviceToken }
   const start = await client.linkStart(auth)
   if ('reason' in start) throw new Error(start.reason)
+  if ('refusal' in start) throw new Error(start.refusal)
   return client.linkPoll(auth, start.code)
 }
 
@@ -282,6 +286,7 @@ async function hostWithAccount(sandbox: boolean) {
     sandbox,
   )
   const boot = await client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   const auth = { deviceToken: boot.deviceToken }
   const credits = async () => {
     const info = await client.account(auth)

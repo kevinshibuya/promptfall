@@ -3,7 +3,7 @@ import { expect, type Mounted, mock, type TestBody } from 'claude-code/testing'
 import type { GameView } from '../types'
 import { test } from './testing'
 import { paneText } from './ui/pane/testing'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger, type LinkApprover } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState, type Item } from './vendor/sim.js'
 
@@ -12,6 +12,7 @@ const SURFACES = ['terminal', 'desktop'] as const
 /** A store already holding an account whose state the test chose. */
 function harness(on: On, state: GameState) {
   const data = new Map<string, unknown>([
+    ['promptfall:server', 'local'],
     ['promptfall:deviceToken', 'token-1'],
     ['promptfall:pf:token:token-1', 'acct-1'],
     [
@@ -194,6 +195,32 @@ for (const surface of SURFACES) {
     expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(true)
     await ui.unmount()
   })
+
+  test(`deleting the account resets this machine and bootstraps a fresh one on ${surface}`, async ($, on) => {
+    const { states, data } = harness(on, seeded())
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await ui.press({ key: 'tab-account' })
+    await ui.press({ key: 'row:delete' })
+    expect(await paneText(ui)).toMatch(/Delete your account on this server\?/)
+    // No deletes nothing.
+    await ui.press({ key: 'no' })
+    expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(true)
+    await ui.press({ key: 'row:delete' })
+    await ui.press({ key: 'yes' })
+    const view = states.get('view') as GameView
+    expect(view.accountId).not.toBe('acct-1')
+    expect(view.inventory).toHaveLength(0)
+    expect(states.get('mode')).toBe('primary')
+    // The ledger dropped the account and its token; the machine's reset dropped the rest.
+    expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
+    expect(data.has('promptfall:pf:token:token-1')).toBe(false)
+    expect(data.get('promptfall:deviceToken')).not.toBe('token-1')
+    // The same server, and the message window says what happened.
+    expect(data.get('promptfall:server')).toBe('local')
+    expect(states.get('notice')).toMatch(/account on this server is deleted/)
+    await ui.unmount()
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -233,6 +260,8 @@ async function marketHarness(
     affixed?: boolean
     /** The bot's inventory has no free slot once its items are listed. */
     botFull?: boolean
+    /** Who approves a link; default the first poll as `player`. */
+    approver?: LinkApprover
   } = {},
 ) {
   let now = 1_000_000
@@ -244,7 +273,7 @@ async function marketHarness(
     seedSource: () => 5,
     tokenSource: () => `tok-${n++}`,
     flags: options.flags ?? {},
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: options.approver ?? approveAs('player'),
   })
   const player = await ledger.host.mint({
     state: { ...createInitialState(61), gold: 5000, inventory: [rareItem('iR')] },
@@ -335,6 +364,12 @@ async function marketHarness(
       case 'GET /v1/account':
         result = await ledger.account(auth)
         break
+      case 'POST /v1/link/github':
+        result = await ledger.linkStart(auth)
+        break
+      case 'POST /v1/link/github/poll':
+        result = await ledger.linkPoll(auth, body.code)
+        break
       case 'GET /v1/listings': {
         const q: Record<string, unknown> = { ...query, page: Number(query.page) }
         result = await ledger.browse(auth, q as never)
@@ -401,12 +436,16 @@ async function startOnTest(
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   // The sandbox switch reads the environment: unset here.
   mock.env(on, {})
-  on('ui.toast', () => ({ value: undefined }))
+  const toasts: string[] = []
+  on('ui.toast', (_$, e) => {
+    toasts.push(e.text)
+    return { value: undefined }
+  })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const clock = mock.clock(on, { now: 1_000_000 })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  return { ui, states, clock }
+  return { ui, states, clock, toasts }
 }
 
 test('the sell window lists matching orders with nets, then Set a price; a typed price shows the fee', async ($, on) => {
@@ -868,6 +907,79 @@ test('the Band row collapses the band', async ($, on) => {
   await ui.press({ key: 'row:band' })
   expect((states.get('prefs') as { collapsed: boolean }).collapsed).toBe(true)
   expect(await paneText(ui)).toMatch(/Band +collapsed/)
+  await ui.unmount()
+})
+
+/** An approver shaped like GitHub's: its own code, URL and interval, then the polls' answers. */
+function githubLike(
+  answers: Awaited<ReturnType<LinkApprover['poll']>>[],
+  start: Awaited<ReturnType<LinkApprover['start']>> = {
+    code: 'WDJB-MJHT',
+    url: 'https://github.com/login/device/select_account',
+    intervalMs: 9000,
+    deviceCode: 'device-1',
+  },
+): LinkApprover {
+  return {
+    start: async () => start,
+    poll: async () => answers.shift() ?? { status: 'pending' },
+  }
+}
+
+test('the link pane shows the code and the URL the server gives, polls at its interval, and unlocks trading', async ($, on) => {
+  const approver = githubLike([{ status: 'pending' }, { status: 'approved', login: 'octocat' }])
+  const a = await marketHarness(on, { linked: false, approver })
+  const { ui, clock } = await startOnTest($, on, a.player)
+  const polls = () => a.sent.filter((x) => x.path === '/v1/link/github/poll').length
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:link' })
+  expect(await paneText(ui)).toMatch(/Enter WDJB-MJHT at/)
+  const link = await ui.find({ type: 'Link' })
+  expect(link?.props.href).toBe('https://github.com/login/device/select_account')
+  await clock.advance(8999)
+  expect(polls()).toBe(0)
+  await clock.advance(1)
+  expect(polls()).toBe(1)
+  expect(a.sent.find((x) => x.path === '/v1/link/github/poll')?.body).toEqual({ code: 'WDJB-MJHT' })
+  await clock.advance(9000)
+  expect(polls()).toBe(2)
+  expect(await paneText(ui)).toMatch(/Linked as octocat/)
+  await ui.press({ key: 'tab-market' })
+  expect(await paneText(ui)).not.toMatch(/Link your GitHub account/)
+  await ui.unmount()
+})
+
+test('a refused link start and an ended link say why in a toast and leave the account unlinked', async ($, on) => {
+  const answers: Awaited<ReturnType<LinkApprover['poll']>>[] = [
+    { status: 'ended', reason: 'denied', message: 'The link was declined on GitHub.' },
+  ]
+  let refuse = true
+  const approver: LinkApprover = {
+    start: async () =>
+      refuse
+        ? { refusal: 'link_unavailable', message: 'This server cannot link GitHub accounts.' }
+        : {
+            code: 'WDJB-MJHT',
+            url: 'https://github.com/login/device',
+            intervalMs: 5000,
+            deviceCode: 'd',
+          },
+    poll: async () => answers.shift() ?? { status: 'pending' },
+  }
+  const a = await marketHarness(on, { linked: false, approver })
+  const { ui, clock, toasts } = await startOnTest($, on, a.player)
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:link' })
+  expect(toasts).toContain('This server cannot link GitHub accounts.')
+  expect(await paneText(ui)).toMatch(/Not linked\./)
+  refuse = false
+  await ui.press({ key: 'row:link' })
+  expect(await paneText(ui)).toMatch(/Enter WDJB-MJHT at/)
+  await clock.advance(5000)
+  expect(toasts).toContain('The link was declined on GitHub.')
+  const text = await paneText(ui)
+  expect(text).toMatch(/Not linked\./)
+  expect(text).not.toMatch(/WDJB-MJHT/)
   await ui.unmount()
 })
 

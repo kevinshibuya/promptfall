@@ -1,14 +1,16 @@
 import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
-import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { SANDBOX_PINS_SERVER } from './sandbox'
+import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   BOSS_WINDOW_MS,
   type ChatMessage,
@@ -28,9 +30,14 @@ import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
 import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
-/** Answers $.store from a map and records every write. */
+/**
+ * Answers $.store from a map and records every write. The machine plays in-process unless the
+ * seed names a server; a seed with `promptfall:server: undefined` is a fresh install.
+ */
 function store(on: On, seed: Record<string, unknown> = {}) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  const data = new Map<string, unknown>(
+    Object.entries({ 'promptfall:server': 'local', ...seed }).filter(([, v]) => v !== undefined),
+  )
   const writes: { key: string; value: unknown }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {
@@ -366,27 +373,33 @@ function remote(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     down: false,
+    /** Answered to every bootstrap while set, as a host's refusal. */
+    refusal: null as null | { refusal: 'rate_limited' | 'banned'; message: string },
     calls: 0,
-    requests: [] as { method: string; path: string }[],
+    requests: [] as { origin: string; method: string; path: string }[],
     ledger,
   }
   on('http.fetch', async (_$, e) => {
     net.calls += 1
-    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] ?? ''
+    const origin = /^https?:\/\/[^/]+/.exec(e.url)?.[0] ?? ''
+    const path = e.url.slice(origin.length).split('?')[0] ?? ''
     const method = e.init?.method ?? 'GET'
     if (net.down) throw new Error('connect ECONNREFUSED')
-    net.requests.push({ method, path })
+    net.requests.push({ origin, method, path })
     const header = e.init?.headers?.authorization ?? ''
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
     let result: unknown
-    if (method === 'POST' && path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    if (method === 'POST' && path === '/v1/bootstrap')
+      result = net.refusal ?? (await ledger.bootstrap(body))
     else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
+    else if (method === 'DELETE' && path === '/v1/account')
+      result = await ledger.deleteAccount(auth)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })
@@ -437,6 +450,113 @@ test('a session whose store points at an unreachable server rides the outage and
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
 })
 
+test('a refused bootstrap shows its message and the session retries later', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  const message = 'Too many new accounts from this address. Promptfall will try again later.'
+  net.refusal = { refusal: 'rate_limited', message }
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('notice')).toBe(message)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('view') ?? null).toBeNull()
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(false)
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  expect(boots()).toBe(1)
+  // Not a hammering retry: a minute on, still the one call.
+  await time.advance(60_000)
+  expect(boots()).toBe(1)
+  net.refusal = null
+  await time.advance(5 * 60_000)
+  expect(boots()).toBe(2)
+  expect(last.get('notice')).toBeNull()
+  expect(last.get('mode')).toBe('primary')
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(typeof data.get(`promptfall:token:${URL_A}`)).toBe('string')
+})
+
+test('a banned account is refused on bootstrap and the plugin pauses with the reason', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('primary')
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const info = await net.ledger.account({ deviceToken: token })
+  if (!('account' in info)) throw new Error(info.reason)
+  await net.ledger.host.ban(info.account.accountId, 'spam in chat')
+  const message = 'Promptfall: this account is banned: spam in chat'
+
+  // Mid-session: the next batch is refused, and play pauses with the reason.
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(16_000)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  const batches = () => net.requests.filter((r) => r.path === '/v1/batches').length
+  const sent = batches()
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(60_000)
+  expect(batches()).toBe(sent)
+
+  // A new session asks once, is refused, shows the reason and does not ask again.
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  const before = boots()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(boots()).toBe(before + 1)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  await time.advance(60 * 60_000)
+  expect(boots()).toBe(before + 1)
+  expect(last.get('notice')).toBe(message)
+  // The token stays: the ban is the account's, and this machine keeps it.
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+})
+
+test('deleting the account on a remote server starts a fresh one there, and only on its word', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+
+  // Unconfirmed: the server did not answer, so nothing on this machine is reset.
+  await ui.press({ key: 'row:delete' })
+  net.down = true
+  await ui.press({ key: 'yes' })
+  expect(await paneText(ui)).toContain(`Refused: ${NOT_DELETED}`)
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+  net.down = false
+  expect(await net.ledger.knowsToken(token)).toBe(true)
+
+  await ui.press({ key: 'row:delete' })
+  await ui.press({ key: 'yes' })
+  const deletes = net.requests.filter((r) => r.method === 'DELETE' && r.path === '/v1/account')
+  expect(deletes.map((r) => r.origin)).toEqual([URL_A])
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  // A fresh account on the same server, and the message window says why.
+  const fresh = data.get(`promptfall:token:${URL_A}`)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe(token)
+  expect(await net.ledger.knowsToken(fresh as string)).toBe(true)
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
+})
+
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)
@@ -459,7 +579,7 @@ test('/promptfall server local during an outage drops the unsent events and says
     )
   // Three tool calls sat in the failed batch and one more in the buffer; ticks depend on cadence.
   expect(Number(m?.[1])).toBeGreaterThanOrEqual(4)
-  expect(data.has('promptfall:server')).toBe(false)
+  expect(data.get('promptfall:server')).toBe('local')
   expect(last.get('server')).toBeNull()
   expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
   expect((last.get('view') as GameView).account.server).toBe('in-process')
@@ -645,6 +765,67 @@ test('a trailing slash on the server URL is dropped', async ($, on) => {
   expect(data.has(`promptfall:token:${URL_A}`)).toBe(true)
 })
 
+test('a fresh install resolves to the public server and local is an explicit setting', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(data.has('promptfall:server')).toBe(false)
+  expect(last.get('server')).toBe(PUBLIC_SERVER)
+  expect((last.get('view') as GameView).account.server).toBe(PUBLIC_SERVER)
+  expect(net.requests.map((r) => r.origin)).toContain(PUBLIC_SERVER)
+  expect(typeof data.get(`promptfall:token:${PUBLIC_SERVER}`)).toBe('string')
+  const report = async () =>
+    ((await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })) as { text: string })
+      .text
+  expect(await report()).toBe(`Promptfall plays on the public server, ${PUBLIC_SERVER}`)
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect(data.get('promptfall:server')).toBe('local')
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(await report()).toBe('Promptfall plays in-process (server local)')
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(await report()).toBe(`Promptfall plays on ${URL_A}`)
+})
+
+test('a stored local setting plays in-process and survives a reset', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': 'local' })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:reset' })
+  await ui.press({ key: 'yes' })
+  await ui.unmount()
+  expect(data.get('promptfall:server')).toBe('local')
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(net.calls).toBe(0)
+})
+
+test('the sandbox plays in-process on a fresh install and never calls the public server', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on, [], { PROMPTFALL_SANDBOX: '1' })
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })
+  expect(r).toMatchObject({ text: SANDBOX_PINS_SERVER })
+  expect(net.calls).toBe(0)
+})
+
 test('a server switch clears a pending link code', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   store(on)
@@ -753,7 +934,7 @@ function worldNet(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     ledger,
@@ -1002,7 +1183,7 @@ test('a boss seen in the snapshot reaches the primary through its next flush, wi
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const requests: string[] = []
   const behind: string[][] = []
@@ -1563,7 +1744,7 @@ test('a read-only sandbox session raises no world boss toast and no cue; its ban
     minClientVersion: '0.0.0',
     seedSource: () => 1,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => null,
+    linkApprover: approveAs(null),
     flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
   })
   const boot = await ledger.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })

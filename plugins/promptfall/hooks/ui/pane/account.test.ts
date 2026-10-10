@@ -38,6 +38,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     ' | Band off',
     ' | Link GitHub',
     " | Reset this machine's data",
+    ' | Delete my account on this server',
   ])
   expect(lines[0]?.length).toBe(78)
   expect(list?.lines[0]?.spans).toContainEqual({ text: 'S', rgb: GAUGE_FULL_RGB })
@@ -51,10 +52,11 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     ['row:off', undefined],
     ['row:link', undefined],
     ['row:reset', undefined],
+    ['row:delete', undefined],
   ])
 })
 
-test('the actions: settings, the band, off, link, and reset opening its Yes/No on No', () => {
+test('the actions: settings, the band, off, link, reset and delete opening their Yes/Nos on No', () => {
   const b = accountPane(input({}, { view: unlinked() }))
   expect(cursors(b).map((s) => s.action)).toEqual([
     { t: 'setting', patch: { sound: true } },
@@ -64,6 +66,7 @@ test('the actions: settings, the band, off, link, and reset opening its Yes/No o
     { t: 'off' },
     { t: 'link' },
     { t: 'open', menu: { kind: 'confirm', action: 'reset', id: '', at: 1 } },
+    { t: 'open', menu: { kind: 'confirm', action: 'delete', id: '', at: 1 } },
   ])
   const forced = accountPane(
     input(
@@ -116,6 +119,30 @@ test('the reset Yes/No: its question, Yes resets', () => {
   ])
   expect(b.focus).toBe('no')
   expect(message(b)).toEqual(["Reset this machine's data? The game starts over.", ''])
+})
+
+test('Delete goes read-only and on the sandbox save; its Yes/No asks first, Yes deletes', () => {
+  const keys = (b: ReturnType<typeof accountPane>) => cursors(b).map((s) => s.key)
+  const sandbox = { ...paneView(), account: { ...paneView().account, sandbox: true } }
+  expect(keys(accountPane(input({}, { readOnly: true, mode: 'secondary' })))).not.toContain(
+    'row:delete',
+  )
+  expect(keys(accountPane(input({}, { view: sandbox })))).not.toContain('row:delete')
+  const asking = accountPane(input({ menu: { kind: 'confirm', action: 'delete', id: '', at: 1 } }))
+  expect(cursors(asking).map((s) => [s.key, s.action])).toEqual([
+    ['yes', { t: 'delete' }],
+    ['no', { t: 'back' }],
+  ])
+  expect(asking.focus).toBe('no')
+  expect(message(asking)).toEqual([
+    'Delete your account on this server? It cannot be undone.',
+    'Its listings and orders go with it; this machine starts over.',
+  ])
+  // Read-only, an open delete menu asks nothing.
+  const readOnly = accountPane(
+    input({ menu: { kind: 'confirm', action: 'delete', id: '', at: 1 } }, { readOnly: true }),
+  )
+  expect(keys(readOnly)).not.toContain('yes')
 })
 
 test('the detail lines and the message', () => {

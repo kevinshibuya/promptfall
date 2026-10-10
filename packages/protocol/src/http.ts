@@ -1,15 +1,19 @@
 import type { TradeKind } from '@promptfall/sim'
 import type { z } from 'zod'
 import type {
+  AccountDeleted,
   AccountInfo,
   Auth,
   BatchAck,
   Bootstrap,
+  BootstrapRefused,
   LinkPoll,
+  LinkRefused,
   LinkStart,
   ServerClient,
 } from './client'
 import type {
+  Banned,
   ListingPage,
   ListingQuery,
   MarketResult,
@@ -19,10 +23,11 @@ import type {
   Unauthorized,
 } from './market'
 import {
+  AccountDeletedResponseSchema,
   AccountResponseSchema,
   BatchAckSchema,
   BoardsResponseSchema,
-  BootstrapSchema,
+  BootstrapResponseSchema,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
   ListingPageResponseSchema,
@@ -47,6 +52,7 @@ export const ROUTES = {
   bootstrap: { method: 'POST', path: '/v1/bootstrap' },
   submit: { method: 'POST', path: '/v1/batches' },
   account: { method: 'GET', path: '/v1/account' },
+  deleteAccount: { method: 'DELETE', path: '/v1/account' },
   linkStart: { method: 'POST', path: '/v1/link/github' },
   linkPoll: { method: 'POST', path: '/v1/link/github/poll' },
   browse: { method: 'GET', path: '/v1/listings' },
@@ -151,27 +157,34 @@ export class HttpClient implements ServerClient {
     return parsed.data
   }
 
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap> {
-    return this.call('bootstrap', BootstrapSchema, { body: input })
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused> {
+    return this.call('bootstrap', BootstrapResponseSchema, { body: input })
   }
 
   submit(batch: Batch, auth: Auth): Promise<BatchAck> {
     return this.call('submit', BatchAckSchema, { auth, body: batch })
   }
 
-  account(auth: Auth): Promise<AccountInfo | Unauthorized> {
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned> {
     return this.call('account', AccountResponseSchema, { auth })
   }
 
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized> {
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
+    return this.call('deleteAccount', AccountDeletedResponseSchema, { auth })
+  }
+
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned> {
     return this.call('linkStart', LinkStartResponseSchema, { auth })
   }
 
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned> {
     return this.call('linkPoll', LinkPollResponseSchema, { auth, body: { code } })
   }
 
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized> {
+  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned> {
     const { kind, base, cls, minRarity, sort, page } = query
     return this.call('browse', ListingPageResponseSchema, {
       auth,
@@ -191,7 +204,7 @@ export class HttpClient implements ServerClient {
     return this.call('buy', MarketResultSchema, { auth, id: listingId })
   }
 
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized> {
+  myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned> {
     return this.call('myOrders', MyOrdersResponseSchema, { auth })
   }
 
@@ -203,7 +216,7 @@ export class HttpClient implements ServerClient {
     return this.call('cancelOrder', MarketResultSchema, { auth, id: orderId })
   }
 
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized> {
+  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned> {
     return this.call('matchingOrders', MatchingOrdersResponseSchema, { auth, query: { itemId } })
   }
 
@@ -211,7 +224,7 @@ export class HttpClient implements ServerClient {
     return this.call('fillOrder', MarketResultSchema, { auth, id: orderId, body: { itemId } })
   }
 
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized> {
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned> {
     return this.call('world', WorldResponseSchema, { auth, query: { since } })
   }
 
@@ -219,7 +232,7 @@ export class HttpClient implements ServerClient {
     return this.call('chat', ChatResultSchema, { auth, body: { text } })
   }
 
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned> {
     return this.call('leaderboards', BoardsResponseSchema, { auth })
   }
 }

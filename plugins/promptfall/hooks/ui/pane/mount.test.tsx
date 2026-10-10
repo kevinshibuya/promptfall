@@ -362,6 +362,9 @@ function stubGame() {
     reset: () => {
       calls.push('reset')
     },
+    deleteAccount: () => {
+      calls.push('deleteAccount')
+    },
   }
   return { calls, game: handle as unknown as GameHandle }
 }
@@ -387,7 +390,7 @@ test('query clears cursor.market, sets the menu, then browses through the game h
   expect(none.d).toBe(DIALOG_DEFAULT)
 })
 
-test('buy closes the menu and buys once; cancel cancels; reset closes the menu and resets', async () => {
+test('buy closes the menu and buys once; cancel cancels; reset and delete close the menu and act', async () => {
   const { calls, game } = stubGame()
   const state: { d: DialogState } = {
     d: { ...DIALOG_DEFAULT, menu: { kind: 'confirm', action: 'buy', id: 'L1', at: 0 } },
@@ -402,6 +405,10 @@ test('buy closes the menu and buys once; cancel cancels; reset closes the menu a
   await runAction({ t: 'reset' }, context(state, [], game))
   expect(state.d.menu).toBeNull()
   expect(calls.at(-1)).toBe('reset')
+  state.d = { ...state.d, menu: { kind: 'confirm', action: 'delete', id: '', at: 0 } }
+  await runAction({ t: 'delete' }, context(state, [], game))
+  expect(state.d.menu).toBeNull()
+  expect(calls.at(-1)).toBe('deleteAccount')
 })
 
 test('Back: a Market pick returns to its filter row; an order pick keeps the form; then the form closes', async () => {
@@ -527,10 +534,12 @@ test('a second Yes before the redraw buys, cancels or resets nothing more', asyn
     runAction({ t: 'buy', listingId: 'L1' }, ctx),
   ])
   expect(calls.filter((c) => c.startsWith('buy'))).toEqual(['buy L1'])
-  // With no Yes/No open, cancel and reset do nothing.
+  // With no Yes/No open, cancel, reset and delete do nothing.
   await runAction({ t: 'cancel', what: 'order', id: 'O1' }, ctx)
   await runAction({ t: 'reset' }, ctx)
+  await runAction({ t: 'delete' }, ctx)
   expect(calls).not.toContain('reset')
+  expect(calls).not.toContain('deleteAccount')
 })
 
 test('a tab switch closes the sell flow and any sub-window', async () => {

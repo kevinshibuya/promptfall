@@ -3,8 +3,8 @@ import { createInitialState, type GameState, type SandboxEvent } from '@promptfa
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, Books, TrackedKeyValue } from './books'
 import { advanceBoss, BOSS_KEY, type BossRecord, loadBoss, settleBoss } from './boss'
-import { Ledger, type LedgerFlag } from './ledger'
-import type { WorldContext } from './world'
+import { approveAs, Ledger, type LedgerFlag } from './ledger'
+import { type WorldContext, WorldMemo } from './world'
 
 const GRID = 1_700_006_400_000 // a grid point, as in the world-boss tests
 const ON = { 'sandbox.enabled': true } as const
@@ -19,7 +19,7 @@ function ledgerAt(start: number, flags: Partial<Record<LedgerFlag, boolean>> = {
     minClientVersion: '0.1.0',
     seedSource: () => 7,
     tokenSource: () => `tok-${n++}`,
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
     flags,
   })
   return {
@@ -87,6 +87,7 @@ describe('host.sandbox', () => {
     expect(r.committedCursor).toBe(0)
     expect(r.log).toEqual([{ n: 1, event: zone2 }])
     const again = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: boot.deviceToken })
+    if ('refusal' in again) throw new Error(again.refusal)
     expect(again.delivery).toEqual({ cursor: 1, events: [{ n: 1, event: zone2 }] })
   })
 
@@ -205,6 +206,7 @@ describe('the grid beside the sandbox', () => {
       now,
       flags: {},
       presence: new Map(),
+      memo: new WorldMemo(),
       ttl: 45_000,
       speed: 1,
       seedSource: () => 7,

@@ -16,16 +16,96 @@ import {
 } from '@promptfall/protocol'
 import { isBlocked } from './blocklist'
 import { type AccountRecord, type Books, isCurrent, publicName } from './books'
-import { BOSS_KEY, engage, isLive, loadBoss, toBossView } from './boss'
+import { BOSS_KEY, type BossRecord, engage, isLive, loadBoss, toBossView } from './boss'
 
 /** Who polled, in the `Ledger` instance's memory only: never in the store. */
 export type Presence = Map<string, { zone: number; name: string; at: number }>
+
+/**
+ * The world snapshot's shared parts (the presence counts and zones, the boss record, the chat
+ * slice per mark), in the `Ledger` instance's memory. Each is built at most once a server-clock
+ * second and dropped sooner when what it was built from changes: the counts on an arrival, a zone
+ * change or a lapse; the boss and the chat on a write to their key through this ledger. Another
+ * process writing the same store is seen within the second.
+ */
+export class WorldMemo {
+  private second = Number.NaN
+  private advanced = Number.NaN
+  private counts: { online: number; zones: WorldSnapshot['zones'] } | null = null
+  private boss: { record: BossRecord | null } | null = null
+  private messages: ChatMessage[] | null = null
+  private readonly slices = new Map<number, ChatMessage[]>()
+
+  /** True on the first call in each second: the boss advance runs then, as it ran on every poll. */
+  advanceDue(now: number): boolean {
+    const second = Math.floor(now / 1000)
+    if (second === this.advanced) return false
+    this.advanced = second
+    return true
+  }
+
+  /** Drops every part when `now` is in another second than the one they were built in. */
+  roll(now: number): void {
+    const second = Math.floor(now / 1000)
+    if (second === this.second) return
+    this.second = second
+    this.counts = null
+    this.boss = null
+    this.dropChat()
+  }
+
+  presenceChanged(): void {
+    this.counts = null
+  }
+
+  /** The store's write hook. */
+  written(key: string): void {
+    if (key === BOSS_KEY) this.boss = null
+    if (key === CHAT_KEY) this.dropChat()
+  }
+
+  presenceCounts(presence: Presence): { online: number; zones: WorldSnapshot['zones'] } {
+    if (this.counts) return this.counts
+    const counts = new Map<number, number>()
+    for (const entry of presence.values()) {
+      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1)
+    }
+    this.counts = {
+      online: presence.size,
+      zones: [...counts.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([zone, count]) => ({ zone, count })),
+    }
+    return this.counts
+  }
+
+  async bossRecord(kv: KeyValue): Promise<BossRecord | null> {
+    this.boss ??= { record: await loadBoss(kv) }
+    return this.boss.record
+  }
+
+  async chatSince(kv: KeyValue, since: number): Promise<ChatMessage[]> {
+    const cached = this.slices.get(since)
+    if (cached) return cached
+    this.messages ??= (await loadChat(kv)).messages
+    const slice =
+      since <= 0 ? this.messages.slice(-CHAT_SERVE) : this.messages.filter((m) => m.id > since)
+    this.slices.set(since, slice)
+    return slice
+  }
+
+  private dropChat(): void {
+    this.messages = null
+    this.slices.clear()
+  }
+}
 
 export type WorldContext = {
   books: Books
   now: number
   flags: Record<string, boolean>
   presence: Presence
+  memo: WorldMemo
   /** Online means a heartbeat inside this many server-clock ms. */
   ttl: number
   speed: number
@@ -58,16 +138,23 @@ async function loadBoards(kv: KeyValue, now: number): Promise<StoredBoards> {
 // ---------------------------------------------------------------------------
 // Presence
 
-/** Drops entries past the TTL; what is left is online. */
-function prune(ctx: WorldContext): void {
+/** Drops entries past the TTL; what is left is online. True when one went. */
+function prune(ctx: WorldContext): boolean {
+  let dropped = false
   for (const [id, entry] of ctx.presence) {
-    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id)
+    if (!(ctx.now - entry.at < ctx.ttl)) {
+      ctx.presence.delete(id)
+      dropped = true
+    }
   }
+  return dropped
 }
 
 /**
  * The world poll: stamps the caller present (in memory) and answers the snapshot. It writes to the
  * store only to engage the caller with a live boss; with `engageCaller` off it writes nothing.
+ * The shared parts come from the memo, read after the stamp; `here`, the caller's boss view and
+ * the engage are the caller's own, every poll.
  */
 export async function world(
   ctx: WorldContext,
@@ -77,22 +164,19 @@ export async function world(
 ): Promise<WorldSnapshot> {
   const presenceOn = ctx.flags['presence.enabled'] !== false
   const id = record.account.accountId
-  prune(ctx)
+  const memo = ctx.memo
+  memo.roll(ctx.now)
+  if (prune(ctx)) memo.presenceChanged()
   if (presenceOn && isCurrent(record)) {
+    const before = ctx.presence.get(id)
     ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now })
+    if (before?.zone !== record.state.zone) memo.presenceChanged()
   }
   let online = 0
   let zones: WorldSnapshot['zones'] = []
   let here: string[] = []
   if (presenceOn) {
-    const counts = new Map<number, number>()
-    for (const entry of ctx.presence.values()) {
-      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1)
-    }
-    online = ctx.presence.size
-    zones = [...counts.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([zone, count]) => ({ zone, count }))
+    ;({ online, zones } = memo.presenceCounts(ctx.presence))
     const mine = ctx.presence.get(id)
     if (mine) {
       here = [...ctx.presence.entries()]
@@ -104,7 +188,7 @@ export async function world(
   }
   // The boss: an online, current account not engaged yet joins on its poll. With presence
   // off nobody is ever stamped, so the poll itself counts as being online.
-  const boss = await loadBoss(ctx.books.kv)
+  const boss = await memo.bossRecord(ctx.books.kv)
   if (
     engageCaller &&
     boss &&
@@ -119,10 +203,7 @@ export async function world(
     await ctx.books.kv.set(BOSS_KEY, boss)
   }
   let chat: ChatMessage[] = []
-  if (ctx.flags['chat.enabled'] !== false) {
-    const { messages } = await loadChat(ctx.books.kv)
-    chat = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since)
-  }
+  if (ctx.flags['chat.enabled'] !== false) chat = await memo.chatSince(ctx.books.kv, since)
   return {
     serverNow: ctx.now,
     speed: ctx.speed,
@@ -214,6 +295,16 @@ export async function leaderboards(ctx: WorldContext): Promise<Boards> {
 export async function isPlaying(books: Books, accountId: string): Promise<boolean> {
   const record = await books.load(accountId)
   return record !== null && isCurrent(record)
+}
+
+/** Takes an account's rows off both boards: an account delete. Writes only when it held one. */
+export async function dropFromBoards(kv: KeyValue, accountId: string): Promise<void> {
+  const boards = (await kv.get(BOARDS_KEY)) as StoredBoards | undefined
+  if (!boards) return
+  const zone = boards.zone.filter((r) => r.accountId !== accountId)
+  const { [accountId]: dropped, ...damage } = boards.week.damage
+  if (zone.length === boards.zone.length && !dropped) return
+  await kv.set(BOARDS_KEY, { zone, week: { ...boards.week, damage } } satisfies StoredBoards)
 }
 
 /**

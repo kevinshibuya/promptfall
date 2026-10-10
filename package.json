@@ -14,6 +14,7 @@
     "test": "pnpm -r --filter './packages/*' --filter './servers/*' test && pnpm test:scripts",
     "vendor": "node scripts/vendor.mjs",
     "vendor:check": "node scripts/vendor.mjs && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/vendor plugins/promptfall/hooks/version.ts)\"",
+    "build:server": "node scripts/build-server.mjs",
     "fake": "pnpm --filter @promptfall/fake-server start",
     "sprites": "tsx scripts/sprites.ts",
     "sprites:check": "pnpm sprites && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/sprites/generated.ts)\"",

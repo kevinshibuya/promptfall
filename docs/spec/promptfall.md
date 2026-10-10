@@ -77,7 +77,7 @@ Checked against Claude Code v2.1.287's mods API.
 - Network: `$.http.fetch(url, init)` only, resolves after the whole body. No
   WebSocket, no server-sent events, no abort signal and no timeout field. The plugin
   gives every fetch 15 seconds and treats a longer one as an outage, so a held
-  long-poll needs its own fetch path and its own failure rule (phase 5).
+  long-poll needs its own fetch path and its own failure rule (none yet: §8).
 - Persistence: `$.store` (a JSON file under the user's Claude Code config
   directory, shared by every session on the machine, 4 MiB total, no atomic
   compare-and-set) and `$.state` (per session, survives a hot reload, read while
@@ -239,11 +239,11 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - World data (presence, the live world boss, the chat tail) is never sim state. A
   session reads it with the world poll, `GET /v1/world`, every 15 seconds on the
   flush cadence and every 5 seconds while a world boss is live or the Chat tab is
-  open. The poll is the heartbeat. Nothing is pushed until the phase 5 stream.
+  open. The poll is the heartbeat. Nothing is pushed: there is no stream (§8).
 - Presence: an account is online while its last heartbeat is inside a 45 second
   TTL. Its zone is the committed state's zone on the server, never a client claim.
   Presence is keyed by account, so a secondary session polling adds nothing. It
-  lives in the ledger's memory on the fakes and in Redis in phase 5; a restart
+  lives in the ledger's memory on every host, the real server too; a restart
   loses it and the next polls rebuild it. The World tab shows the count online
   and the names in your zone; the Leaderboards pane shows the count per zone.
 - Leaderboards: highest zone reached (all time) and world boss damage (weekly,
@@ -274,8 +274,8 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Flags: one per feature, `chat.enabled`, `worldboss.enabled`, `presence.enabled`,
   `leaderboards.enabled`. The in-process fake runs with chat and the world boss
   off, said in place like a closed market.
-- Moderation in phase 3: name and chat blocklists and the chat flag. Mute and ban
-  arrive in phase 5 with the admin CLI that issues them.
+- Moderation in phase 3: name and chat blocklists and the chat flag. Phase 5
+  adds the ban and flag flips over the admin route (§8); there is no mute.
 
 ## 7. Simulation and authority
 
@@ -340,35 +340,86 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   retries back off from 1 to 30 seconds with jitter; the first success flushes
   the buffer and clears the banner. A thrown submit is an outage, never a
   permanent pause.
-- One primary session per account ticks. Phase 1 elects it with a lease in the
-  local store; phase 5 with a server lease. Other sessions show "playing in
-  another session" and render read-only.
+- One primary session per account ticks, elected with a lease in the local
+  store, so one machine plays an account at a time; the server lease is out
+  until a number asks for it (§8). Other sessions show "playing in another
+  session" and render read-only.
 - A paused primary refuses trades, farm and the sandbox verbs with a reason of
   its own, shown as "Promptfall is paused", never as "playing in another
   session".
 
 ## 8. Server (phase 5)
 
-- NestJS API, Postgres via Drizzle, Redis for presence, pub/sub, flag
-  invalidation and queues, a worker process for world bosses, listing expiry and,
-  when needed, batch replay off the request path. The replay function is pure
-  from day one so moving it to the queue is configuration.
-- REST with Zod schemas shared from `@promptfall/protocol`, validated on both
-  ends.
-- Event stream: long-poll, held up to 25 seconds, cursor based over a short
-  per-account log in Redis Streams, so a reconnect never loses an event.
-- Accounts: anonymous device accounts minted on first launch; GitHub device
-  flow to link, which unlocks trading and chat. Tokens are opaque random values
-  stored hashed, cached briefly in Redis, revocable.
+The real server is the HTTP host of §9 on a SQLite store (ADR 0012,
+`the-real-server-is-the-ledger-host-on-sqlite`): the same ledger, the same
+routes and the same contract suite as the HTTP fake, started with production
+flags. No second server program, no Postgres, no Redis, no worker.
+
+- Store: a `KeyValue` over Node's built-in `node:sqlite`, one table of key and
+  JSON value, WAL on, chosen with `--store sqlite:<path>`. `get`, `set` and
+  `delete` work on a write buffer that reads see first; the ledger's `flush`
+  commits the buffer as one transaction, so one ledger operation is one durable
+  write and a crash never leaves half a trade on disk. The store carries the
+  clock snapshot the file store carries.
+- Process: `--host` binds the address (default `127.0.0.1`; the container
+  passes `0.0.0.0`), `--speed 1` runs the real clock, `--link github` runs
+  GitHub's device flow with the client id from `PROMPTFALL_GITHUB_CLIENT_ID`
+  (§9), and `--bots <n>` runs the bots (6 for the soft wave, 0 at the public
+  listing). Presence, the chat and boss memos and the mint cap live in process
+  memory; a restart loses them and the next polls rebuild them.
+- World poll: the snapshot's shared parts (presence counts and zones, the chat
+  slice, the boss record) are memoised inside the ledger for one server-clock
+  second and dropped sooner on a presence change or a write to their key;
+  `here`, the caller's boss view and the engage write stay per poll, and every
+  poll still stamps its heartbeat. The boss advance runs on the first poll of
+  each second.
+- Accounts: anonymous device accounts minted on first launch, one opaque
+  random device token each. Linking runs GitHub's device flow and unlocks
+  trading and chat; the server keeps the GitHub login and drops the access
+  token. Bootstrap answers the bootstrap or `{refusal, message}` with `refusal`
+  `rate_limited` or `banned`. The HTTP layer caps minting (a bootstrap with a
+  null or unknown token) at five an hour per client address, the last hop of
+  `x-forwarded-for` behind Caddy; a known token always passes and the ledger
+  stays address-blind.
 - Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`,
-  `presence.enabled`, `leaderboards.enabled`, `maintenance`, `minClientVersion`,
-  in Postgres, cached in process per instance, invalidated through Redis pub/sub,
-  sent at startup and pushed on change.
-- Admin: a CLI in the monorepo over authenticated admin endpoints. Actions:
-  flip a flag, mute, ban, revoke an item. Every action lands in an audit table.
-- Retention: raw event batches 30 days, state snapshots per batch head kept.
-- Infra: Docker Compose locally (Postgres, Redis, API, worker). Oracle VPS
-  later, same images.
+  `presence.enabled`, `leaderboards.enabled`, `maintenance`. The start flags
+  come from `--flag`; a flag set over the admin route is stored under
+  `pf:flags`, loaded at start over the start flags, and in force from the next
+  call. The version floor is not a flag: the bootstrap's config carries the
+  protocol's `MIN_CLIENT_VERSION`, the launch version 0.3.0, and a batch from
+  an older plugin answers `version_gate`.
+- Admin: with `PROMPTFALL_ADMIN_TOKEN` in the environment, two routes take it
+  as a bearer. `POST /v1/admin/flags` sets flags (`sandbox.enabled` is
+  refused); `POST /v1/admin/ban` stores a record-only `banned: {reason, at}`,
+  after which every authenticated call of that account answers `banned` with
+  the reason, and the plugin pauses with it. Each admin call writes one log
+  line with its time, target and outcome, never the token. Without the token
+  the host has no admin routes. No mute, no item revoke, no unban, no audit
+  table, no admin CLI.
+- Account delete: `DELETE /v1/account` closes the caller's listings and buy
+  orders with nothing returned or refunded, takes it off both boards and
+  presence, and deletes its record and token. Nothing else is settled: a
+  counterparty, the boss record and the chat history are untouched.
+- Logs: one access line per request on stdout (method, path, status,
+  milliseconds; no header, address, token or body), the admin lines and the
+  backup lines. `docker compose logs` is the log.
+- Backups: with `--backup-dir`, the host writes a consistent copy of the
+  SQLite file with the online backup API daily at 03:00 UTC, on SIGUSR1 and on
+  SIGTERM, keeping the newest seven. `deploy/backup.sh`, from the box's cron,
+  asks for a copy over SIGUSR1 and ships it gzipped to Cloudflare R2, thirty
+  days kept; the restore is in `deploy/README.md`.
+- Infra: one image, Node LTS and the server bundled to one file
+  (`pnpm build:server`), running as a non-root user, built by CI for arm64 and
+  amd64 and pushed to GHCR on a `v*` tag. On the box it is the compose project
+  `~/apps/promptfall`: one service `promptfall` on 7777, `mem_limit` 512m,
+  `restart: unless-stopped`, the `web` network, a healthcheck on `/v1/health`,
+  the store and the backups on named volumes. Caddy's site block for
+  `promptfall.kevinshibuya.com` holds TLS and proxies to the container;
+  nothing listens on the host. `deploy/deploy.sh` and `rollback.sh` run from
+  the laptop over ssh; `deploy/smoke.sh` checks the image in CI and the public
+  server after a deploy.
+- Out until a measured number asks for it: the long-poll event stream, a
+  worker, Redis, Postgres and the server lease.
 
 ## 9. Fake servers and the contract suite
 
@@ -377,36 +428,53 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   store, with expiries enforced on every market call and swept by the host. A
   read can leave expiries and the world boss alone: a secondary session's reads
   of the in-process store do, so only the primary writes it.
-  Three hosts run it: the
-  in-process fake, the HTTP fake and the real server. A host adds transport,
-  persistence and, for the HTTP fake, bots; it never adds rules.
+  Two programs host it: the in-process fake inside the plugin, and the HTTP
+  host in `servers/fake`, which is the HTTP fake on a laptop and, with the
+  production flags, the real server on the box (§8). A host adds transport,
+  persistence and, for the HTTP host, bots; it never adds rules.
 - Phase 1: an in-process fake inside the plugin, no infrastructure, persisting
-  through the local store. It replays batches like the real server will, so the
-  client already sends inputs and reconciles hashes. It stays the default
-  server: a plugin installed with nothing running still plays.
+  through the local store. It replays batches like the real server does, so the
+  client already sends inputs and reconciles hashes. It is the `local` server:
+  `/promptfall server local` and the sandbox choose it, and it plays with
+  nothing running. It is not the default: a fresh install, with no server
+  setting, plays on the public server, whose URL is a constant in the plugin.
 - Phase 2 on: the HTTP fake at `servers/fake`, a separate local Node process in
   the monorepo on `node:http`, speaking the real HTTP protocol with the shared
-  schemas, persisting a JSON snapshot after every mutation. Flags: `--port`,
-  `--seed`, `--speed`, `--player-name`, `--data`. `--speed` scales the bots'
+  schemas, persisting a JSON snapshot after every mutation, or a SQLite file
+  with `--store sqlite:<path>` (§8). Flags: `--host`, `--port`, `--seed`,
+  `--speed`, `--player-name`, `--data`, `--store`, `--bots`, `--backup-dir`,
+  `--boss-in`. `--speed` scales the bots'
   cadence and the ledger's clock together, so cooldowns and expiries can be
-  watched. `--flag <name>=<value>`, repeatable, sets a flag for the run; a flag
-  change is a restart. The GitHub link flow is approved on the first poll with
-  `--player-name` as the login, 1 to 64 characters as the wire takes a login:
-  anything else exits at startup with the reason, and the ledger's mint holds
-  names to the same bound.
-- Bots: 12 seeded accounts with names from a fixed list, inventories and
-  rosters rolled from the sim's own loot tables, a gold stipend per tick so
-  they never run dry. From phase 3 a bot is an HTTP client of the fake's own
-  port: each tick it submits a batch of ticks at an idle player's pace, then
-  lists, buys, fills a buy order, places or cancels an order, or posts a chat
-  line from a fixed list, through the same routes as a player. Minting and the
-  stipend are the only in-process calls. Bots advance through zones, show in
-  presence, fill the leaderboards and fight the world boss through their
-  batches, never a back door. Their numbers live in one config file and are
-  tuning, not contract. The bots are the load generator for the real server
-  later.
-- `/promptfall server <url>` points a session at an HTTP server and
-  `/promptfall server local` back at the in-process fake. One device token per
+  watched. `--flag <name>=<value>`, repeatable, sets a flag at start; after
+  that a flag changes over the admin route (§8). `--link github|fake` picks who approves a link. Under
+  `fake`, the default, the first poll approves with `--player-name` as the
+  login, 1 to 64 characters as the wire takes a login: anything else exits at
+  startup with the reason, and the ledger's mint holds names to the same
+  bound. Under `github` the link start answers GitHub's device flow (its user
+  code, verification URL and poll interval) for the OAuth app whose client id
+  is in `PROMPTFALL_GITHUB_CLIENT_ID`; the device code stays in the link
+  record, a poll exchanges it for a token, reads the login and drops the
+  token, so the ledger stores the login only. The GitHub round trips run
+  outside the ledger's mutex. A decline, an expired code or a GitHub call
+  that does not answer within 10 s ends the link unlinked with a message
+  (`{status: 'ended', reason, message}`); a `github` host without a client
+  id answers every link start `{refusal: 'link_unavailable', message}`.
+- Bots: `--bots <n>` seeded accounts (12 by default) with names from a fixed
+  list prefixed `[bot] `, inventories and rosters rolled from the sim's own
+  loot tables, a gold stipend per tick so they never run dry. From phase 3 a bot is an HTTP client
+  of the fake's own port: each tick it submits a batch of ticks at an idle
+  player's pace, then lists, buys, fills a buy order, places or cancels an
+  order, or posts a chat line from a fixed list, through the same routes as a
+  player. Minting and the stipend are the only in-process calls. Bots advance
+  through zones, show in presence and fight the world boss through their
+  batches, never a back door. A bot is minted with a mark on its record (never
+  on the wire) and the boards skip marked accounts, so a bot holds no rank.
+  Their numbers live in one config file and are tuning, not contract. On the
+  real server they stock the soft wave's market (6), and the public listing
+  runs none; on a laptop they are the load generator.
+- `/promptfall server <url>` points a session at an HTTP server,
+  `/promptfall server local` at the in-process fake, and no setting at all
+  means the public server. One device token per
   server; switching re-bootstraps and adopts that server's state. Nothing moves
   between servers, ever.
 - The sandbox (ADR `sandbox-grants-are-server-events`, "The sandbox hands things
@@ -442,15 +510,16 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   accepts `--flag sandbox.enabled=true` by name and has no sandbox route, so
   nothing over HTTP can author a grant. The real server never sets the flag and
   refuses every sandbox call.
-- Until the event stream exists (phase 5), server events ride on responses: the
+- With no event stream (§8 leaves it out), server events ride on responses: the
   batch ack and the market responses carry what is pending past the client's
   cursor, and the dialog refreshes when opened. The cursor is explicit in the
   protocol so the stream is an addition, not a change. World data (§6) is never a
   server event; it is read with the world poll from phase 3 on.
 - `HttpClient` in `@promptfall/protocol` implements `ServerClient` over an
   injected fetch: `$.http.fetch` in the plugin, the global in tests.
-- One contract test suite in `@promptfall/protocol` runs against the in-process
-  fake, the HTTP fake and the real API. Trade cases run two accounts against
+- One contract test suite in `@promptfall/protocol` runs over three wirings:
+  the ledger in process, the HTTP host over the JSON file, and the HTTP host
+  over a SQLite file, which is the real server's suite. Trade cases run two accounts against
   one host. World cases drive the host's clock: presence stamps and expires,
   chat gates and limits, the boss spawns on the grid, a committed batch in boss
   mode adds contribution, the killing commit authors the rewards, flags off
@@ -785,8 +854,14 @@ brim, no white mage with red triangle trim, no archer in a green pointed cap).
    output-only `hit` effect, cues, the motion toggle, item icons) on concept
    sprites; the art second (the style sheet gate, then every sprite zone by
    zone, and the cue clips).
-5. Real server: accounts, authority, flags, admin CLI, Docker Compose, contract
-   suite green against it.
+5. The soft launch (ADR 0012): the HTTP host becomes the real server on a
+   SQLite store, with GitHub's device flow, bots marked and off the boards,
+   admin routes for flags and bans, the mint cap per address and the account
+   delete; one image built by CI, deployed to the shared box behind Caddy with
+   nightly backups to R2; the contract suite green over SQLite. The plugin
+   plays on the public server by default and `local` offline, at the launch
+   version 0.3.0. A soft wave of invited players first, then the public
+   listing.
 
 Each phase gets its own implementation plan when its turn comes.
 
@@ -805,9 +880,16 @@ Each phase gets its own implementation plan when its turn comes.
   (`content:check`).
 - Determinism property test on the sim runs in CI on every change to the sim
   package.
+- The server: tsup bundles the host with the workspace packages into one file
+  (`pnpm build:server`) for the image. CI validates `deploy/`'s compose file and
+  runs `deploy/smoke.sh` (build the image, bring it up, expect `/v1/health`) on
+  every change; the `release` workflow builds the image for arm64 and amd64 and
+  pushes it to GHCR on a `v*` tag. Deploys, rollbacks and backups are scripts
+  in `deploy/`, with the secrets only on the box.
 - Verification bar per phase: typecheck, lint, package tests, plugin tests on
   terminal and desktop surfaces, `claude plugin validate`, and a manual pass in
   a live session.
 - Branch flow: feature branch, PR into `ai-staging`, later `main`. Private
-  during development, MIT at the server release. The monorepo is the plugin
+  during development; public under MIT (`LICENSE`) from the soft wave, the
+  third-party notices kept in the plugin's `NOTICE.md`. The monorepo is the plugin
   marketplace via a root `.claude-plugin/marketplace.json`.

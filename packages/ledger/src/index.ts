@@ -15,13 +15,17 @@ export {
 } from './goods'
 export { nextLedgerId } from './ids'
 export {
+  approveAs,
   Ledger,
   type LedgerFlag,
   type LedgerHost,
   type LedgerOptions,
   LINK_INTERVAL_MS,
   LINK_URL,
+  type LinkApprover,
   PLAYER_NAME_MAX,
   type ReadOptions,
   type SandboxOutcome,
+  SETTABLE_FLAGS,
+  type SettableFlag,
 } from './ledger'
