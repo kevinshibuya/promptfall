@@ -3,12 +3,12 @@ import { expect, mock } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
+import { bandKey } from './stage/loop'
 import {
-  DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
-  DESKTOP_ROW_PX,
   PROBE_DELAY_MS,
   SVG_INTERACTIVE,
+  SVG_MAX_CHARS,
 } from './stage/tuning'
 import { SETTINGS_DEFAULT } from './state'
 import { test } from './testing'
@@ -16,7 +16,7 @@ import { shownBoss, worldRows } from './ui/band'
 import { Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
-import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS } from './windows/tuning'
+import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS, STRIP_SVG_MAX_CHARS } from './windows/tuning'
 import { WORLD_STALE_MS } from './world'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -140,8 +140,16 @@ function cellsOf(node: Node | undefined): { text: string[]; fg: number[][] } {
   return { text, fg }
 }
 
-/** What the strip says: its Raster's text, else its pictures' alts. */
+/** The Party tab's band Raster (#61): the band row's one Raster, the stage and strip inside it. */
+async function bandRaster(ui: Finder): Promise<Node | undefined> {
+  const row = await ui.find({ key: 'row-band' })
+  return ((row?.children ?? []) as Node[]).find((c) => c.type === 'Raster')
+}
+
+/** What the strip says: its Raster's text, the band Raster's strip rows, else its pictures' alts. */
 async function stripText(ui: Finder): Promise<string> {
+  const band = await bandRaster(ui)
+  if (band) return cellsOf(band).text.slice(-STRIP_ROWS).join('\n')
   const strip = await ui.find({ key: 'strip' })
   if (strip?.type === 'Raster') return cellsOf(strip).text.join('\n')
   // The desktop's Svgs keep no key: the strip's is the strip row's first child.
@@ -164,6 +172,12 @@ async function svgs(ui: Finder): Promise<{ stage: Node | undefined; strip: Node 
 /** The band's height in terminal rows: the stage's rows and the strip's, or 6 for compact. */
 async function height(ui: Finder) {
   if (await ui.find({ key: 'compact-stage' })) return 6
+  // The band as one picture (#59, #61): the band row's one Image or Raster.
+  const row = await ui.find({ key: 'row-band' })
+  const band = ((row?.children ?? []) as Node[]).find(
+    (c) => c.type === 'Image' || c.type === 'Raster',
+  )
+  if (band) return Number(band.props.rows)
   const count = async (key: string) => {
     const n = await ui.find({ key })
     if (!n) return 0
@@ -418,7 +432,7 @@ test('the World tab shows who is here and the last chat line, and dims a stale s
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(140, 20) })
   await ui.press({ key: 'hot-w' })
   const presence = async () => {
-    const { text, fg } = cellsOf(await ui.find({ key: 'strip' }))
+    const { text, fg } = cellsOf(await bandRaster(ui))
     const y = text.findIndex((t) => t.includes('13 online'))
     const x = text[y]?.indexOf('13 online') ?? -1
     return { text, colour: fg[y]?.[x] }
@@ -574,17 +588,22 @@ test('in boss mode the enemy window shows the world boss with its bar and time l
 // ---------------------------------------------------------------------------
 // The stage and the strip
 
-test('the full layout: a 120 × 17 stage Raster and a 120 × 5 strip Raster, 22 rows', async ($, on) => {
+/** The rows the band Raster's stage takes: down to the strip's top row, where the line meets it. */
+async function stageRowsOf(ui: Finder): Promise<number> {
+  return cellsOf(await bandRaster(ui)).text.findIndex((row) => row.startsWith('├'))
+}
+
+test('the full layout: one 120 × 22 band Raster, the 17-row stage above the 5-row strip', async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, RASTER)
   shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  const stage = await ui.find({ key: 'stage' })
-  expect(stage?.type).toBe('Raster')
-  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 17])
-  const strip = await ui.find({ key: 'strip' })
-  expect([strip?.type, strip?.props.columns, strip?.props.rows]).toEqual(['Raster', 120, 5])
+  const raster = await bandRaster(ui)
+  expect([raster?.props.columns, raster?.props.rows]).toEqual([120, 22])
+  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  expect(await ui.find({ key: 'strip' })).toBeUndefined()
+  expect(await stageRowsOf(ui)).toBe(17)
   expect(await height(ui)).toBe(22)
   await ui.unmount()
 })
@@ -599,8 +618,8 @@ for (const [name, view, rowsOf] of [
     shown.view = view()
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-    const stage = await ui.find({ key: 'stage' })
-    expect([stage?.props.columns, stage?.props.rows]).toEqual([120, rowsOf])
+    expect((await bandRaster(ui))?.props.columns).toBe(120)
+    expect(await stageRowsOf(ui)).toBe(rowsOf)
     expect(await height(ui)).toBe(rowsOf + STRIP_ROWS)
     await ui.unmount()
   })
@@ -614,8 +633,8 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   // 16 rows: 11 for the stage above the 5-row strip, the sky cropped (ADR 0010).
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
   expect(await height(ui)).toBe(16)
-  const stage = await ui.find({ key: 'stage' })
-  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 11])
+  expect((await bandRaster(ui))?.props.columns).toBe(120)
+  expect(await stageRowsOf(ui)).toBe(11)
   await ui.unmount()
   // A boss needs all 17: the Raster cannot scale, so the same band is compact.
   shown.view = boss()
@@ -626,10 +645,13 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   // 12 rows: 7 left, under the actors' 8: compact.
   const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
   expect(await height(short)).toBe(6)
-  const compact = await short.find({ key: 'stage' })
-  expect([compact?.props.columns, compact?.props.rows]).toEqual([52, 4])
-  const strip = await short.find({ key: 'strip' })
-  expect([strip?.props.columns, strip?.props.rows]).toEqual([120 - 52, 6])
+  // Compact is the band Raster too: the 52-column stage beside the window, inside one line.
+  const compact = await bandRaster(short)
+  expect([compact?.props.columns, compact?.props.rows]).toEqual([120, 6])
+  expect(await short.find({ key: 'stage' })).toBeUndefined()
+  expect(await short.find({ key: 'strip' })).toBeUndefined()
+  const top = cellsOf(compact).text[0] ?? ''
+  expect([top[0], top[52], top[119]]).toEqual(['╭', '┬', '╮'])
   await short.unmount()
 })
 
@@ -660,49 +682,81 @@ test('110 columns is compact with the front enemy in the party window; 99 or 5 r
   }
 })
 
-test('the image renderer draws the stage Image and one Image per window, each with an alt', async ($, on) => {
-  const { data } = harness(on)
-  settings(data, { renderer: 'image' })
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  const stage = await ui.find({ key: 'stage-120x17' })
-  expect(stage?.type).toBe('Image')
-  expect([stage?.props.columns, stage?.props.rows]).toEqual([120, 17])
-  expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
-  const windows = ((await ui.find({ key: 'strip-windows' }))?.children ?? []) as Node[]
-  expect(windows.map((w) => [w.type, w.props.columns, w.props.rows])).toEqual([
-    ['Image', 25, 5],
-    ['Image', 40, 5],
-    ['Image', 42, 5],
-    ['Image', 13, 5],
-  ])
-  for (const w of windows) expect(String(w.props.alt).length).toBeGreaterThan(0)
-  await ui.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'the image renderer draws the full band as one Image keyed by its cells, and no window Images',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    const { data } = harness(on)
+    settings(data, { renderer: 'image' })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
+    // The 17-row stage over the 5-row strip: 22 rows, one picture.
+    const picture = await ui.find({ key: 'band-120x22' })
+    expect(picture?.type).toBe('Image')
+    expect([picture?.props.columns, picture?.props.rows]).toEqual([120, 22])
+    expect(String(picture?.props.alt)).toMatch(/^Zone 1/)
+    expect(await ui.find({ key: 'stage-120x17' })).toBeUndefined()
+    expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
+    // Beside it only the zero-width hotkey box.
+    const [row, ...others] = await rows(ui)
+    expect(others).toHaveLength(0)
+    expect(((row as Node).children as Node[]).map((c) => c.props.key ?? c.type)).toEqual([
+      'band-120x22',
+      'hotkeys',
+    ])
+    await ui.unmount()
+  },
+)
 
-test('a short band keys the image stage by the rows it shows, and the loop blits to it', async ($, on) => {
-  // Ghostty kept a keyed Image at its first placement's height: each size is its own key. A boss
-  // no longer grows the stage (ADR 0010); the band's rows change its size instead. With a boss
-  // the 15 rows left are under its 17, so the Image zooms the whole scene out into them.
-  const { data, shown, clock, blits } = harness(on)
-  settings(data, { renderer: 'image' })
-  shown.view = boss()
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
-  expect((await ui.find({ key: 'stage-120x17' }))?.props.rows).toBe(17)
-  await clock.advance(1_000)
-  await ui.unmount()
-  // 20 rows: 15 for the stage above the strip, the sky cropped.
-  const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  expect(await short.find({ key: 'stage-120x17' })).toBeUndefined()
-  expect((await short.find({ key: 'stage-120x15' }))?.props.rows).toBe(15)
-  const before = blits.length
-  await clock.advance(1_000)
-  const stageBlits = blits.slice(before).filter((b) => b.key.startsWith('stage'))
-  expect(stageBlits.length).toBeGreaterThan(0)
-  for (const b of stageBlits) expect(b).toMatchObject({ key: 'stage-120x15', rows: 15 })
-  await short.unmount()
-})
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'a short band keys the image band by the rows left, and the loop blits to it',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    // Ghostty kept a keyed Image at its first placement's height: each size is its own key. A boss
+    // no longer grows the stage (ADR 0010); the band's rows change its size instead. With a boss
+    // the 15 rows left are under its 17, so the Image zooms the whole scene out into them.
+    const { data, shown, clock, blits } = harness(on)
+    settings(data, { renderer: 'image' })
+    shown.view = boss()
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
+    expect((await ui.find({ key: 'band-120x22' }))?.props.rows).toBe(22)
+    await clock.advance(1_000)
+    await ui.unmount()
+    // 20 rows: the zoomed-out stage in the 15 above the strip.
+    const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    expect(await short.find({ key: 'band-120x22' })).toBeUndefined()
+    expect((await short.find({ key: 'band-120x20' }))?.props).toMatchObject({
+      columns: 120,
+      rows: 20,
+    })
+    const before = blits.length
+    await clock.advance(1_000)
+    const later = blits.slice(before)
+    expect(later.length).toBeGreaterThan(0)
+    for (const b of later) expect(b).toMatchObject({ key: 'band-120x20', columns: 120, rows: 20 })
+    await short.unmount()
+  },
+)
+
+// The whole band's picture, composed and encoded at full size: more than the default budget.
+test(
+  'above 255 columns the image band is 255 wide and centred',
+  { timeoutMs: 15_000 },
+  async ($, on) => {
+    const { data, clock, blits } = harness(on)
+    settings(data, { renderer: 'image' })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(300, 30) })
+    expect((await ui.find({ key: 'band-255x22' }))?.props).toMatchObject({ columns: 255, rows: 22 })
+    expect((await ui.find({ key: 'row-band' }))?.props.justifyContent).toBe('center')
+    await clock.advance(1_000)
+    for (const b of blits) expect(b).toMatchObject({ key: 'band-255x22', columns: 255, rows: 22 })
+    await ui.unmount()
+  },
+)
 
 test('while the renderer is unknown the stage and strip rows are empty and the strip row probes', async ($, on) => {
   harness(on)
@@ -773,6 +827,37 @@ test('the desktop draws the stage Svg and the strip Svg, each with its alt', asy
   await ui.unmount()
 })
 
+test('the Svg band draws the shell behind the stage and the strip, and the line around both', async ($, on) => {
+  harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+  const { stage, strip } = await svgs(ui)
+  const s = String(stage?.props.source)
+  const t = String(strip?.props.source)
+  // Both on the windows' grid at the band's 120 columns, 8 by 16 a cell, drawn at its width.
+  expect(s).toMatch(/^<svg [^>]*viewBox="0 0 960 272" width="1920" height="544"/)
+  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
+  // The shell first, under everything; the 1.5x stage scaled onto the grid over it.
+  expect(s).toContain(
+    '</defs><rect width="960" height="272" fill="#303028"/><g transform="translate(0 0) scale(5.3333)">',
+  )
+  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
+  // The stage Svg ends on the line's top and sides, the shell outside them over its outermost
+  // pixels; the strip Svg on its sides and bottom, over the outer windows' own lines. Stacked,
+  // the sides meet: 2 pixels wide, 2 in from each edge, the corners cut.
+  expect(s).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V272H0ZM3 2H957V3H958V272H2V3H3Z"\/><path fill="#f0f0e8" d="M3 2H957V3H958V272H956V4H4V272H2V3H3Z"\/><\/svg>$/,
+  )
+  expect(t).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM2 0H958V69H957V70H3V69H2Z"\/><path fill="#f0f0e8" d="M2 0H4V68H956V0H958V69H957V70H3V69H2Z"\/><\/svg>$/,
+  )
+  // The SMIL stays in each: the actors' idle clock runs inside the scaled stage.
+  expect(s).toMatch(/scale\(5\.3333\)">.*repeatCount="indefinite".*<\/g><path fill="#303028"/)
+  expect(s.length).toBeLessThan(SVG_MAX_CHARS)
+  expect(t.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
+  await ui.unmount()
+})
+
 for (const [columns, art] of [
   [95, 116],
   [60, 116],
@@ -784,7 +869,9 @@ for (const [columns, art] of [
     const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(columns, 20) })
     const { stage } = await svgs(ui)
     const source = String(stage?.props.source)
-    expect(source).toContain(`viewBox="0 0 ${art * 1.5} 51"`)
+    // On the windows' grid, 8 pixels a column; the 1.5x art scaled on at 16/3 an art pixel.
+    expect(source).toContain(`viewBox="0 0 ${art * CELL_W} 272"`)
+    expect(source).toContain('<g transform="translate(0 0) scale(5.3333)">')
     expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
     // No width prop: the markup is wider than the band and the desktop scales it down to fit.
     expect(stage?.props.width).toBeUndefined()
@@ -799,13 +886,13 @@ test('the desktop draws the 17-row stage for a zone boss, never the compact one 
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 30) })
   const { stage, strip } = await svgs(ui)
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
+  expect(String(stage?.props.source)).toContain('viewBox="0 0 928 272"')
   expect(await ui.find({ key: 'compact-stage' })).toBeUndefined()
   expect(String(strip?.props.alt)).toContain('Boss')
   await ui.unmount()
 })
 
-test('Loot and World are the strip alone: 5 rows, no stage; the loop blits the strip there', async ($, on) => {
+test('Loot and World are the strip alone on the shell: 5 rows, no stage; the loop blits the band there', async ($, on) => {
   const { data, blits, clock } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -815,12 +902,12 @@ test('Loot and World are the strip alone: 5 rows, no stage; the loop blits the s
     expect(await ui.find({ key: 'stage' })).toBeUndefined()
     expect(await height(ui)).toBe(5)
   }
-  // Ticks keep changing the party window: the strip blits, the stage never does.
+  // Ticks keep changing the party window: the band, the strip alone, blits; the stage never does.
   const before = blits.length
   await clock.advance(20_000)
   const later = blits.slice(before)
-  expect(later.some((b) => b.key === 'strip')).toBe(true)
-  expect(later.some((b) => b.key === 'stage')).toBe(false)
+  expect(later.some((b) => b.key === bandKey({ columns: 120, rows: 5 }))).toBe(true)
+  expect(later.some((b) => b.key === 'stage' || b.key === 'strip')).toBe(false)
   await ui.unmount()
 })
 
@@ -833,12 +920,20 @@ test('on the desktop the World tab draws the strip Svg alone, its hotkeys hidden
   const { strip } = await svgs(ui)
   expect(strip?.type).toBe('Svg')
   expect(String(strip?.props.alt)).toContain('World tab')
+  // The strip is the whole playfield: the shell under it, the line all round, 2 pixels in from
+  // each side and over the windows' top and bottom lines.
+  const t = String(strip?.props.source)
+  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
+  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
+  expect(t).toMatch(
+    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM3 10H957V11H958V69H957V70H3V69H2V11H3Z"\/><path fill="#f0f0e8" fill-rule="evenodd" d="M3 10H957V11H958V69H957V70H3V69H2V11H3ZM4 12V68H956V12Z"\/><\/svg>$/,
+  )
   expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
   expect(await ui.find({ key: 'hotkeys' })).toBeDefined()
   await ui.unmount()
 })
 
-test('an action blits the stage at the event rate', async ($, on) => {
+test('an action blits the band at the event rate', async ($, on) => {
   const { data, blits, clock, states } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -851,8 +946,10 @@ test('an action blits the stage at the event rate', async ($, on) => {
   for (let i = 0; i < 60 && busiest < 10; i++) {
     const before = blits.length
     await clock.advance(1_000)
-    const second = blits.slice(before).filter((b) => b.key === 'stage')
-    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key: 'stage' })
+    // The Raster band (#61): the stage loop blits the one band picture, 120 × 20.
+    const key = bandKey({ columns: 120, rows: 20 })
+    const second = blits.slice(before).filter((b) => b.key === key)
+    for (const b of second) expect(b).toMatchObject({ requestId: 'band-test', key, rows: 20 })
     busiest = Math.max(busiest, second.length)
   }
   expect(busiest).toBeGreaterThanOrEqual(10)
@@ -909,24 +1006,28 @@ test('on the desktop the stage sits in a column, so its frame takes the band wid
   await ui.unmount()
 })
 
-test('on a short desktop band the whole stage scales down to the rows the strip leaves; a tall one shows it whole', async ($, on) => {
+test('on a short desktop band the whole stage scales down to the rows the strip leaves, centred on the shell; a tall one shows it whole', async ($, on) => {
   const { shown } = harness(on)
   shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
-  const { stage } = await svgs(ui)
-  // 12 rows of 19 points, less the strip at the band's width (no hotkey row on the desktop).
-  const stripPx = (95 * DESKTOP_COLUMN_PX * STRIP_ROWS * CELL_H) / (116 * CELL_W)
-  const cap = (12 - Math.ceil(stripPx / DESKTOP_ROW_PX)) * DESKTOP_ROW_PX
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 174 51"')
-  expect(stage?.props.height).toBe(Math.round(cap))
-  expect(stage?.props.width).toBe(Math.floor((cap * 116) / 34))
+  const { stage, strip } = await svgs(ui)
+  // 12 rows of 19 points less the strip's 4 at the band's width: 152 points for a stage that
+  // would take 222.8, so it draws at 0.68 of its size. The Svg keeps the band's width: 760
+  // points, its markup 1520 wide and 304 tall, so 152 drawn; the 928 × 185.6 grid around it.
+  for (const v of [stage?.props.width, stage?.props.height]) expect(v).toBeUndefined()
+  const source = String(stage?.props.source)
+  expect(source).toContain('viewBox="0 0 928 185.6" width="1520" height="304"')
+  // The 174 × 51 art at 3.6392 a pixel is 633.2 wide: 147.39 of shell each side, inside the line.
+  expect(source).toContain('<g transform="translate(147.39 0) scale(3.6392)">')
+  expect(source).toMatch(/d="M3 2H925V3H926V185.6H924V4H4V185.6H2V3H3Z"\/><\/svg>$/)
+  // The strip keeps the band's width and its rows.
+  expect(String(strip?.props.source)).toMatch(/viewBox="0 0 928 80" width="1520"/)
   await ui.unmount()
   const tall = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
-  const whole = (await svgs(tall)).stage
-  expect(String(whole?.props.source)).toContain('viewBox="0 0 174 51"')
-  expect(whole?.props.height).toBeUndefined()
-  expect(whole?.props.width).toBeUndefined()
+  const whole = String((await svgs(tall)).stage?.props.source)
+  expect(whole).toContain('viewBox="0 0 928 272"')
+  expect(whole).toContain('<g transform="translate(0 0) scale(5.3333)">')
   await tall.unmount()
 })
 

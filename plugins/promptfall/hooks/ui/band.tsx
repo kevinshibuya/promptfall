@@ -4,17 +4,18 @@ import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { cellsOf, layoutFor } from '../stage/layout'
 import { MessageLog } from '../stage/log'
-import { stageFrame, stageKey } from '../stage/loop'
+import { bandCells, bandFrame, bandKey } from '../stage/loop'
 import { altText } from '../stage/model'
+import { svgFit } from '../stage/playfield'
 import { stagedState } from '../stage/staged'
 import { stageSvg } from '../stage/svg'
 import { StageTimeline } from '../stage/timeline'
 import {
-  DESKTOP_COLUMN_PX,
   DESKTOP_COLUMN_PX_CEILING,
-  DESKTOP_ROW_PX,
   FULL_MIN_COLUMNS,
+  IMAGE_MAX_COLUMNS,
   PROBE_DELAY_MS,
+  RASTER_MAX_COLUMNS,
   STAGE_MAX_COLUMNS,
   SVG_INTERACTIVE,
   SVG_SMIL,
@@ -26,10 +27,8 @@ import {
   SETTINGS_KEY,
   WORLD_DEFAULT,
 } from '../state'
-import { windowKey, windowSource } from '../windows/image'
-import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
-import { CELL_H, CELL_W, STRIP_MAX_COLUMNS } from '../windows/tuning'
+import { STRIP_MAX_COLUMNS } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { type StripInput, stripScene, stripTracks } from './strip'
@@ -209,13 +208,70 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       </Box>
     )
 
+    // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
+    // strip composed on the shell, the band's box up to the host's widest element, centred past it.
+    // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
+    // Loot and World are the strip alone on the same shell, the playfield as wide and centred;
+    // compact is its small stage beside its window inside one line (#64).
+    const picture =
+      rendererNow === 'image' && 'Image' in els
+        ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
+        : rendererNow === 'raster' && 'Raster' in els
+          ? { renderer: 'raster' as const, max: RASTER_MAX_COLUMNS }
+          : null
+    if (terminal && picture) {
+      const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
+      const key = bandKey(box)
+      // The stage and its alt draw the staged state, as everywhere else.
+      const shown = layout.box ? stagedState(view, world, timeline, now) : view
+      let element = null
+      if (picture.renderer === 'raster' && 'Raster' in els) {
+        const { Raster } = els
+        const { cells } = bandCells(shown, timeline, now, layout, settings.motion, box, scene)
+        element = <Raster key={key} columns={box.columns} rows={box.rows} cells={cells} />
+      } else if ('Image' in els) {
+        const { Image } = els
+        // As the stage's: a redraw of the site the loop is drawing reuses the picture it last
+        // sent, the loop's next frame a beat away; anything new composes the first frame here.
+        const source =
+          loop?.stageSource(key, layout, tab) ??
+          bandFrame(shown, timeline, now, layout, settings.motion, box, scene)
+        element = (
+          <Image
+            key={key}
+            source={source}
+            columns={box.columns}
+            rows={box.rows}
+            alt={party ? `${altText(shown)}\n${scene.alt}` : scene.alt}
+          />
+        )
+      }
+      loop?.mount({
+        requestId: e.requestId,
+        key,
+        band: box,
+        layout,
+        renderer: picture.renderer,
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
+      return (
+        <Box key="band" flexDirection="column">
+          <Box key="row-band" flexDirection="row" justifyContent="center">
+            {element}
+            {hidden}
+          </Box>
+        </Box>
+      )
+    }
+
     let stage = null
     let strip = null
     let probe = null
     let renderer: 'raster' | 'image' | 'svg' | 'unknown' = 'svg'
     if (terminal && 'Raster' in els) {
       renderer = await read($, rendererAtom)
-      const { Raster, Image } = els
       if (renderer === 'unknown') {
         // Empty rows while the probe decides, so the band's height does not jump when it lands.
         strip = (
@@ -246,24 +302,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             })()
           })
         }
-      } else if (renderer === 'raster') {
-        strip = (
-          <Raster key="strip" columns={scene.columns} rows={scene.rows} cells={sceneCells(scene)} />
-        )
-      } else {
-        strip = (
-          <Box key="strip-windows" flexDirection="row">
-            {scene.windows.map((w) => (
-              <Image
-                key={windowKey(w)}
-                source={windowSource(w)}
-                columns={w.columns}
-                rows={w.rows}
-                alt={w.alt}
-              />
-            ))}
-          </Box>
-        )
       }
     } else if (!terminal && 'Svg' in els) {
       const { Svg } = els
@@ -274,6 +312,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           source={sceneSvg(scene, tracks, {
             smil: SVG_SMIL,
             width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+            band: party ? 'bottom' : 'both',
           })}
           alt={scene.alt}
           isInteractive={SVG_INTERACTIVE}
@@ -286,94 +325,33 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const box = layout.box
     const staged = box ? stagedState(view, world, timeline, now) : view
     if (box && !terminal && 'Svg' in els) {
-      // At the band's width the stage is taller than the band the desktop shows whole, and the
-      // desktop scrolls the rest away: scale the whole stage down to the rows left under it
-      // (ADR 0004), the zoomed-out view of ADR 0010; under two rows left the desktop scrolls.
-      const stripPx =
-        (e.props.bodyColumns * DESKTOP_COLUMN_PX * scene.rows * CELL_H) / (scene.columns * CELL_W)
-      const stripRows = Math.ceil(stripPx / DESKTOP_ROW_PX) + extra
-      const cap = (e.props.maxRows - stripRows) * DESKTOP_ROW_PX
-      const natural = (e.props.bodyColumns * DESKTOP_COLUMN_PX * box.rows * 2) / box.columns
-      const fit =
-        natural > cap && cap >= DESKTOP_ROW_PX * 2
-          ? { width: Math.floor((cap * box.columns) / (box.rows * 2)), height: Math.round(cap) }
-          : {}
+      // The band's width, its share of the shell and line drawn around the stage; on a short band
+      // the whole stage scales down to the rows the strip leaves, centred on the shell (ADR 0004).
       // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
       const source = stageSvg(staged, timeline, now, box, {
         smil: SVG_SMIL,
         // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
         width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
         motion: settings.motion,
+        fit: svgFit(e.props, box, scene, extra),
       })
       const { Svg } = els
       stage = (
-        <Svg
-          key="stage"
-          source={source}
-          alt={altText(staged)}
-          isInteractive={SVG_INTERACTIVE}
-          {...fit}
-        />
+        <Svg key="stage" source={source} alt={altText(staged)} isInteractive={SVG_INTERACTIVE} />
       )
-    } else if (box && terminal && 'Raster' in els) {
-      const { Raster, Image } = els
-      if (renderer === 'unknown') {
-        stage = (
-          <Box key="stage-empty" flexDirection="column">
-            {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
-              <Text key={`stage-empty-${i}`}> </Text>
-            ))}
-          </Box>
-        )
-      } else {
-        const cells = cellsOf(layout) ?? box
-        // A redraw of the site the loop is drawing reuses the picture it last sent: the engine
-        // sends nothing for a source it already drew, and the loop's next frame is at most a beat
-        // away. A new size or layout, a stage drawn again, or no loop yet, composes once.
-        const reused =
-          renderer === 'image' ? (loop?.stageSource(stageKey(cells), layout) ?? null) : null
-        const frame =
-          reused !== null
-            ? { source: reused }
-            : stageFrame(
-                staged,
-                timeline,
-                now,
-                layout,
-                renderer === 'raster' ? 'raster' : 'image',
-                settings.motion,
-              )
-        if ('cells' in frame) {
-          // The cells the stage shows: the box, or its bottom rows on a short band (ADR 0010).
-          stage = (
-            <Raster key="stage" columns={cells.columns} rows={cells.rows} cells={frame.cells} />
-          )
-        } else {
-          stage = (
-            <Image
-              key={stageKey(cells)}
-              source={frame.source}
-              columns={cells.columns}
-              rows={cells.rows}
-              alt={altText(staged)}
-            />
-          )
-        }
-      }
+    } else if (box && terminal && renderer === 'unknown') {
+      // Empty rows while the probe decides; a known renderer drew the band as one picture above.
+      stage = (
+        <Box key="stage-empty" flexDirection="column">
+          {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
+            <Text key={`stage-empty-${i}`}> </Text>
+          ))}
+        </Box>
+      )
     }
 
-    // The loop: terminals blit the stage and the strip; the desktop runs on SMIL.
-    if (terminal && (renderer === 'raster' || renderer === 'image')) {
-      loop?.mount({
-        requestId: e.requestId,
-        key: box ? (renderer === 'image' ? stageKey(cellsOf(layout) ?? box) : 'stage') : '',
-        layout,
-        renderer,
-        props: e.props,
-        surface: e.surface,
-        strip: { kind, columns: stripColumns, tab, extra },
-      })
-    } else if (!terminal && !SVG_SMIL) {
+    // The loop: the terminals' band picture mounts it above; the desktop runs on SMIL.
+    if (!terminal && !SVG_SMIL) {
       loop?.mount({
         requestId: e.requestId,
         key: 'stage',

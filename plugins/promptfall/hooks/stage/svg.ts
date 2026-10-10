@@ -3,6 +3,7 @@ import { shearShifts, squashRow } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
+import { CELL_H, CELL_W } from '../windows/tuning'
 import { backdropOrigin, frameSize } from './compose'
 import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
@@ -15,6 +16,7 @@ import {
   stageAt,
   variant,
 } from './model'
+import { svgFrame } from './playfield'
 import { bobbingAt, type Motion, type StageTimeline } from './timeline'
 import {
   BLINK_MS,
@@ -202,7 +204,7 @@ function backdropPaths(art: SpriteArt): string {
 export function renderSvg(
   model: StageModel,
   motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; fit?: number },
 ): string {
   const { width: W, height: H } = frameSize(model)
   const scale = model.scale
@@ -531,7 +533,6 @@ export function renderSvg(
     body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }
 
-  const height = Math.round((opts.width * H) / W)
   const flashFilter =
     '<filter id="flash"><feFlood flood-color="#ffffff"/><feComposite operator="in" in2="SourceAlpha"/></filter>'
   // `lighten` on every fill, currentColor included: gamma 0.6 per channel, in sRGB.
@@ -539,7 +540,19 @@ export function renderSvg(
     scale === 1
       ? ''
       : '<filter id="hit" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" exponent="0.6"/><feFuncG type="gamma" exponent="0.6"/><feFuncB type="gamma" exponent="0.6"/></feComponentTransfer></filter>'
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"><defs>${flashFilter}${hitFilter}${defs.join('')}</defs>${body.join('')}</svg>`
+  const head = (w: number, h: number, fill = '') =>
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${opts.width}" height="${Math.round((opts.width * h) / w)}" shape-rendering="crispEdges"${fill}><defs>${flashFilter}${hitFilter}${defs.join('')}</defs>`
+  if (opts.fit === undefined) return `${head(W, H)}${body.join('')}</svg>`
+  // The band's stage Svg (spec #45): the band's width on the windows' grid, the shell under the
+  // stage and the line's top and sides over it. A stage fitted to `fit` of its height sits
+  // centred on the shell between the line's sides; the document keeps the band's width.
+  const gw = model.box.columns * CELL_W
+  const gh = Number((model.box.rows * CELL_H * opts.fit).toFixed(2))
+  const s = gh / H
+  const dx = Number(((gw - W * s) / 2).toFixed(2))
+  const frame = svgFrame(gw, gh, 'top')
+  // Its rounded height must not letterbox the grid: a sliver of no shell would show under it.
+  return `${head(gw, gh, ' preserveAspectRatio="none"')}${frame.under}<g transform="translate(${dx} 0) scale(${Number(s.toFixed(4))})">${body.join('')}</g>${frame.over}</svg>`
 }
 
 /**
@@ -550,22 +563,22 @@ export function svgWithFallback(
   hi: StageModel,
   lo: StageModel,
   motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; fit?: number },
 ): string {
   const svg = renderSvg(hi, motions, opts)
   return svg.length < SVG_MAX_CHARS ? svg : renderSvg(lo, motions, opts)
 }
 
 /**
- * The desktop's full stage: the 1.5x model, falling back to the 1x one over the cap. `view` is the
- * staged state at `now`.
+ * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the 1.5x model,
+ * falling back to the 1x one over the cap. `view` is the staged state at `now`.
  */
 export function stageSvg(
   view: GameView,
   timeline: StageTimeline,
   now: number,
   box: Box,
-  opts: { smil: boolean; width: number; motion: 'full' | 'still' },
+  opts: { smil: boolean; width: number; motion: 'full' | 'still'; fit: number },
 ): string {
   const at = { compact: false, motion: opts.motion }
   const hi = stageAt(view, timeline, now, box, { ...at, scale: HIRES_SCALE })

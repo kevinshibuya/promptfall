@@ -475,32 +475,68 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
   fills between ticks and turns gold when full) and the purse window (gold and
   the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
-  and red at 0. The band is 22 rows and never changes height for a fight.
-  Kitty and Ghostty draw it as an Image, every other
-  terminal as a half-block Raster, desktop, VS Code and mobile as an Svg: one
-  art geometry for all, in cells on terminals and scaled on the Svg surfaces
-  (ADR 0004). The strip is one Image per window on kitty and Ghostty, one Raster
-  of box-drawing text elsewhere, a second Svg on the desktop. On terminals,
-  with 116 columns or more and fewer than 22 rows of `maxRows`, the band takes
-  `maxRows` and the stage fits the rows left over the strip: the Image zooms
-  out, the whole scene widened so that, scaled into those rows, it still spans
-  the band, down to 4 rows; the Raster cannot scale, so it keeps its art size
-  and shows the stage's bottom rows, the sky cropped, down to the tallest actor
-  on it (8 rows for the party, 12 with a turn boss, 17 with a zone or world
-  boss, held through a departed boss's dissolve). Past that, or at 100 to 115
-  columns, compact: the 4-row stage, sprites downsampled, beside one 6-row
-  party window (three hero rows, the front enemy, the command line in its
-  border). One line when `bodyColumns` is under 100 or `maxRows` is under 6.
-  On the Svg surfaces: always the full stage, the art
+  and red at 0. Loot and World are the strip alone: the message window shows
+  the last two drops, or the World rows. Hidden while `hasSurvey`. The band is
+  22 rows and never changes height for a fight.
+- The band as one picture (ADR 0011): a playfield on a shell. The shell is the
+  windows' charcoal, flat, with no decoration, and fills every cell of the
+  band's box that the playfield does not cover: the side margins past 160
+  columns and any rows the layout leaves. The playfield is `min(columns, 160)`
+  wide, every row of the band, centred: on Party the stage with the strip
+  beneath it, the stage's bottom edge on the windows' top lines with no shell
+  between; on Loot and World the strip alone, at the same width and centre.
+  One line goes around it, the strip windows' white line with cut corners. On
+  a band wider than the playfield the line sits in the shell's margin; where
+  the playfield meets the band's edge it sits over the stage's outermost pixel
+  row and column and over the strip's own outer line, so it costs no stage row
+  or column (ADR 0010). The strip's windows keep their own lines inside it.
+  The terminal never shows through the band, except past the Image's 255
+  columns and on the one-line summary.
+- Band renderers. Kitty, Ghostty and cmux draw the band as one Image, keyed by
+  its cells so that only a resize mounts a new one: a PNG on the windows' grid,
+  8 × 16 pixels a cell, the 1.5x stage drawn into it nearest-neighbour at 16/3
+  pixels an art pixel and the strip's windows at their own 1x art. The host's
+  Image takes at most 255 columns: past that the shell stops, centred, and the
+  terminal shows beyond it. At 255 columns and 22 rows the PNG is 2040 × 352.
+  Every other terminal draws one Raster of the same placement in cells, up to
+  512 columns: the stage in half-blocks, the strip and the line in box-drawing
+  text, each window's side joining the line. The Raster's line takes the
+  margin only when the margin is two cells or more a side, so 160 to 163
+  columns draw like 160, and over the stage's top row it opens where an actor's
+  art reaches it, so a boss keeps its head. Ghostty and cmux fit the Image to
+  its cell box keeping its aspect, centred; their cells are a little taller
+  than 8 × 16, so a thin strip of terminal shows above and below the picture
+  (checked on Ghostty 1.3.1 and cmux 0.64.25). The desktop, VS Code and mobile draw two Svgs, the
+  stage's and the strip's, since one Svg of both would pass the
+  131,072-character cap. Each is the band's width and draws its share of the
+  shell (a rect behind its art) and the line (a path over it): the stage's the
+  top and sides, the strip's the sides and the bottom, so stacked they read as
+  one picture; on Loot and World the strip's Svg draws the whole line. One art
+  geometry for all, in cells on terminals and scaled on the Svg surfaces (ADR
+  0004). While the renderer probe is pending the band lays out with the
+  verdict the last session recorded, the half-block rules before any, its
+  rows empty. Every Image and Svg has an alt that carries its text.
+- Band layouts on terminals. Full: 116 columns or more and 22 rows, the
+  17-row stage over the 5-row strip. A band with fewer rows keeps the
+  playfield's width: the Image zooms the whole scene out into the rows left,
+  widened so it still spans the playfield, down to 4 rows, the 5 strip rows
+  under it; the
+  Raster keeps its art size and shows the stage's bottom rows, the sky cut,
+  down to the tallest actor on it (8 rows for the party, 12 with a turn boss,
+  17 with a zone or world boss, held through a departed boss's dissolve)
+  (ADR 0010). Compact, when the full band does
+  not fit or `bodyColumns` is 100 to 115: one 6-row picture, the 4-row stage
+  (sprites downsampled) beside one party window (three hero rows, the front
+  enemy, the command line in its border), the window on the right with its
+  own top, bottom and right lines serving as the line's, so its title and
+  command line stay. The collapsed summary, one line of text with no shell,
+  when `bodyColumns` is under 100 or `maxRows` is under 6. Loot and World are
+  5 rows. On the Svg surfaces: always the full stage, the art
   `clamp(bodyColumns, 116, 160)` pixels wide scaled to the band's width,
-  17 rows whatever `maxRows` says, scaled down where it would pass the rows the
-  surface shows whole once the strip and the hotkey row are counted (the
-  desktop scrolls the rest); the band collapses only by hand or as a
-  secondary. While the renderer probe is pending the band lays out with the
-  verdict the last session recorded, the half-block rules before any. Hidden while
-  `hasSurvey`. Loot and World tabs are the strip alone: the message window
-  shows the last two drops, or the World rows. Every Image and Svg has an alt
-  that carries its text.
+  17 rows whatever `maxRows` says, scaled down where it would pass the rows the surface shows whole once the
+  strip and the hotkey row are counted (the desktop scrolls the rest), and
+  then centred on the shell; the band collapses only by hand or as a
+  secondary.
 - Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
   or cast pose), hit flash, death dissolve, spawn fade-in, floating damage
   numbers, and a drop popping out of the defeated enemy. Driven by the sim's
@@ -510,8 +546,10 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   hits every enemy at once); a heal shows a green rising number and no flash.
   Action starts stretch to the cadence and never overlap, across ticks too.
   About 12 frames a second during an event, 4 while only gauges fill, the idle
-  bob at 2, nothing while the band is hidden or collapsed; on Loot and World
-  the loop draws the strip alone. The combat log types out each action's line
+  bob at 2, nothing while the band is hidden or collapsed. On terminals the
+  loop draws the band's picture, the stage frame with the current strip, so a
+  change in the strip alone (a log line typing out, a gauge filling) redraws
+  it; on Loot and World it draws the strip alone. The combat log types out each action's line
   as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or

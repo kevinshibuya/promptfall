@@ -5,6 +5,7 @@ import { mock, type TestBody } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { decode } from '../sprites/base64'
 import { BOSS_WINDOW_MS } from '../vendor/protocol.js'
+import { STRIP_ROWS } from '../windows/tuning'
 
 export const RUN = {
   origin: { kind: 'composer' },
@@ -69,11 +70,18 @@ export async function sandboxOn(
   return { ...h, run }
 }
 
-/** What the band's strip says: its Raster's cells as text. */
+type Found = { type?: string; props: Record<string, unknown>; children?: unknown[] }
+
+/**
+ * What the band's strip says, as text: the band Raster's strip rows (#61), or the strip Raster's
+ * cells where the band is not one picture.
+ */
 export async function stripText(ui: {
-  find: (q: { key: string }) => Promise<{ props: Record<string, unknown> } | undefined>
+  find: (q: { key: string }) => Promise<Found | undefined>
 }): Promise<string> {
-  const strip = await ui.find({ key: 'strip' })
+  const row = await ui.find({ key: 'row-band' })
+  const band = ((row?.children ?? []) as Found[]).find((c) => c.type === 'Raster')
+  const strip = band ?? (await ui.find({ key: 'strip' }))
   if (!strip) return ''
   const columns = Number(strip.props.columns)
   const bytes = decode(String(strip.props.cells))
@@ -85,7 +93,7 @@ export async function stripText(ui: {
       line += String.fromCodePoint(words[(y * columns + x) * 3] ?? 32)
     lines.push(line)
   }
-  return lines.join('\n')
+  return (band ? lines.slice(-STRIP_ROWS) : lines).join('\n')
 }
 
 /** The band's mount props: 30 rows by 150 columns above the prompt. */

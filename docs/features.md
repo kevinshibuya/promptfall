@@ -155,6 +155,19 @@ terminal crops the sky, down to the tallest actor on the stage. Past that, or on
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
 under 100 columns, and it hides while Claude asks a question.
 
+**The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
+field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
+centred, the stage with the strip beneath it on Party and the strip alone on Loot and World,
+edged by one white line with cut corners like the windows'. On a wide terminal the shell fills
+the margins, and on a short one the zoomed-out stage and the strip still sit inside the line, so
+the terminal's background never shows through the band (Ghostty and cmux keep the picture's
+shape, so a sliver of terminal can show just above and below it). It draws as one image on Kitty, Ghostty
+and cmux (up to 255 columns, past which the terminal shows beside the shell), as one half-block
+picture on other terminals (where the line opens over a boss's head rather than cover it), and
+as two stacked vector pictures, the stage's and the strip's, on
+the desktop. The compact band is the same: its small stage and its party window inside one line
+on the shell. Only the one-row collapsed band stays plain text.
+
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a
 boss lands at its full size. Actors bob between two idle
@@ -162,11 +175,11 @@ drawings and wind up and strike; fireballs, arrows and light bursts fly, hits fl
 rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
 fights until the blow that kills him lands, then dims, and the party window's HP drops with each
 hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never
-changes height. A monster that steps on partway through a tick
-plays its first actions animated, on the desktop too. It draws as an image on Kitty and Ghostty,
-in half-blocks on other terminals, and as vector art on the desktop. A terminal session asks which
-it can draw, and lays the band out with the last session's answer while it waits, so the band holds
-its height from the second session on.
+changes height, the party small on the zone's painting, so a boss lands at its full size. A
+monster that steps on partway through a tick plays its first actions animated, on the desktop
+too. It draws inside the band's picture, as described under the playfield above. A terminal
+session asks which picture it can draw, and lays the band out with the last session's answer
+while it waits, so the band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right

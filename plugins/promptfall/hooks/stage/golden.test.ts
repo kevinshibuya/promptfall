@@ -1,5 +1,5 @@
 import { expect } from 'claude-code/testing'
-import { encode } from '../sprites/base64'
+import { decode, encode } from '../sprites/base64'
 import { BACKDROPS } from '../sprites/generated'
 import { spriteFor } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
@@ -8,14 +8,18 @@ import { item, listing, marketPage, paneInput, paneView } from '../ui/pane/fixtu
 import { inventoryPane } from '../ui/pane/inventory'
 import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
-import { CELL_W, PANE_SVG_MAX_CHARS } from '../windows/tuning'
+import { CELL_W, PANE_SVG_MAX_CHARS, STRIP_SVG_MAX_CHARS } from '../windows/tuning'
 import { composeFrame } from './compose'
 import { fullerFrame } from './fixtures'
-import { GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
-import { imageBytes } from './image'
+import { BAND_GOLDENS, GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
+import { imageBytes, pngImage } from './image'
 import { type StageActor, type StageModel, samePoses } from './model'
+import { composeBand } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
 import {
+  BAND_SCENARIOS,
+  band,
+  bandGoldenOf,
   goldenOf,
   PANE_SCENARIOS,
   pane,
@@ -29,7 +33,10 @@ import {
 import { renderSvg, svgWithFallback } from './svg'
 import type { Motion } from './timeline'
 import {
+  DESKTOP_COLUMN_PX_CEILING,
   IMAGE_MAX_BYTES,
+  IMAGE_MAX_SIDE,
+  IMAGE_MAX_SOURCE_BYTES,
   IMAGE_SCALE,
   RASTER_MAX_PAIRS,
   SVG_MAX_CHARS,
@@ -230,6 +237,57 @@ for (const name of PANE_SCENARIOS) {
     expect(paneGoldenOf(pane(name))).toEqual(PANE_GOLDENS[name])
   })
 }
+
+for (const name of BAND_SCENARIOS) {
+  test(`band golden: ${name}`, () => {
+    expect(bandGoldenOf(band(name))).toEqual(BAND_GOLDENS[name])
+  })
+  test(`band ${name}: the Raster's cells are the band's box and fit the colour pair budget`, () => {
+    const input = band(name)
+    expect(decode(input.cells).length).toBe(input.box.columns * input.box.rows * 12)
+    expect(rasterPairs(input.cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
+  })
+  test(`band ${name}: the desktop's stage and strip Svgs are each the band's width and under their caps`, () => {
+    const { svg, box } = band(name)
+    const width = `width="${box.columns * DESKTOP_COLUMN_PX_CEILING}"`
+    expect(svg.strip).toMatch(new RegExp(`^<svg [^>]*${width}`))
+    expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
+    if (svg.stage === null) {
+      // Loot and World: the strip's Svg is the whole band, the shell under it and the line all
+      // round, its tracks inside.
+      expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
+      expect(svg.strip).toMatch(/<path fill="#f0f0e8" fill-rule="evenodd" d="[^"]*Z"\/><\/svg>$/)
+      return
+    }
+    expect(svg.stage).toMatch(new RegExp(`^<svg [^>]*${width}`))
+    // One grid for both: the same viewBox width, so the line's sides meet.
+    const gridOf = (doc: string) => doc.match(/viewBox="0 0 (\d+) /)?.[1]
+    expect(gridOf(svg.stage)).toBe(gridOf(svg.strip))
+    // The SMIL plays inside the frame: the stage's motions in its scaled group, the strip's tracks.
+    expect(svg.stage).toMatch(
+      /<g transform="translate\([^)]*\) scale\([^)]*\)">.*<animate.*<\/g><path/,
+    )
+    expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
+    expect(svg.stage.length).toBeLessThan(SVG_MAX_CHARS)
+  })
+}
+
+test('the band at 255 × 22 on the 8 by 16 grid is 2040 pixels wide and its PNG fits the host', () => {
+  // The rest band's strip, and a stage frame of noise: no run for deflate to find but the 16/3
+  // upscale's own.
+  const { strip } = band('band-rest')
+  const rgba = new Uint8ClampedArray(240 * 51 * 4)
+  let seed = 1
+  for (let i = 0; i < rgba.length; i++) {
+    seed = (seed * 1_103_515_245 + 12_345) >>> 0
+    rgba[i] = i % 4 === 3 ? 255 : seed >>> 24
+  }
+  const picture = composeBand({ columns: 255, rows: 22 }, { width: 240, height: 51, rgba }, strip)
+  expect([picture.width, picture.height]).toEqual([2040, 352])
+  expect(Math.max(picture.width, picture.height)).toBeLessThanOrEqual(IMAGE_MAX_SIDE)
+  const { png } = pngImage(picture, 1)
+  expect(Math.ceil((png.length * 3) / 4)).toBeLessThanOrEqual(IMAGE_MAX_SOURCE_BYTES)
+})
 
 test('the fullest pane fits the Svg budget', () => {
   // Wide, 120 × 24, 15 rows of 30-character names with sprites, a full detail window, a command

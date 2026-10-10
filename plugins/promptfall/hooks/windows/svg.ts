@@ -2,6 +2,7 @@
 // drawn once as a <symbol> and <use>d per character; with `smil`, tracks animate the next tick:
 // bars through their keys, the message window's lines frame by frame (typing as a stepped clip),
 // the ▶ cursor over its intervals. Times are ms after the scene's now, which is the document's 0.
+import { svgFrame } from '../stage/playfield'
 import { artPaths } from '../stage/svg'
 import {
   barPixels,
@@ -223,13 +224,17 @@ function during(from: number, until: number | undefined, hiddenAtStart: boolean)
 export function sceneSvg(
   scene: Scene,
   tracks: readonly Track[],
-  opts: { smil: boolean; width: number },
+  opts: { smil: boolean; width: number; band?: 'bottom' | 'both' },
 ): string {
   const W = scene.columns * CELL_W
   const H = scene.rows * CELL_H
   const height = Math.round((opts.width * H) / W)
   const live = opts.smil ? tracks : []
-  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges">`
+  // The band's strip Svg (spec #45): the shell under its windows, the line's sides and bottom over,
+  // all round on Loot and World, the grid filling its box so a rounded height leaves no sliver
+  // without shell.
+  const shell = opts.band ? svgFrame(W, H, opts.band) : { under: '', over: '' }
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"${opts.band ? ' preserveAspectRatio="none"' : ''}>`
 
   const build = (frameBudget: number): string => {
     const g = new Glyphs()
@@ -290,7 +295,7 @@ export function sceneSvg(
       const shift = y > 0 ? ` transform="translate(0 ${y})"` : ''
       body.push(`<g id="w-${win.key}"${shift}>${parts.join('')}</g>`)
     }
-    return `${head}<defs>${g.defs.join('')}${clips.join('')}</defs>${body.join('')}</svg>`
+    return `${head}<defs>${g.defs.join('')}${clips.join('')}</defs>${shell.under}${body.join('')}${shell.over}</svg>`
   }
 
   const most = Math.max(0, ...live.map((t) => (t.kind === 'lines' ? t.frames.length : 0)))

@@ -25,26 +25,31 @@ import { windowFrame } from '../windows/image'
 import type { Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
-import { CELL_H, CELL_W, WINDOW_SCALE } from '../windows/tuning'
+import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
 import { composeFrame, type Frame } from './compose'
 import { boss, empty, fallen, wave, worldBoss } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { fnv1a64 } from './hash'
-import { encodeImage } from './image'
-import type { Box } from './layout'
+import { encodeImage, pngImage } from './image'
+import { type Box, type Layout, layoutFor } from './layout'
 import { MessageLog } from './log'
+import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
+import { composeBand, svgFit } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
 import { stagedState } from './staged'
-import { renderSvg, svgWithFallback } from './svg'
+import { renderSvg, stageSvg, svgWithFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
+  DESKTOP_COLUMN_PX_CEILING,
   DISSOLVE_MS,
   DROP_MS,
   FLASH_MS,
+  FULL_MIN_COLUMNS,
   HIRES_SCALE,
   LUNGE_MS,
   SPAWN_MS,
+  STAGE_MAX_COLUMNS,
   STAGE_ROWS,
   WINDUP_HOLD_MS,
 } from './tuning'
@@ -640,5 +645,233 @@ export function paneGoldenOf(build: PaneBuild): PaneGolden {
     cellsHash: fnv1a64(sceneCells(build.scene)),
     svgHash: fnv1a64(svg),
     svgChars: svg.length,
+  }
+}
+
+// The band's scenarios (spec #45): the band as one picture, the playfield on the shell; compact's
+// small stage beside its window; on Loot and World the playfield is the strip alone.
+export const BAND_SCENARIOS = [
+  'band-rest',
+  'band-wide',
+  'band-zoomed',
+  'band-compact',
+  'band-compact-wide',
+  'band-loot',
+  'band-world',
+] as const
+export type BandScenario = (typeof BAND_SCENARIOS)[number]
+export type BandGolden = {
+  imageHash: string
+  cellsHash: string
+  width: number
+  height: number
+  /** None on Loot and World: the strip's Svg is the whole band there. */
+  stageSvgHash?: string
+  stageSvgChars?: number
+  stripSvgHash: string
+  stripSvgChars: number
+}
+/**
+ * What the band composer takes: the band's box, the stage's 1.5x frame (none on Loot and World),
+ * the strip's scene; the Raster's band at the same box, as cells; and the desktop's band at the
+ * same size, its stage Svg and strip Svg.
+ */
+export type BandInput = {
+  box: Box
+  stage: Frame | null
+  strip: Scene
+  cells: string
+  svg: { stage: string | null; strip: string }
+}
+
+/** `view` on a 160-column stage of `rows`, its strip under it, in a band of `columns` × `maxRows`. */
+function bandInput(view: GameView, input: StripInput, columns: number, maxRows: number): BandInput {
+  const t = new StageTimeline()
+  t.observe(view, NOW)
+  const rows = t.rowsAt(view, NOW)
+  const layout = layoutFor(rows, { bodyColumns: columns, maxRows }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    scalable: true,
+  })
+  if (layout.kind !== 'full') throw new Error(`a ${columns} × ${maxRows} band is not full`)
+  const model = stageAt(view, t, NOW, layout.box, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
+  const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
+  const box = { columns, rows: layout.bandRows }
+  const scene = stripScene({ ...input, columns: playfield }).scene
+  // The Raster cannot zoom: it shows the stage's bottom rows at the same box (ADR 0010). A boss
+  // needs all 17, so in play a 12-row band goes compact on the Raster; the zoomed scenario's
+  // cells pin the crop at that box all the same.
+  const room = box.rows - scene.rows
+  const raster: Layout = {
+    kind: 'full',
+    box: { columns: playfield, rows },
+    ...(room < rows ? { cells: { columns: playfield, rows: room } } : {}),
+    bandRows: box.rows,
+  }
+  return {
+    box,
+    stage: composeFrame(model, { numbers: true }),
+    strip: scene,
+    cells: bandCells(view, t, NOW, raster, 'full', box, scene).cells,
+    svg: bandSvgs(view, t, input, columns, maxRows),
+  }
+}
+
+/** The desktop's band at `columns` × `maxRows`: its stage Svg and its strip Svg, as band.tsx draws them. */
+function bandSvgs(
+  view: GameView,
+  t: StageTimeline,
+  input: StripInput,
+  columns: number,
+  maxRows: number,
+): { stage: string; strip: string } {
+  const props = { bodyColumns: columns, maxRows }
+  const layout = layoutFor(t.rowsAt(view, NOW), props, 'desktop', { tab: 'party', extra: 0 })
+  if (!layout.box) throw new Error('the desktop band has no stage')
+  const width = columns * DESKTOP_COLUMN_PX_CEILING
+  const strip = { ...input, columns: layout.box.columns }
+  const { scene } = stripScene(strip)
+  return {
+    stage: stageSvg(view, t, NOW, layout.box, {
+      smil: true,
+      width,
+      motion: 'full',
+      fit: svgFit(props, layout.box, scene, 0),
+    }),
+    strip: sceneSvg(scene, stripTracks(strip, 3000), { smil: true, width, band: 'bottom' }),
+  }
+}
+
+/**
+ * Compact at `columns`: the 4-row stage beside its window inside one line on the shell, on the
+ * Image and the Raster. The desktop never goes compact (ADR 0004): its Svgs are the band it draws
+ * at the same size, the full stage fitted over the strip.
+ */
+function compactInput(view: GameView, input: StripInput, columns: number, maxRows = 22): BandInput {
+  const t = new StageTimeline()
+  t.observe(view, NOW)
+  const props = { bodyColumns: columns, maxRows }
+  const layout = layoutFor(t.rowsAt(view, NOW), props, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    scalable: true,
+  })
+  if (layout.kind !== 'compact') throw new Error(`a ${columns}-column band is not compact`)
+  const box = { columns, rows: layout.bandRows }
+  const scene = stripScene({
+    ...input,
+    kind: 'compact',
+    columns: Math.min(columns, STRIP_MAX_COLUMNS),
+  }).scene
+  const model = stageAt(view, t, NOW, layout.box, { compact: true, motion: 'full' })
+  return {
+    box,
+    stage: composeFrame(model, { numbers: true }),
+    strip: scene,
+    cells: bandCells(view, t, NOW, layout, 'full', box, scene).cells,
+    svg: bandSvgs(view, t, { ...input, kind: 'full' }, columns, box.rows),
+  }
+}
+
+/** Loot or World at `columns`: the strip alone, the playfield as wide and centred as the Party tab's. */
+function bareInput(input: StripInput, columns: number): BandInput {
+  const terminal = layoutFor(0, { bodyColumns: columns, maxRows: 22 }, 'terminal', {
+    tab: input.tab,
+    extra: 0,
+  })
+  if (terminal.kind !== 'bare') throw new Error(`a ${columns}-column ${input.tab} band is not bare`)
+  const box = { columns, rows: terminal.bandRows }
+  const scene = stripScene({ ...input, columns: Math.min(columns, STAGE_MAX_COLUMNS) }).scene
+  // The desktop lays the strip out at the stage's columns and scales it to the band's width.
+  const desktop = {
+    ...input,
+    columns: Math.min(Math.max(columns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS),
+  }
+  const width = columns * DESKTOP_COLUMN_PX_CEILING
+  return {
+    box,
+    stage: null,
+    strip: scene,
+    cells: bandCells(input.view, input.timeline, NOW, terminal, 'full', box, scene).cells,
+    svg: {
+      stage: null,
+      strip: sceneSvg(stripScene(desktop).scene, stripTracks(desktop, 3000), {
+        smil: true,
+        width,
+        band: 'both',
+      }),
+    },
+  }
+}
+
+export function band(name: BandScenario): BandInput {
+  switch (name) {
+    // The playfield fills the band: the line over the stage's outermost pixels.
+    case 'band-rest':
+      return bandInput(wave(), strip('strip-rest'), 160, 22)
+    // Two columns of shell on the left, three on the right, the line in them.
+    case 'band-wide':
+      return bandInput(wave(), strip('strip-rest'), 165, 22)
+    // A boss under a tall prompt: 12 rows, so the widened scene shrinks into the 7 left.
+    case 'band-zoomed':
+      return bandInput(boss(), strip('strip-boss'), 160, 12)
+    // Compact at 110 columns, as strip-compact: the stage's 52 columns, the window's 58.
+    case 'band-compact':
+      return compactInput(wave(), strip('strip-compact'), 110)
+    // Compact under a tall prompt at 170 columns: shell beside the playfield, the window's own right
+    // line the line's, no second one in the margin.
+    case 'band-compact-wide':
+      return compactInput(wave(), strip('strip-compact'), 170, 7)
+    // Loot at the Party tab's 160 columns: the line all round, over the windows' outer lines.
+    case 'band-loot':
+      return bareInput(strip('strip-loot'), 160)
+    // World at 165, as band-wide: the playfield centred, the line in the shell beside it.
+    case 'band-world':
+      return bareInput(strip('strip-world'), 165)
+  }
+}
+
+export function bandPicture(input: BandInput): Frame {
+  return composeBand(input.box, input.stage, input.strip)
+}
+
+/** The band's bitmap, its PNG set in an Svg at twice its size, for eyeballing. */
+export function bandSvgOf(input: BandInput): string {
+  const pic = bandPicture(input)
+  const { png } = pngImage(pic, WINDOW_SCALE)
+  const [w, h] = [pic.width, pic.height]
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 2}" height="${h * 2}" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" style="image-rendering:pixelated" href="data:image/png;base64,${png}"/></svg>`
+}
+
+/** The desktop's two Svgs stacked as the desktop stacks them, the stage over the strip, for eyeballing. */
+export function bandDesktopSvgOf(input: BandInput): string {
+  if (input.svg.stage === null) return input.svg.strip
+  const size = (doc: string) => {
+    const m = doc.match(/^<svg [^>]*width="(\d+)" height="(\d+)"/)
+    return { w: Number(m?.[1]), h: Number(m?.[2]) }
+  }
+  const a = size(input.svg.stage)
+  const b = size(input.svg.strip)
+  const strip = input.svg.strip.replace('<svg ', `<svg y="${a.h}" `)
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${a.w}" height="${a.h + b.h}">${input.svg.stage}${strip}</svg>`
+}
+
+export function bandGoldenOf(input: BandInput): BandGolden {
+  const image = encodeImage(bandPicture(input), WINDOW_SCALE)
+  return {
+    imageHash: fnv1a64(image.rgba),
+    cellsHash: fnv1a64(input.cells),
+    width: image.width,
+    height: image.height,
+    ...(input.svg.stage === null
+      ? {}
+      : { stageSvgHash: fnv1a64(input.svg.stage), stageSvgChars: input.svg.stage.length }),
+    stripSvgHash: fnv1a64(input.svg.strip),
+    stripSvgChars: input.svg.strip.length,
   }
 }

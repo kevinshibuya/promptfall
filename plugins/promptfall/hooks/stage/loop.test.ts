@@ -8,7 +8,7 @@ import { boss, wave } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { layoutFor } from './layout'
 import { MessageLog } from './log'
-import { type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
+import { bandKey, type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
 import { StageTimeline } from './timeline'
 import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
 
@@ -190,16 +190,18 @@ test('the last stage picture the loop sent is there for a redraw of the same sit
   const h = harness(clock)
   const s = { ...site('image'), key: 'stage-120x8' }
   h.loop.mount(s)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
   h.timeline.onEffects(hit, 1_000_000)
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
   const sent = h.blits.filter((b) => b.key === 'stage-120x8').at(-1)
   expect(sent && 'source' in sent ? sent.source : null).not.toBe(null)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(
     sent && 'source' in sent ? sent.source : null,
   )
-  expect(h.loop.stageSource('stage-130x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-130x8', s.layout, 'party')).toBe(null)
+  // Another tab under the same key and layout (Loot and World share both) is another picture.
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'world')).toBe(null)
 })
 
 test('a stage picture is not reused once the stage went away, after a deny, or for another layout', async () => {
@@ -211,20 +213,20 @@ test('a stage picture is not reused once the stage went away, after a deny, or f
     h.timeline.onEffects(hit, await clock.now())
     h.loop.wake()
     await clock.advance(EVENT_FRAME_MS)
-    expect(h.loop.stageSource('stage-120x8', s.layout)).not.toBe(null)
+    expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).not.toBe(null)
   }
   await draw()
   // The same cells under another layout (a scaled boss stage) is another picture.
   const box = s.layout.box ?? { columns: 120, rows: 8 }
   const scaled = { kind: 'full' as const, box: { ...box, rows: 13 }, cells: box, bandRows: 18 }
-  expect(h.loop.stageSource('stage-120x8', scaled)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', scaled, 'party')).toBe(null)
   h.loop.mount(null)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
   await draw()
   h.state.answer = { deny: 'not mounted' }
   h.loop.wake()
   await clock.advance(EVENT_FRAME_MS)
-  expect(h.loop.stageSource('stage-120x8', s.layout)).toBe(null)
+  expect(h.loop.stageSource('stage-120x8', s.layout, 'party')).toBe(null)
 })
 
 test('a wake during a frame runs the next at once, and the beat starts over from it', async () => {
@@ -416,50 +418,6 @@ function extras() {
   return { world: WORLD_DEFAULT, notice: null, gauges: new GaugeTrack(), log: new MessageLog() }
 }
 
-test('the image strip blits each window on the first frame, then only the window that changed', async () => {
-  const clock = fakeClock()
-  const h = harness(clock)
-  h.state.strip = extras()
-  h.loop.mount(site('image'))
-  await clock.advance(EVENT_FRAME_MS + 1)
-  const first = h.blits.filter((b) => b.key.startsWith('win-')).map((b) => b.key)
-  expect(first.sort()).toEqual([
-    'win-enemy-25x5',
-    'win-message-40x5',
-    'win-party-42x5',
-    'win-purse-13x5',
-  ])
-  const before = h.blits.length
-  await clock.advance(IDLE_FRAME_MS * 2)
-  expect(h.blits.slice(before).filter((b) => b.key.startsWith('win-'))).toHaveLength(0)
-  const v = wave()
-  v.gold = 1240
-  h.state.view = v
-  const mid = h.blits.length
-  await clock.advance(IDLE_FRAME_MS * 2)
-  expect(
-    h.blits
-      .slice(mid)
-      .filter((b) => b.key.startsWith('win-'))
-      .map((b) => b.key),
-  ).toEqual(['win-purse-13x5'])
-})
-
-test('the raster strip blits one strip Raster when it changes', async () => {
-  const clock = fakeClock()
-  const h = harness(clock)
-  h.state.strip = extras()
-  h.loop.mount(site('raster'))
-  await clock.advance(EVENT_FRAME_MS + 1)
-  const v = wave()
-  v.farm = true
-  h.state.view = v
-  await clock.advance(IDLE_FRAME_MS * 2)
-  const strip = h.blits.find((b) => b.key === 'strip')
-  expect(strip && 'cells' in strip).toBe(true)
-  expect([strip?.columns, strip?.rows]).toEqual([120, 5])
-})
-
 test('with only a gauge filling the loop re-arms at the gauge rate, capped by the bob', async () => {
   const clock = fakeClock(1_000_000)
   const h = harness(clock)
@@ -479,30 +437,57 @@ test('with only a gauge filling the loop re-arms at the gauge rate, capped by th
   expect(Math.max(...gaps)).toBeLessThanOrEqual(GAUGE_FRAME_MS)
 })
 
-test('a bare site (World) blits the strip and no stage; a boss arriving is not a layout change', async () => {
+/** The World tab's band site (spec #45): the strip alone, drawn as one picture at the band key. */
+function worldSite(renderer: StageSite['renderer'] = 'image'): StageSite {
+  const layout = layoutFor(0, PROPS, 'terminal', { tab: 'world', extra: 0 })
+  const band = { columns: PROPS.bodyColumns, rows: layout.bandRows }
+  return {
+    requestId: 'band-1',
+    key: bandKey(band),
+    layout,
+    band,
+    renderer,
+    props: PROPS,
+    surface: 'terminal',
+    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
+  }
+}
+
+test('a bare band site (World) blits the band, 5 rows, and no stage; a boss arriving is not a layout change', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.state.strip = extras()
-  const props = PROPS
-  h.loop.mount({
-    requestId: 'band-1',
-    key: '',
-    layout: layoutFor(0, props, 'terminal', { tab: 'world', extra: 0 }),
-    renderer: 'image',
-    props,
-    surface: 'terminal',
-    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
-  })
+  h.loop.mount(worldSite())
   await clock.advance(EVENT_FRAME_MS + 1)
   const v = wave()
   v.highestZone = 4
   h.state.view = v
   await clock.advance(IDLE_FRAME_MS * 2)
-  expect(h.blits.some((b) => b.key === 'win-message-40x5')).toBe(true)
-  expect(h.blits.some((b) => b.key === 'stage' || b.key.startsWith('stage-'))).toBe(false)
+  expect(h.blits.length).toBeGreaterThanOrEqual(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
+  const first = h.blits[0]
+  if (!first || !('source' in first) || !first.source || !('png' in first.source))
+    throw new Error('expected a PNG source')
+  expect(pngSize(first.source)).toEqual([960, 80])
   h.state.view = boss()
   await clock.advance(IDLE_FRAME_MS * 3)
   expect(h.invalidations).toHaveLength(0)
+})
+
+test('a bare band site redraws only when its strip changes, whatever the motion setting', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(worldSite('raster'))
+  await clock.advance(5_000)
+  expect(h.blits).toHaveLength(1)
+  expect(cellText(h.blits[0] as UiBlitArgs)[0]).toMatch(/^╭─+┬/)
+  const v = wave()
+  v.gold = 1240
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits).toHaveLength(2)
+  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
 })
 
 /** A PNG source's width and height, from its IHDR. */
@@ -527,4 +512,97 @@ test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled
   const compact = stageFrame(wave(), t, 0, narrow, 'image', 'full')
   if (!('source' in compact)) throw new Error('expected an Image source')
   expect(pngSize(compact.source)).toEqual([312, 48])
+})
+
+/** The band's site (spec #45): the band's box, drawn as one picture at its key. */
+function bandSite(
+  props: StageSite['props'] = PROPS,
+  view = wave(),
+  renderer: StageSite['renderer'] = 'image',
+): StageSite {
+  const s = site(renderer, view, props)
+  const band = { columns: props.bodyColumns, rows: s.layout.bandRows }
+  return { ...s, key: bandKey(band), band }
+}
+
+test('an Image band site blits one picture at the band key, 8 by 16 pixels a cell, and no window', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(bandSite())
+  await clock.advance(IDLE_FRAME_MS * 3)
+  expect(h.blits.length).toBeGreaterThan(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+  const first = h.blits[0]
+  if (!first || !('source' in first) || !first.source || !('png' in first.source))
+    throw new Error('expected a PNG source')
+  expect(pngSize(first.source)).toEqual([960, 352])
+})
+
+test('with motion still, a change in the strip alone redraws the band through the loop', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.settings = { ...SETTINGS_DEFAULT, motion: 'still' }
+  h.state.strip = extras()
+  h.loop.mount(bandSite())
+  await clock.advance(5_000)
+  const settled = h.blits.length
+  await clock.advance(5_000)
+  expect(h.blits.length).toBe(settled)
+  // The purse changes; nothing on the stage does.
+  const v = wave()
+  v.gold = 1240
+  h.state.view = v
+  await clock.advance(IDLE_FRAME_MS * 2)
+  expect(h.blits.slice(settled)).toHaveLength(1)
+  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+})
+
+/** A blit's Raster cells as rows of text. */
+function cellText(b: UiBlitArgs): string[] {
+  if (!('cells' in b) || typeof b.cells !== 'string') throw new Error('expected Raster cells')
+  const bytes = decode(b.cells)
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const columns = b.columns ?? 0
+  const out: string[] = []
+  for (let y = 0; y < (b.rows ?? 0); y++) {
+    let line = ''
+    for (let x = 0; x < columns; x++)
+      line += String.fromCodePoint(words[(y * columns + x) * 3] ?? 0)
+    out.push(line)
+  }
+  return out
+}
+
+test('a Raster band site blits one band Raster at the band key, the stage and strip inside it', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.loop.mount(bandSite(PROPS, wave(), 'raster'))
+  await clock.advance(IDLE_FRAME_MS * 3)
+  expect(h.blits.length).toBeGreaterThan(1)
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
+  const text = cellText(h.blits[0] as UiBlitArgs)
+  expect([text[0]?.[0], text[0]?.[119], text[17]?.[0], text[21]?.[119]]).toEqual([
+    '╭',
+    '╮',
+    '├',
+    '╯',
+  ])
+  // The stage's half blocks above the strip's windows, whose sides meet the bottom line.
+  expect(text[8]?.slice(1, 119)).toMatch(/^[▀▄]+$/)
+  expect(text[21]).toContain('┴')
+})
+
+test('a Raster band under a short band blits the stage rows shown, the line around them', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  // 16 rows: the stage's bottom 11 above the strip (ADR 0010).
+  h.loop.mount(bandSite({ bodyColumns: 120, maxRows: 16 }, wave(), 'raster'))
+  await clock.advance(IDLE_FRAME_MS)
+  const last = h.blits.at(-1) as UiBlitArgs
+  expect(last).toMatchObject({ key: 'band-120x16', columns: 120, rows: 16 })
+  const text = cellText(last)
+  expect([text[0]?.[0], text[11]?.[0], text[15]?.[0]]).toEqual(['╭', '├', '╰'])
 })
