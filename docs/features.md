@@ -137,6 +137,10 @@ Chat needs a server: the in-process fake (`/promptfall server local`) has it off
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
 damage this week, your own rows in gold.
 
+**Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
+fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
+none ever holds a row on either leaderboard.
+
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,

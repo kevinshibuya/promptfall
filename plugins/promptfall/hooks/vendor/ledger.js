@@ -656,7 +656,13 @@ async function contribute(ctx, record, prevDealt) {
   const id = record.account.accountId;
   boss.hp = Math.max(0, boss.hp - delta);
   boss.contributions[id] = (boss.contributions[id] ?? 0) + delta;
-  const weekStart = weekStartOf2(ctx.now);
+  if (!record.bot) await offerDamage(kv, ctx.now, record, delta);
+  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record });
+  else await saveBoss(kv, boss);
+}
+async function offerDamage(kv, now, record, delta) {
+  const id = record.account.accountId;
+  const weekStart = weekStartOf2(now);
   const boards = await kv.get(BOARDS_KEY) ?? {
     zone: [],
     week: { start: weekStart, damage: {} }
@@ -670,8 +676,6 @@ async function contribute(ctx, record, prevDealt) {
       damage: { ...week.damage, [id]: { name: publicName(record), value } }
     }
   });
-  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record });
-  else await saveBoss(kv, boss);
 }
 
 // packages/ledger/src/market.ts
@@ -1170,16 +1174,7 @@ var Ledger = class {
       settle(record);
       await contribute(await this.worldContext(now), record, prevDealt);
       await this.books.deliverReturns(record);
-      await offerZone(
-        this.kv,
-        now,
-        {
-          accountId: record.account.accountId,
-          name: publicName(record),
-          value: record.state.highestZone
-        },
-        (id) => isPlaying(this.books, id)
-      );
+      await this.offerZone(record, now);
       if (hash === batch.resultHash) {
         await this.books.save(record);
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) };
@@ -1384,19 +1379,25 @@ var Ledger = class {
       input.state,
       now
     );
+    if (input.bot) record.bot = true;
     await this.books.save(record);
     await this.kv.set(tokenKey(deviceToken), accountId);
+    await this.offerZone(record, now);
+    return { accountId, deviceToken };
+  }
+  /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+  async offerZone(record, now) {
+    if (record.bot) return;
     await offerZone(
       this.kv,
       now,
       {
-        accountId,
+        accountId: record.account.accountId,
         name: publicName(record),
-        value: input.state.highestZone
+        value: record.state.highestZone
       },
       (id) => isPlaying(this.books, id)
     );
-    return { accountId, deviceToken };
   }
   async currentRecord(accountId) {
     const record = await this.books.load(accountId);

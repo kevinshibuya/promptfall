@@ -93,11 +93,12 @@ export type LedgerOptions = {
 }
 
 export type LedgerHost = {
-  /** Mints an account with a given state and name (bots, tests). */
+  /** Mints an account with a given state and name (bots, tests). `bot` marks it off the boards. */
   mint(input: {
     state: GameState
     name: string
     linked: boolean
+    bot?: boolean
   }): Promise<{ accountId: string; deviceToken: string }>
   /** Authors a `credited` server event (bot stipends; phase 5 admin). */
   credit(accountId: string, gold: number, reason: string): Promise<void>
@@ -403,16 +404,7 @@ export class Ledger implements ServerClient {
       // The batch's damage to the world boss; a killing commit authors the rewards here.
       await boss.contribute(await this.worldContext(now), record, prevDealt)
       await this.books.deliverReturns(record)
-      await world.offerZone(
-        this.kv,
-        now,
-        {
-          accountId: record.account.accountId,
-          name: publicName(record),
-          value: record.state.highestZone,
-        },
-        (id) => world.isPlaying(this.books, id),
-      )
+      await this.offerZone(record, now)
       if (hash === batch.resultHash) {
         await this.books.save(record)
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) }
@@ -652,6 +644,7 @@ export class Ledger implements ServerClient {
     state: GameState
     name: string
     linked: boolean
+    bot?: boolean
   }): Promise<{ accountId: string; deviceToken: string }> {
     if (input.name.length < 1 || input.name.length > PLAYER_NAME_MAX) {
       throw new Error(
@@ -672,19 +665,26 @@ export class Ledger implements ServerClient {
       input.state,
       now,
     )
+    if (input.bot) record.bot = true
     await this.books.save(record)
     await this.kv.set(tokenKey(deviceToken), accountId)
+    await this.offerZone(record, now)
+    return { accountId, deviceToken }
+  }
+
+  /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+  private async offerZone(record: AccountRecord, now: number): Promise<void> {
+    if (record.bot) return
     await world.offerZone(
       this.kv,
       now,
       {
-        accountId,
+        accountId: record.account.accountId,
         name: publicName(record),
-        value: input.state.highestZone,
+        value: record.state.highestZone,
       },
       (id) => world.isPlaying(this.books, id),
     )
-    return { accountId, deviceToken }
   }
 
   private async currentRecord(accountId: string): Promise<AccountRecord> {

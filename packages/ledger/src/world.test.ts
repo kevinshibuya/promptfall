@@ -8,7 +8,14 @@ import {
   MemoryKeyValue,
   type WorldSnapshot,
 } from '@promptfall/protocol'
-import { createInitialState, type Item } from '@promptfall/sim'
+import {
+  createInitialState,
+  type GameState,
+  hashState,
+  type Item,
+  replay,
+  SIM_VERSION,
+} from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { isBlocked } from './blocklist'
 import { type AccountRecord, newRecord, publicName } from './books'
@@ -320,5 +327,82 @@ describe('the world memo', () => {
     expect((await poll(a)).chat.map((m) => m.text)).toEqual(['hi'])
     expect(await ledger.host.settleBoss()).toEqual({ ok: true })
     expect((await poll(a)).boss?.hp).toBe(0)
+  })
+})
+
+describe('bots on the boards', () => {
+  const GRID = 1_700_006_400_000 // a grid point: GRID % BOSS_GRID_MS === 0
+
+  const strong = (s: GameState, highestZone: number): GameState => ({
+    ...s,
+    highestZone,
+    roster: s.roster.map((h) => (s.party.includes(h.id) ? { ...h, level: 40, hp: 9999 } : h)),
+  })
+
+  it('a bot never appears on either board, whatever its zone or damage; a person ranks as before', async () => {
+    let t = GRID - 1_000
+    let n = 0
+    const kv = new MemoryKeyValue()
+    const ledger = new Ledger({
+      kv,
+      now: async () => t,
+      minClientVersion: '0.1.0',
+      seedSource: () => 7,
+      tokenSource: () => `token-${n++}`,
+      linkApprover: approveAs('player'),
+    })
+    const bot = await ledger.host.mint({
+      state: strong(createInitialState(5), 9),
+      name: '[bot] Ashgrove',
+      linked: true,
+      bot: true,
+    })
+    const ann = await ledger.host.mint({
+      state: strong(createInitialState(6), 2),
+      name: 'Ann',
+      linked: true,
+    })
+    const accounts = [bot, ann]
+    for (const m of accounts) await ledger.world({ deviceToken: m.deviceToken }, 0)
+    t += 2_000
+    for (const m of accounts) await ledger.world({ deviceToken: m.deviceToken }, 0)
+
+    // Each plays three ticks into the boss it was engaged with: a commit offers both boards.
+    for (const m of accounts) {
+      const auth = { deviceToken: m.deviceToken }
+      const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+      const local = replay(
+        boot.state,
+        boot.delivery.events.map((e) => e.event),
+      ).state
+      expect(local.boss).not.toBeNull()
+      const events = [{ t: 'tick' as const }, { t: 'tick' as const }, { t: 'tick' as const }]
+      const ack = await ledger.submit(
+        {
+          batchId: crypto.randomUUID(),
+          accountId: m.accountId,
+          seq: boot.seq,
+          clientVersion: '0.1.0',
+          simVersion: SIM_VERSION,
+          cursor: boot.delivery.cursor,
+          baseHash: hashState(boot.state),
+          resultHash: hashState(replay(local, events).state),
+          events: events.map((e, i) => ({ ...e, at: i + 1 })),
+        },
+        auth,
+      )
+      expect(ack).toMatchObject({ ok: true })
+    }
+
+    // The bot still fights the boss: its damage counts toward the kill and its reward.
+    const boss = (await kv.get(BOSS_KEY)) as BossRecord
+    expect(boss.contributions[bot.accountId]).toBeGreaterThan(0)
+    expect(boss.contributions[ann.accountId]).toBeGreaterThan(0)
+
+    const b = await ledger.leaderboards({ deviceToken: ann.deviceToken })
+    if ('reason' in b) throw new Error('unauthorized')
+    expect(b.highestZone).toEqual([{ accountId: ann.accountId, name: 'Ann', value: 2 }])
+    expect(b.damage.map((r) => r.accountId)).toEqual([ann.accountId])
+    expect(b.damage[0]?.value).toBe(boss.contributions[ann.accountId])
   })
 })

@@ -43,6 +43,8 @@ export type AccountRecord = {
   returns: PendingReturn[]
   /** The chat token bucket; absent means full. */
   chat?: { tokens: number; refillAt: number }
+  /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
+  bot?: true
 }
 
 export const BATCH_RING = 200

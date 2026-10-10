@@ -403,17 +403,18 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   that does not answer within 10 s ends the link unlinked with a message
   (`{status: 'ended', reason, message}`); a `github` host without a client
   id answers every link start `{refusal: 'link_unavailable', message}`.
-- Bots: 12 seeded accounts with names from a fixed list, inventories and
-  rosters rolled from the sim's own loot tables, a gold stipend per tick so
-  they never run dry. From phase 3 a bot is an HTTP client of the fake's own
-  port: each tick it submits a batch of ticks at an idle player's pace, then
-  lists, buys, fills a buy order, places or cancels an order, or posts a chat
-  line from a fixed list, through the same routes as a player. Minting and the
-  stipend are the only in-process calls. Bots advance through zones, show in
-  presence, fill the leaderboards and fight the world boss through their
-  batches, never a back door. Their numbers live in one config file and are
-  tuning, not contract. The bots are the load generator for the real server
-  later.
+- Bots: 12 seeded accounts with names from a fixed list prefixed `[bot] `,
+  inventories and rosters rolled from the sim's own loot tables, a gold
+  stipend per tick so they never run dry. From phase 3 a bot is an HTTP client
+  of the fake's own port: each tick it submits a batch of ticks at an idle
+  player's pace, then lists, buys, fills a buy order, places or cancels an
+  order, or posts a chat line from a fixed list, through the same routes as a
+  player. Minting and the stipend are the only in-process calls. Bots advance
+  through zones, show in presence and fight the world boss through their
+  batches, never a back door. A bot is minted with a mark on its record (never
+  on the wire) and the boards skip marked accounts, so a bot holds no rank.
+  Their numbers live in one config file and are tuning, not contract. The bots
+  are the load generator for the real server later.
 - `/promptfall server <url>` points a session at an HTTP server and
   `/promptfall server local` back at the in-process fake. One device token per
   server; switching re-bootstraps and adopts that server's state. Nothing moves

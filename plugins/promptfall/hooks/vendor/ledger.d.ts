@@ -44,6 +44,8 @@ type AccountRecord = {
         tokens: number;
         refillAt: number;
     };
+    /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
+    bot?: true;
 };
 declare const LOG_CAP = 500;
 
@@ -101,11 +103,12 @@ type LedgerOptions = {
     log?: (line: string) => void;
 };
 type LedgerHost = {
-    /** Mints an account with a given state and name (bots, tests). */
+    /** Mints an account with a given state and name (bots, tests). `bot` marks it off the boards. */
     mint(input: {
         state: GameState;
         name: string;
         linked: boolean;
+        bot?: boolean;
     }): Promise<{
         accountId: string;
         deviceToken: string;
@@ -222,6 +225,8 @@ declare class Ledger implements ServerClient {
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized>;
     private mint;
+    /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+    private offerZone;
     private currentRecord;
     private credit;
     private sandbox;
