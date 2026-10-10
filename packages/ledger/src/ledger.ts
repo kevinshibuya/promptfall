@@ -46,6 +46,7 @@ import {
   BATCH_RING,
   Books,
   deliveryOf,
+  FLAGS_KEY,
   isCurrent,
   KINDS,
   linkKey,
@@ -68,6 +69,28 @@ export type LedgerFlag =
   | 'leaderboards.enabled'
   | 'maintenance'
   | 'sandbox.enabled'
+
+/** The flags an operator may set while the host runs: every flag but the sandbox's. */
+export const SETTABLE_FLAGS = [
+  'market.enabled',
+  'chat.enabled',
+  'worldboss.enabled',
+  'presence.enabled',
+  'leaderboards.enabled',
+  'maintenance',
+] as const satisfies readonly LedgerFlag[]
+export type SettableFlag = (typeof SETTABLE_FLAGS)[number]
+
+/** The settable flags in `raw` that are booleans; anything else is dropped. */
+function settable(raw: unknown): Partial<Record<SettableFlag, boolean>> {
+  const out: Partial<Record<SettableFlag, boolean>> = {}
+  if (typeof raw !== 'object' || raw === null) return out
+  for (const flag of SETTABLE_FLAGS) {
+    const value = (raw as Record<string, unknown>)[flag]
+    if (typeof value === 'boolean') out[flag] = value
+  }
+  return out
+}
 
 /** What a sandbox host call answers: the refusal is an answer, not a throw. */
 export type SandboxOutcome =
@@ -115,6 +138,11 @@ export type LedgerHost = {
   spawnBoss(): Promise<SandboxOutcome>
   /** Settles the open world boss now, paying every engaged account. */
   settleBoss(): Promise<SandboxOutcome>
+  /**
+   * Sets flags over the start flags, from the next call on, and stores them so the next start
+   * loads them too. Answers the resolved flags.
+   */
+  setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>
 }
 
 /**
@@ -180,10 +208,19 @@ export class Ledger implements ServerClient {
   private chain: Promise<unknown> = Promise.resolve()
   private readonly presence: world.Presence = new Map()
   private readonly memo = new world.WorldMemo()
+  /** The flags under `pf:flags`, over the start flags. */
+  private stored: Partial<Record<SettableFlag, boolean>> = {}
+  /** The stored flags read at start; every operation waits on it. */
+  private readonly loaded: Promise<void>
 
   constructor(private readonly options: LedgerOptions) {
     this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key))
     this.books = new Books(this.kv)
+    this.loaded = (async () => {
+      this.stored = settable(await options.kv.get(FLAGS_KEY))
+    })()
+    // A failed read fails every operation that waits on it, not the process.
+    this.loaded.catch(() => undefined)
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
@@ -192,6 +229,7 @@ export class Ledger implements ServerClient {
       sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
+      setFlags: (flags) => this.run(() => this.setFlags(flags)),
     }
   }
 
@@ -202,6 +240,7 @@ export class Ledger implements ServerClient {
   private run<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.chain.then(async () => {
       try {
+        await this.loaded
         return await fn()
       } finally {
         await this.kv.flush()
@@ -221,7 +260,16 @@ export class Ledger implements ServerClient {
       maintenance: false,
       'sandbox.enabled': false,
       ...this.options.flags,
+      ...this.stored,
     }
+  }
+
+  private async setFlags(
+    flags: Partial<Record<SettableFlag, boolean>>,
+  ): Promise<Record<string, boolean>> {
+    this.stored = { ...this.stored, ...settable(flags) }
+    await this.kv.set(FLAGS_KEY, this.stored)
+    return this.flags()
   }
 
   private async config(): Promise<ServerConfig> {
@@ -276,6 +324,11 @@ export class Ledger implements ServerClient {
       await this.kv.set(tokenKey(deviceToken), accountId)
       return this.bootFor(deviceToken, record)
     })
+  }
+
+  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  knowsToken(deviceToken: string): Promise<boolean> {
+    return this.run(async () => (await this.books.authenticate({ deviceToken })) !== null)
   }
 
   private async bootFor(deviceToken: string, record: AccountRecord): Promise<Bootstrap> {

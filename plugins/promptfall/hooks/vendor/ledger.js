@@ -22,6 +22,7 @@ var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
 var RETURNS_KEY = "pf:returns";
+var FLAGS_KEY = "pf:flags";
 function everyKind(value) {
   const out = {};
   for (const kind of KINDS) out[kind] = value;
@@ -956,6 +957,23 @@ async function fillOrder(ctx, record, orderId, itemId) {
 }
 
 // packages/ledger/src/ledger.ts
+var SETTABLE_FLAGS = [
+  "market.enabled",
+  "chat.enabled",
+  "worldboss.enabled",
+  "presence.enabled",
+  "leaderboards.enabled",
+  "maintenance"
+];
+function settable(raw) {
+  const out = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const flag of SETTABLE_FLAGS) {
+    const value = raw[flag];
+    if (typeof value === "boolean") out[flag] = value;
+  }
+  return out;
+}
 var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
@@ -980,6 +998,10 @@ var Ledger = class {
     this.options = options;
     this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key));
     this.books = new Books(this.kv);
+    this.loaded = (async () => {
+      this.stored = settable(await options.kv.get(FLAGS_KEY));
+    })();
+    this.loaded.catch(() => void 0);
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
@@ -987,7 +1009,8 @@ var Ledger = class {
       sweep: () => this.run(() => this.sweep()),
       sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
       spawnBoss: () => this.run(() => this.spawnBoss()),
-      settleBoss: () => this.run(() => this.settleBoss())
+      settleBoss: () => this.run(() => this.settleBoss()),
+      setFlags: (flags) => this.run(() => this.setFlags(flags))
     };
   }
   options;
@@ -997,6 +1020,10 @@ var Ledger = class {
   chain = Promise.resolve();
   presence = /* @__PURE__ */ new Map();
   memo = new WorldMemo();
+  /** The flags under `pf:flags`, over the start flags. */
+  stored = {};
+  /** The stored flags read at start; every operation waits on it. */
+  loaded;
   /**
    * The flush runs even when `fn` threw, so an operation must validate before
    * its first `set`; `author` throws before it touches the record for that reason.
@@ -1004,6 +1031,7 @@ var Ledger = class {
   run(fn) {
     const next = this.chain.then(async () => {
       try {
+        await this.loaded;
         return await fn();
       } finally {
         await this.kv.flush();
@@ -1021,8 +1049,14 @@ var Ledger = class {
       "leaderboards.enabled": true,
       maintenance: false,
       "sandbox.enabled": false,
-      ...this.options.flags
+      ...this.options.flags,
+      ...this.stored
     };
+  }
+  async setFlags(flags) {
+    this.stored = { ...this.stored, ...settable(flags) };
+    await this.kv.set(FLAGS_KEY, this.stored);
+    return this.flags();
   }
   async config() {
     return {
@@ -1071,6 +1105,10 @@ var Ledger = class {
       await this.kv.set(tokenKey(deviceToken), accountId);
       return this.bootFor(deviceToken, record);
     });
+  }
+  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  knowsToken(deviceToken) {
+    return this.run(async () => await this.books.authenticate({ deviceToken }) !== null);
   }
   async bootFor(deviceToken, record) {
     const config = await this.config();
@@ -1464,6 +1502,7 @@ export {
   MAX_PRICE,
   MIN_PRICE,
   PLAYER_NAME_MAX,
+  SETTABLE_FLAGS,
   WORLD_BOSSES,
   approveAs,
   isBlocked,

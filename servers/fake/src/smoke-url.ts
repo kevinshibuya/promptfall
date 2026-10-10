@@ -32,9 +32,11 @@ export async function smokeUrl(
   })
   log(`smoke: health ok, sim ${health.simVersion}`)
 
-  const boot = await step('bootstrap', () =>
-    client.bootstrap({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null }),
-  )
+  const boot = await step('bootstrap', async () => {
+    const boot = await client.bootstrap({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null })
+    if ('refusal' in boot) throw new Error(`refused: ${boot.refusal}, ${boot.message}`)
+    return boot
+  })
   log(`smoke: bootstrap ok, account ${boot.account.accountId}`)
 
   const mirror = new Mirror(boot)

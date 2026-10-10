@@ -637,6 +637,8 @@ class GameSession implements GameHandle {
     } catch {
       return
     }
+    // Refused: the primary shows why; the next renewal asks again.
+    if ('refusal' in boot) return
     if (boot.deviceToken !== token) {
       // The server minted for this token: it is unknown there. Wait for the primary to store a new one.
       this.orphanToken = token

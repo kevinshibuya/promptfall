@@ -377,6 +377,8 @@ function remote(on: On) {
   })
   const net = {
     down: false,
+    /** Answered to every bootstrap while set, as a host's refusal. */
+    refusal: null as null | { refusal: 'rate_limited' | 'banned'; message: string },
     calls: 0,
     requests: [] as { origin: string; method: string; path: string }[],
     ledger,
@@ -392,7 +394,8 @@ function remote(on: On) {
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
     let result: unknown
-    if (method === 'POST' && path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    if (method === 'POST' && path === '/v1/bootstrap')
+      result = net.refusal ?? (await ledger.bootstrap(body))
     else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
@@ -443,6 +446,33 @@ test('a session whose store points at an unreachable server rides the outage and
   await time.advance(2_000)
   expect(last.get('notice')).toBeNull()
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
+})
+
+test('a refused bootstrap shows its message and the session retries later', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  const message = 'Too many new accounts from this address. Promptfall will try again later.'
+  net.refusal = { refusal: 'rate_limited', message }
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('notice')).toBe(message)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('view') ?? null).toBeNull()
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(false)
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  expect(boots()).toBe(1)
+  // Not a hammering retry: a minute on, still the one call.
+  await time.advance(60_000)
+  expect(boots()).toBe(1)
+  net.refusal = null
+  await time.advance(5 * 60_000)
+  expect(boots()).toBe(2)
+  expect(last.get('notice')).toBeNull()
+  expect(last.get('mode')).toBe('primary')
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(typeof data.get(`promptfall:token:${URL_A}`)).toBe('string')
 })
 
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {

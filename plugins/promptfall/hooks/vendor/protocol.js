@@ -4406,6 +4406,11 @@ var BootstrapSchema = external_exports.object({
   cursor: count4,
   delivery: DeliverySchema
 });
+var BootstrapRefusedSchema = external_exports.object({
+  refusal: external_exports.enum(["rate_limited", "banned"]),
+  message: external_exports.string().min(1).max(200)
+});
+var BootstrapResponseSchema = external_exports.union([BootstrapRefusedSchema, BootstrapSchema]);
 var adopt = {
   ok: external_exports.literal(false),
   seq: count4,
@@ -4565,7 +4570,7 @@ var HttpClient = class {
     return parsed.data;
   }
   bootstrap(input) {
-    return this.call("bootstrap", BootstrapSchema, { body: input });
+    return this.call("bootstrap", BootstrapResponseSchema, { body: input });
   }
   submit(batch, auth) {
     return this.call("submit", BatchAckSchema, { auth, body: batch });
@@ -4657,6 +4662,8 @@ export {
   BoardRowSchema,
   BoardsResponseSchema,
   BoardsSchema,
+  BootstrapRefusedSchema,
+  BootstrapResponseSchema,
   BootstrapSchema,
   BossViewSchema,
   CHAT_BUCKET_CAPACITY,

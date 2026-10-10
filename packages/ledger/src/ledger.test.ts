@@ -118,6 +118,53 @@ describe('Ledger host', () => {
   })
 })
 
+describe('Ledger flags', () => {
+  it('flags set through the host hold at once and load over the start flags after a restart', async () => {
+    const kv = new MemoryKeyValue()
+    const start = { 'chat.enabled': true, 'market.enabled': false, maintenance: true }
+    const first = makeLedger({ kv, flags: start }).ledger
+    const set = await first.host.setFlags({ 'chat.enabled': false, maintenance: false })
+    expect(set).toMatchObject({
+      'chat.enabled': false,
+      'market.enabled': false,
+      maintenance: false,
+    })
+    const boot = await first.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(await first.chat({ deviceToken: boot.deviceToken }, 'hi')).toEqual({
+      ok: false,
+      reason: 'chat_closed',
+    })
+    await first.host.setFlags({ 'worldboss.enabled': false })
+
+    const second = makeLedger({ kv, flags: start }).ledger
+    const again = await second.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(again.config.flags).toMatchObject({
+      'chat.enabled': false,
+      'market.enabled': false,
+      'worldboss.enabled': false,
+      maintenance: false,
+      'sandbox.enabled': false,
+    })
+  })
+
+  it('a stored sandbox flag is not loaded', async () => {
+    const kv = new MemoryKeyValue()
+    await kv.set('pf:flags', { 'sandbox.enabled': true, 'chat.enabled': false })
+    const { ledger } = makeLedger({ kv })
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(boot.config.flags).toMatchObject({ 'sandbox.enabled': false, 'chat.enabled': false })
+  })
+
+  it('knowsToken answers for a minted token and not for any other, writing nothing', async () => {
+    const { ledger, kv } = makeLedger()
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const writes = (kv as CountingKeyValue).writes
+    expect(await ledger.knowsToken(boot.deviceToken)).toBe(true)
+    expect(await ledger.knowsToken('forged')).toBe(false)
+    expect((kv as CountingKeyValue).writes).toBe(writes)
+  })
+})
+
 describe('Ledger host guards', () => {
   it('credit refuses what the wire would refuse, and writes nothing', async () => {
     const { ledger, kv } = makeLedger()

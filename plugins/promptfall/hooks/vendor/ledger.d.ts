@@ -77,6 +77,9 @@ declare function transfer(goods: Goods, now: number, nextId: () => Promise<strin
 declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r' | 'sb'): Promise<string>;
 
 type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance' | 'sandbox.enabled';
+/** The flags an operator may set while the host runs: every flag but the sandbox's. */
+declare const SETTABLE_FLAGS: readonly ["market.enabled", "chat.enabled", "worldboss.enabled", "presence.enabled", "leaderboards.enabled", "maintenance"];
+type SettableFlag = (typeof SETTABLE_FLAGS)[number];
 /** What a sandbox host call answers: the refusal is an answer, not a throw. */
 type SandboxOutcome = {
     ok: true;
@@ -128,6 +131,11 @@ type LedgerHost = {
     spawnBoss(): Promise<SandboxOutcome>;
     /** Settles the open world boss now, paying every engaged account. */
     settleBoss(): Promise<SandboxOutcome>;
+    /**
+     * Sets flags over the start flags, from the next call on, and stores them so the next start
+     * loads them too. Answers the resolved flags.
+     */
+    setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>;
 };
 /**
  * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
@@ -177,6 +185,10 @@ declare class Ledger implements ServerClient {
     private chain;
     private readonly presence;
     private readonly memo;
+    /** The flags under `pf:flags`, over the start flags. */
+    private stored;
+    /** The stored flags read at start; every operation waits on it. */
+    private readonly loaded;
     constructor(options: LedgerOptions);
     /**
      * The flush runs even when `fn` threw, so an operation must validate before
@@ -184,6 +196,7 @@ declare class Ledger implements ServerClient {
      */
     private run;
     private flags;
+    private setFlags;
     private config;
     private marketContext;
     private worldContext;
@@ -191,6 +204,8 @@ declare class Ledger implements ServerClient {
         clientVersion: string;
         deviceToken: string | null;
     }): Promise<Bootstrap>;
+    /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+    knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
     account(auth: Auth): Promise<AccountInfo | Unauthorized>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
@@ -236,4 +251,4 @@ declare class Ledger implements ServerClient {
     private sweep;
 }
 
-export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, type SandboxOutcome, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, SETTABLE_FLAGS, type SandboxOutcome, type SettableFlag, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

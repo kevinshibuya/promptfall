@@ -1,9 +1,17 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { approveAs, Ledger, type LedgerFlag } from '@promptfall/ledger'
+import {
+  approveAs,
+  Ledger,
+  type LedgerFlag,
+  SETTABLE_FLAGS,
+  type SettableFlag,
+} from '@promptfall/ledger'
 import {
   type Auth,
   BatchSchema,
+  type BootstrapRefused,
   ChatBodySchema,
   type FetchLike,
   type KeyValue,
@@ -16,6 +24,7 @@ import {
 import { SIM_VERSION } from '@promptfall/sim'
 import { type ZodType, z } from 'zod'
 import { githubApprover } from './github'
+import { MINTS_PER_HOUR, MintCap } from './mint-cap'
 import { nodeFetch } from './node-fetch'
 
 export type FakeServerOptions = {
@@ -37,6 +46,12 @@ export type FakeServerOptions = {
   githubFetch?: FetchLike
   /** Operator notes from the GitHub approver, never a code or a token. */
   githubLog?: (line: string) => void
+  /** The bearer token of the admin routes; a host without one has no admin routes. */
+  adminToken?: string | undefined
+  /** One line per admin call: its time, action, target and outcome, never the token. */
+  adminLog?: (line: string) => void
+  /** Accounts one client address may mint per hour of the server's clock. Default 5. */
+  mintsPerHour?: number
 }
 
 export type FakeServer = {
@@ -50,6 +65,8 @@ export type FakeServer = {
 
 type Request = {
   auth: Auth
+  /** The client's address: the last hop of `x-forwarded-for`, else the connection's. */
+  address: string
   params: Record<string, string>
   query: Record<string, string>
   body: unknown
@@ -72,6 +89,57 @@ const BootstrapBody = z.object({
 })
 const CodeBody = z.object({ code: z.string().min(1).max(32) })
 const ItemIdBody = z.object({ itemId: z.string().min(1).max(64) })
+
+const rateLimited: BootstrapRefused = {
+  refusal: 'rate_limited',
+  message: 'Too many new accounts from this address. Promptfall will try again later.',
+}
+
+/** An admin route: what it does with a body, and the target its log line names. */
+type AdminRoute = {
+  method: 'POST'
+  path: string
+  action: string
+  run(body: unknown): Promise<{ target: string; answer: unknown }>
+}
+
+/** `POST /v1/admin/flags`'s body: settable flags to booleans, at least one. */
+function flagsBody(body: unknown): Partial<Record<SettableFlag, boolean>> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body))
+    throw new SchemaError([{ message: 'flags want an object of flag names to true or false' }])
+  const entries = Object.entries(body)
+  if (entries.length === 0) throw new SchemaError([{ message: 'flags want at least one flag' }])
+  const out: Partial<Record<SettableFlag, boolean>> = {}
+  for (const [name, value] of entries) {
+    if (name === 'sandbox.enabled')
+      throw new SchemaError([{ message: 'sandbox.enabled is refused on the admin route' }])
+    const flag = SETTABLE_FLAGS.find((f) => f === name)
+    if (!flag || typeof value !== 'boolean') {
+      throw new SchemaError([
+        { message: `flags want true or false for ${SETTABLE_FLAGS.join(', ')}; got ${name}` },
+      ])
+    }
+    out[flag] = value
+  }
+  return out
+}
+
+/** Equal tokens, compared in time that does not depend on where they differ. */
+function sameToken(a: string, b: string): boolean {
+  const digest = (s: string) => createHash('sha256').update(s).digest()
+  return timingSafeEqual(digest(a), digest(b))
+}
+
+/**
+ * The client's address. Behind Caddy the last hop of `x-forwarded-for` is the address Caddy saw;
+ * a client can forge the hops before it, never that one.
+ */
+function addressOf(req: IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for']
+  const header = Array.isArray(forwarded) ? forwarded[forwarded.length - 1] : forwarded
+  const last = header?.split(',').pop()?.trim()
+  return last || req.socket.remoteAddress || 'unknown'
+}
 
 function parse<T>(schema: ZodType<T>, value: unknown): T {
   const r = schema.safeParse(value)
@@ -174,6 +242,8 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
         : approveAs(options.playerName),
   })
 
+  const mintCap = new MintCap(options.mintsPerHour ?? MINTS_PER_HOUR)
+
   const handlers: Record<keyof typeof ROUTES, Handler> = {
     health: async () => ({
       ok: true,
@@ -182,7 +252,14 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
       speed: options.speed,
       now: await options.now(),
     }),
-    bootstrap: (r) => ledger.bootstrap(parse(BootstrapBody, r.body)),
+    bootstrap: async (r) => {
+      const input = parse(BootstrapBody, r.body)
+      // A known token never mints, so the cap never applies to it; the ledger stays address-blind.
+      if (input.deviceToken !== null && (await ledger.knowsToken(input.deviceToken)))
+        return ledger.bootstrap(input)
+      if (!mintCap.take(r.address, await options.now())) return rateLimited
+      return ledger.bootstrap(input)
+    },
     submit: (r) => ledger.submit(parse(BatchSchema, r.body), r.auth),
     account: (r) => ledger.account(r.auth),
     linkStart: (r) => ledger.linkStart(r.auth),
@@ -206,6 +283,50 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     handler: handlers[name],
   }))
 
+  const adminToken = options.adminToken
+  const adminRoutes: AdminRoute[] = adminToken
+    ? [
+        {
+          method: 'POST',
+          path: '/v1/admin/flags',
+          action: 'flags',
+          run: async (body) => {
+            const flags = flagsBody(body)
+            const target = Object.entries(flags)
+              .map(([name, value]) => `${name}=${value}`)
+              .join(',')
+            return { target, answer: { flags: await ledger.host.setFlags(flags) } }
+          },
+        },
+      ]
+    : []
+
+  /** An admin call: the admin token, then the route; one log line whatever the outcome. */
+  async function admin(
+    route: AdminRoute,
+    req: IncomingMessage,
+    res: ServerResponse,
+    token: string,
+  ): Promise<void> {
+    const write = (target: string, outcome: string) =>
+      options.adminLog?.(`admin ${new Date().toISOString()} ${route.action} ${target} ${outcome}`)
+    if (!sameToken(authOf(req).deviceToken, token)) {
+      req.resume()
+      write('-', 'unauthorized')
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    let done: { target: string; answer: unknown }
+    try {
+      done = await route.run(await readBody(req))
+    } catch (error) {
+      write('-', error instanceof SchemaError ? 'refused' : 'failed')
+      throw error
+    }
+    write(done.target, 'ok')
+    send(res, 200, done.answer)
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const log = options.log
     if (log) {
@@ -219,6 +340,11 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     // Everything, routing included, sits inside the try: one bad request never escapes.
     try {
       const url = new URL(req.url ?? '/', 'http://fake')
+      const adminRoute = adminRoutes.find((r) => r.method === req.method && r.path === url.pathname)
+      if (adminRoute && adminToken) {
+        await admin(adminRoute, req, res, adminToken)
+        return
+      }
       let route: { handler: Handler; params: Record<string, string> } | null = null
       for (const entry of table) {
         if (entry.method !== req.method) continue
@@ -237,7 +363,13 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
       const body = await readBody(req)
       const query: Record<string, string> = {}
       for (const [key, value] of url.searchParams) query[key] = value
-      const result = await route.handler({ auth: authOf(req), params: route.params, query, body })
+      const result = await route.handler({
+        auth: authOf(req),
+        address: addressOf(req),
+        params: route.params,
+        query,
+        body,
+      })
       send(res, 200, result)
     } catch (error) {
       if (error instanceof SchemaError) send(res, 400, { error: 'schema', issues: error.issues })

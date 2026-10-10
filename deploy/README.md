@@ -75,6 +75,23 @@ on the previous image and polls health, as a deploy does. A second rollback roll
 
 A rollback changes the image, not the data: the store stays as the newer image left it.
 
+## Flags
+
+With `PROMPTFALL_ADMIN_TOKEN` set, a flag flips without a restart, from the laptop:
+
+```sh
+curl -sS -X POST https://promptfall.kevinshibuya.com/v1/admin/flags \
+  -H "authorization: Bearer $PROMPTFALL_ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"chat.enabled": false}'
+```
+
+It answers the flags in force. The flags are `market.enabled`, `chat.enabled`, `worldboss.enabled`,
+`presence.enabled`, `leaderboards.enabled` and `maintenance`; `sandbox.enabled` is refused. A flag
+set this way is stored under `pf:flags` and wins over the start flags at every later start, so
+undo it the same way. Each call logs `admin <time> flags <name>=<value> ok` (or `unauthorized`,
+`refused`) in `docker compose logs`, never the token.
+
 ## Backups
 
 The host is started with `--backup-dir /backups` and writes a consistent copy of its SQLite file

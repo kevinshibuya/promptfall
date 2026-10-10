@@ -141,6 +141,14 @@ damage this week, your own rows in gold.
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
 none ever holds a row on either leaderboard.
 
+**Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
+takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
+the market, chat, the world boss, presence, the leaderboards and maintenance switch on the next
+call, and stay switched after a restart, over the `--flag` values it starts with. The sandbox flag
+is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
+never the token. A server without the token has no admin routes. A server makes at most five new
+accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
+
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
@@ -246,7 +254,9 @@ what the old one already toasted, nor leaves out what arrived after the old one 
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
 again. The first answer sends everything played during the outage at once. When the server runs a
 newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
-older game, it asks for a reset from the Account tab.
+older game, it asks for a reset from the Account tab. When the server will not make this machine
+an account (too many new ones from its address this hour), the band shows the server's message
+and the plugin asks again five minutes later.
 
 ## Notifications and cues
 

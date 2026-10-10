@@ -4,6 +4,7 @@ import type {
   AccountInfo,
   BatchAck,
   Bootstrap,
+  BootstrapRefused,
   LinkPoll,
   LinkRefused,
   LinkStart,
@@ -60,6 +61,13 @@ export const BootstrapSchema: z.ZodType<Bootstrap> = z.object({
   cursor: count,
   delivery: DeliverySchema,
 })
+
+export const BootstrapRefusedSchema: z.ZodType<BootstrapRefused> = z.object({
+  refusal: z.enum(['rate_limited', 'banned']),
+  message: z.string().min(1).max(200),
+})
+
+export const BootstrapResponseSchema = z.union([BootstrapRefusedSchema, BootstrapSchema])
 
 const adopt = {
   ok: z.literal(false),

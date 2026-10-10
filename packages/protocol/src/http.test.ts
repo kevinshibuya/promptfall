@@ -316,6 +316,17 @@ describe('HttpClient', () => {
     expect(await http.chat(auth, 'hi')).toEqual({ ok: false, reason: 'rate_limited' })
   })
 
+  it('a bootstrap refusal passes through as a value; an unknown refusal is ServerError', async () => {
+    const limited = { refusal: 'rate_limited', message: 'Too many new accounts from here.' }
+    const input = { clientVersion: '0.1.0', deviceToken: null }
+    expect(await client(limited).http.bootstrap(input)).toEqual(limited)
+    const banned = { refusal: 'banned', message: 'Banned: spam.' }
+    expect(await client(banned).http.bootstrap(input)).toEqual(banned)
+    await expect(
+      client({ refusal: 'link_unavailable', message: 'x' }).http.bootstrap(input),
+    ).rejects.toMatchObject({ name: 'ServerError' })
+  })
+
   it('a link refusal and an ended link pass through as values', async () => {
     const refused = { refusal: 'link_unavailable', message: 'No client id.' }
     expect(await client(refused).http.linkStart(auth)).toEqual(refused)

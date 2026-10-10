@@ -54,7 +54,8 @@ if (values.help) {
                       on SIGTERM, keeping the newest seven
   --bots <n>          bots on the market (default 12; 0 for none)
   --flag <name>=true|false
-                      set a server flag; repeatable
+                      set a server flag; repeatable. A flag set over the admin route (with
+                      PROMPTFALL_ADMIN_TOKEN) is stored and wins over this at the next start
   --boss-in <s>       move the clock so the next world boss spawns in about s real seconds
   -h, --help          print this and exit`)
   process.exit(0)
@@ -125,6 +126,8 @@ if (values.link !== 'github' && values.link !== 'fake') {
 const link = values.link
 // An empty value is no client id: the compose file passes the variable through even when unset.
 const githubClientId = process.env.PROMPTFALL_GITHUB_CLIENT_ID || undefined
+// The admin routes exist only with a token; an empty value is none, as above.
+const adminToken = process.env.PROMPTFALL_ADMIN_TOKEN || undefined
 
 const bossIn = values['boss-in'] === undefined ? null : positive('boss-in', values['boss-in'], true)
 
@@ -159,6 +162,8 @@ const server = createFakeServer({
   link,
   githubClientId,
   githubLog: (line) => console.error(`promptfall fake: ${line}`),
+  adminToken,
+  adminLog: (line) => console.log(line),
 })
 
 const listening = await server.listen(port, values.host)
@@ -175,6 +180,7 @@ console.log(
     (link === 'github'
       ? ` link github${githubClientId ? '' : ' (no PROMPTFALL_GITHUB_CLIENT_ID: link starts refused)'}`
       : '') +
+    (adminToken ? ' admin routes on' : '') +
     (bossIn !== null ? ` boss in ${bossInSeconds()}s` : '') +
     (backupDir !== null ? ` backups ${backupDir}` : ''),
 )

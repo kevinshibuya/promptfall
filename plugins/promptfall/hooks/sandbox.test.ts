@@ -221,6 +221,7 @@ async function firstPoll(setting: string | null, sandbox: boolean) {
     sandbox,
   )
   const boot = await client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   const auth = { deviceToken: boot.deviceToken }
   const start = await client.linkStart(auth)
   if ('reason' in start) throw new Error(start.reason)
@@ -285,6 +286,7 @@ async function hostWithAccount(sandbox: boolean) {
     sandbox,
   )
   const boot = await client.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   const auth = { deviceToken: boot.deviceToken }
   const credits = async () => {
     const info = await client.account(auth)

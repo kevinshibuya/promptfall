@@ -159,12 +159,14 @@ export function startBots(options: BotOptions): Bots {
       // A saved bot behind the sim version, a token the store no longer knows, or a name from
       // before the bot mark (an unmarked account that would hold a rank) is minted again.
       if (
+        'refusal' in b ||
         b.state.v !== SIM_VERSION ||
         b.account.accountId !== saved.accountId ||
         b.account.displayName !== name
       ) {
         saved = await mint(i, name)
         b = await boot(saved)
+        if ('refusal' in b) throw new Error(`bot ${name}: bootstrap refused, ${b.refusal}`)
       }
       bots.push({
         name,

@@ -7,6 +7,7 @@ import { rollBotState } from './bot-seed'
 import { startBots } from './bots'
 import { nodeFetch } from './node-fetch'
 import { createFakeServer } from './server'
+import { booted } from './test-support'
 
 const rarePlus = (r: Rarity) => RARITIES.indexOf(r) >= RARITIES.indexOf('rare')
 const COUNT = 12
@@ -60,7 +61,7 @@ async function run(
       t += Math.floor(BOT_TICK_MS / COUNT)
     }
     bots.stop()
-    const viewer = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const viewer = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
     const auth = { deviceToken: viewer.deviceToken }
     const world = await client.world(auth, 0)
     if ('reason' in world) throw new Error('unauthorized')

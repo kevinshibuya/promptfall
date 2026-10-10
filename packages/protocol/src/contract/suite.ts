@@ -196,6 +196,16 @@ async function spawn(client: ServerClient, clock: ContractClock, traders: Trader
   return w
 }
 
+/** A bootstrap the rule expects answered: a refusal fails the rule. */
+async function booted(
+  client: ServerClient,
+  input: { clientVersion: string; deviceToken: string | null },
+) {
+  const boot = await client.bootstrap(input)
+  if ('refusal' in boot) throw new Error(`bootstrap refused: ${boot.refusal}`)
+  return boot
+}
+
 async function infoOf(client: ServerClient, auth: Auth) {
   const info = await client.account(auth)
   if ('reason' in info) throw new Error('unauthorized')
@@ -210,7 +220,7 @@ export function runServerContract(name: string, make: ContractMake): void {
   const setup = async (flags: Record<string, boolean> = {}) => {
     const clock = makeClock()
     const { client, host } = await make(clock, { flags })
-    const boot = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
     return { clock, client, host, boot, mirror: new Mirror(boot) }
   }
 
@@ -224,7 +234,7 @@ export function runServerContract(name: string, make: ContractMake): void {
     }
     const trader = async (name: string, state: GameState, linked = true) => {
       const m = await host.mint({ state, name, linked })
-      const boot = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+      const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: m.deviceToken })
       const auth: Auth = { deviceToken: m.deviceToken }
       const mirror = new Mirror(boot)
       return {
@@ -288,7 +298,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const ack = await client.submit(mirror.batch(events), mirror.auth())
       expect(ack.ok).toBe(true)
       mirror.commit(events)
-      const again = await client.bootstrap({
+      const again = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -298,7 +308,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(again.state).toEqual(mirror.committed)
       expect(again.cursor).toBe(0)
       expect(again.delivery).toEqual(EMPTY)
-      const stranger = await client.bootstrap({
+      const stranger = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: 'nobody-knows-me',
       })
@@ -314,7 +324,7 @@ export function runServerContract(name: string, make: ContractMake): void {
 
     it('rule 3: another account token naming this account is unauthorized', async () => {
       const { client, mirror } = await setup()
-      const other = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const other = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
       const ack = await client.submit(mirror.batch([tick]), { deviceToken: other.deviceToken })
       expect(ack).toEqual({ ok: false, reason: 'unauthorized' })
     })
@@ -353,7 +363,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         hash: (first as { hash: string }).hash,
         delivery: EMPTY,
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -388,7 +398,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         cursor: 0,
         revokedItemIds: [],
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -507,7 +517,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         hash: hashState(mirror.committed),
         delivery: EMPTY,
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -537,7 +547,7 @@ export function runServerContract(name: string, make: ContractMake): void {
           events: [{ n: 1, event: { t: 'credited', gold: 120, reason: 'test' } }],
         },
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -577,7 +587,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(info.delivery).toEqual(delivery)
       expect(info.returns).toBe(0)
       for (let i = 0; i < 2; i++) {
-        const again = await client.bootstrap({
+        const again = await booted(client, {
           clientVersion: '0.1.0',
           deviceToken: boot.deviceToken,
         })
@@ -598,7 +608,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const later = await client.account(mirror.auth())
       if ('reason' in later) throw new Error('unauthorized')
       expect(later.delivery).toEqual({ cursor: 1, events: [] })
-      const boot2 = await client.bootstrap({
+      const boot2 = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -643,7 +653,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(start.code).toMatch(/^[0-9A-Z]{8}$/)
       expect(start.url).toBe('https://github.com/login/device')
       expect(start.intervalMs).toBe(5000)
-      const other = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const other = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
       expect(await client.linkPoll({ deviceToken: other.deviceToken }, start.code)).toEqual({
         status: 'pending',
       })
@@ -1179,7 +1189,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect((await boards(fresh.client, h.auth)).highestZone).toEqual([
         { accountId: h.accountId, name: 'adventurer', value: 1 },
       ])
-      const boot = await fresh.client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const boot = await booted(fresh.client, { clientVersion: '0.1.0', deviceToken: null })
       const mirror = new Mirror(boot)
       const commit = async () => {
         const ack = await fresh.client.submit(mirror.batch([tick]), mirror.auth())
@@ -1388,7 +1398,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       }
       const m = await first.host.mint({ state: strongState(94), name: 'Ann', linked: true })
       const auth = { deviceToken: m.deviceToken }
-      const boot = await first.client.bootstrap({
+      const boot = await booted(first.client, {
         clientVersion: '0.1.0',
         deviceToken: m.deviceToken,
       })
@@ -1406,7 +1416,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         auth: otherAuth,
         accountId: other.accountId,
         mirror: new Mirror(
-          await first.client.bootstrap({ clientVersion: '0.1.0', deviceToken: other.deviceToken }),
+          await booted(first.client, { clientVersion: '0.1.0', deviceToken: other.deviceToken }),
         ),
         async refresh() {
           b.mirror.receive((await infoOf(first.client, otherAuth)).delivery)

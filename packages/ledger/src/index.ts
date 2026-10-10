@@ -26,4 +26,6 @@ export {
   PLAYER_NAME_MAX,
   type ReadOptions,
   type SandboxOutcome,
+  SETTABLE_FLAGS,
+  type SettableFlag,
 } from './ledger'

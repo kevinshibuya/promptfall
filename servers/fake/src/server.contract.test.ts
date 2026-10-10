@@ -20,7 +20,7 @@ import {
 import { afterAll, describe, expect, it } from 'vitest'
 import { createFakeServer } from './server'
 import { SqliteKeyValue } from './sqlite-kv'
-import { nodeFetch } from './test-support'
+import { booted, nodeFetch } from './test-support'
 
 const open = new Set<{ close(): Promise<void> }>()
 const stores = new Set<SqliteKeyValue>()
@@ -118,7 +118,7 @@ describe('HTTP fake over SQLite', () => {
     const m = await first.host.mint({ state: strongState(94), name: 'Ann', linked: true })
     const auth = { deviceToken: m.deviceToken }
     const mirror = new Mirror(
-      await first.client.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken }),
+      await booted(first.client, { clientVersion: '0.1.0', deviceToken: m.deviceToken }),
     )
     // Present just before the grid point, polled just after it: the boss spawns.
     clock.advance(BOSS_GRID_MS - (t % BOSS_GRID_MS) - 10_000)

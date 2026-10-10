@@ -55,6 +55,8 @@ export const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 export const tokenKey = (token: string) => `pf:token:${token}`
 export const linkKey = (code: string) => `pf:link:${code}`
 export const RETURNS_KEY = 'pf:returns'
+/** The flags set over the admin route: loaded at start over the start flags. */
+export const FLAGS_KEY = 'pf:flags'
 
 export function everyKind(value: number): Record<BudgetKind, number> {
   const out = {} as Record<BudgetKind, number>

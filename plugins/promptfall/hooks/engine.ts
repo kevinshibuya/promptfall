@@ -140,6 +140,9 @@ export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
 /** A paused primary's refusal, on every surface: the band's notice says why. */
 export const PAUSED_LINE = 'Promptfall is paused'
 
+/** How long a refused bootstrap waits before it asks again: the mint cap counts by the hour. */
+export const REFUSED_RETRY_MS = 300_000
+
 /** How long the sim keeps ticking and buffering after the first failure. */
 export const OUTAGE_BUFFER_MS = 120_000
 const BACKOFF_BASE_MS = 1_000
@@ -183,6 +186,7 @@ export class GameEngine {
   private shownWrite: Promise<void> = Promise.resolve()
   private noticeGen = 0
   private outageGen = 0
+  private refusedGen = 0
 
   constructor(private readonly deps: EngineDeps) {}
 
@@ -212,7 +216,8 @@ export class GameEngine {
   // Start and resync
 
   /**
-   * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries.
+   * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries,
+   * and a refused one pauses with the host's message and asks again after REFUSED_RETRY_MS.
    * The bootstrap's delivery hands on only the events past the cursor a primary of this account
    * has shown: what one already toasted does not toast again, and what nobody saw still does.
    */
@@ -233,6 +238,16 @@ export class GameEngine {
     }
     // Replaced (a reset or a switch) while the bootstrap was in flight: write nothing.
     if (this.stopped) return
+    if ('refusal' in boot) {
+      this.clearOutage()
+      this.setPaused(boot.message)
+      const gen = ++this.refusedGen
+      this.deps.after(REFUSED_RETRY_MS, () => {
+        if (gen !== this.refusedGen || this.stopped) return
+        void this.lock(() => this.doStart())
+      })
+      return
+    }
     this.firstRun = boot.deviceToken !== token
     this.token = boot.deviceToken
     if (boot.deviceToken !== token) await this.deps.kv.set(this.tokenKey, boot.deviceToken)

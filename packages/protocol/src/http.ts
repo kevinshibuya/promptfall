@@ -5,6 +5,7 @@ import type {
   Auth,
   BatchAck,
   Bootstrap,
+  BootstrapRefused,
   LinkPoll,
   LinkRefused,
   LinkStart,
@@ -23,7 +24,7 @@ import {
   AccountResponseSchema,
   BatchAckSchema,
   BoardsResponseSchema,
-  BootstrapSchema,
+  BootstrapResponseSchema,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
   ListingPageResponseSchema,
@@ -152,8 +153,11 @@ export class HttpClient implements ServerClient {
     return parsed.data
   }
 
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap> {
-    return this.call('bootstrap', BootstrapSchema, { body: input })
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused> {
+    return this.call('bootstrap', BootstrapResponseSchema, { body: input })
   }
 
   submit(batch: Batch, auth: Auth): Promise<BatchAck> {

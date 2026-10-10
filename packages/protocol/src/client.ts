@@ -78,6 +78,12 @@ export type Bootstrap = {
   delivery: Delivery
 }
 
+/**
+ * A bootstrap the host will not answer: `rate_limited` when this address minted too many accounts
+ * this hour, `banned` when the account is. The message is the player's to read.
+ */
+export type BootstrapRefused = { refusal: 'rate_limited' | 'banned'; message: string }
+
 export type LinkStart = { code: string; url: string; intervalMs: number }
 /** A host that cannot link now: a `github` host without a client id, or GitHub not answering. */
 export type LinkRefused = { refusal: 'link_unavailable'; message: string }
@@ -89,7 +95,10 @@ export type LinkPoll =
   | { status: 'ended'; reason: LinkEnd; message: string }
 
 export interface ServerClient {
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused>
   submit(batch: Batch, auth: Auth): Promise<BatchAck>
   account(auth: Auth): Promise<AccountInfo | Unauthorized>
   linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized>
