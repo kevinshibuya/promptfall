@@ -41,8 +41,9 @@ The host that runs as a separate local process speaking the real HTTP protocol, 
 _Avoid_: dev server, mock server
 
 **Bot**:
-A seeded account inside the HTTP fake that plays and trades through the same public API as
-a player: it submits batches, lists, buys, chats and fights the world boss.
+A seeded account inside a host that plays and trades through the same public API as a
+player: it submits batches, lists, buys, chats and fights the world boss. Named so it reads as
+one, and kept off the leaderboards.
 _Avoid_: NPC, agent, simulated player
 
 **Cursor**:
@@ -182,6 +183,27 @@ The fireball, light burst or arrow the stage moves during a hero's action: a bol
 caster to its target, a burst sits on it. An ordinary sprite of kind `effect`. The sim's
 `Effect` (a combat event) is unrelated.
 _Avoid_: projectile, particle, VFX
+
+**Lunge**:
+The thrust an enemy or the knight makes at its target during its wind-up and strike, out and
+back. The mages and the archer strike in place.
+_Avoid_: charge, dash, step (that is the move before the action)
+
+**Step**:
+The pace every attacker takes toward its target before its wind-up, holds through the action and
+takes back after it. The same distance for every actor, the world boss included.
+_Avoid_: lunge (the thrust itself), hop, jump, approach
+
+**Chest**:
+The box a kill leaves where the enemy stood when it drops an item. One chest, whatever the
+rarity; the rarity shows in the reveal.
+_Avoid_: loot box, crate, drop (that is the item)
+
+**Reveal**:
+The chest opening and the item rising out of it on a glow in its rarity colour, held longer the
+rarer the item. The combat log and the Loot rows carry a drop once its item has risen; a toast
+reads the state, as always. The next enemy enters after it.
+_Avoid_: drop animation, unboxing, loot pop
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
