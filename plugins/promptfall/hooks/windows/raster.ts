@@ -57,6 +57,12 @@ function cut(grid: Cell[][], win: Win, spans: readonly Span[] | undefined, y: nu
 
 /** The whole scene as Raster cells, `columns × rows`, base64. */
 export function sceneCells(scene: Scene): string {
+  // Uint32Array is host-endian; every host the engine runs on is little-endian, as raster.ts writes.
+  return encode(new Uint8Array(sceneWords(scene).buffer))
+}
+
+/** sceneCells' cells as words: per cell a codepoint, then fg, then bg. */
+export function sceneWords(scene: Scene): Uint32Array {
   const grid: Cell[][] = Array.from({ length: scene.rows }, () =>
     Array.from({ length: scene.columns }, () => ({ ch: ' ', fg: CLEAR, bg: CLEAR })),
   )
@@ -93,6 +99,5 @@ export function sceneCells(scene: Scene): string {
       words[w + 2] = cell.bg
     }
   }
-  // Uint32Array is host-endian; every host the engine runs on is little-endian, as raster.ts writes.
-  return encode(new Uint8Array(words.buffer))
+  return words
 }

@@ -17,41 +17,38 @@ function pixel(frame: Frame, x: number, y: number): number | null {
   return ((frame.rgba[i] ?? 0) << 16) | ((frame.rgba[i + 1] ?? 0) << 8) | (frame.rgba[i + 2] ?? 0)
 }
 
-/** Writes one little-endian u32 at word `w`. */
-function put(bytes: Uint8Array, w: number, value: number): void {
-  const i = w * 4
-  bytes[i] = value & 0xff
-  bytes[i + 1] = (value >>> 8) & 0xff
-  bytes[i + 2] = (value >>> 16) & 0xff
-  bytes[i + 3] = (value >>> 24) & 0xff
-}
-
 /**
  * Raster cells for a frame composed with `numbers: false`, then each number's glyphs as text
  * cells at cell (floor x, floor y / 2), clamped inside the box: fg its colour, bg the scene pixel
  * under the cell (the backdrop, or CLEAR where there is none), so a number is not a box.
  */
 export function encodeRaster(frame: Frame, numbers: readonly StageNumber[]): string {
+  // Uint32Array is host-endian; every host the engine runs on is little-endian, as Raster reads.
+  return encode(new Uint8Array(rasterWords(frame, numbers).buffer))
+}
+
+/** encodeRaster's cells as words: per cell a codepoint, then fg, then bg. */
+export function rasterWords(frame: Frame, numbers: readonly StageNumber[]): Uint32Array {
   const columns = frame.width
   const rows = Math.floor(frame.height / 2)
-  const bytes = new Uint8Array(columns * rows * 12)
+  const words = new Uint32Array(columns * rows * 3)
   for (let cy = 0; cy < rows; cy++) {
     for (let cx = 0; cx < columns; cx++) {
       const top = pixel(frame, cx, cy * 2)
       const bottom = pixel(frame, cx, cy * 2 + 1)
       const w = (cy * columns + cx) * 3
       if (top !== null) {
-        put(bytes, w, UPPER)
-        put(bytes, w + 1, top)
-        put(bytes, w + 2, bottom ?? CLEAR)
+        words[w] = UPPER
+        words[w + 1] = top
+        words[w + 2] = bottom ?? CLEAR
       } else if (bottom !== null) {
-        put(bytes, w, LOWER)
-        put(bytes, w + 1, bottom)
-        put(bytes, w + 2, CLEAR)
+        words[w] = LOWER
+        words[w + 1] = bottom
+        words[w + 2] = CLEAR
       } else {
-        put(bytes, w, SPACE)
-        put(bytes, w + 1, CLEAR)
-        put(bytes, w + 2, CLEAR)
+        words[w] = SPACE
+        words[w + 1] = CLEAR
+        words[w + 2] = CLEAR
       }
     }
   }
@@ -60,12 +57,12 @@ export function encodeRaster(frame: Frame, numbers: readonly StageNumber[]): str
     const y = Math.max(0, Math.min(rows - 1, Math.floor(n.y / 2)))
     for (let c = 0; c < n.text.length && x0 + c < columns; c++) {
       const w = (y * columns + x0 + c) * 3
-      put(bytes, w, n.text.charCodeAt(c))
-      put(bytes, w + 1, n.rgb)
-      put(bytes, w + 2, pixel(frame, x0 + c, y * 2) ?? CLEAR)
+      words[w] = n.text.charCodeAt(c)
+      words[w + 1] = n.rgb
+      words[w + 2] = pixel(frame, x0 + c, y * 2) ?? CLEAR
     }
   }
-  return encode(bytes)
+  return words
 }
 
 /** Distinct (fg, bg) pairs in encoded cells, for the 1024-pair budget. */

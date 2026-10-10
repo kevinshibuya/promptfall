@@ -2,6 +2,7 @@ import type { On, UiBlitArgs } from 'claude-code'
 import { expect, mock } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { bandKey } from './stage/loop'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
@@ -1196,7 +1197,9 @@ test('effects with a hit wake the stage loop', async ($, on) => {
   for (let i = 0; i < 12 && !woke; i++, next += 5_000) {
     await time.advance(next + EVENT_FRAME_MS - time.now())
     const tick = next
-    woke = blits.some((b) => b.key === 'stage' && b.at >= tick && b.at <= tick + EVENT_FRAME_MS)
+    // The Raster band (#61): the stage loop blits the one band picture, 120 × 20.
+    const key = bandKey({ columns: 120, rows: 20 })
+    woke = blits.some((b) => b.key === key && b.at >= tick && b.at <= tick + EVENT_FRAME_MS)
   }
   expect(woke).toBe(true)
   await ui.unmount()

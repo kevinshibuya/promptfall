@@ -1,0 +1,5 @@
+{
+  "name": "aspect-spike",
+  "version": "0.1.0",
+  "description": "Spec #45 experiment: does the terminal stretch an Image to its cell box or fit it"
+}
