@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import type { KeyValue } from '@promptfall/protocol'
 import type { ClockSnapshot } from './clock'
+import type { HostStore } from './store'
 
 /** The snapshot file: the whole KeyValue plus the clock it was written at. */
 export type Snapshot = { clock: ClockSnapshot | null; kv: Record<string, unknown> }
@@ -10,7 +10,7 @@ export type Snapshot = { clock: ClockSnapshot | null; kv: Record<string, unknown
  * A KeyValue held in memory and written to one JSON file on `flush()`: write
  * `<path>.tmp`, then rename, so one ledger operation is one durable write.
  */
-export class FileKeyValue implements KeyValue {
+export class FileKeyValue implements HostStore {
   private readonly data = new Map<string, string>()
   /** The clock stored in the file when it was loaded, or null. */
   readonly persistedClock: ClockSnapshot | null
@@ -63,4 +63,7 @@ export class FileKeyValue implements KeyValue {
     writeFileSync(tmp, JSON.stringify(snapshot))
     renameSync(tmp, this.path)
   }
+
+  /** Nothing held open: the file is whole after every flush. */
+  close(): void {}
 }
