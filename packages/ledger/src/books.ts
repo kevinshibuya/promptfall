@@ -47,6 +47,8 @@ export type AccountRecord = {
   bot?: true
   /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
   banned?: { reason: string; at: number }
+  /** The code of the account's one open GitHub link, so a new start or a delete can drop its row. */
+  linkCode?: string
 }
 
 export const BATCH_RING = 200

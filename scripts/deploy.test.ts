@@ -116,6 +116,8 @@ describe('deploy.sh and rollback.sh', () => {
     expect(calls[0]).toMatch(/^ssh kevin@box bash -s -- deploy /)
     expect(calls).toContain('docker pull ghcr.io/kevinshibuya/promptfall:v0.3.0')
     expect(calls).toContain('docker compose up --detach --remove-orphans')
+    // Each probe is bounded, so a container that accepts and stalls cannot hold the deploy.
+    expect(calls.find((c) => c.includes(' node -e '))).toContain('AbortSignal.timeout(5000)')
     expect(r.out).toContain('is healthy')
   })
 

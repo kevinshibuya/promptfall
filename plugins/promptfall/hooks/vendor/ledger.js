@@ -1206,6 +1206,7 @@ var Ledger = class {
       await closeAllOf(await this.marketContext(), id);
       await dropFromBoards(this.kv, id);
       if (this.presence.delete(id)) this.memo.presenceChanged();
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
       await this.books.remove(record, auth.deviceToken);
       return { deleted: true };
     });
@@ -1324,8 +1325,13 @@ var Ledger = class {
     if ("refusal" in started) return started;
     const { deviceCode, ...start } = started;
     return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || record.account.accountId !== accountId) return unauthorized;
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
       const link = { accountId, createdAt: await this.options.now(), deviceCode };
       await this.kv.set(linkKey(start.code), link);
+      record.linkCode = start.code;
+      await this.books.save(record);
       return start;
     });
   }
@@ -1352,7 +1358,11 @@ var Ledger = class {
         return record.account.linked ? { status: "linked", account: record.account } : pending;
       }
       await this.kv.delete(linkKey(code));
-      if (answer.status === "ended") return answer;
+      if (record.linkCode === code) delete record.linkCode;
+      if (answer.status === "ended") {
+        await this.books.save(record);
+        return answer;
+      }
       record.account = {
         ...record.account,
         displayName: answer.login,

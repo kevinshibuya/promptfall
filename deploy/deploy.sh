@@ -85,13 +85,13 @@ mv "$tmp" .env
 echo "deploy: IMAGE=$image PREVIOUS_IMAGE=$previous"
 docker compose up --detach --remove-orphans
 for _ in $(seq 1 30); do
-  if docker compose exec -T promptfall node -e "fetch('http://127.0.0.1:7777/v1/health').then((r) => r.text().then((t) => { console.log(t); process.exit(r.ok ? 0 : 1) }), () => process.exit(1))"; then
+  if docker compose exec -T promptfall node -e "fetch('http://127.0.0.1:7777/v1/health', { signal: AbortSignal.timeout(5000) }).then((r) => r.text().then((t) => { console.log(t); process.exit(r.ok ? 0 : 1) }), () => process.exit(1))"; then
     echo "deploy: $image is healthy"
     exit 0
   fi
   sleep 2
 done
-echo "deploy: $image did not answer /v1/health within 60 s" >&2
+echo "deploy: $image did not answer /v1/health after 30 tries" >&2
 docker compose logs --tail 50 promptfall >&2 || true
 exit 1
 REMOTE

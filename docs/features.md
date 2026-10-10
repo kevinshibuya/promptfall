@@ -161,8 +161,8 @@ shows it again. There is no unban.
 **Deleting an account.** Delete my account on this server, on the Account tab, asks Yes or No, then
 calls `DELETE /v1/account` with the machine's token. The server closes the account's open listings
 and buy orders without returning the goods or refunding the escrow, which leave with the account,
-takes its rows off both leaderboards and out of the online count, and deletes its record and its
-token; nothing of any other player's changes. From then on that token is unknown to the server.
+takes its rows off both leaderboards and out of the online count, and deletes its record, its
+token and any GitHub link it had open; nothing of any other player's changes. From then on that token is unknown to the server.
 On the server's confirmation the plugin resets this machine's data, as the reset does, starts a
 fresh account on the same server, and says so in the message window. When the server does not
 confirm, nothing on the machine changes and the pane says the account was not deleted. The row is

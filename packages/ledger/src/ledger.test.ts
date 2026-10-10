@@ -684,6 +684,75 @@ describe('Ledger link', () => {
     expect(info.account.linked).toBeNull()
   })
 
+  const linkRows = (kv: unknown) =>
+    (kv as MemoryKeyValue).keys().filter((k) => k.startsWith('pf:link:'))
+
+  it('an ended link leaves no row and no open code on the record', async () => {
+    const message = 'You declined the link on GitHub.'
+    const { approver } = scripted([{ status: 'ended', reason: 'denied', message }])
+    const { ledger, kv } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    await ledger.linkStart(auth)
+    await ledger.linkPoll(auth, 'WDJB-MJHT')
+    expect(linkRows(kv)).toEqual([])
+    const id = (await ledger.account(auth)) as { account: { accountId: string } }
+    expect((await record(kv as MemoryKeyValue, id.account.accountId)).linkCode).toBeUndefined()
+  })
+
+  it("a second start replaces the first one's row: one open link per account", async () => {
+    const codes = ['AAAA-0001', 'BBBB-0002']
+    const polled: string[] = []
+    const approver: LinkApprover = {
+      start: async () => {
+        const code = codes.shift() ?? 'none'
+        return { code, url: 'https://github.com/login/device', intervalMs: 7000, deviceCode: code }
+      },
+      poll: async (deviceCode) => {
+        polled.push(deviceCode)
+        return { status: 'pending' }
+      },
+    }
+    const { ledger, kv } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    await ledger.linkStart(auth)
+    await ledger.linkStart(auth)
+    expect(linkRows(kv)).toEqual(['pf:link:BBBB-0002'])
+    expect(await ledger.linkPoll(auth, 'AAAA-0001')).toEqual({ status: 'pending' })
+    expect(polled).toEqual([])
+  })
+
+  it('a delete takes the open link with the account', async () => {
+    const { approver } = scripted([])
+    const { ledger, kv } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    await ledger.linkStart(auth)
+    expect(linkRows(kv)).toHaveLength(1)
+    expect(await ledger.deleteAccount(auth)).toEqual({ deleted: true })
+    expect(linkRows(kv)).toEqual([])
+  })
+
+  it('a start whose account is deleted during the round trip writes no row', async () => {
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const approver: LinkApprover = {
+      start: async () => {
+        await held
+        return { code: 'WDJB-MJHT', url: 'https://github.com/login/device', intervalMs: 7000, deviceCode: 'd' }
+      },
+      poll: async () => ({ status: 'pending' }),
+    }
+    const { ledger, kv } = makeLedger({ linkApprover: approver })
+    const auth = await unlinked(ledger)
+    const starting = ledger.linkStart(auth)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(await ledger.deleteAccount(auth)).toEqual({ deleted: true })
+    release()
+    expect(await starting).toEqual({ reason: 'unauthorized' })
+    expect(linkRows(kv)).toEqual([])
+  })
+
   it("a refused start answers the approver's refusal and keeps no link", async () => {
     const refusal = { refusal: 'link_unavailable' as const, message: 'Linking is off here.' }
     const { ledger } = makeLedger({

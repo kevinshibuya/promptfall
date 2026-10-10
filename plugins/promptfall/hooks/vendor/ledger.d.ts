@@ -51,6 +51,8 @@ type AccountRecord = {
         reason: string;
         at: number;
     };
+    /** The code of the account's one open GitHub link, so a new start or a delete can drop its row. */
+    linkCode?: string;
 };
 declare const LOG_CAP = 500;
 

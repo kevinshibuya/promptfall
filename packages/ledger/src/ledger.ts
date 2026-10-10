@@ -433,6 +433,7 @@ export class Ledger implements ServerClient {
       await market.closeAllOf(await this.marketContext(), id)
       await world.dropFromBoards(this.kv, id)
       if (this.presence.delete(id)) this.memo.presenceChanged()
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
       await this.books.remove(record, auth.deviceToken)
       return { deleted: true } as const
     })
@@ -581,8 +582,15 @@ export class Ledger implements ServerClient {
     if ('refusal' in started) return started
     const { deviceCode, ...start } = started
     return this.run(async () => {
+      // An account deleted during the round trip gets no row back.
+      const record = await this.books.authenticate(auth)
+      if (!record || record.account.accountId !== accountId) return unauthorized
+      // One open link per account: a new start replaces the last one's row.
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
       const link: Link = { accountId, createdAt: await this.options.now(), deviceCode }
       await this.kv.set(linkKey(start.code), link)
+      record.linkCode = start.code
+      await this.books.save(record)
       return start
     })
   }
@@ -611,7 +619,11 @@ export class Ledger implements ServerClient {
         return record.account.linked ? { status: 'linked', account: record.account } : pending
       }
       await this.kv.delete(linkKey(code))
-      if (answer.status === 'ended') return answer
+      if (record.linkCode === code) delete record.linkCode
+      if (answer.status === 'ended') {
+        await this.books.save(record)
+        return answer
+      }
       record.account = {
         ...record.account,
         displayName: answer.login,

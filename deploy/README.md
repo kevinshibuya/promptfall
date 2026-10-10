@@ -7,7 +7,7 @@ reaches `promptfall:7777` on the `web` network. Secrets live only in the box's `
 
 | File | What it is |
 | --- | --- |
-| `docker-compose.yml` | The project: one service, 512m, `restart: unless-stopped`, the `web` network, a healthcheck on `/v1/health`, the `data` and `backups` volumes. |
+| `docker-compose.yml` | The project: one service, 512m, `restart: unless-stopped`, the `web` network, a healthcheck on `/v1/health`, the `data` and `backups` volumes, logs rotated at 5 × 50 MB. |
 | `.env.example` | The box's `.env` with placeholders. |
 | `Caddyfile.snippet` | The site block for the box's Caddyfile. |
 | `deploy.sh` | A release, from the laptop over ssh. `--help` for the flags. |
@@ -59,7 +59,7 @@ The examples below run from the repo root on the laptop unless they say "on the 
 2. `deploy/deploy.sh --dry-run v0.3.1` prints what will run on the box, without connecting.
 3. `deploy/deploy.sh v0.3.1` pulls the image, writes `IMAGE=…:v0.3.1` and
    `PREVIOUS_IMAGE=<the image that was running>` into `.env`, runs `docker compose up -d` and polls
-   `/v1/health` inside the container for up to 60 s. A failure prints the last log lines and the
+   `/v1/health` inside the container: 30 tries, each at most 5 s, 2 s apart. A failure prints the last log lines and the
    rollback command. Redeploying the running tag keeps the rollback target it had.
 4. `deploy/smoke.sh https://promptfall.kevinshibuya.com`: health, a bootstrap, one batch, one
    world poll. Each run mints one account on the server.
@@ -74,6 +74,9 @@ on the previous image and polls health, as a deploy does. A second rollback roll
 `--dry-run` prints it without connecting. Smoke it afterwards as after a release.
 
 A rollback changes the image, not the data: the store stays as the newer image left it.
+
+After the first deploy `PREVIOUS_IMAGE` is still `.env.example`'s placeholder, so there is nothing
+to roll back to until the second release.
 
 ## Flags
 
@@ -109,6 +112,9 @@ of that account answers `banned` with `Promptfall: this account is banned: <reas
 plugin pauses with that line. Banning again replaces the reason. There is no unban route. Each call
 logs `admin <time> ban <id> ok` (or `unknown`, `unauthorized`, `refused`), never the reason or the
 token.
+
+A ban is on the account id: a player who resets mints a fresh account and may link the same
+GitHub login again.
 
 ## Backups
 

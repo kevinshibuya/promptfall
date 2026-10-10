@@ -8,6 +8,10 @@ services:
     container_name: promptfall
     restart: unless-stopped
     mem_limit: 512m
+    # The access log is one line per request: rotate it, or it fills the box's disk.
+    logging:
+      driver: json-file
+      options: { max-size: "50m", max-file: "5" }
     command: --host 0.0.0.0 --store sqlite:/data/promptfall.sqlite --backup-dir /backups --bots ${PROMPTFALL_BOTS} --speed 1 --link github
     environment:
       PROMPTFALL_GITHUB_CLIENT_ID: ${PROMPTFALL_GITHUB_CLIENT_ID}

@@ -16,8 +16,9 @@ built.
 - [ ] Create the GitHub OAuth app under your account (Settings → Developer settings → OAuth Apps):
       name Promptfall, homepage `https://github.com/kevinshibuya/promptfall`, "Enable Device Flow"
       ticked. Keep the client id for the box's `.env`; generate no client secret.
-- [ ] Point DNS for `promptfall.kevinshibuya.com` at the box's public address, and check it with
-      `dig +short promptfall.kevinshibuya.com`.
+- [ ] Point DNS for `promptfall.kevinshibuya.com` at the box's public address as a plain A record,
+      DNS only (not proxied): behind a CDN proxy the mint cap would key on the proxy's addresses.
+      Check it with `dig +short promptfall.kevinshibuya.com`.
 - [ ] Put the project on the box and fill its `.env` (`deploy/README.md`, First deploy, steps 1
       to 3): `PROMPTFALL_GITHUB_CLIENT_ID`, a fresh `PROMPTFALL_ADMIN_TOKEN`, and the bots count,
       `PROMPTFALL_BOTS=6`.
