@@ -42,24 +42,20 @@ Next: phase 5 (the real server), with its own plan when its turn comes.
 
 ## Play it
 
-```sh
-pnpm install
-claude --plugin-dir plugins/promptfall
+In a Claude Code session:
+
+```
+/plugin marketplace add kevinshibuya/promptfall
+/plugin install promptfall@promptfall
 ```
 
-The plugin plays on an in-process ledger by default. To trade with bots, run the HTTP fake and
-point the plugin at it:
+A fresh install plays on the public server, `https://promptfall.kevinshibuya.com`, with the world
+boss, the market and other players. `/promptfall server local` plays offline on the in-process
+fake instead (no chat, no world boss), `/promptfall server <url>` plays on any other server, and
+`/promptfall server` says which one is in force.
 
-```sh
-pnpm fake --port 7777 --speed 10        # one terminal: the fake, with 12 bots
-# --flag chat.enabled=false (repeatable) turns a server flag off
-# --boss-in 60 brings the next world boss a minute out (a dev flag)
-# --store sqlite:.promptfall/fake.sqlite runs on a SQLite file instead of the JSON one
-# --host 0.0.0.0 binds every interface instead of loopback (the container does)
-/promptfall server http://127.0.0.1:7777   # in the Claude Code session
-```
-
-The plugin README covers commands, hotkeys, the market and the world: [plugins/promptfall/README.md](plugins/promptfall/README.md).
+The plugin README covers commands, hotkeys, the market and the world, and its Develop section
+covers playing from a checkout and running the HTTP fake: [plugins/promptfall/README.md](plugins/promptfall/README.md).
 
 ## Repository
 

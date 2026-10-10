@@ -22,7 +22,8 @@ import { WORLD_STALE_MS } from './world'
 const SURFACES = ['terminal', 'desktop'] as const
 
 function harness(on: On) {
-  const data = new Map<string, unknown>()
+  // The machine plays in-process: a fresh install would play on the public server.
+  const data = new Map<string, unknown>([['promptfall:server', 'local']])
   const states = new Map<string, unknown>()
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {

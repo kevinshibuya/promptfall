@@ -24,7 +24,8 @@ function harness(
   env: Record<string, string> | ((name: string) => string | undefined),
   seed: Record<string, unknown> = {},
 ) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  // The machine plays in-process unless the seed names a server.
+  const data = new Map<string, unknown>(Object.entries({ 'promptfall:server': 'local', ...seed }))
   const states = new Map<string, unknown>()
   const registered: { name: string; argumentHint?: string }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
@@ -81,6 +82,7 @@ test('with the sandbox on, the argument hint names the sandbox verb', async ($, 
 })
 
 const REAL_SAVE = {
+  'promptfall:server': 'local',
   'promptfall:deviceToken': 'real-token',
   'promptfall:pf:token:real-token': 'real-acct',
   'promptfall:pf:acct:real-acct:record': { account: { accountId: 'real-acct' }, gold: 123 },

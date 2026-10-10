@@ -32,8 +32,9 @@ A process or module that runs the ledger and exposes it to clients: the in-proce
 the HTTP fake, the real server.
 
 **In-process fake**:
-The host that runs inside the plugin on the local store. The default server; no
-infrastructure, no bots.
+The host that runs inside the plugin on the local store, chosen by the `local` server
+setting and pinned by the sandbox; no infrastructure, no bots. A fresh install plays on the
+public server instead.
 _Avoid_: local server, LocalServer (the class name only)
 
 **HTTP fake**:

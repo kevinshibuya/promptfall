@@ -125,7 +125,7 @@ the World tab dims as stale.
 bottom, the ▶ message whole in the detail window. Enter on a row puts the cursor in the compose
 field; a message is at most 200 characters, posting is rate-limited, and a blocked word refuses
 the message, naming the rule. The band's World tab shows the latest message as a one-line ticker.
-Chat needs a server: the default in-process fake has it off and says so in place.
+Chat needs a server: the in-process fake (`/promptfall server local`) has it off and says so in place.
 
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
 damage this week, your own rows in gold.
@@ -137,7 +137,7 @@ percentage and time left, the bar dropping as the party's hits land, waves pause
 spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
 boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
-needs a server; the default in-process fake runs none, and with the boss off the World tab's
+needs a server; the in-process fake runs none, and with the boss off the World tab's
 records row says so in place when it has room.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
@@ -218,8 +218,9 @@ still play. It is set with `n` on the Account tab or `/promptfall motion full|st
 
 **The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
 and show the band for the session while play goes on, `farm` flips the tactics, and `server <url>`
-or `server local` points the machine at an HTTP server or back at the in-process fake, each with
-its own account. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
+or `server local` points the machine at an HTTP server or at the in-process fake, each with its
+own account; `server` alone says which is in force. A fresh install, with no server set, plays on
+the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
 **Primary session.** One session per account plays; running a gameplay verb or typing a prompt in

@@ -5,7 +5,14 @@ import { commandSpec, registerCommand } from './command'
 import { CUE_ASSET, type Cue } from './cues'
 import { type EnginePublish, GameEngine, type GameHandle, type TradeCall } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
-import { type ResolvedServer, resolveClient, type SecondaryReads } from './server'
+import {
+  LOCAL,
+  type ResolvedServer,
+  resolveClient,
+  SERVER_KEY,
+  type SecondaryReads,
+  serverOf,
+} from './server'
 import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
@@ -76,8 +83,6 @@ type Io = {
   sandbox: boolean
 }
 
-/** The store key of the machine's server setting: a URL, or absent for the in-process ledger. */
-const SERVER_KEY = 'server'
 /** How many polls a link waits for approval before giving up (15 minutes at 5 s). */
 const LINK_POLLS = 180
 /** A request the server has not answered by then is a thrown fetch: an outage, not a held lock. */
@@ -274,8 +279,7 @@ class GameSession implements GameHandle {
   private async readSetting(): Promise<string | null> {
     // The sandbox pins the in-process ledger: a stored URL is ignored.
     if (this.io.sandbox) return null
-    const raw = await this.kv.get(SERVER_KEY)
-    return typeof raw === 'string' && raw !== '' ? raw : null
+    return serverOf(await this.kv.get(SERVER_KEY))
   }
 
   async start(): Promise<void> {
@@ -343,8 +347,7 @@ class GameSession implements GameHandle {
       await this.engine.flush()
       if (this.engine.isUnreachable()) dropped = this.engine.unsentCount()
     }
-    if (url === null) await this.kv.delete(SERVER_KEY)
-    else await this.kv.set(SERVER_KEY, url)
+    await this.kv.set(SERVER_KEY, url ?? LOCAL)
     await this.restart(url)
     return { label: this.server.label, old, dropped }
   }
@@ -477,16 +480,14 @@ class GameSession implements GameHandle {
     }
   }
 
-  /** Deletes every Promptfall key but the lease, then starts over on the same server. */
+  /** Deletes every Promptfall key but the lease and the settings, then starts over on the same server. */
   async reset(): Promise<void> {
     await this.claim()
     await this.engine.stop()
-    const setting = this.setting
     for (const key of await this.kv.keys()) {
-      if (key !== LEASE_KEY && key !== SETTINGS_KEY) await this.kv.delete(key)
+      if (key !== LEASE_KEY && key !== SETTINGS_KEY && key !== SERVER_KEY) await this.kv.delete(key)
     }
-    if (setting !== null) await this.kv.set(SERVER_KEY, setting)
-    await this.restart(setting)
+    await this.restart(this.setting)
   }
 
   setCadence(ms: number): void {

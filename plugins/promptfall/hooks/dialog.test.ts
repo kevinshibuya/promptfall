@@ -12,6 +12,7 @@ const SURFACES = ['terminal', 'desktop'] as const
 /** A store already holding an account whose state the test chose. */
 function harness(on: On, state: GameState) {
   const data = new Map<string, unknown>([
+    ['promptfall:server', 'local'],
     ['promptfall:deviceToken', 'token-1'],
     ['promptfall:pf:token:token-1', 'acct-1'],
     [

@@ -18,7 +18,8 @@ export function harness(
   env: Record<string, string> = {},
   now = 1_000_000,
 ) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  // The machine plays in-process unless the seed names a server.
+  const data = new Map<string, unknown>(Object.entries({ 'promptfall:server': 'local', ...seed }))
   const states = new Map<string, unknown>()
   const opened: { id: string; title?: string }[] = []
   const toasts: string[] = []
