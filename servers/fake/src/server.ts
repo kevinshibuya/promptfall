@@ -24,10 +24,16 @@ export type FakeServerOptions = {
   tokenSource: () => string
   playerName: string
   seed: number
+  /** The access log: one line per request, method, path, status and milliseconds. */
+  log?: (line: string) => void
 }
 
 export type FakeServer = {
-  listen(port: number): Promise<{ port: number; close(): Promise<void> }>
+  /** Binds `host`, loopback unless told otherwise; a container passes 0.0.0.0. */
+  listen(
+    port: number,
+    host?: string,
+  ): Promise<{ host: string; port: number; close(): Promise<void> }>
   ledger: Ledger
 }
 
@@ -183,6 +189,15 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
   }))
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const log = options.log
+    if (log) {
+      // The path without its query, and never a header or a body: no token reaches the log.
+      const started = performance.now()
+      const path = (req.url ?? '/').split('?')[0]
+      res.once('finish', () => {
+        log(`${req.method} ${path} ${res.statusCode} ${Math.round(performance.now() - started)}ms`)
+      })
+    }
     // Everything, routing included, sits inside the try: one bad request never escapes.
     try {
       const url = new URL(req.url ?? '/', 'http://fake')
@@ -219,15 +234,16 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
 
   return {
     ledger,
-    listen(port: number) {
+    listen(port: number, host = '127.0.0.1') {
       const server = createServer((req, res) => {
         void handle(req, res)
       })
       return new Promise((resolve, reject) => {
         server.once('error', reject)
-        server.listen(port, '127.0.0.1', () => {
+        server.listen(port, host, () => {
           const address = server.address() as AddressInfo
           resolve({
+            host: address.address,
             port: address.port,
             close: () =>
               new Promise<void>((done, fail) => {

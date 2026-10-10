@@ -18,6 +18,7 @@ if (argv[0] === '--') argv.shift()
 const { values } = parseArgs({
   args: argv,
   options: {
+    host: { type: 'string', default: '127.0.0.1' },
     port: { type: 'string', default: '7777' },
     seed: { type: 'string', default: '1' },
     speed: { type: 'string', default: '1' },
@@ -35,6 +36,7 @@ const { values } = parseArgs({
 if (values.help) {
   console.log(`usage: pnpm fake [-- flags]
 
+  --host <addr>       address to bind (default 127.0.0.1; a container passes 0.0.0.0)
   --port <n>          port to listen on (default 7777; 0 picks one)
   --seed <n>          world seed (default 1)
   --speed <x>         virtual ms per real ms (default 1)
@@ -130,9 +132,10 @@ const server = createFakeServer({
   tokenSource: () => randomUUID(),
   playerName,
   seed,
+  log: (line) => console.log(line),
 })
 
-const listening = await server.listen(port)
+const listening = await server.listen(port, values.host)
 /** Real seconds to the next grid point. */
 function bossInSeconds(): number {
   const now = clock.nowSync()
@@ -141,17 +144,24 @@ function bossInSeconds(): number {
 
 const passed = Object.entries(flags).map(([name, value]) => `${name}=${value}`)
 console.log(
-  `promptfall fake on http://127.0.0.1:${listening.port} seed ${seed} speed ${speed} ${sqlitePath === null ? `data ${data}` : `store sqlite:${sqlitePath}`}` +
+  `promptfall fake on http://${listening.host}:${listening.port} seed ${seed} speed ${speed} ${sqlitePath === null ? `data ${data}` : `store sqlite:${sqlitePath}`}` +
     (passed.length > 0 ? ` flags ${passed.join(',')}` : '') +
     (bossIn !== null ? ` boss in ${bossInSeconds()}s` : ''),
 )
 // The clock is on disk from the start, so a restart never resumes behind it.
 kv.flushSync()
 
+// The bots dial the address bound, or loopback when the bind is a wildcard.
+const dial = ['0.0.0.0', '::'].includes(listening.host)
+  ? '127.0.0.1'
+  : listening.host.includes(':')
+    ? `[${listening.host}]`
+    : listening.host
+
 const bots =
   botCount > 0
     ? startBots({
-        client: new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch }),
+        client: new HttpClient({ baseUrl: `http://${dial}:${listening.port}`, fetch: nodeFetch }),
         host: server.ledger.host,
         kv,
         seed,

@@ -55,6 +55,7 @@ pnpm fake --port 7777 --speed 10        # one terminal: the fake, with 12 bots
 # --flag chat.enabled=false (repeatable) turns a server flag off
 # --boss-in 60 brings the next world boss a minute out (a dev flag)
 # --store sqlite:.promptfall/fake.sqlite runs on a SQLite file instead of the JSON one
+# --host 0.0.0.0 binds every interface instead of loopback (the container does)
 /promptfall server http://127.0.0.1:7777   # in the Claude Code session
 ```
 
@@ -67,9 +68,11 @@ The plugin README covers commands, hotkeys, the market and the world: [plugins/p
 | `packages/sim` | `@promptfall/sim`: the game rules and content, integer math only, with a balance harness (`pnpm --filter @promptfall/sim harness -- --hours 8`) |
 | `packages/protocol` | `@promptfall/protocol`: Zod schemas for batches, server events and the market, the `ServerClient` interface, `HttpClient`, and the server contract suite at `@promptfall/protocol/contract` |
 | `packages/ledger` | `@promptfall/ledger`: account records, batch replay, the server event log and deliveries, the market rules, the host privileges; run in-process by the plugin and over HTTP by the fake |
-| `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot or a SQLite file (`--store sqlite:<path>`), a virtual clock, seeded bots that play over HTTP, and server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`) |
+| `servers/fake` | `@promptfall/fake-server`: the ledger behind `node:http` with a JSON snapshot or a SQLite file (`--store sqlite:<path>`), a virtual clock, seeded bots that play over HTTP, server flags (`pnpm fake --port 7777 --speed 10 --bots 12 --flag chat.enabled=false`), an access log line per request on stdout, and the image's `Dockerfile` |
 | `plugins/promptfall` | The Claude Code mod, with the three packages bundled into `hooks/vendor/` |
 | `scripts/vendor.mjs` | Builds those bundles |
+| `scripts/build-server.mjs` | Bundles the server into one file, `servers/fake/dist/cli.js`, for the image (`pnpm build:server`) |
+| `deploy/` | The compose project for the box (`docker-compose.yml`, `.env.example`) and `smoke.sh`, which builds the image and waits for health; CI runs it, and a `v*` tag pushes the image to GHCR |
 | `art/` | The sprite manifest, palettes and the sprites in `art/sprites/` (1×) and `art/sprites-hires/` (1.5×) that `pnpm sprites` turns into the plugin's sprite module, `art/sheets.md` (the prompt and cut behind each sprite sheet), and the window font's source |
 | `scripts/font.ts` | Bakes the window font into the plugin's glyph module (`pnpm font`) |
 | `docs/` | The spec, the phase plans and the manual-pass scripts |

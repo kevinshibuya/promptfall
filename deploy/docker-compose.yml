@@ -1,0 +1,40 @@
+# Promptfall on the box: ~/apps/promptfall, beside its own .env, behind Caddy on the web network.
+# Nothing listens on the host; Caddy reaches promptfall:7777.
+name: promptfall
+
+services:
+  promptfall:
+    image: ${IMAGE}
+    container_name: promptfall
+    restart: unless-stopped
+    mem_limit: 512m
+    command: --host 0.0.0.0 --store sqlite:/data/promptfall.sqlite --bots ${PROMPTFALL_BOTS} --speed 1
+    environment:
+      PROMPTFALL_GITHUB_CLIENT_ID: ${PROMPTFALL_GITHUB_CLIENT_ID}
+      PROMPTFALL_ADMIN_TOKEN: ${PROMPTFALL_ADMIN_TOKEN}
+    expose:
+      - "7777"
+    volumes:
+      - data:/data
+      - backups:/backups
+    networks:
+      - web
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:7777/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+      start_interval: 2s
+
+volumes:
+  data:
+  backups:
+
+networks:
+  web:
+    external: true

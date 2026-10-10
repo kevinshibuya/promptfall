@@ -217,6 +217,100 @@ describe('HTTP fake', () => {
   })
 })
 
+describe('HTTP host binding', () => {
+  it('binds loopback by default and the host it is given otherwise', async () => {
+    const make = () =>
+      createFakeServer({
+        kv: new MemoryKeyValue(),
+        now: async () => T0,
+        speed: 1,
+        flags: {},
+        seedSource: () => 5,
+        tokenSource: () => crypto.randomUUID(),
+        playerName: 'kevin',
+        seed: 9,
+      })
+    const loopback = await make().listen(0)
+    const any = await make().listen(0, '0.0.0.0')
+    try {
+      expect(loopback.host).toBe('127.0.0.1')
+      expect(any.host).toBe('0.0.0.0')
+      const r = await fetch(`http://127.0.0.1:${any.port}/v1/health`)
+      expect(r.status).toBe(200)
+    } finally {
+      await loopback.close()
+      await any.close()
+    }
+  })
+})
+
+describe('HTTP host access log', () => {
+  it('writes one access log line per request, without the token, a header or a body', async () => {
+    const lines: string[] = []
+    let n = 0
+    const server = createFakeServer({
+      kv: new MemoryKeyValue(),
+      now: async () => T0,
+      speed: 1,
+      flags: {},
+      seedSource: () => 5,
+      tokenSource: () => `tok-7f3a9c-${n++}`,
+      playerName: 'kevin',
+      seed: 9,
+      log: (line) => lines.push(line),
+    })
+    const listening = await server.listen(0)
+    try {
+      const at = `http://127.0.0.1:${listening.port}`
+      const post = (path: string, body: unknown, token?: string) =>
+        fetch(at + path, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        }).then((r) => r.json())
+      const b = BootstrapSchema.parse(
+        await post('/v1/bootstrap', { clientVersion: '0.1.0', deviceToken: null }),
+      )
+      // A known token travels in the bootstrap body.
+      await post('/v1/bootstrap', { clientVersion: '0.1.0', deviceToken: b.deviceToken })
+      const events = [{ t: 'tick' as const }]
+      const batchId = crypto.randomUUID()
+      BatchAckSchema.parse(
+        await post(
+          '/v1/batches',
+          {
+            batchId,
+            accountId: b.account.accountId,
+            seq: 0,
+            clientVersion: '0.1.0',
+            simVersion: SIM_VERSION,
+            cursor: 0,
+            baseHash: b.hash,
+            resultHash: hashState(replay(b.state, events).state),
+            events: events.map((e) => ({ ...e, at: 1 })),
+          },
+          b.deviceToken,
+        ),
+      )
+      await fetch(`${at}/v1/nowhere?token=${b.deviceToken}`)
+
+      expect(lines).toHaveLength(4)
+      expect(lines[0]).toMatch(/^POST \/v1\/bootstrap 200 \d+ms$/)
+      expect(lines[1]).toMatch(/^POST \/v1\/bootstrap 200 \d+ms$/)
+      expect(lines[2]).toMatch(/^POST \/v1\/batches 200 \d+ms$/)
+      expect(lines[3]).toMatch(/^GET \/v1\/nowhere 404 \d+ms$/)
+      const all = lines.join('\n')
+      for (const secret of [b.deviceToken, 'Bearer', 'authorization', batchId, b.hash])
+        expect(all).not.toContain(secret)
+    } finally {
+      await listening.close()
+    }
+  })
+})
+
 describe('FileKeyValue', () => {
   it('round-trips through the file with tmp-and-rename', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'pf-kv-'))
