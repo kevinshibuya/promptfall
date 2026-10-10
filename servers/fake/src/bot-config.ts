@@ -21,6 +21,11 @@ export const BOT_NAMES = [
   'Perrin',
 ] as const
 
+/** A bot's name: the fixed list's, prefixed so that nobody takes it for a person. */
+export function botName(i: number): string {
+  return `[bot] ${BOT_NAMES[i % BOT_NAMES.length]}`
+}
+
 export const BOT_START_GOLD = 50_000
 /** Below this a bot is credited a stipend before it acts. */
 export const STIPEND_FLOOR = 2000

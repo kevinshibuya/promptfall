@@ -1,7 +1,7 @@
 import { expect } from 'claude-code/testing'
 import { SANDBOX_PREFIX } from '../storage'
 import { test } from '../testing'
-import { EXPIRY_MS, Ledger } from '../vendor/ledger.js'
+import { approveAs, EXPIRY_MS, Ledger } from '../vendor/ledger.js'
 import { BOSS_GRID_MS, type KeyValue } from '../vendor/protocol.js'
 import { createInitialState } from '../vendor/sim.js'
 import { WORLD_POLL_MS } from '../world'
@@ -60,7 +60,7 @@ test('a secondary reads the store without expiring listings or advancing the bos
     minClientVersion: '0.1.0',
     seedSource: () => 5,
     tokenSource: () => `seed-${n++}`,
-    linkApprover: async () => null,
+    linkApprover: approveAs(null),
     flags: { 'worldboss.enabled': false },
   })
   const sword = {

@@ -2,7 +2,7 @@ import type { On } from 'claude-code'
 import { expect } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { test } from '../testing'
-import { Ledger } from '../vendor/ledger.js'
+import { approveAs, Ledger } from '../vendor/ledger.js'
 import { MemoryKeyValue } from '../vendor/protocol.js'
 import { harness } from './harness'
 
@@ -17,7 +17,7 @@ function hanging(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = { hold: false, held: 0, release: (() => undefined) as () => void }
   let gate = Promise.resolve()

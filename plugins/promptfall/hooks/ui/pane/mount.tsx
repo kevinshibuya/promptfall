@@ -609,5 +609,8 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
     case 'reset':
       if (await answered(ctx, 'reset', '')) ctx.game()?.reset()
       return
+    case 'delete':
+      if (await answered(ctx, 'delete', '')) ctx.game()?.deleteAccount()
+      return
   }
 }

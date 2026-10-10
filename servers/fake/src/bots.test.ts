@@ -1,18 +1,25 @@
-import type { AccountRecord } from '@promptfall/ledger'
+import type { AccountRecord, Ledger } from '@promptfall/ledger'
 import { BOSS_BASE_HP, HttpClient, type Listing, MemoryKeyValue } from '@promptfall/protocol'
 import { RARITIES, type Rarity } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
-import { BOT_NAMES, BOT_TICK_MS } from './bot-config'
+import { BOT_NAMES, BOT_TICK_MS, botName } from './bot-config'
 import { rollBotState } from './bot-seed'
 import { startBots } from './bots'
 import { nodeFetch } from './node-fetch'
 import { createFakeServer } from './server'
+import { booted } from './test-support'
 
 const rarePlus = (r: Rarity) => RARITIES.indexOf(r) >= RARITIES.indexOf('rare')
 const COUNT = 12
 
 /** A fake listening on port 0 with a manual clock, and bots that act only when the test ticks them. */
-async function run(seed: number, ticks: number, start = 1_700_000_000_000) {
+async function run(
+  seed: number,
+  ticks: number,
+  start = 1_700_000_000_000,
+  /** Runs before the bots start, over the same store and ledger. */
+  prepare?: (ledger: Ledger, kv: MemoryKeyValue) => Promise<void>,
+) {
   const kv = new MemoryKeyValue()
   let t = start
   let n = 0
@@ -28,6 +35,7 @@ async function run(seed: number, ticks: number, start = 1_700_000_000_000) {
   })
   const listening = await server.listen(0)
   const client = new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch })
+  await prepare?.(server.ledger, kv)
   const calls: string[] = []
   const host = {
     mint: server.ledger.host.mint,
@@ -53,7 +61,7 @@ async function run(seed: number, ticks: number, start = 1_700_000_000_000) {
       t += Math.floor(BOT_TICK_MS / COUNT)
     }
     bots.stop()
-    const viewer = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const viewer = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
     const auth = { deviceToken: viewer.deviceToken }
     const world = await client.world(auth, 0)
     if ('reason' in world) throw new Error('unauthorized')
@@ -125,7 +133,7 @@ describe('bots over HTTP', () => {
     const { all, world, orders, records, lines, calls } = await run(1, 120)
     const speakers = new Set(world.chat.map((m) => m.name))
     expect(speakers.size).toBeGreaterThanOrEqual(2)
-    for (const name of speakers) expect(BOT_NAMES).toContain(name)
+    for (const name of speakers) expect(BOT_NAMES.map((_, i) => botName(i))).toContain(name)
     // Hero listings sell fast (bots buy at the asking price), so the kinds listed are read
     // from the open listings and from what was sold or returned.
     const trades = records.flatMap((r) => r.state.lootLog.filter((e) => e.k === 'trade'))
@@ -150,8 +158,38 @@ describe('bots over HTTP', () => {
     expect(boss.spawnedAt).toBe(grid)
     expect(boss.maxHp).toBe(COUNT * BOSS_BASE_HP)
     expect(boss.hp).toBeLessThan(boss.maxHp)
-    const bots = boards.damage.filter((r) => (BOT_NAMES as readonly string[]).includes(r.name))
-    expect(bots.length).toBeGreaterThan(0)
+    // Only bots played and fought: neither board holds a row.
+    expect(boards.damage).toEqual([])
+    expect(boards.highestZone).toEqual([])
+  }, 120_000)
+
+  it('bots are minted with the mark and named as bots', async () => {
+    const { records, world } = await run(1, COUNT)
+    expect(records.map((r) => r.account.displayName)).toEqual(
+      Array.from({ length: COUNT }, (_, i) => `[bot] ${BOT_NAMES[i % BOT_NAMES.length]}`),
+    )
+    for (const record of records) {
+      expect(record.bot).toBe(true)
+      // The mark is the record's alone: the account is what the wire carries.
+      expect(record.account).not.toHaveProperty('bot')
+    }
+    // Still in presence like anyone else.
+    expect(world.online).toBe(COUNT + 1)
+  }, 120_000)
+
+  it('a bot saved before the mark is minted again, marked and named as a bot', async () => {
+    let unmarked = ''
+    const { records } = await run(1, COUNT, undefined, async (ledger, kv) => {
+      const saved = await ledger.host.mint({
+        state: rollBotState(1, 0),
+        name: 'Ashgrove',
+        linked: true,
+      })
+      unmarked = saved.accountId
+      await kv.set('pf:bot:0', saved)
+    })
+    expect(records[0]?.account.accountId).not.toBe(unmarked)
+    expect(records[0]).toMatchObject({ bot: true, account: { displayName: '[bot] Ashgrove' } })
   }, 120_000)
 
   it('two runs with the same seed list the same ids at the same prices', async () => {

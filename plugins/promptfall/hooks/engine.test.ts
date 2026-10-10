@@ -7,12 +7,13 @@ import {
   UNREACHABLE_NOTICE,
   UPDATE_NOTICE,
 } from './engine'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   type Auth,
   type Batch,
   type BatchAck,
   type Bootstrap,
+  type BootstrapRefused,
   type ListingQuery,
   type MarketResult,
   MemoryKeyValue,
@@ -47,7 +48,7 @@ class Recorder implements ServerClient {
   async bootstrap(input: {
     clientVersion: string
     deviceToken: string | null
-  }): Promise<Bootstrap> {
+  }): Promise<Bootstrap | BootstrapRefused> {
     this.bootstraps += 1
     if (this.holdBootstrap) await this.holdBootstrap
     if (this.failBootstraps > 0) {
@@ -100,6 +101,9 @@ class Recorder implements ServerClient {
   account(auth: Auth) {
     this.accounts += 1
     return this.inner.account(auth)
+  }
+  deleteAccount(auth: Auth) {
+    return this.inner.deleteAccount(auth)
   }
   linkStart(auth: Auth) {
     return this.inner.linkStart(auth)
@@ -156,7 +160,7 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
     minClientVersion: '0.1.0',
     seedSource: () => 4242,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
     ...(flags ? { flags } : {}),
   })
   const client = new Recorder(ledger)
@@ -297,6 +301,7 @@ test('cursor_behind keeps the batch, applies the delivery and resubmits with the
     clientVersion: '0.1.0',
     deviceToken: String(await kv.get('deviceToken')),
   })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   expect(boot.seq).toBe(1)
   expect(boot.cursor).toBe(1)
   expect(boot.state).toEqual(engine.state())

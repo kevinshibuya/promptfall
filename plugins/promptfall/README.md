@@ -1,16 +1,18 @@
 # Promptfall plugin
 
 The Claude Code mod half of Promptfall. It runs the sim locally, sends the events in batches to
-a ledger, and draws a band above the prompt. By default the ledger runs inside the plugin and
-persists through `$.store`; `/promptfall server <url>` points it at an HTTP server instead, such as
-the fake in `servers/fake`.
+a ledger, and draws a band above the prompt. By default the ledger is the public server at
+`https://promptfall.kevinshibuya.com`; `/promptfall server local` runs it inside the plugin instead,
+persisted through `$.store`, and `/promptfall server <url>` points it at any other HTTP server, such
+as the fake in `servers/fake`.
 
 ## Play
 
-Load it from the repository root in an interactive session:
+Install it from this repository's marketplace in a Claude Code session:
 
-```sh
-claude --plugin-dir plugins/promptfall
+```
+/plugin marketplace add kevinshibuya/promptfall
+/plugin install promptfall@promptfall
 ```
 
 The band appears above the prompt once the session starts. Your three heroes fight on their own.
@@ -33,12 +35,15 @@ one zone at full health and costs nothing else.
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
+| `/promptfall server` | Says which server this machine plays on: the public server, `local`, or a URL |
 | `/promptfall server <url>` | Plays on the HTTP server at `<url>`, for every session on this machine |
-| `/promptfall server local` | Goes back to the in-process ledger |
+| `/promptfall server local` | Plays on the in-process ledger, offline: no chat, no world boss |
 
 ### Servers
 
-Each server keeps its own account: nothing moves between them, so the first switch to a server
+With no server set, the machine plays on the public server. `local` is a setting of its own, so
+the in-process ledger is only ever an explicit choice, and the sandbox plays in-process whatever
+the setting says. Each server keeps its own account: nothing moves between them, so the first switch to a server
 starts a fresh one there. The setting is machine-wide and a session that is not playing follows
 it within 10 seconds. When the server stops answering, or refuses a batch, the message window reads
 `Promptfall: server unreachable, retrying`, the band keeps ticking and buffering for two minutes,
@@ -317,6 +322,24 @@ the only filter. The GitHub link is approved by the fakes, not by GitHub, and th
 has no bots, so its market is yours alone and its chat is closed.
 
 ## Develop
+
+To play from a checkout, load the plugin from the repository root in an interactive session:
+
+```sh
+pnpm install
+claude --plugin-dir plugins/promptfall
+```
+
+To trade with bots offline, run the HTTP fake and point the plugin at it:
+
+```sh
+pnpm fake --port 7777 --speed 10        # one terminal: the fake, with 12 bots
+# --flag chat.enabled=false (repeatable) turns a server flag off
+# --boss-in 60 brings the next world boss a minute out (a dev flag)
+# --store sqlite:.promptfall/fake.sqlite runs on a SQLite file instead of the JSON one
+# --host 0.0.0.0 binds every interface instead of loopback (the container does)
+/promptfall server http://127.0.0.1:7777   # in the Claude Code session
+```
 
 A `--plugin-dir` folder reloads on save. The game packages live in `packages/`, and a mod can
 import only files inside its own folder, so `pnpm vendor` bundles them into `hooks/vendor/`.

@@ -192,6 +192,19 @@ export async function expireDue(ctx: MarketContext): Promise<void> {
   }
 }
 
+/**
+ * Closes every open listing and order of an account being deleted. Nothing goes back: the goods
+ * and the escrow leave with the account, and no counterparty is touched.
+ */
+export async function closeAllOf(ctx: MarketContext, accountId: string): Promise<void> {
+  for (const listing of await openListings(ctx)) {
+    if (listing.sellerId === accountId) await closeListing(ctx, listing.id)
+  }
+  for (const order of await openOrders(ctx)) {
+    if (order.buyerId === accountId) await closeOrder(ctx, order.id)
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Reads
 

@@ -1,5 +1,6 @@
 import type { GameState, PlayerEventKind, ServerEvent, TradeKind } from '@promptfall/sim'
 import type {
+  Banned,
   ListingPage,
   ListingQuery,
   MarketResult,
@@ -32,6 +33,7 @@ export type AdoptReason = 'seq_mismatch' | 'cursor_mismatch' | 'hash_mismatch' |
 export type BatchAck =
   | { ok: true; seq: number; hash: string; duplicate: boolean; delivery: Delivery }
   | { ok: false; reason: 'unauthorized' }
+  | ({ ok: false } & Banned)
   | { ok: false; reason: 'version_gate'; minClientVersion: string }
   | { ok: false; reason: 'sim_version'; simVersion: number }
   /** Apply the delivery, re-step, resubmit; nothing is adopted. */
@@ -78,35 +80,64 @@ export type Bootstrap = {
   delivery: Delivery
 }
 
-export type LinkStart = { code: string; url: string; intervalMs: number }
-export type LinkPoll = { status: 'pending' } | { status: 'linked'; account: Account }
+/**
+ * A bootstrap the host will not answer: `rate_limited` when this address minted too many accounts
+ * this hour, `banned` when the account is. The message is the player's to read.
+ */
+export type BootstrapRefused = { refusal: 'rate_limited' | 'banned'; message: string }
 
+/** The account delete's answer: the account, its token and its rows are gone. */
+export type AccountDeleted = { deleted: true }
+
+export type LinkStart = { code: string; url: string; intervalMs: number }
+/** A host that cannot link now: a `github` host without a client id, or GitHub not answering. */
+export type LinkRefused = { refusal: 'link_unavailable'; message: string }
+/** Why a link ended unlinked: declined on GitHub, its code expired, or GitHub did not answer. */
+export type LinkEnd = 'denied' | 'expired' | 'unavailable'
+export type LinkPoll =
+  | { status: 'pending' }
+  | { status: 'linked'; account: Account }
+  | { status: 'ended'; reason: LinkEnd; message: string }
+
+/**
+ * Every authenticated call of a banned account answers `banned` with the operator's reason as the
+ * message: `{ reason: 'banned', message }`, with `ok: false` where the call's refusals carry it,
+ * and `{ refusal: 'banned', message }` from the bootstrap.
+ */
 export interface ServerClient {
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused>
   submit(batch: Batch, auth: Auth): Promise<BatchAck>
-  account(auth: Auth): Promise<AccountInfo | Unauthorized>
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized>
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>
-  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>
+  /**
+   * Deletes the caller's account: its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its token is unknown from then on.
+   */
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>
+  linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>
+  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>
+  browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized | Banned>
   list(auth: Auth, input: { kind: TradeKind; id: string; price: number }): Promise<MarketResult>
   cancelListing(auth: Auth, listingId: string): Promise<MarketResult>
   buy(auth: Auth, listingId: string): Promise<MarketResult>
-  myOrders(auth: Auth): Promise<MyOrders | Unauthorized>
+  myOrders(auth: Auth): Promise<MyOrders | Unauthorized | Banned>
   placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>
   cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>
-  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>
+  matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized | Banned>
   fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>
   /** The world poll: stamps the caller present and answers the snapshot. `since` is the chat mark; 0 asks for the last 50. */
-  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized>
+  world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>
   chat(auth: Auth, text: string): Promise<ChatResult>
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized>
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>
 }
 
 /**
- * The lowest client version a server lets submit. It stays at 0.1.0 while the plugin is 0.2.0: the
- * sim version gate already refuses a client on an older sim.
+ * The lowest client version a server lets submit: the launch version, so a pre-launch build is
+ * told to update. It moves with the plugin's version only when old clients must go.
  */
-export const MIN_CLIENT_VERSION = '0.1.0'
+export const MIN_CLIENT_VERSION = '0.3.0'
 
 export type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end'
 

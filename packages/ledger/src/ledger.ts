@@ -1,17 +1,22 @@
 import {
+  type AccountDeleted,
   type AccountInfo,
   type AdoptReason,
   type Auth,
+  type Banned,
   type BatchAck,
   BatchSchema,
   type Boards,
   type Bootstrap,
+  type BootstrapRefused,
   BUDGETS,
   type BudgetKind,
   type ChatResult,
   compareSemver,
   type KeyValue,
+  type LinkEnd,
   type LinkPoll,
+  type LinkRefused,
   type LinkStart,
   type ListingPage,
   type ListingQuery,
@@ -44,6 +49,7 @@ import {
   BATCH_RING,
   Books,
   deliveryOf,
+  FLAGS_KEY,
   isCurrent,
   KINDS,
   linkKey,
@@ -67,6 +73,28 @@ export type LedgerFlag =
   | 'maintenance'
   | 'sandbox.enabled'
 
+/** The flags an operator may set while the host runs: every flag but the sandbox's. */
+export const SETTABLE_FLAGS = [
+  'market.enabled',
+  'chat.enabled',
+  'worldboss.enabled',
+  'presence.enabled',
+  'leaderboards.enabled',
+  'maintenance',
+] as const satisfies readonly LedgerFlag[]
+export type SettableFlag = (typeof SETTABLE_FLAGS)[number]
+
+/** The settable flags in `raw` that are booleans; anything else is dropped. */
+function settable(raw: unknown): Partial<Record<SettableFlag, boolean>> {
+  const out: Partial<Record<SettableFlag, boolean>> = {}
+  if (typeof raw !== 'object' || raw === null) return out
+  for (const flag of SETTABLE_FLAGS) {
+    const value = (raw as Record<string, unknown>)[flag]
+    if (typeof value === 'boolean') out[flag] = value
+  }
+  return out
+}
+
 /** What a sandbox host call answers: the refusal is an answer, not a throw. */
 export type SandboxOutcome =
   | { ok: true }
@@ -82,8 +110,8 @@ export type LedgerOptions = {
   /** Device tokens, account ids and link codes. */
   tokenSource: () => string
   flags?: Partial<Record<LedgerFlag, boolean>>
-  /** Links approve on the first poll with this login (the fakes). Phase 5 replaces it with GitHub. */
-  linkApprover: (code: string) => Promise<{ login: string } | null>
+  /** Who approves a link: `approveAs` in the fakes, GitHub's device flow on a `github` host. */
+  linkApprover: LinkApprover
   /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
   presenceTtlMs?: number
   /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
@@ -91,11 +119,12 @@ export type LedgerOptions = {
 }
 
 export type LedgerHost = {
-  /** Mints an account with a given state and name (bots, tests). */
+  /** Mints an account with a given state and name (bots, tests). `bot` marks it off the boards. */
   mint(input: {
     state: GameState
     name: string
     linked: boolean
+    bot?: boolean
   }): Promise<{ accountId: string; deviceToken: string }>
   /** Authors a `credited` server event (bot stipends; phase 5 admin). */
   credit(accountId: string, gold: number, reason: string): Promise<void>
@@ -112,6 +141,16 @@ export type LedgerHost = {
   spawnBoss(): Promise<SandboxOutcome>
   /** Settles the open world boss now, paying every engaged account. */
   settleBoss(): Promise<SandboxOutcome>
+  /**
+   * Sets flags over the start flags, from the next call on, and stores them so the next start
+   * loads them too. Answers the resolved flags.
+   */
+  setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>
+  /**
+   * Bans an account: from the next call on, every authenticated call it makes is refused with
+   * `reason`. Answers the ban as stored, or null when no account has the id.
+   */
+  ban(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
 }
 
 /**
@@ -127,12 +166,58 @@ export const PLAYER_NAME_MAX = 64
 export const LINK_URL = 'https://github.com/login/device'
 export const LINK_INTERVAL_MS = 5000
 
-type Link = { accountId: string; createdAt: number }
+/**
+ * The two calls of a link. Both run outside the ledger's mutex, so a slow answer stalls only
+ * the caller. `start` gets a code the ledger drew; an approver with its own codes ignores it.
+ * `deviceCode` stays in the link record and never reaches the client.
+ */
+export type LinkApprover = {
+  start(code: string): Promise<(LinkStart & { deviceCode: string }) | LinkRefused>
+  poll(
+    deviceCode: string,
+  ): Promise<
+    | { status: 'pending' }
+    | { status: 'approved'; login: string }
+    | { status: 'ended'; reason: LinkEnd; message: string }
+  >
+}
+
+/** The fakes' approver: the ledger's code, the first poll approves as `login`; `null` never does. */
+export function approveAs(login: string | null): LinkApprover {
+  return {
+    start: async (code) => ({
+      code,
+      url: LINK_URL,
+      intervalMs: LINK_INTERVAL_MS,
+      deviceCode: code,
+    }),
+    poll: async () => (login === null ? { status: 'pending' } : { status: 'approved', login }),
+  }
+}
+
+/** Keyed by the code the player sees. Records from before the device code fall back to the key. */
+type Link = { accountId: string; createdAt: number; deviceCode?: string }
 
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
+const pending: LinkPoll = { status: 'pending' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
 const sandboxOff: SandboxOutcome = { ok: false, reason: 'sandbox_off' }
+
+/** A banned record's refusal, or null for one that plays: the reason is the message. */
+function bannedOf(record: AccountRecord): Banned | null {
+  if (!record.banned) return null
+  return {
+    reason: 'banned',
+    message: `Promptfall: this account is banned: ${record.banned.reason}`,
+  }
+}
+
+/** `bannedOf` where the call's refusals carry `ok: false`. */
+function refusedBanned(record: AccountRecord): ({ ok: false } & Banned) | null {
+  const banned = bannedOf(record)
+  return banned ? { ok: false, ...banned } : null
+}
 
 /**
  * The account ledger: records, batch replay, server events and the market.
@@ -145,10 +230,20 @@ export class Ledger implements ServerClient {
   private readonly books: Books
   private chain: Promise<unknown> = Promise.resolve()
   private readonly presence: world.Presence = new Map()
+  private readonly memo = new world.WorldMemo()
+  /** The flags under `pf:flags`, over the start flags. */
+  private stored: Partial<Record<SettableFlag, boolean>> = {}
+  /** The stored flags read at start; every operation waits on it. */
+  private readonly loaded: Promise<void>
 
   constructor(private readonly options: LedgerOptions) {
-    this.kv = new TrackedKeyValue(options.kv)
+    this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key))
     this.books = new Books(this.kv)
+    this.loaded = (async () => {
+      this.stored = settable(await options.kv.get(FLAGS_KEY))
+    })()
+    // A failed read fails every operation that waits on it, not the process.
+    this.loaded.catch(() => undefined)
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
@@ -157,6 +252,8 @@ export class Ledger implements ServerClient {
       sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
+      setFlags: (flags) => this.run(() => this.setFlags(flags)),
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
     }
   }
 
@@ -167,6 +264,7 @@ export class Ledger implements ServerClient {
   private run<T>(fn: () => Promise<T>): Promise<T> {
     const next = this.chain.then(async () => {
       try {
+        await this.loaded
         return await fn()
       } finally {
         await this.kv.flush()
@@ -186,7 +284,27 @@ export class Ledger implements ServerClient {
       maintenance: false,
       'sandbox.enabled': false,
       ...this.options.flags,
+      ...this.stored,
     }
+  }
+
+  private async setFlags(
+    flags: Partial<Record<SettableFlag, boolean>>,
+  ): Promise<Record<string, boolean>> {
+    this.stored = { ...this.stored, ...settable(flags) }
+    await this.kv.set(FLAGS_KEY, this.stored)
+    return this.flags()
+  }
+
+  private async ban(
+    accountId: string,
+    reason: string,
+  ): Promise<{ reason: string; at: number } | null> {
+    const record = await this.books.load(accountId)
+    if (!record) return null
+    record.banned = { reason, at: await this.options.now() }
+    await this.books.save(record)
+    return record.banned
   }
 
   private async config(): Promise<ServerConfig> {
@@ -210,6 +328,7 @@ export class Ledger implements ServerClient {
       now: at ?? (await this.options.now()),
       flags: this.flags(),
       presence: this.presence,
+      memo: this.memo,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
       speed,
       seedSource: this.options.seedSource,
@@ -220,11 +339,22 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // Accounts
 
-  bootstrap(input: { clientVersion: string; deviceToken: string | null }): Promise<Bootstrap> {
-    return this.run(async () => {
+  /** A null token always mints, so only a known token can be refused. */
+  bootstrap(input: { clientVersion: string; deviceToken: null }): Promise<Bootstrap>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused>
+  bootstrap(input: {
+    clientVersion: string
+    deviceToken: string | null
+  }): Promise<Bootstrap | BootstrapRefused> {
+    return this.run(async (): Promise<Bootstrap | BootstrapRefused> => {
       if (input.deviceToken) {
         // A known token writes nothing: a secondary session bootstraps every few seconds.
         const record = await this.books.authenticate({ deviceToken: input.deviceToken })
+        const banned = record && bannedOf(record)
+        if (banned) return { refusal: 'banned', message: banned.message }
         if (record) return this.bootFor(input.deviceToken, record)
       }
       const now = await this.options.now()
@@ -240,6 +370,11 @@ export class Ledger implements ServerClient {
       await this.kv.set(tokenKey(deviceToken), accountId)
       return this.bootFor(deviceToken, record)
     })
+  }
+
+  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  knowsToken(deviceToken: string): Promise<boolean> {
+    return this.run(async () => (await this.books.authenticate({ deviceToken })) !== null)
   }
 
   private async bootFor(deviceToken: string, record: AccountRecord): Promise<Bootstrap> {
@@ -268,16 +403,39 @@ export class Ledger implements ServerClient {
     }
   }
 
-  account(auth: Auth): Promise<AccountInfo | Unauthorized> {
+  account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       return {
         account: record.account,
         returns: isCurrent(record) ? record.returns.length : 0,
         config: await this.config(),
         delivery: deliveryOf(record),
       }
+    })
+  }
+
+  /**
+   * Deletes the caller's account. Its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   */
+  deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
+      const id = record.account.accountId
+      await market.closeAllOf(await this.marketContext(), id)
+      await world.dropFromBoards(this.kv, id)
+      if (this.presence.delete(id)) this.memo.presenceChanged()
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
+      await this.books.remove(record, auth.deviceToken)
+      return { deleted: true } as const
     })
   }
 
@@ -294,6 +452,8 @@ export class Ledger implements ServerClient {
       if (!owner || owner !== batch.accountId) return { ok: false, reason: 'unauthorized' }
       const record = await this.books.load(owner)
       if (!record) return { ok: false, reason: 'unauthorized' }
+      const banned = refusedBanned(record)
+      if (banned) return banned
 
       // 4. Versions.
       const { minClientVersion } = this.options
@@ -368,16 +528,7 @@ export class Ledger implements ServerClient {
       // The batch's damage to the world boss; a killing commit authors the rewards here.
       await boss.contribute(await this.worldContext(now), record, prevDealt)
       await this.books.deliverReturns(record)
-      await world.offerZone(
-        this.kv,
-        now,
-        {
-          accountId: record.account.accountId,
-          name: publicName(record),
-          value: record.state.highestZone,
-        },
-        (id) => world.isPlaying(this.books, id),
-      )
+      await this.offerZone(record, now)
       if (hash === batch.resultHash) {
         await this.books.save(record)
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) }
@@ -417,37 +568,68 @@ export class Ledger implements ServerClient {
   }
 
   // ---------------------------------------------------------------------------
-  // GitHub link (approved by `linkApprover` until phase 5)
+  // GitHub link: the approver's round trips sit between two short locked steps.
 
-  linkStart(auth: Auth): Promise<LinkStart | Unauthorized> {
-    return this.run(async () => {
+  async linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned> {
+    const found = await this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
-      const code = this.linkCode()
-      const link: Link = {
-        accountId: record.account.accountId,
-        createdAt: await this.options.now(),
-      }
-      await this.kv.set(linkKey(code), link)
-      return { code, url: LINK_URL, intervalMs: LINK_INTERVAL_MS }
+      return bannedOf(record) ?? record.account.accountId
+    })
+    if (typeof found !== 'string') return found
+    const accountId = found
+    const started = await this.options.linkApprover.start(this.linkCode())
+    if ('refusal' in started) return started
+    const { deviceCode, ...start } = started
+    return this.run(async () => {
+      // An account deleted during the round trip gets no row back.
+      const record = await this.books.authenticate(auth)
+      if (!record || record.account.accountId !== accountId) return unauthorized
+      // One open link per account: a new start replaces the last one's row.
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
+      const link: Link = { accountId, createdAt: await this.options.now(), deviceCode }
+      await this.kv.set(linkKey(start.code), link)
+      record.linkCode = start.code
+      await this.books.save(record)
+      return start
     })
   }
 
-  linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized> {
+  async linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned> {
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
+      const link = (await this.kv.get(linkKey(code))) as Link | undefined
+      if (!link || link.accountId !== record.account.accountId) return pending
+      return link
+    })
+    if (!('accountId' in found)) return found
+    const answer = await this.options.linkApprover.poll(found.deviceCode ?? code)
+    if (answer.status === 'pending') return pending
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       const link = (await this.kv.get(linkKey(code))) as Link | undefined
-      if (!link || link.accountId !== record.account.accountId) return { status: 'pending' }
-      const approved = await this.options.linkApprover(code)
-      if (!approved) return { status: 'pending' }
+      // A poll that raced this one already settled the link.
+      if (!link || link.accountId !== record.account.accountId) {
+        return record.account.linked ? { status: 'linked', account: record.account } : pending
+      }
+      await this.kv.delete(linkKey(code))
+      if (record.linkCode === code) delete record.linkCode
+      if (answer.status === 'ended') {
+        await this.books.save(record)
+        return answer
+      }
       record.account = {
         ...record.account,
-        displayName: approved.login,
-        linked: { provider: 'github', login: approved.login },
+        displayName: answer.login,
+        linked: { provider: 'github', login: answer.login },
       }
       await this.books.save(record)
-      await this.kv.delete(linkKey(code))
       return { status: 'linked', account: record.account }
     })
   }
@@ -472,10 +654,11 @@ export class Ledger implements ServerClient {
     auth: Auth,
     expire: boolean,
     fn: (ctx: market.MarketContext, record: AccountRecord) => Promise<T>,
-  ): Promise<T | Unauthorized> {
+  ): Promise<T | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire)
       if (!record) return unauthorized
+      if ('message' in record) return record
       return fn(record.ctx, record.record)
     })
   }
@@ -488,6 +671,7 @@ export class Ledger implements ServerClient {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire)
       if (!record) return refusedUnauthorized
+      if ('message' in record) return { ok: false, ...record }
       return fn(record.ctx, record.record)
     })
   }
@@ -495,15 +679,17 @@ export class Ledger implements ServerClient {
   /**
    * The caller's current record, after expiring what is due. Expiry runs only
    * for an authenticated caller, and the record is read after it, since
-   * expiring the caller's own listing changes the caller's record.
+   * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
    */
   private async authenticated(
     auth: Auth,
     expire: boolean,
-  ): Promise<{ ctx: market.MarketContext; record: AccountRecord } | null> {
+  ): Promise<{ ctx: market.MarketContext; record: AccountRecord } | Banned | null> {
     const ctx = await this.marketContext()
     const caller = await this.books.authenticate(auth)
     if (!caller || !isCurrent(caller)) return null
+    const banned = bannedOf(caller)
+    if (banned) return banned
     if (!expire) return { ctx, record: caller }
     await market.expireDue(ctx)
     const record = await this.books.load(caller.account.accountId)
@@ -514,7 +700,7 @@ export class Ledger implements ServerClient {
     auth: Auth,
     query: ListingQuery,
     { expire = true }: ReadOptions = {},
-  ): Promise<ListingPage | Unauthorized> {
+  ): Promise<ListingPage | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) => market.browse(ctx, record, query))
   }
 
@@ -532,7 +718,10 @@ export class Ledger implements ServerClient {
     return this.marketWrite(auth, true, (ctx, record) => market.buy(ctx, record, listingId))
   }
 
-  myOrders(auth: Auth, { expire = true }: ReadOptions = {}): Promise<MyOrders | Unauthorized> {
+  myOrders(
+    auth: Auth,
+    { expire = true }: ReadOptions = {},
+  ): Promise<MyOrders | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) => market.myOrders(ctx, record))
   }
 
@@ -548,7 +737,7 @@ export class Ledger implements ServerClient {
     auth: Auth,
     itemId: string,
     { expire = true }: ReadOptions = {},
-  ): Promise<Order[] | Unauthorized> {
+  ): Promise<Order[] | Unauthorized | Banned> {
     return this.marketRead(auth, expire, (ctx, record) =>
       market.matchingOrders(ctx, record, itemId),
     )
@@ -567,13 +756,17 @@ export class Ledger implements ServerClient {
     auth: Auth,
     since: number,
     { advance = true }: ReadOptions = {},
-  ): Promise<WorldSnapshot | Unauthorized> {
+  ): Promise<WorldSnapshot | Unauthorized | Banned> {
     return this.run(async () => {
       const ctx = await this.worldContext()
-      // Before any record loads: the caller's record is read fresh after it.
-      if (advance) await boss.advanceBoss(ctx)
+      // Before any record loads: the caller's record is read fresh after it. Once a second: a
+      // grid point falls on a whole second, so the first poll at or past one still spawns it.
+      if (advance && this.memo.advanceDue(ctx.now)) await boss.advanceBoss(ctx)
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      // Banned: no heartbeat either, so the account leaves the online count.
+      const banned = bannedOf(record)
+      if (banned) return banned
       return world.world(ctx, record, since, advance)
     })
   }
@@ -583,15 +776,19 @@ export class Ledger implements ServerClient {
       const ctx = await this.worldContext()
       const record = await this.books.authenticate(auth)
       if (!record) return chatUnauthorized
+      const banned = refusedBanned(record)
+      if (banned) return banned
       return world.chat(ctx, record, text)
     })
   }
 
-  leaderboards(auth: Auth): Promise<Boards | Unauthorized> {
+  leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned> {
     return this.run(async () => {
       const ctx = await this.worldContext()
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
       return world.leaderboards(ctx)
     })
   }
@@ -603,6 +800,7 @@ export class Ledger implements ServerClient {
     state: GameState
     name: string
     linked: boolean
+    bot?: boolean
   }): Promise<{ accountId: string; deviceToken: string }> {
     if (input.name.length < 1 || input.name.length > PLAYER_NAME_MAX) {
       throw new Error(
@@ -623,19 +821,26 @@ export class Ledger implements ServerClient {
       input.state,
       now,
     )
+    if (input.bot) record.bot = true
     await this.books.save(record)
     await this.kv.set(tokenKey(deviceToken), accountId)
+    await this.offerZone(record, now)
+    return { accountId, deviceToken }
+  }
+
+  /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+  private async offerZone(record: AccountRecord, now: number): Promise<void> {
+    if (record.bot) return
     await world.offerZone(
       this.kv,
       now,
       {
-        accountId,
+        accountId: record.account.accountId,
         name: publicName(record),
-        value: input.state.highestZone,
+        value: record.state.highestZone,
       },
       (id) => world.isPlaying(this.books, id),
     )
-    return { accountId, deviceToken }
   }
 
   private async currentRecord(accountId: string): Promise<AccountRecord> {

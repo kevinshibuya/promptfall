@@ -18,15 +18,20 @@ test('in play, a hero stands until the blow that kills him lands', async ($, on)
   let died = 0
   let trailed = 0
   let caughtUp = 0
+  // The most heroes the state has had dead since the stage last caught up with it. A cleared
+  // wave revives the party, and the stage may still be playing the blows that felled them.
+  let fell = 0
   for (let step = 0; step < 2400 && caughtUp === 0; step++) {
     await clock.advance(50)
     const dead = view().heroes.filter((h) => !h.alive).length
     const drawn = await fallen()
-    // Never ahead of the state: a hero dims only once the state has him dead.
-    expect(drawn).toBeLessThanOrEqual(dead)
+    fell = Math.max(fell, dead)
+    // Never ahead of the state: a hero dims only once the state has had him dead.
+    expect(drawn).toBeLessThanOrEqual(fell)
     if (dead > 0) died++
     if (drawn < dead) trailed++
-    else if (trailed > 0 && dead > 0) caughtUp++
+    else if (trailed > 0 && drawn > 0) caughtUp++
+    if (drawn <= dead) fell = dead
   }
   expect(died, 'a hero died').toBeGreaterThan(0)
   // The tick that killed him drew him standing, and the redraw after the blow landed dims him.

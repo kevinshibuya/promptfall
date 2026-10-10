@@ -22,6 +22,7 @@ var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
 var RETURNS_KEY = "pf:returns";
+var FLAGS_KEY = "pf:flags";
 function everyKind(value) {
   const out = {};
   for (const kind of KINDS) out[kind] = value;
@@ -92,20 +93,24 @@ function hasRoom(state, goods) {
   return goods.kind === "item" ? state.inventory.length < state.inventoryCap : state.roster.length < state.rosterCap;
 }
 var TrackedKeyValue = class {
-  constructor(inner) {
+  constructor(inner, onWrite = () => void 0) {
     this.inner = inner;
+    this.onWrite = onWrite;
   }
   inner;
+  onWrite;
   dirty = false;
   get(key) {
     return this.inner.get(key);
   }
   set(key, value) {
     this.dirty = true;
+    this.onWrite(key);
     return this.inner.set(key, value);
   }
   delete(key) {
     this.dirty = true;
+    this.onWrite(key);
     return this.inner.delete(key);
   }
   async flush() {
@@ -125,6 +130,13 @@ var Books = class {
   }
   async save(record) {
     await this.kv.set(recordKey(record.account.accountId), record);
+  }
+  /** Deletes the record, its token and its place on the returns queue: an account delete. */
+  async remove(record, token) {
+    record.returns = [];
+    await this.syncReturnsQueue(record);
+    await this.kv.delete(recordKey(record.account.accountId));
+    await this.kv.delete(tokenKey(token));
   }
   async accountFor(token) {
     const raw = await this.kv.get(tokenKey(token));
@@ -284,6 +296,66 @@ import {
   HERE_MAX,
   weekStartOf
 } from './protocol.js';
+var WorldMemo = class {
+  second = Number.NaN;
+  advanced = Number.NaN;
+  counts = null;
+  boss = null;
+  messages = null;
+  slices = /* @__PURE__ */ new Map();
+  /** True on the first call in each second: the boss advance runs then, as it ran on every poll. */
+  advanceDue(now) {
+    const second = Math.floor(now / 1e3);
+    if (second === this.advanced) return false;
+    this.advanced = second;
+    return true;
+  }
+  /** Drops every part when `now` is in another second than the one they were built in. */
+  roll(now) {
+    const second = Math.floor(now / 1e3);
+    if (second === this.second) return;
+    this.second = second;
+    this.counts = null;
+    this.boss = null;
+    this.dropChat();
+  }
+  presenceChanged() {
+    this.counts = null;
+  }
+  /** The store's write hook. */
+  written(key) {
+    if (key === BOSS_KEY) this.boss = null;
+    if (key === CHAT_KEY) this.dropChat();
+  }
+  presenceCounts(presence) {
+    if (this.counts) return this.counts;
+    const counts = /* @__PURE__ */ new Map();
+    for (const entry of presence.values()) {
+      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
+    }
+    this.counts = {
+      online: presence.size,
+      zones: [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }))
+    };
+    return this.counts;
+  }
+  async bossRecord(kv) {
+    this.boss ??= { record: await loadBoss(kv) };
+    return this.boss.record;
+  }
+  async chatSince(kv, since) {
+    const cached = this.slices.get(since);
+    if (cached) return cached;
+    this.messages ??= (await loadChat(kv)).messages;
+    const slice = since <= 0 ? this.messages.slice(-CHAT_SERVE) : this.messages.filter((m) => m.id > since);
+    this.slices.set(since, slice);
+    return slice;
+  }
+  dropChat() {
+    this.messages = null;
+    this.slices.clear();
+  }
+};
 var CHAT_KEY = "pf:chat";
 var BOARDS_KEY = "pf:boards";
 async function loadChat(kv) {
@@ -295,43 +367,45 @@ async function loadBoards(kv, now) {
   return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
 }
 function prune(ctx) {
+  let dropped = false;
   for (const [id, entry] of ctx.presence) {
-    if (!(ctx.now - entry.at < ctx.ttl)) ctx.presence.delete(id);
+    if (!(ctx.now - entry.at < ctx.ttl)) {
+      ctx.presence.delete(id);
+      dropped = true;
+    }
   }
+  return dropped;
 }
 async function world(ctx, record, since, engageCaller = true) {
   const presenceOn = ctx.flags["presence.enabled"] !== false;
   const id = record.account.accountId;
-  prune(ctx);
+  const memo = ctx.memo;
+  memo.roll(ctx.now);
+  if (prune(ctx)) memo.presenceChanged();
   if (presenceOn && isCurrent(record)) {
+    const before = ctx.presence.get(id);
     ctx.presence.set(id, { zone: record.state.zone, name: publicName(record), at: ctx.now });
+    if (before?.zone !== record.state.zone) memo.presenceChanged();
   }
   let online = 0;
   let zones = [];
   let here = [];
   if (presenceOn) {
-    const counts = /* @__PURE__ */ new Map();
-    for (const entry of ctx.presence.values()) {
-      counts.set(entry.zone, (counts.get(entry.zone) ?? 0) + 1);
-    }
-    online = ctx.presence.size;
-    zones = [...counts.entries()].sort(([a], [b]) => a - b).map(([zone, count]) => ({ zone, count }));
+    ;
+    ({ online, zones } = memo.presenceCounts(ctx.presence));
     const mine = ctx.presence.get(id);
     if (mine) {
       here = [...ctx.presence.entries()].filter(([other, entry]) => other !== id && entry.zone === mine.zone).sort(([, a], [, b]) => b.at - a.at).slice(0, HERE_MAX).map(([, entry]) => entry.name);
     }
   }
-  const boss = await loadBoss(ctx.books.kv);
+  const boss = await memo.bossRecord(ctx.books.kv);
   if (engageCaller && boss && ctx.flags["worldboss.enabled"] !== false && isLive(ctx, boss) && (!presenceOn || ctx.presence.has(id)) && isCurrent(record) && !(id in boss.contributions)) {
     engage(record, boss);
     await ctx.books.save(record);
     await ctx.books.kv.set(BOSS_KEY, boss);
   }
   let chat2 = [];
-  if (ctx.flags["chat.enabled"] !== false) {
-    const { messages } = await loadChat(ctx.books.kv);
-    chat2 = since <= 0 ? messages.slice(-CHAT_SERVE) : messages.filter((m) => m.id > since);
-  }
+  if (ctx.flags["chat.enabled"] !== false) chat2 = await memo.chatSince(ctx.books.kv, since);
   return {
     serverNow: ctx.now,
     speed: ctx.speed,
@@ -391,6 +465,14 @@ async function leaderboards(ctx) {
 async function isPlaying(books, accountId) {
   const record = await books.load(accountId);
   return record !== null && isCurrent(record);
+}
+async function dropFromBoards(kv, accountId) {
+  const boards = await kv.get(BOARDS_KEY);
+  if (!boards) return;
+  const zone = boards.zone.filter((r) => r.accountId !== accountId);
+  const { [accountId]: dropped, ...damage } = boards.week.damage;
+  if (zone.length === boards.zone.length && !dropped) return;
+  await kv.set(BOARDS_KEY, { zone, week: { ...boards.week, damage } });
 }
 async function offerZone(kv, now, row, keep = async () => true) {
   const boards = await loadBoards(kv, now);
@@ -590,7 +672,13 @@ async function contribute(ctx, record, prevDealt) {
   const id = record.account.accountId;
   boss.hp = Math.max(0, boss.hp - delta);
   boss.contributions[id] = (boss.contributions[id] ?? 0) + delta;
-  const weekStart = weekStartOf2(ctx.now);
+  if (!record.bot) await offerDamage(kv, ctx.now, record, delta);
+  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record });
+  else await saveBoss(kv, boss);
+}
+async function offerDamage(kv, now, record, delta) {
+  const id = record.account.accountId;
+  const weekStart = weekStartOf2(now);
   const boards = await kv.get(BOARDS_KEY) ?? {
     zone: [],
     week: { start: weekStart, damage: {} }
@@ -604,8 +692,6 @@ async function contribute(ctx, record, prevDealt) {
       damage: { ...week.damage, [id]: { name: publicName(record), value } }
     }
   });
-  if (boss.hp === 0) await settleBoss(ctx, boss, { expired: false, inHand: record });
-  else await saveBoss(kv, boss);
 }
 
 // packages/ledger/src/market.ts
@@ -729,6 +815,14 @@ async function expireDue(ctx) {
     author(buyer, { t: "order_refunded", orderId: order.id, escrow: order.maxPrice });
     await ctx.books.save(buyer);
     await closeOrder(ctx, order.id);
+  }
+}
+async function closeAllOf(ctx, accountId) {
+  for (const listing of await openListings(ctx)) {
+    if (listing.sellerId === accountId) await closeListing(ctx, listing.id);
+  }
+  for (const order of await openOrders(ctx)) {
+    if (order.buyerId === accountId) await closeOrder(ctx, order.id);
   }
 }
 async function browse(ctx, _record, query) {
@@ -886,18 +980,62 @@ async function fillOrder(ctx, record, orderId, itemId) {
 }
 
 // packages/ledger/src/ledger.ts
+var SETTABLE_FLAGS = [
+  "market.enabled",
+  "chat.enabled",
+  "worldboss.enabled",
+  "presence.enabled",
+  "leaderboards.enabled",
+  "maintenance"
+];
+function settable(raw) {
+  const out = {};
+  if (typeof raw !== "object" || raw === null) return out;
+  for (const flag of SETTABLE_FLAGS) {
+    const value = raw[flag];
+    if (typeof value === "boolean") out[flag] = value;
+  }
+  return out;
+}
 var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
+function approveAs(login) {
+  return {
+    start: async (code) => ({
+      code,
+      url: LINK_URL,
+      intervalMs: LINK_INTERVAL_MS,
+      deviceCode: code
+    }),
+    poll: async () => login === null ? { status: "pending" } : { status: "approved", login }
+  };
+}
 var unauthorized = { reason: "unauthorized" };
+var pending = { status: "pending" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
 var sandboxOff = { ok: false, reason: "sandbox_off" };
+function bannedOf(record) {
+  if (!record.banned) return null;
+  return {
+    reason: "banned",
+    message: `Promptfall: this account is banned: ${record.banned.reason}`
+  };
+}
+function refusedBanned(record) {
+  const banned = bannedOf(record);
+  return banned ? { ok: false, ...banned } : null;
+}
 var Ledger = class {
   constructor(options) {
     this.options = options;
-    this.kv = new TrackedKeyValue(options.kv);
+    this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key));
     this.books = new Books(this.kv);
+    this.loaded = (async () => {
+      this.stored = settable(await options.kv.get(FLAGS_KEY));
+    })();
+    this.loaded.catch(() => void 0);
     this.host = {
       mint: (input) => this.run(() => this.mint(input)),
       credit: (accountId, gold, reason) => this.run(() => this.credit(accountId, gold, reason)),
@@ -905,7 +1043,9 @@ var Ledger = class {
       sweep: () => this.run(() => this.sweep()),
       sandbox: (accountId, event) => this.run(() => this.sandbox(accountId, event)),
       spawnBoss: () => this.run(() => this.spawnBoss()),
-      settleBoss: () => this.run(() => this.settleBoss())
+      settleBoss: () => this.run(() => this.settleBoss()),
+      setFlags: (flags) => this.run(() => this.setFlags(flags)),
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason))
     };
   }
   options;
@@ -914,6 +1054,11 @@ var Ledger = class {
   books;
   chain = Promise.resolve();
   presence = /* @__PURE__ */ new Map();
+  memo = new WorldMemo();
+  /** The flags under `pf:flags`, over the start flags. */
+  stored = {};
+  /** The stored flags read at start; every operation waits on it. */
+  loaded;
   /**
    * The flush runs even when `fn` threw, so an operation must validate before
    * its first `set`; `author` throws before it touches the record for that reason.
@@ -921,6 +1066,7 @@ var Ledger = class {
   run(fn) {
     const next = this.chain.then(async () => {
       try {
+        await this.loaded;
         return await fn();
       } finally {
         await this.kv.flush();
@@ -938,8 +1084,21 @@ var Ledger = class {
       "leaderboards.enabled": true,
       maintenance: false,
       "sandbox.enabled": false,
-      ...this.options.flags
+      ...this.options.flags,
+      ...this.stored
     };
+  }
+  async setFlags(flags) {
+    this.stored = { ...this.stored, ...settable(flags) };
+    await this.kv.set(FLAGS_KEY, this.stored);
+    return this.flags();
+  }
+  async ban(accountId, reason) {
+    const record = await this.books.load(accountId);
+    if (!record) return null;
+    record.banned = { reason, at: await this.options.now() };
+    await this.books.save(record);
+    return record.banned;
   }
   async config() {
     return {
@@ -960,18 +1119,19 @@ var Ledger = class {
       now: at ?? await this.options.now(),
       flags: this.flags(),
       presence: this.presence,
+      memo: this.memo,
       ttl: this.options.presenceTtlMs ?? PRESENCE_TTL_MS * speed,
       speed,
       seedSource: this.options.seedSource,
       log: this.options.log ?? (() => void 0)
     };
   }
-  // ---------------------------------------------------------------------------
-  // Accounts
   bootstrap(input) {
     return this.run(async () => {
       if (input.deviceToken) {
         const record2 = await this.books.authenticate({ deviceToken: input.deviceToken });
+        const banned = record2 && bannedOf(record2);
+        if (banned) return { refusal: "banned", message: banned.message };
         if (record2) return this.bootFor(input.deviceToken, record2);
       }
       const now = await this.options.now();
@@ -987,6 +1147,10 @@ var Ledger = class {
       await this.kv.set(tokenKey(deviceToken), accountId);
       return this.bootFor(deviceToken, record);
     });
+  }
+  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  knowsToken(deviceToken) {
+    return this.run(async () => await this.books.authenticate({ deviceToken }) !== null);
   }
   async bootFor(deviceToken, record) {
     const config = await this.config();
@@ -1017,12 +1181,34 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return {
         account: record.account,
         returns: isCurrent(record) ? record.returns.length : 0,
         config: await this.config(),
         delivery: deliveryOf(record)
       };
+    });
+  }
+  /**
+   * Deletes the caller's account. Its open listings and orders close with nothing returned or
+   * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   */
+  deleteAccount(auth) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
+      const id = record.account.accountId;
+      await closeAllOf(await this.marketContext(), id);
+      await dropFromBoards(this.kv, id);
+      if (this.presence.delete(id)) this.memo.presenceChanged();
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
+      await this.books.remove(record, auth.deviceToken);
+      return { deleted: true };
     });
   }
   // ---------------------------------------------------------------------------
@@ -1034,6 +1220,8 @@ var Ledger = class {
       if (!owner || owner !== batch.accountId) return { ok: false, reason: "unauthorized" };
       const record = await this.books.load(owner);
       if (!record) return { ok: false, reason: "unauthorized" };
+      const banned = refusedBanned(record);
+      if (banned) return banned;
       const { minClientVersion } = this.options;
       if (compareSemver(batch.clientVersion, minClientVersion) < 0) {
         return { ok: false, reason: "version_gate", minClientVersion };
@@ -1090,16 +1278,7 @@ var Ledger = class {
       settle(record);
       await contribute(await this.worldContext(now), record, prevDealt);
       await this.books.deliverReturns(record);
-      await offerZone(
-        this.kv,
-        now,
-        {
-          accountId: record.account.accountId,
-          name: publicName(record),
-          value: record.state.highestZone
-        },
-        (id) => isPlaying(this.books, id)
-      );
+      await this.offerZone(record, now);
       if (hash === batch.resultHash) {
         await this.books.save(record);
         return { ok: true, duplicate: false, seq, hash, delivery: deliveryOf(record) };
@@ -1133,35 +1312,63 @@ var Ledger = class {
     return { ...common, reason };
   }
   // ---------------------------------------------------------------------------
-  // GitHub link (approved by `linkApprover` until phase 5)
-  linkStart(auth) {
-    return this.run(async () => {
+  // GitHub link: the approver's round trips sit between two short locked steps.
+  async linkStart(auth) {
+    const found = await this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
-      const code = this.linkCode();
-      const link = {
-        accountId: record.account.accountId,
-        createdAt: await this.options.now()
-      };
-      await this.kv.set(linkKey(code), link);
-      return { code, url: LINK_URL, intervalMs: LINK_INTERVAL_MS };
+      return bannedOf(record) ?? record.account.accountId;
+    });
+    if (typeof found !== "string") return found;
+    const accountId = found;
+    const started = await this.options.linkApprover.start(this.linkCode());
+    if ("refusal" in started) return started;
+    const { deviceCode, ...start } = started;
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || record.account.accountId !== accountId) return unauthorized;
+      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
+      const link = { accountId, createdAt: await this.options.now(), deviceCode };
+      await this.kv.set(linkKey(start.code), link);
+      record.linkCode = start.code;
+      await this.books.save(record);
+      return start;
     });
   }
-  linkPoll(auth, code) {
+  async linkPoll(auth, code) {
+    const found = await this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
+      const link = await this.kv.get(linkKey(code));
+      if (!link || link.accountId !== record.account.accountId) return pending;
+      return link;
+    });
+    if (!("accountId" in found)) return found;
+    const answer = await this.options.linkApprover.poll(found.deviceCode ?? code);
+    if (answer.status === "pending") return pending;
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       const link = await this.kv.get(linkKey(code));
-      if (!link || link.accountId !== record.account.accountId) return { status: "pending" };
-      const approved = await this.options.linkApprover(code);
-      if (!approved) return { status: "pending" };
+      if (!link || link.accountId !== record.account.accountId) {
+        return record.account.linked ? { status: "linked", account: record.account } : pending;
+      }
+      await this.kv.delete(linkKey(code));
+      if (record.linkCode === code) delete record.linkCode;
+      if (answer.status === "ended") {
+        await this.books.save(record);
+        return answer;
+      }
       record.account = {
         ...record.account,
-        displayName: approved.login,
-        linked: { provider: "github", login: approved.login }
+        displayName: answer.login,
+        linked: { provider: "github", login: answer.login }
       };
       await this.books.save(record);
-      await this.kv.delete(linkKey(code));
       return { status: "linked", account: record.account };
     });
   }
@@ -1180,6 +1387,7 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire);
       if (!record) return unauthorized;
+      if ("message" in record) return record;
       return fn(record.ctx, record.record);
     });
   }
@@ -1187,18 +1395,21 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.authenticated(auth, expire);
       if (!record) return refusedUnauthorized;
+      if ("message" in record) return { ok: false, ...record };
       return fn(record.ctx, record.record);
     });
   }
   /**
    * The caller's current record, after expiring what is due. Expiry runs only
    * for an authenticated caller, and the record is read after it, since
-   * expiring the caller's own listing changes the caller's record.
+   * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
    */
   async authenticated(auth, expire) {
     const ctx = await this.marketContext();
     const caller = await this.books.authenticate(auth);
     if (!caller || !isCurrent(caller)) return null;
+    const banned = bannedOf(caller);
+    if (banned) return banned;
     if (!expire) return { ctx, record: caller };
     await expireDue(ctx);
     const record = await this.books.load(caller.account.accountId);
@@ -1248,9 +1459,11 @@ var Ledger = class {
   world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      if (advance) await advanceBoss(ctx);
+      if (advance && this.memo.advanceDue(ctx.now)) await advanceBoss(ctx);
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return world(ctx, record, since, advance);
     });
   }
@@ -1259,6 +1472,8 @@ var Ledger = class {
       const ctx = await this.worldContext();
       const record = await this.books.authenticate(auth);
       if (!record) return chatUnauthorized;
+      const banned = refusedBanned(record);
+      if (banned) return banned;
       return chat(ctx, record, text);
     });
   }
@@ -1267,6 +1482,8 @@ var Ledger = class {
       const ctx = await this.worldContext();
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
       return leaderboards(ctx);
     });
   }
@@ -1292,19 +1509,25 @@ var Ledger = class {
       input.state,
       now
     );
+    if (input.bot) record.bot = true;
     await this.books.save(record);
     await this.kv.set(tokenKey(deviceToken), accountId);
+    await this.offerZone(record, now);
+    return { accountId, deviceToken };
+  }
+  /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+  async offerZone(record, now) {
+    if (record.bot) return;
     await offerZone(
       this.kv,
       now,
       {
-        accountId,
+        accountId: record.account.accountId,
         name: publicName(record),
-        value: input.state.highestZone
+        value: record.state.highestZone
       },
       (id) => isPlaying(this.books, id)
     );
-    return { accountId, deviceToken };
   }
   async currentRecord(accountId) {
     const record = await this.books.load(accountId);
@@ -1371,7 +1594,9 @@ export {
   MAX_PRICE,
   MIN_PRICE,
   PLAYER_NAME_MAX,
+  SETTABLE_FLAGS,
   WORLD_BOSSES,
+  approveAs,
   isBlocked,
   listingFee,
   nextLedgerId,

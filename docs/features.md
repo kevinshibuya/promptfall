@@ -111,8 +111,15 @@ in returns and arrives the moment a slot frees; returns are never vendored.
 **Cooldowns.** An item or hero that changes hands cannot be listed again for 24 hours.
 
 **Linking.** Browsing is open to every account, but listing, buying, ordering and posting to chat
-need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: a
-code in the detail window and the URL to enter it under the picture. An unlinked account or a
+need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: the
+code the server gives in the detail window, the URL to enter it at under the picture, and a poll
+at the interval the server gives. A server started with `--link github` runs GitHub's own device
+flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
+link completing on the first poll after the player authorises, and the GitHub login as the
+account's name. The server keeps the login and never the access token. A decline, an expired code
+or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
+without a client id refuses the start the same way. `--link fake`, the default, approves on the
+first poll as `--player-name`. The public server runs GitHub's flow. An unlinked account or a
 closed market is said in the message window, with a hotkey to the Account tab.
 
 ## World
@@ -125,10 +132,42 @@ the World tab dims as stale.
 bottom, the ▶ message whole in the detail window. Enter on a row puts the cursor in the compose
 field; a message is at most 200 characters, posting is rate-limited, and a blocked word refuses
 the message, naming the rule. The band's World tab shows the latest message as a one-line ticker.
-Chat needs a server: the default in-process fake has it off and says so in place.
+Chat needs a server: the in-process fake (`/promptfall server local`) has it off and says so in place.
 
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
 damage this week, your own rows in gold.
+
+**Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
+fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
+none ever holds a row on either leaderboard. The public server runs six during the soft wave and
+none from the public listing on.
+
+**Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
+takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
+the market, chat, the world boss, presence, the leaderboards and maintenance switch on the next
+call, and stay switched after a restart, over the `--flag` values it starts with. The sandbox flag
+is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
+never the token. A server without the token has no admin routes. A server makes at most five new
+accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
+
+**Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
+stores the ban on the account's record, never on the account the wire carries, and logs one line
+with the account id. From the next call on, every call of that account (the bootstrap, batches,
+the market, the world poll, chat, the boards, the link) answers `banned` with
+`Promptfall: this account is banned: <reason>`. The plugin pauses play and shows that line in the
+message window, as it shows the update notice; it does not ask again until the next session, which
+shows it again. There is no unban.
+
+**Deleting an account.** Delete my account on this server, on the Account tab, asks Yes or No, then
+calls `DELETE /v1/account` with the machine's token. The server closes the account's open listings
+and buy orders without returning the goods or refunding the escrow, which leave with the account,
+takes its rows off both leaderboards and out of the online count, and deletes its record, its
+token and any GitHub link it had open; nothing of any other player's changes. From then on that token is unknown to the server.
+On the server's confirmation the plugin resets this machine's data, as the reset does, starts a
+fresh account on the same server, and says so in the message window. When the server does not
+confirm, nothing on the machine changes and the pane says the account was not deleted. The row is
+not on the sandbox save, nor in a session that is not playing; a banned account cannot delete
+itself. The in-process server deletes the same way.
 
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
@@ -137,12 +176,30 @@ percentage and time left, the bar dropping as the party's hits land, waves pause
 spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
 boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
-needs a server; the default in-process fake runs none, and with the boss off the World tab's
+needs a server; the in-process fake runs none, and with the boss off the World tab's
 records row says so in place when it has room.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
 "Your share of …", and goods with no free slot wait in returns.
+
+## Servers
+
+**The public server.** Promptfall's own server runs at `https://promptfall.kevinshibuya.com`: the
+same rules as every other server, with the world boss on its three-hour grid, the market, chat and
+the leaderboards, on the real clock. Linking there goes through GitHub itself. During the soft wave
+six bots keep its market stocked; at the public listing it runs none. The README's privacy
+paragraph says what it keeps about an account and for how long.
+
+**The default server and `local`.** A fresh install, with no server set, plays on the public
+server. `/promptfall server local` moves this machine to the in-process fake, which plays offline
+with no chat and no world boss; `/promptfall server <url>` moves it to any other server, and
+`/promptfall server` says which one is in force. Each server has its own account on the machine,
+and nothing moves between them. The sandbox always plays on the in-process fake, whatever the
+setting.
+
+**Updates.** The public server asks for the launch version, 0.3.0, or newer. An older plugin
+pauses and the band asks for an update instead of being refused in silence.
 
 ## Interface
 
@@ -207,8 +264,9 @@ command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cance
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
 **Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer), the band
-shown or collapsed, Band off, Link GitHub and a reset of this machine's data that asks Yes or No.
-Its detail window names the server, the client, the mode and the session.
+shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on
+this server, each of the last two asking Yes or No. Its detail window names the server, the client,
+the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions.
@@ -218,8 +276,9 @@ still play. It is set with `n` on the Account tab or `/promptfall motion full|st
 
 **The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
 and show the band for the session while play goes on, `farm` flips the tactics, and `server <url>`
-or `server local` points the machine at an HTTP server or back at the in-process fake, each with
-its own account. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
+or `server local` points the machine at an HTTP server or at the in-process fake, each with its
+own account; `server` alone says which is in force. A fresh install, with no server set, plays on
+the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
 **Primary session.** One session per account plays; running a gameplay verb or typing a prompt in
@@ -234,7 +293,10 @@ what the old one already toasted, nor leaves out what arrived after the old one 
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
 again. The first answer sends everything played during the outage at once. When the server runs a
 newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
-older game, it asks for a reset from the Account tab.
+older game, it asks for a reset from the Account tab. When the server will not make this machine
+an account (too many new ones from its address this hour), the band shows the server's message
+and the plugin asks again five minutes later. A banned account's band shows the ban and its reason,
+and play stays paused until a new session asks again.
 
 ## Notifications and cues
 

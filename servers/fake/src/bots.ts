@@ -23,9 +23,9 @@ import {
   BATCH_TICKS_MIN,
   BATCH_TICKS_SPREAD,
   BOT_LINES,
-  BOT_NAMES,
   BOT_TICK_MS,
   BUY_UNDER_MULT,
+  botName,
   CHAT_EVERY_TICKS,
   HERO_PRICE,
   LIST_MULT_MIN,
@@ -139,6 +139,7 @@ export function startBots(options: BotOptions): Bots {
       state: rollBotState(options.seed, i),
       name,
       linked: true,
+      bot: true,
     })
     // Not flushed here: a flush outside the ledger's mutex could write another
     // operation's half-done state. The next ledger write carries it to disk.
@@ -151,14 +152,21 @@ export function startBots(options: BotOptions): Bots {
 
   const ready = (async () => {
     for (let i = 0; i < options.count; i++) {
-      const name = BOT_NAMES[i % BOT_NAMES.length] ?? `Bot ${i}`
+      const name = botName(i)
       let saved = (await options.kv.get(botKey(i))) as Saved | undefined
       if (!saved) saved = await mint(i, name)
       let b = await boot(saved)
-      // A saved bot behind the sim version, or a token the store no longer knows, is minted again.
-      if (b.state.v !== SIM_VERSION || b.account.accountId !== saved.accountId) {
+      // A saved bot behind the sim version, a token the store no longer knows, or a name from
+      // before the bot mark (an unmarked account that would hold a rank) is minted again.
+      if (
+        'refusal' in b ||
+        b.state.v !== SIM_VERSION ||
+        b.account.accountId !== saved.accountId ||
+        b.account.displayName !== name
+      ) {
         saved = await mint(i, name)
         b = await boot(saved)
+        if ('refusal' in b) throw new Error(`bot ${name}: bootstrap refused, ${b.refusal}`)
       }
       bots.push({
         name,

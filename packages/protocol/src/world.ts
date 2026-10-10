@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { type Banned, RefusedBannedSchema } from './market'
 
 // World data: presence, the chat tail, the boards and the live boss. Never a server event, never sim state.
 
@@ -13,7 +14,10 @@ export type ChatRefusal =
   | 'blocked'
   | 'unauthorized'
 
-export type ChatResult = { ok: true; message: ChatMessage } | { ok: false; reason: ChatRefusal }
+export type ChatResult =
+  | { ok: true; message: ChatMessage }
+  | { ok: false; reason: ChatRefusal }
+  | ({ ok: false } & Banned)
 
 export type BossView = {
   bossId: string
@@ -107,6 +111,7 @@ export const ChatResultSchema: z.ZodType<ChatResult> = z.union([
       'unauthorized',
     ]),
   }),
+  RefusedBannedSchema,
 ])
 
 export const ChatBodySchema = z.object({ text: z.string().max(2000) })

@@ -1,6 +1,6 @@
 // The Account tab as windows (docs/plans/2026-10-06-ui-pr3-remaining-tabs.md, "Account"): the
 // settings and actions as rows, the machine and session facts in the detail window, the GitHub
-// device-flow Link under the picture, the reset Yes/No; and the pane with no game view.
+// device-flow Link under the picture, the reset and delete Yes/Nos; and the pane with no game view.
 import type { Settings } from '../../../types'
 import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
@@ -27,6 +27,13 @@ const NOT_STARTED = 'Promptfall has not started in this session.'
 const RESET_ACTION: PaneAction = {
   t: 'open',
   menu: { kind: 'confirm', action: 'reset', id: '', at: 1 },
+}
+const DELETE = 'Delete my account on this server'
+const DELETE_QUESTION = 'Delete your account on this server? It cannot be undone.'
+const DELETE_DETAIL = 'Its listings and orders go with it; this machine starts over.'
+const DELETE_ACTION: PaneAction = {
+  t: 'open',
+  menu: { kind: 'confirm', action: 'delete', id: '', at: 1 },
 }
 
 const text = (t: string, inner: number): Line => ({
@@ -117,6 +124,9 @@ export function accountPane(input: PaneInput): PaneBuild {
   if (!view.account.linked && !view.account.sandbox && !dialog.link && !input.readOnly)
     rows.push(setting(inner, 'link', [{ text: 'Link GitHub' }], '', { t: 'link' }))
   rows.push(setting(inner, 'reset', [{ text: RESET }], '', RESET_ACTION))
+  // The server's delete needs the lease; the sandbox save holds no account on a server.
+  const deleting = !view.account.sandbox && !input.readOnly
+  if (deleting) rows.push(setting(inner, 'delete', [{ text: DELETE }], '', DELETE_ACTION))
 
   const ids = rows.flatMap((r) => (r.key ? [r.key.slice(4)] : []))
   const cursor = cursorRow(dialog.cursor.account ?? null, ids)
@@ -141,6 +151,10 @@ export function accountPane(input: PaneInput): PaneBuild {
   if (menu?.kind === 'confirm' && menu.action === 'reset') {
     spec.yesNo = { at: menu.at, yes: { t: 'reset' } }
     spec.state = [RESET_QUESTION, '']
+  }
+  if (deleting && menu?.kind === 'confirm' && menu.action === 'delete') {
+    spec.yesNo = { at: menu.at, yes: { t: 'delete' } }
+    spec.state = [DELETE_QUESTION, DELETE_DETAIL]
   }
   return listPane(input, spec)
 }

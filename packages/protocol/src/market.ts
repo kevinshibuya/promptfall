@@ -60,13 +60,19 @@ export type MarketRefusal =
   | 'no_match'
   | 'unauthorized'
 
-export type MarketResult = { ok: true; delivery: Delivery } | { ok: false; reason: MarketRefusal }
+export type MarketResult =
+  | { ok: true; delivery: Delivery }
+  | { ok: false; reason: MarketRefusal }
+  | ({ ok: false } & Banned)
 
 export type NewOrder = { base: string; minRarity: Rarity; affixId: string | null; maxPrice: number }
 
 export type MyOrders = { listings: Listing[]; orders: Order[]; returns: number }
 
 export type Unauthorized = { reason: 'unauthorized' }
+
+/** An account the operator banned: every authenticated call answers it, the reason in the message. */
+export type Banned = { reason: 'banned'; message: string }
 
 export const LISTINGS_PER_PAGE = 10
 
@@ -138,9 +144,22 @@ export const MARKET_REFUSALS = [
   'unauthorized',
 ] as const satisfies readonly MarketRefusal[]
 
+export const BannedSchema: z.ZodType<Banned> = z.object({
+  reason: z.literal('banned'),
+  message: z.string().min(1).max(200),
+})
+
+/** A banned answer where refusals carry `ok: false`: batches, trades and chat. */
+export const RefusedBannedSchema = z.object({
+  ok: z.literal(false),
+  reason: z.literal('banned'),
+  message: z.string().min(1).max(200),
+})
+
 export const MarketResultSchema: z.ZodType<MarketResult> = z.union([
   z.object({ ok: z.literal(true), delivery: DeliverySchema }),
   z.object({ ok: z.literal(false), reason: z.enum(MARKET_REFUSALS) }),
+  RefusedBannedSchema,
 ])
 
 /** The price is checked by the ledger (`bad_price`), so the schema only wants an integer. */
