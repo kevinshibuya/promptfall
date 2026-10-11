@@ -1012,6 +1012,10 @@ function approveAs(login) {
   };
 }
 var unauthorized = { reason: "unauthorized" };
+var unknownToken = {
+  refusal: "unknown",
+  message: "The server does not know this account."
+};
 var pending = { status: "pending" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
@@ -1133,6 +1137,7 @@ var Ledger = class {
         const banned = record2 && bannedOf(record2);
         if (banned) return { refusal: "banned", message: banned.message };
         if (record2) return this.bootFor(input.deviceToken, record2);
+        return unknownToken;
       }
       const now = await this.options.now();
       const seed = this.options.seedSource() >>> 0;
@@ -1148,7 +1153,7 @@ var Ledger = class {
       return this.bootFor(deviceToken, record);
     });
   }
-  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  /** Whether `deviceToken` names an account: a read that writes nothing. */
   knowsToken(deviceToken) {
     return this.run(async () => await this.books.authenticate({ deviceToken }) !== null);
   }

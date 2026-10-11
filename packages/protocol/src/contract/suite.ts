@@ -292,7 +292,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(boot.delivery).toEqual(EMPTY)
     })
 
-    it('rule 2: a known token returns the same account and its progress; an unknown one mints', async () => {
+    it('rule 2: a known token returns the same account and its progress', async () => {
       const { client, boot, mirror } = await setup()
       const events = [tick, tick, { t: 'tool_call' } as PlayerEvent]
       const ack = await client.submit(mirror.batch(events), mirror.auth())
@@ -308,12 +308,21 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(again.state).toEqual(mirror.committed)
       expect(again.cursor).toBe(0)
       expect(again.delivery).toEqual(EMPTY)
-      const stranger = await booted(client, {
+    })
+
+    it('rule 2: an unknown token is refused as unknown and mints nothing', async () => {
+      const { client, boot } = await setup()
+      const stranger = await client.bootstrap({
         clientVersion: '0.1.0',
         deviceToken: 'nobody-knows-me',
       })
-      expect(stranger.account.accountId).not.toBe(boot.account.accountId)
-      expect(stranger.seq).toBe(0)
+      expect(stranger).toEqual({ refusal: 'unknown', message: expect.any(String) })
+      // Still unknown: the refusal minted nothing under that token.
+      expect(
+        await client.bootstrap({ clientVersion: '0.1.0', deviceToken: 'nobody-knows-me' }),
+      ).toMatchObject({ refusal: 'unknown' })
+      const again = await booted(client, { clientVersion: '0.1.0', deviceToken: boot.deviceToken })
+      expect(again.account).toEqual(boot.account)
     })
 
     it('rule 3: an unknown token is unauthorized', async () => {
