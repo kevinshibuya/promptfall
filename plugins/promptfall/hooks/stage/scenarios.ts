@@ -41,6 +41,7 @@ import { stagedState } from './staged'
 import { renderSvg, stageSvg, svgOrFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
+  CHEST_FALL_MS,
   CHEST_OPEN_MS,
   CHEST_SIT_MS,
   DESKTOP_COLUMN_PX_CEILING,
@@ -67,6 +68,7 @@ export const SCENARIOS = [
   'chest',
   'reveal',
   'reveal-legendary',
+  'lone-chest',
   'windup',
   'strike',
   'follow',
@@ -234,6 +236,15 @@ export function stage(name: Scenario): Staged {
         ],
         FULL,
       )
+    }
+    // A sandbox item dropped between spawns: no row to fall from, so its chest fell onto the
+    // front slot's empty ground; at NOW it has opened and the sword is halfway up its rise.
+    case 'lone-chest': {
+      const t0 = NOW - (CHEST_FALL_MS + CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS / 2)
+      t.observe(empty(), t0 - 1000)
+      t.onEffects([{ k: 'drop', item }], t0)
+      t.observe(empty(), NOW)
+      return staged(empty(), t, FULL)
     }
     // The kill's chest lands as its fade ends. At NOW, for `chest`, it sits closed halfway
     // through its sit; for `drop`, it has opened and the sword is halfway up its rise; for

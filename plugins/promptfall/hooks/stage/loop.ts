@@ -1,6 +1,7 @@
 // The frame loop: one timer per surface, re-armed each tick, blitting the mounted stage and its
 // window strip. The render hook mounts the site and draws the first frame; every frame after it
-// is a blit here.
+// is a blit here. Each frame also drains the held toasts due by its `now`. On the desktop, whose
+// SMIL plays the motion, the loop draws nothing: it wakes only for the next held toast's show time.
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
 import type { BandTab, GameView, Settings, WorldState } from '../../types'
@@ -36,7 +37,8 @@ export type StageSite = {
   band?: Box
   /** The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row. */
   strip: { kind: 'full' | 'compact' | 'bare'; columns: number; tab: BandTab; extra: 0 | 1 }
-  renderer: 'raster' | 'image' | 'svg'
+  /** `smil`: the desktop's stage, which SMIL plays; the loop draws no frame for it. */
+  renderer: 'raster' | 'image' | 'svg' | 'smil'
   /** The band's props the layout came from, so a tick can tell when it no longer holds. */
   props: { bodyColumns: number; maxRows: number }
   surface: RenderSurface
@@ -50,6 +52,13 @@ export type LoopIo = {
   invalidate: () => void
   view: () => Promise<GameView | null>
   settings: () => Promise<Settings>
+  /**
+   * Drains the held queue at `now`: the registration raises the toasts due and their cues.
+   * Answers whether any was due.
+   */
+  release: (now: number) => boolean
+  /** The next show time after `now` a held toast waits for, or null: a SMIL loop's wake. */
+  nextRelease: (now: number) => number | null
   /** What the strip reads besides the view; null draws no strip. */
   strip: () => Promise<{
     world: WorldState
@@ -267,6 +276,11 @@ export class StageLoop {
     }
   }
 
+  /** A stage is mounted on this surface: held toasts wait for the stage to play their event. */
+  isDrawn(): boolean {
+    return this.site !== null
+  }
+
   /**
    * The picture the loop last sent to the Image keyed `key` in `layout` on `tab`, or null. Loot
    * and World share a key and a layout: the tab tells their pictures apart.
@@ -278,7 +292,7 @@ export class StageLoop {
       : null
   }
 
-  /** New effects landed: draw the next frame now. */
+  /** New effects landed: draw the next frame now, or on SMIL re-arm the wake. */
   wake(): void {
     if (this.site === null || this.stopped) return
     this.beat = null
@@ -324,14 +338,34 @@ export class StageLoop {
       if (this.rerun && this.site !== null && !this.stopped && this.timer === null) this.arm(0)
       return
     }
-    if (next === null) return
+    if (next === null) {
+      // A wake during a frame that found nothing to do still runs: its batch may hold a toast.
+      if (this.rerun && this.site !== null && !this.stopped) this.arm(0)
+      return
+    }
     // A wake during the frame runs the next at once, and the beat starts over from it.
     if (this.rerun) this.beat = null
     this.arm(this.rerun ? 0 : next)
   }
 
+  /**
+   * SMIL plays the desktop's motion: no frame and no blit, only the drain and a wake for the next
+   * held toast's show time, or none until the next batch wakes the loop. It reads the clock alone,
+   * so no other read's latency lands between a show time and its release.
+   */
+  private async wakeFrame(gen: number): Promise<number | null> {
+    const now = await this.io.now()
+    if (gen !== this.gen || this.site === null) return null
+    // SMIL plays the actors and the chest but not the backdrop, which is drawn: a release redraws,
+    // so the picture changes with the words and not at the next publish.
+    if (this.io.release(now)) this.io.invalidate()
+    const next = this.io.nextRelease(now)
+    return next === null ? null : next - now
+  }
+
   /** One frame; answers the delay to the next, or null to stop until the next mount. */
   private async frame(gen: number): Promise<number | null> {
+    if (this.site?.renderer === 'smil') return this.wakeFrame(gen)
     // One round of reads through `$`, not four in a row.
     const [now, view, settings, extras] = await Promise.all([
       this.io.now(),
@@ -344,7 +378,10 @@ export class StageLoop {
     const slot = this.beat ?? now
     this.beat = null
     const site = this.site
-    if (gen !== this.gen || site === null || view === null) return null
+    // A SMIL site mounted while the reads ran has a new generation: its wake frame is its own.
+    if (gen !== this.gen || site === null || view === null || site.renderer === 'smil') return null
+    // Held toasts land on the first frame at or after their show time.
+    this.io.release(now)
 
     this.timeline.observe(view, now)
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
