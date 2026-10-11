@@ -238,7 +238,12 @@ export const SANDBOX_VERBS: readonly SandboxVerb[] = [
     help: 'spawn a world boss now, or settle it',
     run: worldboss,
   },
-  { verb: 'item', args: '<base> [rarity]', help: 'drop an item, common by default', run: item },
+  {
+    verb: 'item',
+    args: '<base> [rarity]',
+    help: 'the front enemy falls and drops an item, common by default',
+    run: item,
+  },
   { verb: 'level', args: '<hero> <n>', help: 'raise a hero to a level, up to its cap', run: level },
   { verb: 'gold', args: '<n>', help: 'add gold', run: gold },
   { verb: 'zone', args: '<n>', help: 'move the party to a zone at wave 1', run: zone },
