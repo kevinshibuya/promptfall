@@ -263,7 +263,8 @@ class GameSession implements GameHandle {
     )
   }
 
-  private makeEngine(): GameEngine {
+  /** `deleted`: the engine starts after the account's delete. */
+  private makeEngine(deleted = false): GameEngine {
     const io = this.io
     return new GameEngine({
       client: this.server.client,
@@ -284,17 +285,18 @@ class GameSession implements GameHandle {
         io.after(ms, fn)
       },
       random: Math.random,
+      deleted,
     })
   }
 
   /** Points the session at a server: a fresh client and engine; the old engine stops. */
-  private useServer(setting: string | null): void {
+  private useServer(setting: string | null, deleted = false): void {
     void this.engine.stop()
     this.linkGen += 1
     this.orphanToken = null
     this.setting = setting
     this.server = this.resolve(setting)
-    this.engine = this.makeEngine()
+    this.engine = this.makeEngine(deleted)
     // World data belongs to one server: drop it and poll the new one.
     void this.poller.reset()
   }
@@ -375,9 +377,12 @@ class GameSession implements GameHandle {
     return { label: this.server.label, old, dropped }
   }
 
-  /** A fresh engine on `setting`, started as primary or refreshed as secondary. */
-  private async restart(setting: string | null): Promise<void> {
-    this.useServer(setting)
+  /**
+   * A fresh engine on `setting`, started as primary or refreshed as secondary. `deleted`: after the
+   * account's delete.
+   */
+  private async restart(setting: string | null, deleted = false): Promise<void> {
+    this.useServer(setting, deleted)
     // Listing and order ids belong to one server: nothing loaded or pending on the old one survives.
     await this.io.publish({
       server: setting,
@@ -522,13 +527,18 @@ class GameSession implements GameHandle {
   }
 
   /** Deletes every Promptfall key but the lease and the settings, then starts over on the same server. */
-  async reset(): Promise<void> {
+  reset(): Promise<void> {
+    return this.wipe(false)
+  }
+
+  /** The reset; `deleted`: after the account's delete, so a refused start says the delete happened. */
+  private async wipe(deleted: boolean): Promise<void> {
     await this.claim()
     await this.engine.stop()
     for (const key of await this.kv.keys()) {
       if (key !== LEASE_KEY && key !== SETTINGS_KEY && key !== SERVER_KEY) await this.kv.delete(key)
     }
-    await this.restart(this.setting)
+    await this.restart(this.setting, deleted)
   }
 
   async deleteAccount(): Promise<void> {
@@ -544,9 +554,12 @@ class GameSession implements GameHandle {
       this.refuseInPane(NOT_DELETED)
       return
     }
-    await this.reset()
-    // Over the welcome: the fresh account's first notice says why it is fresh.
-    this.engine.notice(DELETED_NOTICE, WELCOME_MS)
+    await this.wipe(true)
+    // Only a fresh account playing gets the notice, over the welcome: it says why it is fresh. A
+    // refused start has paused with the refusal, which says the delete happened.
+    if (this.engine.accountId() !== null && !this.engine.isPaused()) {
+      this.engine.notice(DELETED_NOTICE, WELCOME_MS)
+    }
   }
 
   setCadence(ms: number): void {
@@ -684,10 +697,14 @@ class GameSession implements GameHandle {
     } catch {
       return
     }
-    // Refused: the primary shows why; the next renewal asks again.
-    if ('refusal' in boot) return
+    if ('refusal' in boot) {
+      // Unknown: only the primary resets and mints, so wait for it to store a new token. Any other
+      // refusal the primary shows; the next renewal asks again.
+      if (boot.refusal === 'unknown') this.orphanToken = token
+      return
+    }
     if (boot.deviceToken !== token) {
-      // The server minted for this token: it is unknown there. Wait for the primary to store a new one.
+      // An older server minted for this token: it is unknown there. Wait for the primary to store a new one.
       this.orphanToken = token
       return
     }

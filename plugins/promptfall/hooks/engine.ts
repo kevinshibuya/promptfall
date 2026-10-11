@@ -81,6 +81,8 @@ export type EngineDeps = {
   after: (ms: number, fn: () => void) => void
   /** In [0, 1): the jitter of outage retries. */
   random: () => number
+  /** This engine starts after the account's delete: a refused bootstrap's pause says so. */
+  deleted?: boolean
 }
 
 /** What the command and the dialog hold of a running game. */
@@ -154,6 +156,10 @@ export const RETRYING_NOTICE = 'Promptfall: server unreachable, retrying'
 export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
 export const DELETED_NOTICE =
   'Promptfall: your account on this server is deleted. A fresh one plays here now.'
+/** A refused bootstrap after the delete: the refusal, and that the delete happened. */
+export function deletedRefusal(message: string): string {
+  return `Promptfall: your account was deleted. ${message}`
+}
 /** The pane's refusal when the server did not confirm a delete: nothing was reset. */
 export const NOT_DELETED = 'the server did not delete the account'
 /** A paused primary's refusal, on every surface: the band's notice says why. */
@@ -209,8 +215,12 @@ export class GameEngine {
   private noticeGen = 0
   private outageGen = 0
   private refusedGen = 0
+  /** No bootstrap has succeeded since the account's delete: a refusal's pause names it. */
+  private afterDelete: boolean
 
-  constructor(private readonly deps: EngineDeps) {}
+  constructor(private readonly deps: EngineDeps) {
+    this.afterDelete = deps.deleted ?? false
+  }
 
   private get tokenKey(): string {
     return this.deps.tokenKey ?? 'deviceToken'
@@ -240,7 +250,9 @@ export class GameEngine {
   /**
    * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries,
    * and a refused one pauses with the host's message: a rate limit asks again after
-   * REFUSED_RETRY_MS, a ban never does.
+   * REFUSED_RETRY_MS, a ban never does. A token the server does not know is cleared, if the store
+   * still holds it, and the start runs again: with no token it mints.
+   * After a delete, the pause says the delete happened.
    * The bootstrap's delivery hands on only the events past the cursor a primary of this account
    * has shown: what one already toasted does not toast again, and what nobody saw still does.
    */
@@ -263,7 +275,13 @@ export class GameEngine {
     if (this.stopped) return
     if ('refusal' in boot) {
       this.clearOutage()
-      this.setPaused(boot.message)
+      if (boot.refusal === 'unknown' && token !== null) {
+        await this.forget(token)
+        if (this.stopped) return
+        await this.doStart()
+        return
+      }
+      this.setPaused(this.afterDelete ? deletedRefusal(boot.message) : boot.message)
       if (boot.refusal === 'banned') return
       const gen = ++this.refusedGen
       this.deps.after(REFUSED_RETRY_MS, () => {
@@ -272,6 +290,7 @@ export class GameEngine {
       })
       return
     }
+    this.afterDelete = false
     this.firstRun = boot.deviceToken !== token
     this.token = boot.deviceToken
     if (boot.deviceToken !== token) await this.deps.kv.set(this.tokenKey, boot.deviceToken)
@@ -309,6 +328,16 @@ export class GameEngine {
     await this.publish({ view: this.view() })
     // Only the minted account's first view says firstRun; every later view says no.
     this.firstRun = false
+  }
+
+  /**
+   * Clears the stored token if it is still `token`. Another session may have healed it while the
+   * refused call was in flight: then the store holds its token, and that one is kept.
+   */
+  private async forget(token: string): Promise<void> {
+    const stored = await this.deps.kv.get(this.tokenKey)
+    if (this.stopped || stored !== token) return
+    await this.deps.kv.delete(this.tokenKey)
   }
 
   /** The server wins: a read-only bootstrap with the stored token, the buffer dropped. */
