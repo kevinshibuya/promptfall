@@ -226,17 +226,19 @@ the desktop. The compact band is the same: its small stage and its party window 
 on the shell. Only the one-row collapsed band stays plain text.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
-the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a
-boss lands at its full size. Actors bob between two idle
-drawings and wind up and strike; fireballs, arrows and light bursts fly, hits flash white with a
-rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands and
-fights until the blow that kills him lands, then dims, and the party window's HP drops with each
-hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never
-changes height, the party small on the zone's painting, so a boss lands at its full size. A
-monster that steps on partway through a tick plays its first actions animated, on the desktop
-too. It draws inside the band's picture, as described under the playfield above. A terminal
-session asks which picture it can draw, and lays the band out with the last session's answer
-while it waits, so the band holds its height from the second session on.
+the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a boss
+lands at its full size. Actors bob between two idle drawings and wind up and strike. Every attacker,
+hero or monster, the world boss included, steps toward its target as it winds up, the same few
+pixels for all, holds there through its blow and steps back as its action ends; the knight and the
+enemies lunge from the stepped position. Fireballs, arrows and light bursts fly, hits flash white
+with a rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands
+and fights until the blow that kills him lands, then dims, and the party window's HP drops with each
+hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never changes
+height, the party small on the zone's painting, so a boss lands at its full size. A monster that
+steps on partway through a tick plays its first actions animated, on the desktop too. It draws
+inside the band's picture, as described under the playfield above. A terminal session asks which
+picture it can draw, and lays the band out with the last session's answer while it waits, so the
+band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right

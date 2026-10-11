@@ -28,6 +28,13 @@ export const COMPACT_PITCH = 8
 // Motion, in ms and px.
 export const LUNGE_MS = 240
 export const LUNGE_PX = 4
+/**
+ * The step every attacker takes toward its target: out over the first STEP_OUT_MS of its wind-up
+ * hold, back over the last STEP_OUT_MS of its action, the same distance for every actor. Inside
+ * the action, so it costs no time (the sim owns STEP_MS).
+ */
+export const STEP_OUT_MS = 80
+export const STEP_PX = 4
 /** The wind-up frame covers the lunge's outward half; the strike shows from the apex (reading 1). */
 export const WINDUP_MS = 120
 /**

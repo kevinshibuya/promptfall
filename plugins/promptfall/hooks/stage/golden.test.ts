@@ -489,9 +489,9 @@ test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a
   expect(svg.length).toBe(51_396)
 })
 
-test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 53,127 characters over the zone 1 backdrop, under the cap', () => {
+test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 53,279 characters over the zone 1 backdrop, under the cap', () => {
   const svg = staged('boss-strike').renders.svgHi
-  expect(svg.length).toBe(53_127)
+  expect(svg.length).toBe(53_279)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
 })
 

@@ -31,6 +31,7 @@ export type AttackShape = 'lunge' | 'lunge_follow' | 'bolt' | 'burst'
 export type EffectId = 'fireball' | 'light_burst' | 'arrow'
 
 export type Motion =
+  | { kind: 'step'; actor: string; from: number; until: number; dir: 1 | -1 }
   | { kind: 'lunge'; actor: string; from: number; until: number; dir: 1 | -1 }
   | { kind: 'flash'; actor: string; from: number; until: number }
   | { kind: 'windup'; actor: string; from: number; until: number }
@@ -65,6 +66,7 @@ export const ACTION_MS =
 
 /** The motions an action starts; dropping a queued action drops these and nothing else. */
 const ACTION_KINDS: ReadonlySet<Motion['kind']> = new Set([
+  'step',
   'lunge',
   'windup',
   'strike',
@@ -280,10 +282,16 @@ export class StageTimeline {
     return at
   }
 
-  /** When the last action motion shown on this actor ends, its own or one on it, or `now`; a number floats on. */
+  /**
+   * When the last action motion shown on this actor ends, its own or one on it, or `now`; a number
+   * floats on, and a step back costs no time.
+   */
   private lastShownEnd(id: string, now: number): number {
     return this.motions
-      .filter((m) => m.actor === id && ACTION_KINDS.has(m.kind) && m.kind !== 'number')
+      .filter(
+        (m) =>
+          m.actor === id && ACTION_KINDS.has(m.kind) && m.kind !== 'number' && m.kind !== 'step',
+      )
       .reduce((end, m) => Math.max(end, m.until), now)
   }
 
@@ -487,9 +495,18 @@ export class StageTimeline {
         attacker !== null ? EFFECT_OF_CLASS[this.heroes.get(attacker) ?? ''] : undefined
       if (attacker !== null) {
         const strikeFrom = begin + WINDUP_MS
+        // Heroes face the enemies on their left; enemies the party on their right.
+        const dir = this.heroes.has(attacker) ? -1 : 1
+        // The step: out in the hold, back in the action's tail, so the action is no longer.
+        this.motions.push({
+          kind: 'step',
+          actor: attacker,
+          from: start,
+          until: start + ACTION_MS,
+          dir,
+        })
         this.motions.push({ kind: 'windup', actor: attacker, from: start, until: strikeFrom })
         if (shape === 'lunge' || shape === 'lunge_follow') {
-          const dir = this.heroes.has(attacker) ? -1 : 1
           this.motions.push({
             kind: 'lunge',
             actor: attacker,
