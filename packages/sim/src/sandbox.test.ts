@@ -140,11 +140,22 @@ describe('sandbox events', () => {
   })
 
   describe('sandbox_item', () => {
-    it('drops a rolled item of that base and rarity into the inventory', () => {
+    it('the front hero strikes the front enemy down, and the item is its drop', () => {
+      const [hero] = fighting.roster.filter((h) => fighting.party.includes(h.id) && h.hp > 0)
+      const [front] = fighting.encounter?.enemies ?? []
+      if (!hero || !front) throw new Error('no fight')
       const r = step(fighting, { t: 'sandbox_item', base: 'oak_staff', rarity: 'legendary' })
       const drop = r.effects.find((e) => e.k === 'drop')
       if (drop?.k !== 'drop') throw new Error('no drop')
-      expect(r.effects).toEqual([drop])
+      expect(r.effects.slice(0, 2)).toEqual([
+        { k: 'act', actor: hero.id, action: 'attack', at: 0 },
+        { k: 'hit', by: hero.id, target: front.id, amount: front.hp },
+      ])
+      // One drop, the granted one: the kill's roll does not run.
+      expect(r.effects.filter((e) => e.k === 'drop' || e.k === 'drop_vendored')).toEqual([drop])
+      expect(r.effects.some((e) => e.k === 'gold')).toBe(true)
+      expect(r.state.stats.kills).toBe(fighting.stats.kills + 1)
+      expect(r.state.encounter?.enemies.some((e) => e.id === front.id) ?? false).toBe(false)
       const { item } = drop
       expect(item.base).toBe('oak_staff')
       expect(item.rarity).toBe('legendary')
@@ -165,9 +176,27 @@ describe('sandbox events', () => {
         rarity: 'legendary',
         vendoredFor: null,
       })
-      expect(r.state.gold).toBe(fighting.gold)
-      // The fight goes on.
-      expect(r.state.encounter).toEqual(fighting.encounter)
+      const gold = r.effects.find((e) => e.k === 'gold')
+      expect(r.state.gold).toBe(fighting.gold + (gold?.k === 'gold' ? gold.amount : 0))
+    })
+
+    it('with no enemy on the field, the item drops alone', () => {
+      const empty = { ...fighting, encounter: null }
+      const r = step(empty, { t: 'sandbox_item', base: 'oak_staff', rarity: 'rare' })
+      expect(r.effects.map((e) => e.k)).toEqual(['drop'])
+      expect(r.state.stats.kills).toBe(empty.stats.kills)
+    })
+
+    it('a zone boss struck down clears its zone, the item its drop', () => {
+      let s: GameState = step(fighting, { t: 'sandbox_boss', zone: 3, boss: 'zone_boss' }).state
+      while (!s.encounter?.enemies.some((e) => e.kind === 'zone_boss')) {
+        s = step(s, { t: 'tick' }).state
+      }
+      const r = step(s, { t: 'sandbox_item', base: 'oak_staff', rarity: 'epic' })
+      const kinds = r.effects.map((e) => e.k)
+      expect(kinds).toContain('zone_cleared')
+      expect(kinds.filter((k) => k === 'drop')).toHaveLength(1)
+      expect(r.state.zone).toBe(4)
     })
 
     it('vendors the item with a full inventory, as a kill drop does', () => {
@@ -175,11 +204,12 @@ describe('sandbox events', () => {
       const r = step(full, { t: 'sandbox_item', base: 'oak_staff', rarity: 'rare' })
       const sold = r.effects.find((e) => e.k === 'drop_vendored')
       if (sold?.k !== 'drop_vendored') throw new Error('not vendored')
-      expect(r.effects).toEqual([sold])
+      expect(r.effects.filter((e) => e.k === 'drop' || e.k === 'drop_vendored')).toEqual([sold])
       expect(sold.item.base).toBe('oak_staff')
       expect(sold.gold).toBe(vendorValue(sold.item))
       expect(sold.gold).toBeGreaterThan(0)
-      expect(r.state.gold).toBe(100 + sold.gold)
+      const kill = r.effects.find((e) => e.k === 'gold')
+      expect(r.state.gold).toBe(100 + sold.gold + (kill?.k === 'gold' ? kill.amount : 0))
       expect(r.state.inventory).toEqual(full.inventory)
       expect(r.state.lootLog.at(-1)).toEqual({
         k: 'item',

@@ -69,7 +69,7 @@ leaves a chest where the enemy stood: it falls out of the enemy as it fades, sit
 and the item rises out of it on a glow in its rarity colour, wider the rarer the item. The item
 holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
 item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
-the same chest, and a sandbox item plays its chest on the front monster. The combat log's drop
+the same chest, and a sandbox item is the drop of the front monster, struck down for it. The combat log's drop
 line and the Loot tab's row wait for the reveal: they appear once the item has risen, not at the
 kill, while sales and purchases show at once. The Loot tab shows the last two rows, drops and sales
 alike, coloured by rarity.
@@ -356,9 +356,11 @@ zone boss or turn boss the next encounter, moving the party to its zone. `worldb
 world boss and engages the party; `worldboss end` settles it and pays every engaged party. Each
 answers once the boss's "appeared" or "down" toast has shown, and refuses while a boss is already
 live or when none is. The sandbox keeps the world boss's own schedule, so one can also appear by
-itself. `item <base> [rarity]` drops an item
-through the normal drop, common unless a rarity is given; with the inventory full it is vendored,
-as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
+itself. `item <base> [rarity]`: the front hero
+strikes the front monster down and the item, common unless a rarity is given, is that kill's drop,
+with the kill's XP and gold, and a zone boss's kill clears its zone. With no monster on the field,
+between spawns or against a world boss, the item drops alone. With the inventory full it is
+vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
 refuses with a full roster. `wipe` makes the party fall now. `boss`, `zone` and `wipe` refuse while
 the party fights a world boss. `reset` throws the sandbox save away and starts a fresh one in

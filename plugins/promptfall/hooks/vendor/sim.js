@@ -850,7 +850,7 @@ function changeZone(s, zone) {
   s.wave = 1;
   if (zone > s.highestZone) s.highestZone = zone;
 }
-function onEnemyKilled(s, enemy, effects) {
+function onEnemyKilled(s, enemy, effects, drop) {
   const encounter = s.encounter;
   if (!encounter) return;
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id);
@@ -864,7 +864,8 @@ function onEnemyKilled(s, enemy, effects) {
   }
   s.stats.kills += 1;
   if (enemy.kind !== "wave") s.stats.bosses += 1;
-  if (def) {
+  if (drop) takeDrop(s, drop, effects);
+  else if (def) {
     const r = rollDrops(s, def);
     Object.assign(s, r.state);
     effects.push(...r.effects);
@@ -1685,7 +1686,17 @@ function sandboxItem(state, event) {
   }
   if (noSuchRarity(event.rarity)) return unapplicable(state, event, "unknown_rarity");
   return draft(state, (s, effects) => {
-    takeDrop(s, rollItemOf(s, event.base, event.rarity), effects);
+    const item = rollItemOf(s, event.base, event.rarity);
+    const hero = livingParty(s)[0];
+    const enemy = s.encounter?.enemies.find((e) => e.kind !== "world_boss");
+    if (!hero || !enemy) {
+      takeDrop(s, item, effects);
+      return;
+    }
+    effects.push({ k: "act", actor: hero.id, action: "attack", at: 0 });
+    effects.push({ k: "hit", by: hero.id, target: enemy.id, amount: enemy.hp });
+    enemy.hp = 0;
+    onEnemyKilled(s, enemy, effects, item);
   });
 }
 function sandboxLevel(state, event) {
