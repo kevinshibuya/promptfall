@@ -266,6 +266,8 @@ export class GameEngine {
 
   private async doStart(): Promise<void> {
     const stored = await this.deps.kv.get(this.tokenKey)
+    // Stopped (a reset, a switch, a demotion) while the token was read: a null token would mint.
+    if (this.stopped) return
     const token = typeof stored === 'string' ? stored : null
     let boot: Awaited<ReturnType<ServerClient['bootstrap']>>
     try {
@@ -807,7 +809,8 @@ export class GameEngine {
 
   /** A ban on the running account pauses play for good with its message. */
   private pauseBanned(message: string): void {
-    this.bannedToken = this.token
+    // A session refused at bootstrap runs no token: it keeps the credential that refusal left it.
+    this.bannedToken = this.token ?? this.bannedToken
     this.setPaused(message)
   }
 

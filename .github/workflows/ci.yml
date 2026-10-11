@@ -19,19 +19,24 @@ jobs:
       - run: pnpm typecheck
       # Claude Code writes the engine's declarations under the plugin when an interactive
       # session loads it. No login is needed once onboarding and the folder's trust are marked
-      # done; `script` gives it the terminal it wants.
+      # done; `script` gives it the terminal it wants. The session plays the sandbox, so its game
+      # runs on the in-process ledger and never bootstraps against the public server.
       - name: Engine declarations for the plugin
         run: |
           npm i -g @anthropic-ai/claude-code
           printf '{"hasCompletedOnboarding":true,"projects":{"%s":{"hasTrustDialogAccepted":true}}}' "$PWD" > ~/.claude.json
           types=plugins/promptfall/.claude-plugin/types
-          TERM=xterm-256color script -qec "stty cols 140 rows 50; claude --plugin-dir plugins/promptfall" /dev/null > /dev/null &
+          written() {
+            [ -f $types/tsconfig.json ] && [ -f $types/claude-code/index.d.ts ] && [ -f $types/claude-code-tools/index.d.ts ] && [ -f $types/claude-code-mcp/index.d.ts ]
+          }
+          PROMPTFALL_SANDBOX=1 TERM=xterm-256color script -qec "stty cols 140 rows 50; claude --plugin-dir plugins/promptfall" /dev/null > /dev/null &
           for _ in $(seq 60); do
-            [ -f $types/tsconfig.json ] && [ -f $types/claude-code/index.d.ts ] && [ -f $types/claude-code-tools/index.d.ts ] && [ -f $types/claude-code-mcp/index.d.ts ] && break
+            written && break
             sleep 1
           done
           sleep 1
           pkill -f 'claude --plugin-dir' || true
+          written || { echo "Claude Code wrote no engine declarations under $types in 60 s"; exit 1; }
           ls -R $types
       - name: Typecheck the plugin
         run: pnpm typecheck:plugin

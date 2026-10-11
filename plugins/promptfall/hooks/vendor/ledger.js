@@ -1178,7 +1178,7 @@ var Ledger = class {
   }
   bootstrap(input) {
     return this.run(async () => {
-      if (input.deviceToken) {
+      if (input.deviceToken !== null) {
         const record2 = await this.books.authenticate({ deviceToken: input.deviceToken });
         const banned = record2 && bannedOf(record2);
         if (banned) return { refusal: "banned", message: banned.message };

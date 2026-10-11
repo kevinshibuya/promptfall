@@ -171,6 +171,14 @@ describe('Ledger flags', () => {
     expect(await ledger.knowsToken('forged')).toBe(false)
     expect((kv as CountingKeyValue).writes).toBe(writes)
   })
+  it('only a null token mints: an empty token is unknown and writes nothing', async () => {
+    const { ledger, kv } = makeLedger()
+    const writes = (kv as CountingKeyValue).writes
+    expect(await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: '' })).toMatchObject({
+      refusal: 'unknown',
+    })
+    expect((kv as CountingKeyValue).writes).toBe(writes)
+  })
 })
 
 describe('Ledger bans', () => {
