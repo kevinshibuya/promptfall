@@ -12,7 +12,7 @@ import { STAGE_MAX_COLUMNS, STAGE_ROWS } from '../plugins/promptfall/hooks/stage
 import { hex, medianCut, nearest, parseHex, type Rgba, readPng, rgbOf } from './png'
 
 export type Style = 'nes' | 'snes'
-export type Kind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'
+export type Kind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect' | 'chest'
 export type FrameName = 'windup' | 'strike' | 'follow'
 
 export type ManifestEntry = {
@@ -95,9 +95,19 @@ export const LIMITS: Record<Style, { colours: number; width: number; height: num
 }
 const COMPACT_HEIGHT = 8
 const SMALL = { width: 8, height: 4 }
-const KINDS: readonly Kind[] = ['hero', 'hero_attack', 'enemy', 'world_boss', 'item', 'effect']
+const KINDS: readonly Kind[] = [
+  'hero',
+  'hero_attack',
+  'enemy',
+  'world_boss',
+  'item',
+  'effect',
+  'chest',
+]
 /** The effect sprites the stage moves during a hero's action; not content, so listed here. */
 export const EFFECT_IDS = ['effect:fireball', 'effect:light_burst', 'effect:arrow'] as const
+/** The chest a drop leaves, one sprite per state of its reveal; not content, so listed here. */
+export const CHEST_IDS = ['chest:closed', 'chest:opening', 'chest:open'] as const
 const FRAME_DRIFT = 0.2
 const ALPHA_MIN = 128
 /** The 1.5x art: its scale over the 1x canvases and its colour limit. */
@@ -718,7 +728,7 @@ export function emitModule(result: BuildResult): string {
   lines.push('}')
   lines.push('')
   lines.push(
-    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'; style: 'nes' | 'snes'; raritySlot: number | null; raritySlotHires: number | null; isPlaceholder: boolean; frames: Frames | null } & Variants>> = {",
+    "export const SPRITES: Readonly<Record<string, { id: string; kind: 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect' | 'chest'; style: 'nes' | 'snes'; raritySlot: number | null; raritySlotHires: number | null; isPlaceholder: boolean; frames: Frames | null } & Variants>> = {",
   )
   for (const s of sprites) {
     const v = name.get(s.stem)
@@ -785,7 +795,7 @@ const ROOT = join(import.meta.dirname, '..')
 const ART_DIR = join(ROOT, 'art')
 const OUT = join(ROOT, 'plugins/promptfall/hooks/sprites/generated.ts')
 
-/** Every sprite id the build expects: the content's, the effects and the fallback. */
+/** Every sprite id the build expects: the content's, the effects, the chests and the fallback. */
 export async function expectedIds(): Promise<string[]> {
   const { content } = await import('@promptfall/sim')
   const { WORLD_BOSSES } = await import('@promptfall/ledger')
@@ -796,6 +806,7 @@ export async function expectedIds(): Promise<string[]> {
     ...WORLD_BOSSES.map((b) => `world_boss:${worldBossKey(b.name)}`),
     ...Object.keys(content.itemBases).map((id) => `item:${id}`),
     ...EFFECT_IDS,
+    ...CHEST_IDS,
     'fallback',
   ]
 }
