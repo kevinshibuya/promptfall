@@ -37,7 +37,7 @@ import {
   WORLD_DEFAULT,
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
-import { toastsFor, worldToast } from './toasts'
+import { type Toast, toastsFor, worldToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -176,6 +176,8 @@ class GameSession implements GameHandle {
             invalidate: io.invalidate,
             view: io.view,
             settings: io.settings,
+            release: (now) => this.releaseHeld(now),
+            nextRelease: (now) => this.stage.log.nextRelease(now),
             strip: async () => ({
               world: (await io.readWorld()) ?? WORLD_DEFAULT,
               notice: await io.readNotice(),
@@ -630,8 +632,31 @@ class GameSession implements GameHandle {
   }
 
   private async tick(): Promise<void> {
+    const now = await this.io.now()
+    // Before the accept check: a paused session still raises what it held.
+    this.releaseHeld(now)
     if (!this.canApply()) return
-    this.engine.apply({ t: 'tick' }, await this.io.now())
+    this.engine.apply({ t: 'tick' }, now)
+  }
+
+  /** A stage is mounted on some surface: only then does a held toast wait for its show time. */
+  private stageDrawn(): boolean {
+    return [...this.loops.values()].some((loop) => loop.isDrawn())
+  }
+
+  /**
+   * The drain: raises the held toasts due by `now`. With no stage drawn on any surface (band off,
+   * collapsed, paused, secondary) everything held is due: nobody sees the picture it waits for.
+   */
+  private releaseHeld(now: number): void {
+    this.raise(this.stage.log.release(this.stageDrawn() ? now : Number.POSITIVE_INFINITY))
+  }
+
+  /** Raises toasts on the primary, then each cue they earned, once. */
+  private raise(toasts: readonly Toast[]): void {
+    if (this.role !== 'primary') return
+    for (const toast of toasts) this.io.toast(toast.text, toast.timeoutMs)
+    for (const cue of new Set(toasts.map((t) => t.cue))) if (cue) void this.playCue(cue)
   }
 
   private async becomePrimary(): Promise<void> {
@@ -744,9 +769,8 @@ class GameSession implements GameHandle {
     for (const loop of this.loops.values()) loop.wake()
     for (const effect of effects) if (effect.k === 'rejected') this.refuseInPane(effect.reason)
     const toasts = toastsFor(effects, view, { bossName: (id) => this.bossNames.get(id) ?? null })
-    for (const toast of toasts) this.io.toast(toast.text, toast.timeoutMs)
-    // After the toasts: each cue the burst earned, once.
-    for (const cue of new Set(toasts.map((t) => t.cue))) if (cue) void this.playCue(cue)
+    // A toast with a show time waits for it while a stage is drawn; the rest land with the burst.
+    this.raise(this.stageDrawn() ? this.stage.log.hold(toasts, this.stage.timeline, now) : toasts)
   }
 }
 

@@ -174,7 +174,7 @@ _Avoid_: scene, arena, battlefield, viewport
 **Staged state**:
 The fight as the stage has played it so far: the sim's state less every hit, heal and death the
 stage has not landed yet. The stage and every window of the band draw the staged state; the sim,
-the server, the pane and the toasts deal in the state.
+the server and the pane deal in the state, and so do the toasts, except at a show time.
 _Avoid_: shown state, played state, predicted HP, animation state
 
 **Sprite**:
@@ -321,7 +321,8 @@ _Avoid_: batch (that is a submission of player events), tick (one of the two kin
 
 **Fold**:
 Several effects of one kind in a burst becoming one toast that carries the count and the sum.
-A legendary drop, a recruit, a reward, a wipe or a zone arrival never folds.
+A legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival
+never folds: a toast with a show time lands at its own.
 _Avoid_: group, coalesce, merge, summary toast
 
 **Cue**:

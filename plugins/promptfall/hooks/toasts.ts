@@ -25,12 +25,22 @@ export type ToastRow =
   | 'returned'
   | 'world_boss_down'
 
-/** A toast the primary raises: its row, its sentence, its tier's duration and its cue. */
+/**
+ * What a toast waits for: the reveal of its item, or the arrival in the zone past the one
+ * cleared. The holder asks the stage's timeline for its show time.
+ */
+export type ToastWait = { item: string } | { zone: number }
+
+/**
+ * A toast the primary raises: its row, its sentence, its tier's duration and its cue. A toast
+ * with a wait is a held toast: it is raised at its show time, not with its burst.
+ */
 export type Toast = {
   row: ToastRow
   text: string
   timeoutMs: typeof SHORT_MS | typeof LONG_MS
   cue: Cue | null
+  wait?: ToastWait
 }
 
 /** Names a burst's effects do not carry. */
@@ -45,8 +55,13 @@ type Row<Input> = {
   cue: Cue | null
   /** The row's single form, or null when the input is not this row's. */
   single: (input: Input) => string | null
-  /** The folded form of two or more of the row's inputs in one burst; absent: the row never folds. */
+  /**
+   * The folded form of two or more of the row's inputs in one burst; absent: the row never folds.
+   * A row whose toasts wait never folds: each lands at its own show time.
+   */
   fold?: (inputs: Input[]) => string
+  /** What the row's toast for one input waits for; absent: the row is raised with its burst. */
+  wait?: (input: Input) => ToastWait | undefined
   /** Splits the row's inputs into groups that fold apart, in stacking order. */
   split?: (inputs: Input[]) => Input[][]
 }
@@ -66,23 +81,16 @@ function andList(names: string[]): string {
   return names.length < 2 ? last : `${names.slice(0, -1).join(', ')} and ${last}`
 }
 
-/** A fold's name list: up to three names, then "and N more". */
-function namesUpToThree(names: string[]): string {
-  return names.length <= 3
-    ? names.join(', ')
-    : `${names.slice(0, 3).join(', ')} and ${names.length - 3} more`
-}
-
-/** The gold an effect moved: a vendoring's, or a trade's. */
+/** The gold a trade moved. */
 function goldOf(effect: Effect): number {
-  if (effect.k === 'drop_vendored') return effect.gold
   return effect.k === 'traded' ? effect.entry.gold : 0
 }
 
 const goldSum = (inputs: EffectInput[]) => inputs.reduce((sum, i) => sum + goldOf(i.effect), 0)
 
-function dropName(effect: Effect): string {
-  return effect.k === 'drop' ? tradeName('item', effect.item.base) : ''
+/** A drop's or a vendoring's wait: its item's reveal. */
+function itemWait({ effect }: EffectInput): ToastWait | undefined {
+  return effect.k === 'drop' || effect.k === 'drop_vendored' ? { item: effect.item.id } : undefined
 }
 
 /**
@@ -126,6 +134,7 @@ const TABLE = {
       effect.k === 'drop' && effect.item.rarity === 'legendary'
         ? `Legendary drop: ${tradeName('item', effect.item.base)}`
         : null,
+    wait: itemWait,
   },
   recruit: {
     purpose: 'rare good news',
@@ -189,16 +198,12 @@ const TABLE = {
       effect.k === 'drop' && (effect.item.rarity === 'rare' || effect.item.rarity === 'epic')
         ? `${rarityWord(effect.item.rarity)} drop: ${tradeName('item', effect.item.base)}`
         : null,
-    // Epic outranks rare within the row, so its fold stacks first.
+    wait: itemWait,
+    // Epic outranks rare within the row, so its toasts stack first.
     split: (inputs: EffectInput[]) =>
       (['epic', 'rare'] as const).map((rarity) =>
         inputs.filter(({ effect }) => effect.k === 'drop' && effect.item.rarity === rarity),
       ),
-    fold: (inputs: EffectInput[]) => {
-      const rarity = inputs[0]?.effect.k === 'drop' ? inputs[0].effect.item.rarity : 'rare'
-      const names = inputs.map((i) => dropName(i.effect))
-      return `${inputs.length} ${rarity} drops: ${namesUpToThree(names)}`
-    },
   },
   vendored: {
     purpose: 'wants a decision',
@@ -209,8 +214,7 @@ const TABLE = {
       effect.k === 'drop_vendored' && RARE_OR_BETTER.has(effect.item.rarity)
         ? `Inventory full: ${tradeName('item', effect.item.base)} vendored for ${effect.gold} gold`
         : null,
-    fold: (inputs: EffectInput[]) =>
-      `Inventory full: ${inputs.length} items vendored for ${goldSum(inputs)} gold`,
+    wait: itemWait,
   },
   level_up: {
     purpose: 'rare good news',
@@ -277,9 +281,9 @@ const EFFECT_ROWS = [
 
 type EffectRow = (typeof EFFECT_ROWS)[number]
 
-function toast(row: ToastRow, text: string): Toast {
+function toast(row: ToastRow, text: string, wait?: ToastWait): Toast {
   const { tier, cue } = TABLE[row]
-  return { row, text, timeoutMs: TIER_MS[tier], cue }
+  return { row, text, timeoutMs: TIER_MS[tier], cue, ...(wait ? { wait } : {}) }
 }
 
 /** A roster hero's full name with its epithet, or null when the view has no such hero. */
@@ -290,7 +294,8 @@ export function heroNameById(view: GameView | null, heroId: string): string | nu
 /**
  * The toasts a burst raises, in the table's order. Effects group by row: a row that folds
  * gives one toast per group (a group of one in its single form), a row that never folds one
- * toast per effect. Nothing is held across bursts.
+ * toast per effect. A drop's or a vendoring's toast carries its item's wait, which the caller
+ * holds to its show time; this stays a function of the effects alone, with no clock.
  */
 export function toastsFor(effects: Effect[], view: GameView | null, names: ToastNames): Toast[] {
   const byRow = new Map<EffectRow, EffectInput[]>()
@@ -305,7 +310,7 @@ export function toastsFor(effects: Effect[], view: GameView | null, names: Toast
     return (entry.split?.(inputs) ?? [inputs]).flatMap((group) =>
       entry.fold && group.length > 1
         ? [toast(row, entry.fold(group))]
-        : group.map((input) => toast(row, entry.single(input) ?? '')),
+        : group.map((input) => toast(row, entry.single(input) ?? '', entry.wait?.(input))),
     )
   })
 }
