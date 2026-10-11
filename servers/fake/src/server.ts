@@ -5,6 +5,7 @@ import {
   approveAs,
   Ledger,
   type LedgerFlag,
+  PLAYER_NAME_MAX,
   SETTABLE_FLAGS,
   type SettableFlag,
 } from '@promptfall/ledger'
@@ -120,6 +121,15 @@ const BanBody = z.object({
     .min(1)
     .max(120)
     .refine((r) => !/\p{Cc}/u.test(r), 'the reason is one line of text'),
+})
+
+/** `POST /v1/admin/unban`'s body: the GitHub login, one token, in any case. */
+const UnbanBody = z.object({
+  login: z
+    .string()
+    .min(1)
+    .max(PLAYER_NAME_MAX)
+    .regex(/^[^\s\p{Cc}]+$/u),
 })
 
 /** `POST /v1/admin/flags`'s body: settable flags to booleans, at least one. */
@@ -333,6 +343,24 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
               }
             }
             return { target: accountId, answer: { accountId, banned } }
+          },
+        },
+        {
+          method: 'POST',
+          path: '/v1/admin/unban',
+          action: 'unban',
+          run: async (body) => {
+            const { login } = parse(UnbanBody, body)
+            const unbanned = await ledger.host.unban(login)
+            if (!unbanned) {
+              return {
+                target: login.toLowerCase(),
+                answer: { error: 'login' },
+                status: 404,
+                outcome: 'unknown',
+              }
+            }
+            return { target: unbanned.login, answer: unbanned }
           },
         },
       ]

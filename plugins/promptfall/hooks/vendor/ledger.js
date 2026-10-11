@@ -21,6 +21,7 @@ var KINDS = Object.keys(BUDGETS);
 var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
+var loginBanKey = (login) => `pf:ban:${login.toLowerCase()}`;
 var RETURNS_KEY = "pf:returns";
 var LINKS_KEY = "pf:links";
 var FLAGS_KEY = "pf:flags";
@@ -146,6 +147,10 @@ var Books = class {
   async authenticate(auth) {
     const accountId = await this.accountFor(auth.deviceToken);
     return accountId ? this.load(accountId) : null;
+  }
+  async loginBan(login) {
+    const raw = await this.kv.get(loginBanKey(login));
+    return raw ? raw : null;
   }
   async returnsQueue() {
     const raw = await this.kv.get(RETURNS_KEY);
@@ -1068,7 +1073,8 @@ var Ledger = class {
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
       setFlags: (flags) => this.run(() => this.setFlags(flags)),
-      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason))
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
+      unban: (login) => this.run(() => this.unban(login))
     };
   }
   options;
@@ -1121,7 +1127,28 @@ var Ledger = class {
     if (!record) return null;
     record.banned = { reason, at: await this.options.now() };
     await this.books.save(record);
+    const login = record.account.linked?.login;
+    if (login) {
+      const prior = await this.books.loginBan(login);
+      const ban = prior ?? { ...record.banned, accountIds: [] };
+      if (!ban.accountIds.includes(accountId)) ban.accountIds = [...ban.accountIds, accountId];
+      await this.kv.set(loginBanKey(login), ban);
+    }
     return record.banned;
+  }
+  async unban(login) {
+    const ban = await this.books.loginBan(login);
+    if (!ban) return null;
+    await this.kv.delete(loginBanKey(login));
+    const lifted = [];
+    for (const accountId of ban.accountIds) {
+      const record = await this.books.load(accountId);
+      if (!record?.banned) continue;
+      delete record.banned;
+      await this.books.save(record);
+      lifted.push(accountId);
+    }
+    return { login: login.toLowerCase(), lifted };
   }
   async config() {
     return {
@@ -1218,14 +1245,13 @@ var Ledger = class {
   /**
    * Deletes the caller's account. Its open listings and orders close with nothing returned or
    * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   * else is settled: a counterparty, the boss record and the chat history are untouched. The
+   * one call a ban lets through: a banned player may leave. A login ban stays behind.
    */
   deleteAccount(auth) {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
-      const banned = bannedOf(record);
-      if (banned) return banned;
       const id = record.account.accountId;
       await closeAllOf(await this.marketContext(), id);
       await dropFromBoards(this.kv, id);
@@ -1389,6 +1415,15 @@ var Ledger = class {
       if (answer.status === "ended") {
         await this.books.save(record);
         return answer;
+      }
+      const loginBan = await this.books.loginBan(answer.login);
+      if (loginBan) {
+        await this.books.save(record);
+        return {
+          status: "ended",
+          reason: "denied",
+          message: `Promptfall: this GitHub account is banned: ${loginBan.reason}`.slice(0, 200)
+        };
       }
       record.account = {
         ...record.account,

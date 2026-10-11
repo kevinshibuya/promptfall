@@ -734,6 +734,84 @@ describe('HTTP host admin ban', () => {
   })
 })
 
+describe('HTTP host admin unban', () => {
+  it('unban over the admin route lifts the login and its account, and logs one line', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+    })
+    try {
+      const http = new HttpClient({ baseUrl: h.at, fetch: nodeFetch })
+      /** A fresh account's link, which the fake approves as `kevin`. */
+      const link = async () => {
+        const boot = await booted(http, { clientVersion: '0.3.0', deviceToken: null })
+        const auth = { deviceToken: boot.deviceToken }
+        const start = await http.linkStart(auth)
+        if (!('code' in start)) throw new Error('expected a link start')
+        return { boot, auth, polled: await http.linkPoll(auth, start.code) }
+      }
+      const banned = await link()
+      expect(banned.polled).toMatchObject({ status: 'linked' })
+      const accountId = banned.boot.account.accountId
+      const ban = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId, reason: 'cheating' },
+        token: ADMIN,
+      })
+      expect(ban.status).toBe(200)
+      // The login is banned: a fresh account cannot link it, and is not banned for trying.
+      const refused = await link()
+      expect(refused.polled).toEqual({
+        status: 'ended',
+        reason: 'denied',
+        message: 'Promptfall: this GitHub account is banned: cheating',
+      })
+      expect(await http.account(refused.auth)).toMatchObject({ account: { linked: null } })
+
+      const body = { login: 'Kevin' }
+      const wrong = await h.call('POST', '/v1/admin/unban', { body, token: 'guess' })
+      expect(wrong).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      const missing = await h.call('POST', '/v1/admin/unban', { body })
+      expect(missing).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      const unknown = await h.call('POST', '/v1/admin/unban', {
+        body: { login: 'octocat' },
+        token: ADMIN,
+      })
+      expect(unknown).toEqual({ status: 404, body: { error: 'login' } })
+      expect((await http.account(banned.auth)) as object).toMatchObject({ reason: 'banned' })
+
+      const unban = await h.call('POST', '/v1/admin/unban', { body, token: ADMIN })
+      expect(unban).toEqual({ status: 200, body: { login: 'kevin', lifted: [accountId] } })
+      expect(await http.account(banned.auth)).toMatchObject({ account: { accountId } })
+      expect((await link()).polled).toMatchObject({ status: 'linked' })
+      for (const body of [{}, { login: '' }, { login: 'two words' }, { login: 'k'.repeat(65) }]) {
+        const r = await h.call('POST', '/v1/admin/unban', { body, token: ADMIN })
+        expect(r.status).toBe(400)
+      }
+
+      expect(lines.slice(1)).toEqual([
+        expect.stringMatching(/^admin \S+Z unban - unauthorized$/),
+        expect.stringMatching(/^admin \S+Z unban - unauthorized$/),
+        expect.stringMatching(/^admin \S+Z unban octocat unknown$/),
+        expect.stringMatching(/^admin \S+Z unban kevin ok$/),
+        ...Array.from({ length: 4 }, () => expect.stringMatching(/^admin \S+Z unban - refused$/)),
+      ])
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('a host without an admin token has no unban route', async () => {
+    const h = await hostOn(new MemoryKeyValue())
+    try {
+      const r = await h.call('POST', '/v1/admin/unban', { body: { login: 'kevin' }, token: ADMIN })
+      expect(r).toEqual({ status: 404, body: { error: 'route' } })
+    } finally {
+      await h.close()
+    }
+  })
+})
+
 describe('HTTP host mint cap', () => {
   it('the sixth mint from one address in an hour is refused and a known token passes', async () => {
     let now = T0
