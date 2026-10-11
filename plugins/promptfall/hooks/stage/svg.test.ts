@@ -10,11 +10,11 @@ import { stagedState } from './staged'
 import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
 import {
-  DROP_MS,
   HIRES_SCALE,
   IDLE_BOB_PX,
   LUNGE_MS,
   RARITY_RGB,
+  SVG_MAX_CHARS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
@@ -83,32 +83,26 @@ test('smil animates a lunge already under way from a negative begin', () => {
   expect(s).toContain('filter="url(#flash)"')
 })
 
+test('smil plays the step as a translate on the stepper from its place, under Motion still too', () => {
+  const still: Opts = { smil: true, motion: 'still' }
+  const held = NOW + 110
+  const s = svg([act, hit], held, still)
+  expect(s.match(/<animateTransform[^>]*values="0 0;-4 0;-4 0;0 0"[^>]*>/g)).toEqual([
+    '<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-4 0;-4 0;0 0" keyTimes="0;0.16;0.84;1" begin="-0.11s" dur="0.5s"/>',
+  ])
+  // The groups stand where they stand at rest: the animation adds the step.
+  const places = (doc: string) =>
+    [...doc.matchAll(/<g transform="(translate\([^)]*\))"/g)].map((m) => m[1])
+  expect(places(s)).toEqual(places(svg([], held, still)))
+  // Without SMIL the knight is drawn stepped.
+  const flat = places(svg([act, hit], held, { smil: false, motion: 'still' }))
+  const rest = places(svg([], held, { smil: false, motion: 'still' }))
+  expect(flat.filter((p) => !rest.includes(p))).toHaveLength(1)
+})
+
 test('a motion already over yields nothing', () => {
   const s = svg([hit], NOW + LUNGE_MS + 2000, { smil: true, motion: 'still' })
   expect(s).not.toContain('<animate')
-})
-
-test('a drop yields an animated use', () => {
-  const s = svg(
-    [
-      hit,
-      {
-        k: 'drop',
-        item: {
-          id: 'i',
-          base: 'iron_sword',
-          rarity: 'rare',
-          affixes: [],
-          equippedBy: null,
-          tradeableAt: null,
-        },
-      },
-    ],
-    NOW + DROP_MS / 2,
-  )
-  expect(s).toMatch(
-    /<use href="#a\d+" transform="translate\(\d+ \d+\)" opacity="0"><animate attributeName="opacity" values="1;1;0"/,
-  )
 })
 
 test('without smil no animation element appears', () => {
@@ -132,22 +126,102 @@ const DROP: Effect = {
   },
 }
 
-test('a drop still running after its enemy dissolved stays in a redraw', () => {
+/** e1 killed at NOW with DROP (rare) on a 17-row stage: its chest falls from NOW + 400, lands at NOW + 700. */
+function chestSvg(at: number, smil: boolean): { doc: string; chests: number } {
   const t = new StageTimeline()
   t.observe(wave(), NOW)
   t.onEffects([hit, DROP], NOW)
   const gone = wave()
   gone.enemies = gone.enemies.filter((e) => e.id !== 'e1')
   t.observe(gone, NOW + 10)
-  // Past the dissolve, inside the drop.
-  const at = NOW + 750
-  const model = stageAt(stagedState(gone, WORLD_DEFAULT, t, at), t, at, BOX, {
+  const model = stageAt(stagedState(gone, WORLD_DEFAULT, t, at), t, at, TALL, {
     compact: false,
-    motion: 'full',
+    motion: 'still',
   })
-  expect(model.drops).toHaveLength(1)
-  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
-  expect(s).toMatch(/values="1;1;0"/)
+  const doc = renderSvg(model, t.active(at), { smil, motion: 'still', now: at, width: 960 })
+  return { doc, chests: model.chests.length }
+}
+const TALL = { columns: 120, rows: 17 }
+
+/** The def id `art` is drawn under in `doc`. */
+function defIdOf(doc: string, art: Parameters<typeof artPaths>[0] | undefined): string {
+  if (!art) throw new Error('no art')
+  const id = doc.match(new RegExp(`<g id="(a\\d+)">${artPaths(art, null)}</g>`))?.[1]
+  if (!id) throw new Error('no def for the art')
+  return id
+}
+
+test('the SMIL Svg drops the chest with a translate, shows its three arts in turn and raises its item', () => {
+  const [closed, opening, open] = (['closed', 'opening', 'open'] as const).map(
+    (id) => spriteFor('chest', id).full,
+  )
+  // Before the chest starts: e1 stood at x 4 on a 34 px stage; the chest falls 8 px to y 18 from
+  // 0.4 s over 0.3 s, shows closed to 1 s, opening to 1.25 s and open after; the item rises 10 px
+  // from y 15 from 1.5 s, the end of the open phase. Both fade over the last 0.2 s of the rare
+  // item's 2.8 s.
+  const before = chestSvg(NOW, true).doc
+  const [c, o, a] = [closed, opening, open].map((art) => defIdOf(before, art))
+  expect(before).toContain(
+    `<g transform="translate(4 18)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.929;1" begin="0.4s" dur="2.8s"/>`,
+  )
+  expect(before).toMatch(
+    /<animateTransform attributeName="transform" type="translate" additive="sum" values="0 -8;0 0" [^>]*begin="0.4s" dur="0.3s"\/>/,
+  )
+  expect(before).toContain(
+    `<use href="#${c}" visibility="hidden"><set attributeName="visibility" to="visible" begin="0.4s" dur="0.6s"/></use><use href="#${o}" visibility="hidden"><set attributeName="visibility" to="visible" begin="1s" dur="0.25s"/></use><use href="#${a}" visibility="hidden"><set attributeName="visibility" to="visible" begin="1.25s" dur="1.95s"/></use></g>`,
+  )
+  expect(before).toMatch(
+    /<use href="#a\d+" transform="translate\(4 15\)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.882;1" begin="1.5s" dur="1.7s"\/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -10" begin="1.5s" dur="0.3s" fill="freeze"\/><\/use>/,
+  )
+  // A redraw mid-hold, the enemy long faded, resumes the same chest: open, the only art it draws.
+  const held = chestSvg(NOW + 2000, true)
+  expect(held.chests).toBe(1)
+  expect(held.doc).toContain('begin="-1.6s" dur="2.8s"')
+  expect(held.doc).toContain(`<use href="#${defIdOf(held.doc, open)}"/></g>`)
+  for (const id of ['closed', 'opening']) {
+    expect(held.doc).not.toContain(defOf(spriteFor('chest', id).full, null))
+  }
+  expect(held.doc).toContain('values="0 0;0 -10" begin="-0.5s"')
+  // Without SMIL, the model as of now: the open chest on the ground, the item risen.
+  const flat = chestSvg(NOW + 2000, false).doc
+  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(4 18)"/>`)
+  expect(flat).toMatch(/<use href="#a\d+" transform="translate\(4 5\)"\/>/)
+  expect(flat).not.toContain('<animate')
+})
+
+test('the glow is one circle in the rarity colour, behind the chest, its alpha ramping in over the rise', () => {
+  // The rare item risen at (4, 5), 16 px: the glow on its centre (12, 13), radius 10. Its rise
+  // runs 1.5 s to 1.8 s and its fade from 3 s to 3.2 s: of its 1.7 s, 0.176 and 0.882.
+  const blue = `#${(RARITY_RGB.rare ?? 0).toString(16).padStart(6, '0')}`
+  const before = chestSvg(NOW, true).doc
+  expect(before.match(/<circle/g)).toHaveLength(1)
+  expect(before).toContain(
+    `<circle cx="12" cy="13" r="10" fill="${blue}" opacity="0"><animate attributeName="opacity" values="0;0.5;0.5;0" keyTimes="0;0.176;0.882;1" begin="1.5s" dur="1.7s"/></circle>`,
+  )
+  const chest = before.indexOf('<g transform="translate(4 18)" opacity="0">')
+  expect(chest).toBeGreaterThan(0)
+  expect(before.indexOf('<circle')).toBeLessThan(chest)
+  // A redraw mid-hold resumes it.
+  const held = chestSvg(NOW + 2000, true).doc
+  expect(held.match(/<circle/g)).toHaveLength(1)
+  expect(held).toContain('values="0;0.5;0.5;0" keyTimes="0;0.176;0.882;1" begin="-0.5s" dur="1.7s"')
+  // Without SMIL, the glow as of now.
+  const flat = chestSvg(NOW + 2000, false).doc
+  expect(flat.match(/<circle/g)).toHaveLength(1)
+  expect(flat).toContain(`<circle cx="12" cy="13" r="10" fill="${blue}" opacity="0.5"/>`)
+  // Before the rise, no glow.
+  expect(chestSvg(NOW + 1200, false).doc).not.toContain('<circle')
+})
+
+test('the reveal scenarios stay under the Svg cap with SMIL on and never fall back to the 1x Svg', () => {
+  for (const name of ['reveal', 'reveal-legendary'] as const) {
+    const s = stage(name)
+    const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
+    const hi = renderSvg(s.hires, s.motions, opts)
+    expect(hi.length, name).toBeLessThan(SVG_MAX_CHARS)
+    expect(svgWithFallback(s.hires, s.model, s.motions, opts), name).toBe(hi)
+    expect(hi.match(/<circle/g), name).toHaveLength(1)
+  }
 })
 
 test('a hero flashing at a redraw keeps its rarity colour under the flash', () => {
@@ -250,6 +324,35 @@ test('an action that starts after the next redraw carries none of its frames', (
   expect(svg).not.toContain(defOf(f.windup.art, f.windup.raritySlot))
   // The knight's hit, inside the goblin's action, is in use.
   expect(svg).toContain('filter="url(#hit)"')
+})
+
+test('two queued casts both throw from the stepped position', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  // The mage's second action starts at the first's end, after the first step is back.
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h2', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h2', target: 'e1', amount: 3 },
+      { k: 'act', actor: 'h2', action: 'attack', at: 300 },
+      { k: 'hit', by: 'h2', target: 'e1', amount: 3 },
+    ],
+    NOW,
+  )
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
+  const svg = renderSvg(model, t.active(NOW), { ...SMIL, now: NOW })
+  const launches = [
+    ...svg.matchAll(
+      /<g transform="translate\((-?\d+) (-?\d+)\)" opacity="0"><animate attributeName="opacity" values="1;1"/g,
+    ),
+  ].map((m) => Number(m[1]))
+  expect(launches.length).toBe(2)
+  expect(launches[1]).toBe(launches[0])
 })
 
 test("the bolt scenario flies a fireball from the mage's front edge to the target's centre", () => {

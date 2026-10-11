@@ -278,7 +278,7 @@ class GameSession implements GameHandle {
         // The session owns the mode: the engine's pause becomes the derived value.
         return io.publish(patch.mode === undefined ? patch : { ...patch, mode: this.mode() })
       },
-      onEffects: (effects, at, view) => this.onEffects(effects, at, view),
+      onEffects: (effects, at, view, arrived) => this.onEffects(effects, at, view, arrived),
       toast: io.toast,
       after: (ms, fn) => {
         io.after(ms, fn)
@@ -718,7 +718,12 @@ class GameSession implements GameHandle {
     })
   }
 
-  private onEffects(effects: Effect[], at: number | undefined, view: GameView | null): void {
+  private onEffects(
+    effects: Effect[],
+    at: number | undefined,
+    view: GameView | null,
+    arrived?: number,
+  ): void {
     // Before the toasts, and synchronously: the next render observes the view these effects
     // came with, so the hits must already be on the timeline (engine.apply publishes first).
     if (at !== undefined) this.lastAt = at
@@ -729,7 +734,9 @@ class GameSession implements GameHandle {
     // A monster the tick brought acts in it: the timeline knows it before the effects play, not
     // only from the next redraw (the desktop's is a round away).
     if (view) this.stage.timeline.admit(view, now)
-    const starts = this.stage.timeline.onEffects(effects, now, cadence)
+    // A delivery plays at the last tick's time, but a lone drop in it (a sandbox item) falls when
+    // it arrived: at that stale time its chest would be over before it was drawn.
+    const starts = this.stage.timeline.onEffects(effects, now, cadence, arrived ?? now)
     if (view) {
       this.stage.gauges.onTick(view, now, cadence, this.stage.timeline)
       this.stage.log.onEffects(effects, starts, view, now, cadence, this.stage.timeline)

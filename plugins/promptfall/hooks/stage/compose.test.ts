@@ -16,6 +16,8 @@ function model(overrides: Partial<StageModel> = {}): StageModel {
     backdrop: null,
     actors: [],
     numbers: [],
+    glows: [],
+    chests: [],
     drops: [],
     effects: [],
     alt: '',
@@ -170,4 +172,46 @@ test('mirrored continues a row past both edges without a seam', () => {
   expect([-3, -2, -1, 0, 1, 7, 8, 9, 15, 16, 17].map((i) => mirrored(i, 8))).toEqual([
     2, 1, 0, 0, 1, 7, 7, 6, 0, 0, 1,
   ])
+})
+
+test('a glow is a disc of its colour under the chest, dithered at its alpha', () => {
+  const gold = 0xf0c040
+  const rgbAt = (f: { width: number; rgba: Uint8ClampedArray }, x: number, y: number) => {
+    const i = (y * f.width + x) * 4
+    return f.rgba[i + 3]
+      ? ((f.rgba[i] ?? 0) << 16) | ((f.rgba[i + 1] ?? 0) << 8) | (f.rgba[i + 2] ?? 0)
+      : null
+  }
+  const full = composeFrame(model({ glows: [{ x: 20, y: 8, r: 4, rgb: gold, alpha: 1 }] }), {
+    numbers: true,
+  })
+  // A pixel is in the disc when its centre is: (23, 8) is 3.5 px off, (24, 8) 4.5.
+  expect([rgbAt(full, 20, 8), rgbAt(full, 23, 8), rgbAt(full, 24, 8)]).toEqual([gold, gold, null])
+  expect(rgbAt(full, 20, 3)).toBe(null)
+  // At alpha 0.5, about half the disc's pixels.
+  const disc = opaqueIn(full, 40, 18)
+  const half = composeFrame(model({ glows: [{ x: 20, y: 8, r: 4, rgb: gold, alpha: 0.5 }] }), {
+    numbers: true,
+  })
+  expect(opaqueIn(half, 40, 18)).toBe(disc / 2)
+  // A chest over it keeps its own colours.
+  const chest = spriteFor('chest', 'open').full
+  const under = composeFrame(
+    model({
+      glows: [{ x: 20, y: 8, r: 4, rgb: gold, alpha: 1 }],
+      chests: [{ spriteId: 'chest:open', art: chest, x: 12, y: 0, alpha: 1, phase: 'hold' }],
+    }),
+    { numbers: true },
+  )
+  const alone = composeFrame(
+    model({
+      chests: [{ spriteId: 'chest:open', art: chest, x: 12, y: 0, alpha: 1, phase: 'hold' }],
+    }),
+    { numbers: true },
+  )
+  for (let y = 0; y < 16; y++) {
+    for (let x = 12; x < 28; x++) {
+      if (rgbAt(alone, x, y) !== null) expect(rgbAt(under, x, y)).toBe(rgbAt(alone, x, y))
+    }
+  }
 })

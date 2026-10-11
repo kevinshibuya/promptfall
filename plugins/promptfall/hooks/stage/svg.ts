@@ -8,25 +8,36 @@ import { backdropOrigin, frameSize } from './compose'
 import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
 import {
+  actionOffset,
+  CHESTS,
+  chestPlace,
   effectAt,
-  lungeOffset,
+  glowOf,
   type Pose,
   type StageActor,
   type StageModel,
   stageAt,
+  stepOffset,
   variant,
 } from './model'
 import { svgFrame } from './playfield'
-import { bobbingAt, type Motion, type StageTimeline } from './timeline'
+import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './timeline'
 import {
   BLINK_MS,
+  CHEST_FALL_MS,
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
   COMPACT_STAGE_ROWS,
-  DROP_RISE_PX,
+  GLOW_ALPHA,
   HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LUNGE_PX,
   NUMBER_RISE_PX,
+  REVEAL_FADE_MS,
+  REVEAL_RISE_MS,
+  STEP_OUT_MS,
+  STEP_PX,
   SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
 } from './tuning'
@@ -239,6 +250,19 @@ export function renderSvg(
   const begin = (m: Motion) => seconds(m.from - opts.now)
   const dur = (m: Motion) => seconds(m.until - m.from)
   const bobPx = px(IDLE_BOB_PX)
+  /** The step and the lunge as translates on the actor's group, summed with its place. */
+  const moveAnim = (m: Motion): string | null => {
+    if (m.kind === 'lunge') {
+      const dx = m.dir * px(LUNGE_PX)
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`
+    }
+    if (m.kind === 'step') {
+      const dx = m.dir * px(STEP_PX)
+      const out = Number((STEP_OUT_MS / (m.until - m.from)).toFixed(3))
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;${dx} 0;0 0" keyTimes="0;${out};${Number((1 - out).toFixed(3))};1" begin="${begin(m)}" dur="${dur(m)}"/>`
+    }
+    return null
+  }
   const bob = opts.motion === 'full' ? bobbingAt(opts.now) * bobPx : 0
   const ground = px(2)
 
@@ -312,11 +336,9 @@ export function renderSvg(
   const hiresActor = (actor: StageActor, mine: readonly Motion[], x: number): string => {
     const anim: string[] = []
     for (const m of mine) {
-      if (m.kind === 'lunge') {
-        const dx = m.dir * px(LUNGE_PX)
-        anim.push(
-          `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`,
-        )
+      const move = moveAnim(m)
+      if (move !== null) {
+        anim.push(move)
       } else if (m.kind === 'spawn') {
         anim.push(
           `<animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`,
@@ -380,7 +402,7 @@ export function renderSvg(
     const mine = live.filter((m) => m.actor === actor.key)
     const spawning = mine.some((m) => m.kind === 'spawn')
     if (actor.alpha <= 0 && !(opts.smil && spawning)) {
-      // Not drawn, but a drop still rising from it needs its anchor.
+      // Not drawn, but a chest still on its ground needs its anchor.
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
@@ -417,8 +439,9 @@ export function renderSvg(
     }
 
     // Back out the offsets the model baked in at `now`; the animations reapply them.
-    const lunge = mine.find((m) => m.kind === 'lunge' && m.from <= opts.now)
-    const x = actor.x - lungeOffset(lunge, opts.now, scale)
+    const started = (kind: Motion['kind']) =>
+      mine.find((m) => m.kind === kind && m.from <= opts.now)
+    const x = actor.x - actionOffset(started('step'), started('lunge'), opts.now, scale)
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
@@ -430,11 +453,9 @@ export function renderSvg(
     base.set(actor.key, { x, y, actor })
     const anim: string[] = []
     for (const m of mine) {
-      if (m.kind === 'lunge') {
-        const dx = m.dir * px(LUNGE_PX)
-        anim.push(
-          `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`,
-        )
+      const move = moveAnim(m)
+      if (move !== null) {
+        anim.push(move)
       } else if (m.kind === 'spawn') {
         anim.push(
           `<animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`,
@@ -463,7 +484,18 @@ export function renderSvg(
     body.push(`<g transform="translate(${x} ${y})"${op}>${anim.join('')}${use}${flashes}</g>`)
   }
 
+  /** A glow's circle in its rarity fill; `extra` its opacity or its animation. */
+  const circle = (g: { x: number; y: number; r: number; rgb: number }, extra: string) =>
+    `<circle cx="${g.x}" cy="${g.y}" r="${g.r}" fill="${hex(g.rgb)}"${extra}`
+
   if (!opts.smil) {
+    for (const g of model.glows) {
+      if (g.alpha > 0) body.push(`${circle(g, ` opacity="${Number(g.alpha.toFixed(2))}"`)}/>`)
+    }
+    for (const c of model.chests) {
+      const op = c.alpha < 1 ? ` opacity="${Number(c.alpha.toFixed(2))}"` : ''
+      body.push(`<use href="#${define(c.art, null)}" transform="translate(${c.x} ${c.y})"${op}/>`)
+    }
     for (const d of model.drops) {
       const op = d.alpha < 1 ? ` opacity="${Number(d.alpha.toFixed(2))}"` : ''
       body.push(`<use href="#${define(d.art, null)}" transform="translate(${d.x} ${d.y})"${op}/>`)
@@ -493,23 +525,62 @@ export function renderSvg(
         const rise = clamp(at.y + px(2) - px(NUMBER_RISE_PX), 0, H - glyphH) - top
         const anim = `<animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/>`
         body.push(text(m.text, x, top, m.rgb, block, anim, ' opacity="0"'))
-      } else if (m.kind === 'drop') {
-        const sprite = SPRITES[m.item]
+      } else if (m.kind === 'chest') {
+        const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
-        const art = compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
-        const cx = at.x + at.actor.poses.idle.art.width / 2
-        const cy = at.y + at.actor.poses.idle.art.height / 2
-        const x = clamp(Math.round(cx - art.width / 2), 0, Math.max(0, W - art.width))
-        const y = clamp(Math.round(cy - art.height / 2), 0, Math.max(0, H - art.height))
-        const rise = clamp(y - px(DROP_RISE_PX), 0, H) - y
+        const closed = variant(CHESTS.closed, compact, scale)
+        const item = variant(sprite, compact, scale)
+        const idle = at.actor.poses.idle.art
+        // Where the actor stood: on the ground, whatever its bob.
+        const stood = { x: at.x, y: H - idle.height, width: idle.width, height: idle.height }
+        const place = chestPlace(stood, closed, item, { width: W, height: H }, scale)
+        /** Visible from `from` to the chest's end, fading over its last REVEAL_FADE_MS. */
+        const shown = (from: number) => {
+          const fade = Number((1 - REVEAL_FADE_MS / (m.until - from)).toFixed(3))
+          return `<animate attributeName="opacity" values="1;1;0" keyTimes="0;${fade};1" begin="${seconds(from - opts.now)}" dur="${seconds(m.until - from)}"/>`
+        }
+        const rise = m.from + CHEST_SHOW_MS - REVEAL_RISE_MS
+        // The glow, behind the chest: its alpha ramps in over the rise, holds and fades.
+        const ramp = Number((REVEAL_RISE_MS / (m.until - rise)).toFixed(3))
+        const fade = Number((1 - REVEAL_FADE_MS / (m.until - rise)).toFixed(3))
         body.push(
-          `<use href="#${define(art, null)}" transform="translate(${x} ${y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.667;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
+          `${circle(glowOf(m, item, place, 1), ' opacity="0"')}><animate attributeName="opacity" values="0;${GLOW_ALPHA};${GLOW_ALPHA};0" keyTimes="0;${ramp};${fade};1" begin="${seconds(rise - opts.now)}" dur="${seconds(m.until - rise)}"/></circle>`,
+        )
+        // The three arts in turn, as the pose frames are: closed to the open phase, opening its
+        // first half, open after; only those still to show. All one size, so one place.
+        const opens = m.from + CHEST_FALL_MS + CHEST_SIT_MS
+        const arts = [
+          { sprite: CHESTS.closed, from: m.from, until: opens },
+          { sprite: CHESTS.opening, from: opens, until: opens + CHEST_OPEN_MS / 2 },
+          { sprite: CHESTS.open, from: opens + CHEST_OPEN_MS / 2, until: m.until },
+        ].filter((a) => a.until > opts.now)
+        const uses = arts.map((a) => {
+          const href = `#${define(variant(a.sprite, compact, scale), null)}`
+          if (arts.length === 1 && a.from <= opts.now) return `<use href="${href}"/>`
+          return `<use href="${href}" visibility="hidden"><set attributeName="visibility" to="visible" begin="${seconds(a.from - opts.now)}" dur="${seconds(a.until - a.from)}"/></use>`
+        })
+        // The fall eases in (a quadratic), as the pixel surfaces draw it.
+        const fall =
+          m.from + CHEST_FALL_MS > opts.now
+            ? `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 ${place.fromY - place.groundY};0 0" calcMode="spline" keyTimes="0;1" keySplines="0.333 0 0.667 0.333" begin="${begin(m)}" dur="${seconds(CHEST_FALL_MS)}"/>`
+            : ''
+        body.push(
+          `<g transform="translate(${place.x} ${place.groundY})" opacity="0">${shown(m.from)}${fall}${uses.join('')}</g>`,
+        )
+        body.push(
+          `<use href="#${define(item, null)}" transform="translate(${place.itemX} ${place.itemY})" opacity="0">${shown(rise)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${place.risenY - place.itemY}" begin="${seconds(rise - opts.now)}" dur="${seconds(REVEAL_RISE_MS)}" fill="freeze"/></use>`,
         )
       } else if (m.kind === 'effect') {
         const to = base.get(m.target)
         const sprite = SPRITES[`effect:${m.effect}`]
         if (!to || !sprite) continue
         const art = variant(sprite, compact, scale)
+        // The attacker throws from where it stands as it throws: stepped out, in its own action's
+        // step (a second queued action has its own).
+        const step = live.find(
+          (o) => o.actor === m.actor && o.kind === 'step' && o.from <= m.from && m.from < o.until,
+        )
+        const thrower = { ...at, x: at.x + stepOffset(step, m.from, scale) }
         const place = (a: typeof at) => ({
           x: a.x,
           y: a.y,
@@ -517,8 +588,8 @@ export function renderSvg(
           height: a.actor.poses.idle.art.height,
         })
         const flipX = at.actor.flipX
-        const end = effectAt(art, flipX, place(at), place(to), 1)
-        const start = m.shape === 'bolt' ? effectAt(art, flipX, place(at), place(to), 0) : end
+        const end = effectAt(art, flipX, place(thrower), place(to), 1)
+        const start = m.shape === 'bolt' ? effectAt(art, flipX, place(thrower), place(to), 0) : end
         if (!start || !end) continue
         const flip = flipX ? ` transform="translate(${art.width} 0) scale(-1 1)"` : ''
         const fly =

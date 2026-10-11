@@ -606,9 +606,16 @@ flags. No second server program, no Postgres, no Redis, no worker.
   strip and the hotkey row are counted (the desktop scrolls the rest), and
   then centred on the shell; the band collapses only by hand or as a
   secondary.
-- Stage motion (phase 4): idle bob, attack lunge (heroes switch to a drawn attack
-  or cast pose), hit flash, death dissolve, spawn fade-in, floating damage
-  numbers, and a drop popping out of the defeated enemy. Driven by the sim's
+- Stage motion (phase 4, spec #72): idle bob, the step, attack lunge (heroes
+  switch to a drawn attack or cast pose), hit flash, death dissolve, spawn
+  fade-in, floating damage numbers, and the chest. Every attacker, hero or
+  monster of any size, steps a fixed distance forward (a hero toward the
+  enemies, a monster toward the party) in its wind-up hold and back in its action's tail, so the step costs no time; the lunge
+  thrusts from the stepped position. A kill that drops an item leaves a chest:
+  it falls out of the fading enemy, sits, opens, and the item rises on a glow
+  in its rarity colour (the reveal), held longer the rarer the item, then
+  fades; the next enemy enters after it. The reveal's show time, the item fully
+  risen, is when the drop's log line and its Loot row appear. Driven by the sim's
   output-only effects: `act` starts an action at its battle-time offset, then
   come its `hit` and `heal` effects. One action plays at a time: the actor
   lunges once and all of its hits land at one impact (the Black Mage's spell
@@ -622,7 +629,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or
-  sales. The desktop
+  sales. A drop's line is held until its reveal's show time, then queues as if
+  it had just arrived, so it never delays the lines after it. The desktop
   redraws once a tick with the tick's motion as SMIL, the action gauges and
   the HP bars both keyed from the tick's landings, so a bar drops at its hit's
   impact without a redraw. A monster that enters mid-tick plays its first

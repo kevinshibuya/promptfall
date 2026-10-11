@@ -5,7 +5,15 @@ import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
-import { bobbingAt, enemySpriteId, type Motion, type StageTimeline } from './timeline'
+import {
+  bobbingAt,
+  type ChestMotion,
+  type ChestPhase,
+  chestPhaseAt,
+  enemySpriteId,
+  type Motion,
+  type StageTimeline,
+} from './timeline'
 import {
   ACTOR_EDGE,
   ACTOR_PITCH,
@@ -13,11 +21,15 @@ import {
   COMPACT_PITCH,
   DROP_RISE_PX,
   FLASH_RGB,
+  GLOW_ALPHA,
+  GLOW_RADIUS_PX,
   IDLE_BOB_PX,
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
   SPRITE_PX,
+  STEP_OUT_MS,
+  STEP_PX,
   ZONE_GROUND,
 } from './tuning'
 
@@ -55,8 +67,8 @@ export type StageActor = {
   /** The art's palette after the rarity swap, the fallen-hero dim and the flash. */
   palette: readonly number[]
   /**
-   * The idle art's top-left in stage pixels, after lunge and bob: the anchor numbers and drops
-   * measure from. A pose draws at `x + poses[pose].dx`.
+   * The idle art's top-left in stage pixels, after step, lunge and bob: the anchor numbers measure
+   * from. A pose draws at `x + poses[pose].dx`.
    */
   x: number
   y: number
@@ -77,7 +89,19 @@ export type StageActor = {
 }
 /** The text's top-left in stage pixels, already clamped inside the frame. */
 export type StageNumber = { text: string; x: number; y: number; rgb: number }
+/** A dropped item rising out of its chest. */
 export type StageDrop = { spriteId: string; art: SpriteArt; x: number; y: number; alpha: number }
+/** A chest where a dead enemy stood, in the phase it is in. */
+export type StageChest = {
+  spriteId: string
+  art: SpriteArt
+  x: number
+  y: number
+  alpha: number
+  phase: ChestPhase
+}
+/** The light behind a rising item: a disc in its rarity colour, centre and radius in stage pixels. */
+export type StageGlow = { x: number; y: number; r: number; rgb: number; alpha: number }
 export type StageModel = {
   box: Box
   /** The ground strip's colour: drawn alone when the zone has no backdrop. */
@@ -89,6 +113,10 @@ export type StageModel = {
   backdrop: SpriteArt | null
   actors: StageActor[]
   numbers: StageNumber[]
+  /** Drawn after the actors, under the chests. */
+  glows: StageGlow[]
+  /** Drawn after the glows, under their items. */
+  chests: StageChest[]
   drops: StageDrop[]
   /** Drawn after the drops, before the numbers. */
   effects: StageEffect[]
@@ -98,6 +126,17 @@ export type StageModel = {
 }
 
 const FALLBACK = spriteFor('item', '')
+/** The chest's three drawings, all one size, so each places as the closed one does. */
+export const CHESTS = {
+  closed: spriteFor('chest', 'closed'),
+  opening: spriteFor('chest', 'opening'),
+  open: spriteFor('chest', 'open'),
+} as const
+/** The chest's sprite in `phase` at `p`: closed to the open phase, opening its first half, open after. */
+function chestSprite(phase: ChestPhase, p: number): Sprite {
+  if (phase === 'fall' || phase === 'sit') return CHESTS.closed
+  return phase === 'open' && p < 0.5 ? CHESTS.opening : CHESTS.open
+}
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 const progress = (m: Motion, now: number) => clamp((now - m.from) / (m.until - m.from), 0, 1)
 
@@ -106,6 +145,27 @@ export function lungeOffset(m: Motion | undefined, now: number, scale = 1): numb
   if (m?.kind !== 'lunge') return 0
   const p = progress(m, now)
   return m.dir * Math.round(Math.round(LUNGE_PX * scale) * (p < 0.5 ? p * 2 : (1 - p) * 2))
+}
+
+/**
+ * The step's offset: out over the first STEP_OUT_MS, held, back over the last STEP_OUT_MS. The
+ * same pixels for every actor at a scale, a world boss's as a goblin's.
+ */
+export function stepOffset(m: Motion | undefined, now: number, scale = 1): number {
+  if (m?.kind !== 'step') return 0
+  const out = clamp((now - m.from) / STEP_OUT_MS, 0, 1)
+  const back = clamp((m.until - now) / STEP_OUT_MS, 0, 1)
+  return m.dir * Math.round(Math.round(STEP_PX * scale) * Math.min(out, back))
+}
+
+/** An actor's offset from its place: the step, and the lunge from the stepped position. */
+export function actionOffset(
+  step: Motion | undefined,
+  lunge: Motion | undefined,
+  now: number,
+  scale = 1,
+): number {
+  return stepOffset(step, now, scale) + lungeOffset(lunge, now, scale)
 }
 
 function halve(rgb: number): number {
@@ -229,6 +289,8 @@ export function stageAt(
 
   /** Each actor's top-left without the bob: effects never bob. */
   const grounded = new Map<string, { x: number; y: number; width: number; height: number }>()
+  /** Each enemy's place on the ground, without its step and lunge: where a chest lands. */
+  const stands = new Map<string, { x: number; y: number; width: number; height: number }>()
   for (const known of view.enemies) {
     const sprite = SPRITES[enemySpriteId(known)] ?? FALLBACK
     const art = variant(sprite, opts.compact, scale)
@@ -245,13 +307,16 @@ export function stageAt(
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
     const lunge = motionOf(known.id, 'lunge')
+    const step = motionOf(known.id, 'step')
     const flashing = isFlashing(known.id)
     const boss = known.kind !== 'wave'
     const poses = posesOf(sprite, null, opts.compact, scale, false, (p) => p)
     const pose = poseOf(known.id, false)
     const shown = poses[pose]
-    const x = baseX + lungeOffset(lunge, now, scale)
-    grounded.set(known.id, { x, y: height - art.height, width: art.width, height: art.height })
+    const x = baseX + actionOffset(step, lunge, now, scale)
+    const ground = { y: height - art.height, width: art.width, height: art.height }
+    grounded.set(known.id, { ...ground, x })
+    stands.set(known.id, { ...ground, x: baseX })
     ;(boss ? bosses : actors).push({
       key: known.id,
       spriteId: sprite.id,
@@ -276,6 +341,7 @@ export function stageAt(
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
+    const step = fallen ? undefined : motionOf(hero.id, 'step')
     const sprite = spriteFor('hero', hero.cls)
     const attack = spriteFor('hero_attack', hero.cls)
     const art = variant(sprite, opts.compact, scale)
@@ -292,7 +358,11 @@ export function stageAt(
     const flashing = !fallen && isFlashing(hero.id)
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
     const x =
-      width - edge - art.width - (partySize - 1 - index) * pitch + lungeOffset(lunge, now, scale)
+      width -
+      edge -
+      art.width -
+      (partySize - 1 - index) * pitch +
+      actionOffset(step, lunge, now, scale)
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
     actors.push({
       key: hero.id,
@@ -314,13 +384,15 @@ export function stageAt(
 
   const at = new Map(actors.map((a) => [a.key, a]))
   const numbers: StageNumber[] = []
+  const glows: StageGlow[] = []
+  const chests: StageChest[] = []
   const drops: StageDrop[] = []
   const effects: StageEffect[] = []
   const block = glyphBlock(scale)
   for (const m of started) {
     const actor = at.get(m.actor)
     if (!actor) continue
-    // Numbers and drops measure from the idle art, whatever the pose.
+    // Numbers measure from the idle art, whatever the pose; a chest from where the actor stands.
     const anchor = actor.poses.idle.art
     if (m.kind === 'number') {
       const w = textWidth(m.text, block)
@@ -328,26 +400,38 @@ export function stageAt(
       const rise = progress(m, now) * px(NUMBER_RISE_PX)
       const y = clamp(Math.round(actor.y + px(2) - rise), 0, height - GLYPH_HEIGHT * block)
       numbers.push({ text: m.text, x, y, rgb: m.rgb })
-    } else if (m.kind === 'drop') {
-      const item = variant(SPRITES[m.item] ?? FALLBACK, opts.compact, scale)
-      const p = progress(m, now)
-      const cx = actor.x + anchor.width / 2
-      const cy = actor.y + anchor.height / 2
+    } else if (m.kind === 'chest') {
+      const stood = stands.get(m.actor)
+      if (!stood) continue
+      const { phase, p } = chestPhaseAt(m, now)
+      const sprite = chestSprite(phase, p)
+      const art = variant(sprite, opts.compact, scale)
+      const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact, scale)
+      const closed = variant(CHESTS.closed, opts.compact, scale)
+      const place = chestPlace(stood, closed, item, { width, height }, scale)
+      const alpha = phase === 'fade' ? 1 - p : 1
+      // The fall eases in, as a thing dropped does.
+      const y =
+        phase === 'fall' ? place.fromY + (place.groundY - place.fromY) * p * p : place.groundY
+      chests.push({ spriteId: sprite.id, art, x: place.x, y: Math.round(y), alpha, phase })
+      if (phase === 'fall' || phase === 'sit' || phase === 'open') continue
+      const rise = phase === 'rise' ? p : 1
+      glows.push(glowOf(m, item, place, rise * alpha))
       drops.push({
-        spriteId: m.item,
+        spriteId: m.spriteId,
         art: item,
-        x: clamp(Math.round(cx - item.width / 2), 0, Math.max(0, width - item.width)),
-        y: clamp(
-          Math.round(cy - item.height / 2 - p * px(DROP_RISE_PX)),
-          0,
-          Math.max(0, height - item.height),
-        ),
-        alpha: p < 2 / 3 ? 1 : (1 - p) * 3,
+        x: place.itemX,
+        y: Math.round(place.itemY + (place.risenY - place.itemY) * rise),
+        alpha,
       })
     } else if (m.kind === 'effect') {
-      const from = grounded.get(m.actor)
+      const at = grounded.get(m.actor)
       const to = grounded.get(m.target)
-      if (!from || !to) continue
+      if (!at || !to) continue
+      // Thrown from where the attacker stood as it threw: stepped out, whatever its step does since.
+      const step = motionOf(m.actor, 'step')
+      const shift = stepOffset(step, m.from, scale) - stepOffset(step, now, scale)
+      const from = { ...at, x: at.x + shift }
       const sprite = SPRITES[`effect:${m.effect}`] ?? FALLBACK
       const art = variant(sprite, opts.compact, scale)
       const flipX = actor.flipX
@@ -365,6 +449,8 @@ export function stageAt(
     backdrop: opts.compact ? null : backdropFor(view.zone, scale),
     actors,
     numbers,
+    glows,
+    chests,
     drops,
     effects,
     alt: altText(view),
@@ -373,6 +459,53 @@ export function stageAt(
 }
 
 type Place = { x: number; y: number; width: number; height: number }
+
+/**
+ * The glow behind a chest's item: on the risen item's centre, its radius by rarity scaled with the
+ * item's art, at GLOW_ALPHA times `level` (the rise's progress, then the fade's).
+ */
+export function glowOf(
+  m: ChestMotion,
+  item: SpriteArt,
+  place: { itemX: number; risenY: number },
+  level: number,
+): StageGlow {
+  return {
+    x: place.itemX + item.width / 2,
+    y: place.risenY + item.height / 2,
+    r: Math.round((GLOW_RADIUS_PX[m.rarity] * item.width) / SPRITE_PX),
+    rgb: RARITY_RGB[m.rarity] ?? 0,
+    alpha: GLOW_ALPHA * level,
+  }
+}
+
+/**
+ * Where a chest goes for the actor that stood at `stood`, in stage pixels: centred under the
+ * actor, its bottom starting at the actor's centre (`fromY`) and falling to the ground
+ * (`groundY`); its item centred on the chest's top (`itemY`), risen DROP_RISE_PX (`risenY`),
+ * kept inside the frame. `chest` is the closed art: the item rises from the box, not the open lid.
+ */
+export function chestPlace(
+  stood: Place,
+  chest: SpriteArt,
+  item: SpriteArt,
+  frame: { width: number; height: number },
+  scale: number,
+): { x: number; fromY: number; groundY: number; itemX: number; itemY: number; risenY: number } {
+  const cx = stood.x + stood.width / 2
+  const groundY = frame.height - chest.height
+  const top = groundY + (opaqueBox(chest)?.y0 ?? 0)
+  const itemTop = (y: number) =>
+    clamp(Math.round(y - item.height / 2), 0, Math.max(0, frame.height - item.height))
+  return {
+    x: clamp(Math.round(cx - chest.width / 2), 0, Math.max(0, frame.width - chest.width)),
+    fromY: Math.round(stood.y + stood.height / 2) - chest.height,
+    groundY,
+    itemX: clamp(Math.round(cx - item.width / 2), 0, Math.max(0, frame.width - item.width)),
+    itemY: itemTop(top),
+    risenY: itemTop(top - Math.round(DROP_RISE_PX * scale)),
+  }
+}
 
 /**
  * An effect sprite's top-left at progress `p`: its opaque box's centre (mirrored with the art)
