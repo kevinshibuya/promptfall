@@ -278,8 +278,11 @@ describe('Ledger account delete', () => {
 
     expect(await ledger.deleteAccount(mine)).toEqual({ deleted: true })
 
-    // The token is dead: every call is unauthorized, and a bootstrap with it mints anew.
+    // The token is dead: every call is unauthorized, and a bootstrap with it is unknown.
     expect(await ledger.account(mine)).toEqual({ reason: 'unauthorized' })
+    expect(
+      await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: leaver.deviceToken }),
+    ).toMatchObject({ refusal: 'unknown' })
     expect(await ledger.deleteAccount(mine)).toEqual({ reason: 'unauthorized' })
     expect(await ledger.knowsToken(leaver.deviceToken)).toBe(false)
     expect(await store.get(`pf:acct:${leaver.accountId}:record`)).toBeUndefined()

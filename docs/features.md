@@ -158,6 +158,8 @@ call, and stay switched after a restart, over the `--flag` values it starts with
 is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
 never the token. A server without the token has no admin routes. A server makes at most five new
 accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
+Only a launch with no token makes an account: a token the server does not know is refused as
+`unknown` and makes nothing, so a second session or a stale client never mints an orphan.
 
 **Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
 stores the ban on the account's record, never on the account the wire carries, and logs one line

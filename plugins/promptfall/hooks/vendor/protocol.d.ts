@@ -325,10 +325,11 @@ type Bootstrap = {
 };
 /**
  * A bootstrap the host will not answer: `rate_limited` when this address minted too many accounts
- * this hour, `banned` when the account is. The message is the player's to read.
+ * this hour, `banned` when the account is, `unknown` when the token names no account (only a null
+ * token mints). The message is the player's to read.
  */
 type BootstrapRefused = {
-    refusal: 'rate_limited' | 'banned';
+    refusal: 'rate_limited' | 'banned' | 'unknown';
     message: string;
 };
 /** The account delete's answer: the account, its token and its rows are gone. */

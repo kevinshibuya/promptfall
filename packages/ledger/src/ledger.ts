@@ -199,6 +199,11 @@ export function approveAs(login: string | null): LinkApprover {
 type Link = { accountId: string; createdAt: number; deviceCode?: string }
 
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
+/** A bootstrap with a token the books do not know: only a null token mints. */
+const unknownToken: BootstrapRefused = {
+  refusal: 'unknown',
+  message: 'The server does not know this account.',
+}
 const pending: LinkPoll = { status: 'pending' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
@@ -339,7 +344,7 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // Accounts
 
-  /** A null token always mints, so only a known token can be refused. */
+  /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */
   bootstrap(input: { clientVersion: string; deviceToken: null }): Promise<Bootstrap>
   bootstrap(input: {
     clientVersion: string
@@ -356,6 +361,7 @@ export class Ledger implements ServerClient {
         const banned = record && bannedOf(record)
         if (banned) return { refusal: 'banned', message: banned.message }
         if (record) return this.bootFor(input.deviceToken, record)
+        return unknownToken
       }
       const now = await this.options.now()
       const seed = this.options.seedSource() >>> 0
@@ -372,7 +378,7 @@ export class Ledger implements ServerClient {
     })
   }
 
-  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  /** Whether `deviceToken` names an account: a read that writes nothing. */
   knowsToken(deviceToken: string): Promise<boolean> {
     return this.run(async () => (await this.books.authenticate({ deviceToken })) !== null)
   }

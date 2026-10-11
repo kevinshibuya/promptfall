@@ -754,10 +754,6 @@ describe('HTTP host mint cap', () => {
       expect(sixth.status).toBe(200)
       const refused = BootstrapResponseSchema.parse(sixth.body)
       expect(refused).toMatchObject({ refusal: 'rate_limited', message: expect.any(String) })
-      // An unknown token mints, so it counts as a mint.
-      expect(
-        BootstrapResponseSchema.parse((await from('203.0.113.7', 'forged')).body),
-      ).toMatchObject({ refusal: 'rate_limited' })
       // A known token from the capped address always passes.
       const known = BootstrapSchema.parse((await from('203.0.113.7', tokens[0] ?? '')).body)
       expect(known.deviceToken).toBe(tokens[0])
@@ -769,6 +765,37 @@ describe('HTTP host mint cap', () => {
       // An hour after the first mint, the address mints again.
       now += 30 * 60_000
       BootstrapSchema.parse((await from('203.0.113.7', null)).body)
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('a bootstrap with an unknown token is refused as unknown and spends no mint', async () => {
+    const h = await hostOn(new MemoryKeyValue())
+    const from = (deviceToken: string | null) =>
+      h.call('POST', '/v1/bootstrap', {
+        body: { clientVersion: '0.3.0', deviceToken },
+        headers: { 'x-forwarded-for': '203.0.113.9' },
+      })
+    try {
+      for (let i = 0; i < 4; i++) BootstrapSchema.parse((await from(null)).body)
+      for (let i = 0; i < 3; i++) {
+        const r = await from('forged')
+        expect(r.status).toBe(200)
+        expect(BootstrapResponseSchema.parse(r.body)).toEqual({
+          refusal: 'unknown',
+          message: expect.any(String),
+        })
+      }
+      // The three unknown answers spent nothing: the fifth mint passes, the sixth is capped.
+      BootstrapSchema.parse((await from(null)).body)
+      expect(BootstrapResponseSchema.parse((await from(null)).body)).toMatchObject({
+        refusal: 'rate_limited',
+      })
+      // A capped address with an unknown token still hears unknown, not the cap.
+      expect(BootstrapResponseSchema.parse((await from('forged')).body)).toMatchObject({
+        refusal: 'unknown',
+      })
     } finally {
       await h.close()
     }
