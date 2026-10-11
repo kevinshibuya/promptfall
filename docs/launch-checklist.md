@@ -10,9 +10,9 @@ The store, the host flags, the image and deploy, and the GitHub link gate the wa
 built.
 
 - [ ] Set the wave's date and write it on this line: `____-__-__`.
-- [ ] Reserve the handles: `@promptfall` on TikTok, the name the README points at (if it is taken,
+- [x] Reserve the handles: `@promptfall` on TikTok, the name the README points at (if it is taken,
       take the nearest and change the README's link in the same commit), and the same name on any
-      other network you mean to post on.
+      other network you mean to post on. Taken 2026-10-11: `@promptfall` on TikTok, Instagram and X.
 - [ ] Create the GitHub OAuth app under your account (Settings → Developer settings → OAuth Apps):
       name Promptfall, homepage `https://github.com/kevinshibuya/promptfall`, "Enable Device Flow"
       ticked. Keep the client id for the box's `.env`; generate no client secret.

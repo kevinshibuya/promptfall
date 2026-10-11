@@ -112,8 +112,9 @@ out. To have anything else removed, ask in GitHub Discussions.
 ## Talk to us
 
 Questions, bugs and ideas go to [GitHub Discussions](https://github.com/kevinshibuya/promptfall/discussions).
-Promptfall is on TikTok as [@promptfall](https://www.tiktok.com/@promptfall). What comes next is in
-[docs/roadmap.md](docs/roadmap.md).
+Promptfall is @promptfall on [TikTok](https://www.tiktok.com/@promptfall),
+[Instagram](https://www.instagram.com/promptfall/) and [X](https://x.com/promptfall). What comes
+next is in [docs/roadmap.md](docs/roadmap.md).
 
 ## Licence
 
