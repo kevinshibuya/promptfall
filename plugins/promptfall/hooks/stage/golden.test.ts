@@ -151,9 +151,16 @@ function actor(
   }
 }
 
-/** Three heroes lunging, three numbers rising, a chest revealing its item. */
+/**
+ * Three heroes and the boss stepped out, the heroes lunging, three numbers rising, a chest
+ * revealing its item.
+ */
 function busyMotions(boss: string): Motion[] {
   return [
+    ...['h1', 'h2', 'h3'].map(
+      (h): Motion => ({ kind: 'step', actor: h, from: NOW - 100, until: NOW + 400, dir: -1 }),
+    ),
+    { kind: 'step', actor: boss, from: NOW - 100, until: NOW + 400, dir: 1 },
     ...['h1', 'h2', 'h3'].map(
       (h): Motion => ({ kind: 'lunge', actor: h, from: NOW - 50, until: NOW + 190, dir: -1 }),
     ),

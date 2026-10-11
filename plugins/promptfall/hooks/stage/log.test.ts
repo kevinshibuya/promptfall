@@ -110,11 +110,15 @@ test('each row of the wording table prints as written', () => {
     ],
     { before: v },
   )
-  // The drops wait for their chests' reveal: their lines queue after the rest of the batch.
+  // The drops wait for their chests' reveal: their lines take their place at its show time,
+  // after the actions that started by then and ahead of the lines still queued for later.
   expect(texts).toEqual([
     `${hero} hits ${enemy} for 12.`,
     `${enemy} hits ${hero} for 5.`,
     `${v.heroes[2]?.shortName} heals ${hero} for 14.`,
+    'Drop: Oak Staff.',
+    'Rare drop: Oak Staff.',
+    'Inventory full: Oak Staff vendored for 12G.',
     'Aldric reached level 5.',
     'Aldric falls!',
     'Goblin Scout appears!',
@@ -124,9 +128,6 @@ test('each row of the wording table prints as written', () => {
     'Oak Staff sold for 120G.',
     'Your share of the boss: 120G and Oak Staff.',
     'Your share of the boss: 120G.',
-    'Drop: Oak Staff.',
-    'Rare drop: Oak Staff.',
-    'Inventory full: Oak Staff vendored for 12G.',
   ])
 })
 
@@ -415,4 +416,81 @@ test('a held drop line follows its chest when the backlog re-times it', () => {
     log.shown(now, 'still').some((l) => l.text === 'Rare drop: Silk Robe.')
   expect(drop(moved - 1)).toBe(false)
   expect(drop(moved)).toBe(true)
+})
+
+test("a drop line due after the next tick's lines are queued takes its place at its show time", () => {
+  const v = terse()
+  const [h1, h2, h3] = v.heroes.map((h) => h.id ?? '')
+  const [e1, e2] = v.enemies.map((e) => e.id ?? '')
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  // The kill late in its tick: its reveal comes after the next tick's batch is queued.
+  const first: Effect[] = [
+    act(h1 ?? '', 500),
+    hit(h1 ?? '', e1 ?? '', 30),
+    { k: 'drop', item: item('silk_robe') },
+  ]
+  log.onEffects(first, t.onEffects(first, NOW, 2000), after, NOW, 2000, t)
+  t.observe(after, NOW + 1)
+  const second: Effect[] = [
+    act(h2 ?? '', 0),
+    hit(h2 ?? '', e2 ?? '', 4),
+    act(e2 ?? '', 500),
+    hit(e2 ?? '', h2 ?? '', 3),
+    act(h3 ?? '', 1000),
+    hit(h3 ?? '', e2 ?? '', 2),
+  ]
+  const starts = t.onEffects(second, NOW + 2000, 2000)
+  log.onEffects(second, starts, after, NOW + 2000, 2000, t)
+  const show = t.showAt('i1') ?? 0
+  expect(show).toBeGreaterThan(starts[0] ?? 0)
+  expect(show).toBeLessThan(starts[1] ?? 0)
+  const lines = log.upcoming(NOW + 1999, 1e9)
+  const at = (text: string) => lines.find((l) => l.text === text)?.at
+  // The drop line types at its show time, or as soon as the line ahead of it has typed.
+  const drop = at('Rare drop: Silk Robe.') ?? 0
+  expect(drop).toBeGreaterThanOrEqual(show)
+  expect(drop).toBeLessThan(starts[1] ?? 0)
+  // The line queued by the show time keeps its time; the one after it moves back, not out.
+  expect(at('Bo hits Rat for 4.')).toBe(starts[0])
+  const moved = at('Rat hits Bo for 3.') ?? 0
+  expect(moved).toBeGreaterThanOrEqual(drop + LINE_MIN_MS)
+  expect(moved).toBeLessThan((starts[1] ?? 0) + 2000)
+  expect(at('Cy hits Rat for 2.')).toBeDefined()
+  for (let i = 1; i < lines.length; i++)
+    expect((lines[i]?.at ?? 0) - (lines[i - 1]?.at ?? 0)).toBeGreaterThanOrEqual(LINE_MIN_MS)
+  expect(log.shown(drop, 'still').map((l) => l.text)).toContain('Rare drop: Silk Robe.')
+  expect(log.shown(drop, 'still').map((l) => l.text)).not.toContain('Rat hits Bo for 3.')
+})
+
+test('at the idle cadence a drop line slots into the gap and moves nothing', () => {
+  const v = terse()
+  const [h1, h2, h3] = v.heroes.map((h) => h.id ?? '')
+  const [e1, e2, e3] = v.enemies.map((e) => e.id ?? '')
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  const { log, t, starts } = run(
+    [
+      act(h1 ?? '', 0),
+      hit(h1 ?? '', e1 ?? '', 30),
+      { k: 'drop', item: item('silk_robe') },
+      act(e2 ?? '', 500),
+      hit(e2 ?? '', h2 ?? '', 1),
+      act(e3 ?? '', 1000),
+      hit(e3 ?? '', h3 ?? '', 1),
+      act(h2 ?? '', 1500),
+      hit(h2 ?? '', e2 ?? '', 2),
+    ],
+    { before: v, after, cadence: 5000 },
+  )
+  const show = t.showAt('i1') ?? 0
+  const lines = log.upcoming(NOW - 1, 1e9)
+  const at = (text: string) => lines.find((l) => l.text === text)?.at
+  expect(at('Rare drop: Silk Robe.')).toBe(show)
+  expect(at('Al hits Rat for 30.')).toBe(starts[0])
+  expect(at('Rat hits Bo for 1.')).toBe(starts[1])
+  expect(at('Rat hits Cy for 1.')).toBe(starts[2])
+  expect(at('Bo hits Rat for 2.')).toBe(starts[3])
 })

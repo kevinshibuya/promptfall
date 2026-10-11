@@ -200,7 +200,7 @@ come up to one cadence before the last hero falls on the stage.
 - **Choreography.** One action, from its start, in ms. Every attacker holds its wind-up frame in
   place for 140 (`WINDUP_HOLD_MS`), then moves in its shape; at impact the target shows its hit
   frame for 160 (`FLASH_MS`), and the number rises from it. Every attacker also takes the step:
-  4 px toward its target at 1× and 6 at 1.5× (`STEP_PX`, the same for a goblin and the world
+  4 px forward at 1× and 6 at 1.5× (`STEP_PX`, the same for a goblin and the world
   boss), out over the first 80 of the hold (`STEP_OUT_MS`), held, and back over the last 80 of
   the action. The lunge thrusts from the stepped position, and numbers and effects measure from
   it. On the SMIL `Svg` the step is a translate on the actor's group; at 1× it moves the one

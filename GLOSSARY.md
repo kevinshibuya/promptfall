@@ -203,8 +203,9 @@ back. The mages and the archer strike in place.
 _Avoid_: charge, dash, step (that is the move before the action)
 
 **Step**:
-The pace every attacker takes toward its target before its wind-up, holds through the action and
-takes back after it. The same distance for every actor, the world boss included.
+The pace every attacker takes forward, toward the other side, before its wind-up, whatever its
+action (a heal steps the same way), holds through the action and takes back after it. The same
+distance for every actor, the world boss included.
 _Avoid_: lunge (the thrust itself), hop, jump, approach
 
 **Chest**:

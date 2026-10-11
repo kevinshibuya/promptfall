@@ -326,6 +326,35 @@ test('an action that starts after the next redraw carries none of its frames', (
   expect(svg).toContain('filter="url(#hit)"')
 })
 
+test('two queued casts both throw from the stepped position', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  // The mage's second action starts at the first's end, after the first step is back.
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h2', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h2', target: 'e1', amount: 3 },
+      { k: 'act', actor: 'h2', action: 'attack', at: 300 },
+      { k: 'hit', by: 'h2', target: 'e1', amount: 3 },
+    ],
+    NOW,
+  )
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
+    compact: false,
+    motion: 'full',
+    scale: HIRES_SCALE,
+  })
+  const svg = renderSvg(model, t.active(NOW), { ...SMIL, now: NOW })
+  const launches = [
+    ...svg.matchAll(
+      /<g transform="translate\((-?\d+) (-?\d+)\)" opacity="0"><animate attributeName="opacity" values="1;1"/g,
+    ),
+  ].map((m) => Number(m[1]))
+  expect(launches.length).toBe(2)
+  expect(launches[1]).toBe(launches[0])
+})
+
 test("the bolt scenario flies a fireball from the mage's front edge to the target's centre", () => {
   const s = stage('bolt')
   const svg = renderSvg(s.hires, s.motions, { ...SMIL, now: s.now })

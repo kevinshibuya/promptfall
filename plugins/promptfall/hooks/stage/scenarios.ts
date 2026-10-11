@@ -444,8 +444,8 @@ export function strip(name: StripScenario): StripInput {
     case 'strip-loot': {
       const v = wave()
       v.loot = [
-        { text: '/ Iron Sword (epic)', rarity: 'epic', kind: 'drop' },
-        { text: '[ Silk Robe (rare)', rarity: 'rare', kind: 'drop' },
+        { text: '/ Iron Sword (epic)', rarity: 'epic', kind: 'drop', itemId: 'loot1' },
+        { text: '[ Silk Robe (rare)', rarity: 'rare', kind: 'drop', itemId: 'loot2' },
       ]
       return stripInput(v, { kind: 'bare', tab: 'loot' })
     }

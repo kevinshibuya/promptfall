@@ -575,8 +575,11 @@ export function renderSvg(
         const sprite = SPRITES[`effect:${m.effect}`]
         if (!to || !sprite) continue
         const art = variant(sprite, compact, scale)
-        // The attacker throws from where it stands as it throws: stepped out.
-        const step = live.find((o) => o.actor === m.actor && o.kind === 'step')
+        // The attacker throws from where it stands as it throws: stepped out, in its own action's
+        // step (a second queued action has its own).
+        const step = live.find(
+          (o) => o.actor === m.actor && o.kind === 'step' && o.from <= m.from && m.from < o.until,
+        )
         const thrower = { ...at, x: at.x + stepOffset(step, m.from, scale) }
         const place = (a: typeof at) => ({
           x: a.x,
