@@ -377,10 +377,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   random device token each. Linking runs GitHub's device flow and unlocks
   trading and chat; the server keeps the GitHub login and drops the access
   token. Bootstrap answers the bootstrap or `{refusal, message}` with `refusal`
-  `rate_limited` or `banned`. The HTTP layer caps minting (a bootstrap with a
-  null or unknown token) at five an hour per client address, the last hop of
-  `x-forwarded-for` behind Caddy; a known token always passes and the ledger
-  stays address-blind.
+  `rate_limited`, `banned` or `unknown`. Only a bootstrap with a null token
+  mints; one with a token the ledger does not know is refused as `unknown` and
+  mints nothing. The HTTP layer caps minting (a bootstrap with a null token) at
+  five an hour per client address, the last hop of `x-forwarded-for` behind
+  Caddy; any other token passes the cap and the ledger stays address-blind.
 - Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`,
   `presence.enabled`, `leaderboards.enabled`, `maintenance`. The start flags
   come from `--flag`; a flag set over the admin route is stored under

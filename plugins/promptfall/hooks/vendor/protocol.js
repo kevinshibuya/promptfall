@@ -4418,7 +4418,7 @@ var BootstrapSchema = external_exports.object({
   delivery: DeliverySchema
 });
 var BootstrapRefusedSchema = external_exports.object({
-  refusal: external_exports.enum(["rate_limited", "banned"]),
+  refusal: external_exports.enum(["rate_limited", "banned", "unknown"]),
   message: external_exports.string().min(1).max(200)
 });
 var BootstrapResponseSchema = external_exports.union([BootstrapRefusedSchema, BootstrapSchema]);

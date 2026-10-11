@@ -273,9 +273,8 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     }),
     bootstrap: async (r) => {
       const input = parse(BootstrapBody, r.body)
-      // A known token never mints, so the cap never applies to it; the ledger stays address-blind.
-      if (input.deviceToken !== null && (await ledger.knowsToken(input.deviceToken)))
-        return ledger.bootstrap(input)
+      // Only a null token mints, so the cap takes from nothing else; the ledger stays address-blind.
+      if (input.deviceToken !== null) return ledger.bootstrap(input)
       if (!mintCap.take(r.address, await options.now())) return rateLimited
       return ledger.bootstrap(input)
     },
