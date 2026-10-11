@@ -54,11 +54,12 @@ function store(on: On, seed: Record<string, unknown> = {}) {
   return { data, writes }
 }
 
-/** Records the state the plugin writes. */
-function states(on: On) {
+/** Records the state the plugin writes: the last value per key, and every write into `seen`. */
+function states(on: On, seen: { key: string; value: unknown }[] = []) {
   const last = new Map<string, unknown>()
   on('state.set', async (_$, e, next) => {
     last.set(e.key, e.value)
+    seen.push({ key: e.key, value: e.value })
     return next(e)
   })
   return last
@@ -379,6 +380,10 @@ function remote(on: On) {
     down: false,
     /** Answered to every bootstrap while set, as a host's refusal. */
     refusal: null as null | { refusal: 'rate_limited' | 'banned'; message: string },
+    /** Runs before each bootstrap reaches the ledger: another session's work in the flight. */
+    beforeBoot: (async () => undefined) as (token: string | null) => Promise<void>,
+    /** Accounts a bootstrap through this mock minted. */
+    mints: 0,
     calls: 0,
     requests: [] as { origin: string; method: string; path: string }[],
     ledger,
@@ -394,9 +399,11 @@ function remote(on: On) {
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
     let result: unknown
-    if (method === 'POST' && path === '/v1/bootstrap')
+    if (method === 'POST' && path === '/v1/bootstrap') {
+      await net.beforeBoot(body.deviceToken)
       result = net.refusal ?? (await ledger.bootstrap(body))
-    else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
+      if (body.deviceToken === null && !('refusal' in (result as object))) net.mints += 1
+    } else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
     else if (method === 'DELETE' && path === '/v1/account')
       result = await ledger.deleteAccount(auth)
@@ -554,6 +561,40 @@ test('deleting the account on a remote server starts a fresh one there, and only
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
   expect(last.get('mode')).toBe('primary')
   expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
+})
+
+test('a delete whose re-bootstrap is refused shows the refusal and says the delete happened', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const seen: { key: string; value: unknown }[] = []
+  const last = states(on, seen)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:delete' })
+  // The address has spent its mints this hour: the fresh account is refused.
+  const message = 'Too many new accounts from this address. Promptfall will try again later.'
+  net.refusal = { refusal: 'rate_limited', message }
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  const before = boots()
+  await ui.press({ key: 'yes' })
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(false)
+  const refused = `Promptfall: your account was deleted. ${message}`
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(refused)
+  // Past the notice's 20 s and the retry's re-pause at 5 min, the message is the same.
+  await time.advance(30_000)
+  expect(last.get('notice')).toBe(refused)
+  await time.advance(5 * 60_000)
+  expect(boots()).toBe(before + 2)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(refused)
+  expect(seen.filter((w) => w.key === 'notice').map((w) => w.value)).not.toContain(DELETED_NOTICE)
   await ui.unmount()
 })
 
@@ -750,6 +791,62 @@ test('a secondary stops bootstrapping with a token the server does not know', as
   await time.advance(10_000)
   expect(boots()).toBe(2)
   expect(last.get('view')).toBeTruthy()
+})
+
+test('an unknown token resets the primary and mints, and leaves a secondary waiting', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const key = `promptfall:token:${URL_A}`
+  const { data } = store(on, {
+    'promptfall:server': URL_A,
+    [key]: 'stale',
+    [LEASE]: { owner: 'other', until: 1_025_000 },
+  })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // The secondary is refused `unknown` once and waits: it mints nothing and writes no token.
+  await time.advance(20_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(boots()).toBe(1)
+  expect(net.mints).toBe(0)
+  expect(data.get(key)).toBe('stale')
+  // The other session's lease runs out: this one is primary, clears the stale token and mints.
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(net.mints).toBe(1)
+  const fresh = data.get(key)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe('stale')
+  expect(await net.ledger.knowsToken(fresh as string)).toBe(true)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+})
+
+test('an unknown refusal landing after another session minted restarts with its token and mints nothing', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const key = `promptfall:token:${URL_A}`
+  const { data } = store(on, { 'promptfall:server': URL_A, [key]: 'stale' })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  let healed: string | null = null
+  net.beforeBoot = async (token) => {
+    if (token !== 'stale' || healed !== null) return
+    // Another session took the lease, was refused the same stale token, and minted.
+    const boot = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    healed = boot.deviceToken
+    data.set(key, healed)
+  }
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(healed).not.toBeNull()
+  expect(data.get(key)).toBe(healed)
+  expect(net.mints).toBe(0)
+  expect(net.requests.filter((r) => r.path === '/v1/bootstrap')).toHaveLength(2)
+  expect(last.get('mode')).toBe('primary')
+  const info = await net.ledger.account({ deviceToken: healed ?? '' })
+  if (!('account' in info)) throw new Error(info.reason)
+  expect((last.get('view') as GameView).accountId).toBe(info.account.accountId)
 })
 
 test('a trailing slash on the server URL is dropped', async ($, on) => {

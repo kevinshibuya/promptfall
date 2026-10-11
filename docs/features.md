@@ -162,7 +162,10 @@ is refused there. Each admin call logs one line with its time, the flags it set 
 never the token. A server without the token has no admin routes. A server makes at most five new
 accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
 Only a launch with no token makes an account: a token the server does not know is refused as
-`unknown` and makes nothing, so a second session or a stale client never mints an orphan.
+`unknown` and makes nothing, so a second session or a stale client never mints an orphan. The
+playing session clears that token, unless another session has stored a new one meanwhile, and
+launches again with none, which mints; a session that is not playing waits for the token the
+playing one stores. A delete's reset and a wiped dev store heal this way.
 
 **Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
 stores the ban on the account's record, never on the account the wire carries, and logs one line
@@ -178,10 +181,13 @@ and buy orders without returning the goods or refunding the escrow, which leave 
 takes its rows off both leaderboards and out of the online count, and deletes its record, its
 token and any GitHub link it had open; nothing of any other player's changes. From then on that token is unknown to the server.
 On the server's confirmation the plugin resets this machine's data, as the reset does, starts a
-fresh account on the same server, and says so in the message window. When the server does not
-confirm, nothing on the machine changes and the pane says the account was not deleted. The row is
-not on the sandbox save, nor in a session that is not playing; a banned account cannot delete
-itself. The in-process server deletes the same way.
+fresh account on the same server, and says so in the message window once it plays. That launch has
+no token, so it counts against the mint cap: when the server refuses it, play pauses and the message
+window says the delete happened and why nothing plays, in one line,
+`Promptfall: your account was deleted.` followed by the server's message, which stays through the
+pause's later retries. When the server does not confirm, nothing on the machine changes and the
+pane says the account was not deleted. The row is not on the sandbox save, nor in a session that is
+not playing; a banned account cannot delete itself. The in-process server deletes the same way.
 
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
