@@ -655,6 +655,13 @@ for g in knight-windup knight-follow black_mage-windup white_mage-windup archer-
   pnpm -s grid --png art/sheets/grids/hires-hero-$g.txt art/sprites-frames/hero/$g.png >/dev/null
 done
 rm -rf art/sprites/x art/sprites-hires/x art/sprites-frames/x art/sheets/native/x /tmp/promptfall-frame-cuts
+
+# The chest (spec #72): cut, then the hand-drawn 1× and 1.5× states written back over it.
+cut art/sheets/chest.png art/sprites --grid 3x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-hires --row 1 --names chest/closed,chest/opening,chest/open
+for s in closed opening open; do
+  pnpm -s grid --png art/sheets/grids/chest-$s.txt art/sprites/chest/$s.png >/dev/null
+  pnpm -s grid --png art/sheets/grids/hires-chest-$s.txt art/sprites-hires/chest/$s.png >/dev/null
+done
 ```
 
 ## frames-heroes.png
@@ -1680,3 +1687,56 @@ Zone briefs (one per run, after the common prompt):
 The twelve ran three at a time on 2026-10-08, 14:11 to 14:27. The astra driver spent two to five minutes a
 sheet checking its own colour counts against the prompt's "at most 12 colours" before saving; the cut
 quantises anyway, so a future prompt can say "about 12".
+
+## chest.png
+
+2026-10-11, spec #72 (ticket #75): the chest a drop leaves, `chest:closed`, `chest:opening` and
+`chest:open`, three ordinary `chest` sprites with no frames. One run, `chest-sheet`, 182 s,
+`20261011-000900-83471-chest-sheet.log`. Reference: `art/sheets/dense-heroes-zone1-items.png`, the
+approved style sheet, for the item icons' pixel size.
+
+Prompt (`bg.txt` + body + `common.txt`, its facing line changed to the front):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 3 columns x 4 rows, 12 small sprites, one per cell, every cell the same size (512 x 256 screen pixels). Every sprite is a tiny 16x16-art-pixel 8-bit sprite with at most 3 colours plus the black outline, small in its cell, with magenta all around it, drawn at the same pixel size as the item icons of the attached reference sheet.
+Each row is ONE wooden treasure chest, the same chest in three states, left to right: column 1 closed; column 2 half open (the lid raised about 45 degrees, a dark gap and a glint of gold inside); column 3 fully open (the lid swung up and back, standing upright behind the box, the dark inside and gold showing).
+The chest is seen from the front and a little above, symmetric left to right: a brown wooden box with dark iron bands and a small gold lock plate on the front, a rounded lid. The lid is hinged at the BACK edge, so it swings up and away from the viewer. The box itself is identical in all three columns of a row: same width (about 14 art pixels), same height, same position, standing on the same ground line; only the lid moves. The closed chest is about 11 art pixels tall; the open lid adds height above the box, the whole open chest at most 16 art pixels tall.
+Rows 2, 3 and 4: three more different takes of the same three states, each row its own chest.
+
+STYLE (match the attached reference sheet's pixel style exactly, but these are NEW designs, not copies of the reference figures):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite is shown from the front, standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/chest.png.
+```
+
+Picks: row 2 (one iron band, the lock plate, a plain lid). The four takes all drew the lid hinged
+at the back and the box the same across a row.
+
+```sh
+D=art/sheets/chest.png
+C="--grid 3x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-hires"
+pnpm slice $D art/sprites $=C --row 1 --names chest/closed,chest/opening,chest/open
+for s in closed opening open; do
+  pnpm -s grid --png art/sheets/grids/chest-$s.txt art/sprites/chest/$s.png
+  pnpm -s grid --png art/sheets/grids/hires-chest-$s.txt art/sprites-hires/chest/$s.png
+done
+```
+
+The cut fits each state to its canvas on its own scale (natives 20 × 14, 19 × 17 and 20 × 21), so
+the three boxes came out at different widths and heights and the chest jumped between states. The
+1× and the 1.5× art of all three are hand-drawn over the cut (`art/sheets/grids/chest-<state>.txt`,
+`hires-chest-<state>.txt`), the second exception to the never-hand-drawn 1.5× rule after the hero
+poses: one box, identical in the three states, on the same footprint (14 × 8 at 1×, bottom rows
+8 to 15; 22 × 12 at 1.5×, rows 12 to 23), symmetric about the canvas centre; only the lid moves.
+Closed, the lid sits on the box; opening, it is raised over a dark gap with a gold glint; open, it
+stands upright behind the box, its inner face showing, over gold. The grids are `pnpm grid` of the
+committed PNGs, so `pnpm grid art/sprites/chest/<state>.png` rebuilds a lost one. The 1× uses
+black, `#c84c0c` wood, `#747474` iron and `#f0bc3c` gold; the 1.5× snaps to 8 master colours.
