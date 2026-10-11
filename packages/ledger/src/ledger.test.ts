@@ -16,6 +16,12 @@ import { approveAs, Ledger, type LedgerOptions, type LinkApprover } from './ledg
 class CountingKeyValue extends MemoryKeyValue {
   flushes = 0
   writes = 0
+  /** Gets of an account record. */
+  accountReads = 0
+  async get(key: string): Promise<unknown> {
+    if (key.startsWith('pf:acct:')) this.accountReads += 1
+    return super.get(key)
+  }
   async set(key: string, value: unknown): Promise<void> {
     this.writes += 1
     await super.set(key, value)
@@ -791,5 +797,90 @@ describe('Ledger link', () => {
     release({ status: 'approved', login: 'octocat' })
     const linked = await poll
     expect('status' in linked && linked.status).toBe('linked')
+  })
+})
+
+describe('Ledger link sweep', () => {
+  const MINUTE = 60_000
+  const linkRows = (kv: unknown) =>
+    (kv as MemoryKeyValue).keys().filter((k) => k.startsWith('pf:link:'))
+  const indexed = async (kv: unknown) =>
+    (((await (kv as MemoryKeyValue).get('pf:links')) ?? []) as { code: string }[]).map(
+      (e) => `pf:link:${e.code}`,
+    )
+
+  async function starter(ledger: Ledger) {
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: boot.deviceToken }
+    const start = await ledger.linkStart(auth)
+    if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+    return { auth, code: start.code, accountId: boot.account.accountId }
+  }
+
+  it('the sweep removes a link row older than its lifetime and keeps a younger one', async () => {
+    const { ledger, kv, advance } = makeLedger({ linkApprover: approveAs(null) })
+    const a = await starter(ledger)
+    advance(14 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([`pf:link:${a.code}`])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBe(a.code)
+
+    advance(2 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect(await indexed(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
+    expect(await ledger.linkPoll(a.auth, a.code)).toEqual({ status: 'pending' })
+  })
+
+  it('scales the lifetime by the speed: at 60 it is 900 virtual minutes', async () => {
+    const { ledger, kv, advance } = makeLedger({ linkApprover: approveAs(null), speed: 60 })
+    const a = await starter(ledger)
+    advance(840 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([`pf:link:${a.code}`])
+    advance(120 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
+  })
+
+  it('link cleanup reads no account while no link has expired', async () => {
+    const quiet = makeLedger({ linkApprover: approveAs(null) })
+    const open = makeLedger({ linkApprover: approveAs(null) })
+    await quiet.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    await starter(open.ledger)
+    for (const w of [quiet, open]) w.advance(14 * MINUTE)
+    const reads = async (w: typeof quiet) => {
+      const counting = w.kv as CountingKeyValue
+      const before = counting.accountReads
+      await w.ledger.host.sweep()
+      return counting.accountReads - before
+    }
+    expect(await reads(open)).toBe(await reads(quiet))
+  })
+
+  it('a start, a second start, a final poll and a delete keep the index on the rows', async () => {
+    const { ledger, kv, advance } = makeLedger()
+    // Starts twice and never polls.
+    const a = await starter(ledger)
+    const again = await ledger.linkStart(a.auth)
+    if ('reason' in again || 'refusal' in again) throw new Error('expected a start')
+    expect(await indexed(kv)).toEqual(linkRows(kv))
+    // Polls to the final answer.
+    const b = await starter(ledger)
+    expect(await ledger.linkPoll(b.auth, b.code)).toMatchObject({ status: 'linked' })
+    // Deletes the account with its link open.
+    const c = await starter(ledger)
+    expect(await ledger.deleteAccount(c.auth)).toEqual({ deleted: true })
+
+    expect(linkRows(kv)).toEqual([`pf:link:${again.code}`])
+    expect(await indexed(kv)).toEqual(linkRows(kv))
+
+    advance(16 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect(await indexed(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
   })
 })
