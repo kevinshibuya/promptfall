@@ -1,10 +1,12 @@
 // The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
 // queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
-// drop's line waits for its reveal: held aside until its item has risen, then takes its place in
-// the queue at that time.
+// drop's line waits for its reveal, and a zone arrival's for the backdrop change: held aside until
+// its show time, then takes its place in the queue at that time. The log is also the holder for
+// held toasts: a toast with a wait is kept here until its show time and handed out once, by
+// `release`.
 import type { GameView, Settings } from '../../types'
-import { heroNameById } from '../toasts'
+import { heroNameById, type Toast, type ToastWait } from '../toasts'
 import { content, type Effect, type Rarity } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
@@ -27,10 +29,16 @@ type Known = { name: string; kind: string; hp?: number }
 type Said = { text: string; key: boolean; rgb?: number }
 
 /**
- * A drop or vendored line waiting for its item's reveal. `showAt` is the show time the timeline
- * last answered: a chest it no longer holds leaves its line due then.
+ * A held line or toast: what it waits for, and `showAt`, the show time the timeline last answered
+ * for it. A chest the timeline no longer holds leaves its entry due then.
  */
-type Held = { line: Said; itemId: string; showAt: number; cadenceMs: number }
+type Waiting = { wait: ToastWait; showAt: number }
+
+/** A drop or vendored line waiting for its item's reveal, or an arrival's for its zone's. */
+type Held = Waiting & { line: Said; cadenceMs: number }
+
+/** A toast waiting for its show time, raised when `release` hands it out. */
+type HeldToast = Waiting & { toast: Toast }
 
 /** Enemies the log remembers past their view, so a kill can name them; older ones are dropped. */
 const KNOWN_KEEP = 200
@@ -56,8 +64,9 @@ function dropWord(rarity: Rarity): string {
 export class MessageLog {
   private lines: LogLine[] = []
   private held: Held[] = []
+  private heldToasts: HeldToast[] = []
   private known = new Map<string, Known>()
-  /** The stage's timeline, asked for each held line's show time whenever the log is read. */
+  /** The stage's timeline, asked for each held entry's show time whenever the log is read. */
   private timeline: StageTimeline | null = null
 
   /** Every applied batch, after timeline.onEffects; `starts` is its answer. */
@@ -127,11 +136,12 @@ export class MessageLog {
       for (const e of g.effects) {
         const line = this.consequence(e, view, name)
         if (!line) continue
-        // A drop's line waits for its chest's reveal; one with no chest prints with its action.
-        const itemId = e.k === 'drop' || e.k === 'drop_vendored' ? e.item.id : null
-        const showAt = itemId === null ? null : timeline.showAt(itemId)
-        if (itemId === null || showAt === null) out.push(line)
-        else this.held.push({ line, itemId, showAt, cadenceMs })
+        // A drop's line waits for its chest's reveal, an arrival's for the backdrop change; one
+        // the timeline has no show time for prints with its action.
+        const wait = this.waitOf(e)
+        const showAt = wait === null ? null : this.showOf(wait)
+        if (wait === null || showAt === null) out.push(line)
+        else this.held.push({ line, wait, showAt, cadenceMs })
       }
       for (const l of out) this.schedule(this.lines, l, start, cadenceMs)
     }
@@ -236,10 +246,65 @@ export class MessageLog {
     return at
   }
 
+  /** What `e`'s line waits for: a drop's item, an advance's zone cleared; a farming clear none. */
+  private waitOf(e: Effect): ToastWait | null {
+    if (e.k === 'drop' || e.k === 'drop_vendored') return { item: e.item.id }
+    return e.k === 'zone_cleared' && e.advancedTo > e.zone ? { zone: e.zone } : null
+  }
+
+  /** The show time the timeline answers for `wait`; null when it has none. */
+  private showOf(wait: ToastWait): number | null {
+    const t = this.timeline
+    if (t === null) return null
+    return 'item' in wait ? t.showAt(wait.item) : t.zoneShowAt(wait.zone)
+  }
+
+  /**
+   * Each entry's show time read afresh. One the timeline no longer answers keeps its last, but
+   * never later than `now`: a chest pruned after it played stays due, and one a resync took away
+   * (the enemy revived) is due at once rather than at a reveal that will not come.
+   */
+  private reread(entries: readonly Waiting[], now: number): void {
+    for (const h of entries) h.showAt = this.showOf(h.wait) ?? Math.min(h.showAt, now)
+  }
+
   /** Held lines whose show time has passed by `now`, in show order, each read afresh. */
   private due(now: number): Held[] {
-    for (const h of this.held) h.showAt = this.timeline?.showAt(h.itemId) ?? h.showAt
+    this.reread(this.held, now)
     return this.held.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
+  }
+
+  /**
+   * Holds each toast whose wait has a show time after `now`; answers the rest, to be raised now,
+   * in their order. A toast with no wait, or one the timeline knows no show time for, is never held.
+   */
+  hold(toasts: readonly Toast[], timeline: StageTimeline, now: number): Toast[] {
+    this.timeline = timeline
+    return toasts.filter((toast) => {
+      const showAt = toast.wait ? this.showOf(toast.wait) : null
+      if (!toast.wait || showAt === null || showAt <= now) return true
+      this.heldToasts.push({ toast, wait: toast.wait, showAt })
+      return false
+    })
+  }
+
+  /**
+   * The drain: the held toasts whose show time has passed by `now`, in show order, taken out of
+   * the holder so each is handed out once. The only call that releases one; the reads only look.
+   * An infinite `now` releases everything held.
+   */
+  release(now: number): Toast[] {
+    this.reread(this.heldToasts, now)
+    const due = this.heldToasts.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
+    this.heldToasts = this.heldToasts.filter((h) => !due.includes(h))
+    return due.map((h) => h.toast)
+  }
+
+  /** The earliest show time after `now` a held toast waits for, read afresh; null for none. */
+  nextRelease(now: number): number | null {
+    this.reread(this.heldToasts, now)
+    const next = this.heldToasts.filter((h) => h.showAt > now).map((h) => h.showAt)
+    return next.length === 0 ? null : Math.min(...next)
   }
 
   /**
@@ -292,10 +357,12 @@ export class MessageLog {
     return { ...line, revealed: Math.floor((now - line.at) / line.charMs) }
   }
 
-  /** A line is waiting, held for its reveal, or still typing. */
+  /** A line is waiting, a line or a toast is held for its show time, or a line is still typing. */
   isBusy(now: number, motion: Settings['motion']): boolean {
     const lines = this.linesAt(now)
     if (this.held.some((h) => h.showAt > now)) return true
+    this.reread(this.heldToasts, now)
+    if (this.heldToasts.some((h) => h.showAt > now)) return true
     return lines.some((l) => l.at > now || (motion !== 'still' && typed(l) > now))
   }
 

@@ -614,8 +614,31 @@ flags. No second server program, no Postgres, no Redis, no worker.
   thrusts from the stepped position. A kill that drops an item leaves a chest:
   it falls out of the fading enemy, sits, opens, and the item rises on a glow
   in its rarity colour (the reveal), held longer the rarer the item, then
-  fades; the next enemy enters after it. The reveal's show time, the item fully
-  risen, is when the drop's log line and its Loot row appear. Driven by the sim's
+  fades; the next enemy enters after it. A line or toast about an event the
+  stage plays is a **held line**: it lands at the event's **show time**, the
+  moment the stage plays it, not before; an event the stage never plays, or
+  plays while no band is drawn, has no show time and its words land with the
+  state (GLOSSARY). A drop's show time is its reveal, the item fully risen:
+  the drop's log line, its Loot row, its toast and its cue all land then. A
+  zone arrival's show time is the backdrop change, when the zone boss's row
+  has left (its dissolve and any chest over, the moment the staged state's zone
+  flips): the arrival's log line and its toast land then. The timeline answers
+  it as the kill's effects arrive, before any draw has departed the boss, as a
+  prediction (the end of the blow shown on the boss plus the dissolve, or its
+  chest's end, whichever is later), and refines it as the draws schedule and
+  re-time those motions. The boss's drop reveals before its row leaves, so its
+  words land first and the zone's after. The farming line ("Zone N cleared.")
+  is not held.
+  While a stage is drawn the log holds the held toasts and drains them on the
+  stage loop's clock: on a frame loop at the first frame at or after the show
+  time, on the desktop's SMIL site at a wake armed for it, and on every
+  session tick, before the engine's accept check. SMIL plays the actors and the
+  chest but not the backdrop, so a wake that releases a toast also redraws the
+  band, and the zone's words land with its backdrop. A held entry whose show
+  time the timeline stops answering (a resync revived the enemy, so the chest
+  is gone) is due at once. With no stage drawn on any
+  surface (band off, collapsed, paused, secondary) everything held is due, so a
+  toast held before the band went off is raised on the next tick. Driven by the sim's
   output-only effects: `act` starts an action at its battle-time offset, then
   come its `hit` and `heal` effects. One action plays at a time: the actor
   lunges once and all of its hits land at one impact (the Black Mage's spell
@@ -629,8 +652,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
   as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or
-  sales. A drop's line is held until its reveal's show time, then queues as if
-  it had just arrived, so it never delays the lines after it. The desktop
+  sales. A drop's line is held until its reveal's show time, and a zone
+  arrival's until the backdrop change; each then queues as if it had just
+  arrived, so it never delays the lines after it. The desktop
   redraws once a tick with the tick's motion as SMIL, the action gauges and
   the HP bars both keyed from the tick's landings, so a bar drops at its hit's
   impact without a redraw. A monster that enters mid-tick plays its first
@@ -657,9 +681,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
   gone, and the backdrop changes zone when the zone boss's row leaves. The
   stage (and its alt text), the enemy window, the party window, the strip's
   titles, the compact window and its front enemy, and the world boss bar on
-  every tab read the staged state. The sim, the server, the pane and the
-  toasts read the state, so a toast may lead what the stage shows (see the
-  wipe row below). The strip's hero HP trails the state and never leads it.
+  every tab read the staged state. The sim, the server and the pane read the
+  state. The toasts read the state, except those with a show time, which land
+  when the stage plays their event; the wipe toast may lead the last hero's
+  fall by at most one cadence. The strip's hero HP trails the state and never leads it.
 - World tab rows (phase 3), in the message window: the count online and the
   names in your zone, you excluded; then the latest chat message as a ticker,
   or highest zone, kills and wipes when chat is closed or quiet, ending in
@@ -740,15 +765,15 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
 | event | purpose | tier | toast | folded (same kind, one burst) | cue |
 |---|---|---|---|---|---|
-| legendary drop | rare good news | long | `Legendary drop: Ironwood Staff` | never folds | legendary |
+| legendary drop | rare good news | long | `Legendary drop: Ironwood Staff`, at the reveal | never folds | legendary |
 | recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | none |
 | boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
 | wipe | wants a decision | long | `The party fell, retreating to zone 2` | never folds | none |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
-| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills` | never folds | none |
-| rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …` | `3 rare drops: Ironwood Staff, Oak Bow, Iron Helm`, past three names `…, Rune Staff and 2 more`; rare and epic fold separately, epic first | drop |
-| vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold` | `Inventory full: 3 items vendored for 95 gold` | none |
+| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills`, at the backdrop change | never folds | none |
+| rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
+| vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
 | level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
 | sold | money moved | short | `Ironwood Staff sold for 120 gold` | `3 items sold for 410 gold` | none |
 | bought | money moved | short | `Ironwood Staff bought for 120 gold` | `2 items bought for 300 gold` | none |
@@ -762,10 +787,15 @@ flags. No second server program, no Postgres, no Redis, no worker.
   toasts the world boss appeared row's text and tier with no cue: the boss is
   news, not a fight starting.
 
-  The toasts read the state, not the staged state, so the wipe toast may lead
-  the last hero's fall on the stage by at most one cadence: the tick that
-  wipes the party toasts as it lands, while the stage plays that tick's blows
-  over the cadence that follows.
+  The toasts read the state, not the staged state, except the drop, vendored
+  and zone arrival rows, which are held lines. A drop or vendored toast lands
+  at its reveal's show time, with its log line and its Loot row, and its cue
+  plays then; a zone arrival lands at the backdrop change, when the zone boss's
+  row has left, with its log line, after the boss's drop. A drop whose item has
+  no chest on the stage, a zone arrival with no zone boss row on the stage, or
+  either while no stage is drawn, toasts with its burst. The wipe toast may lead the last hero's fall on the stage by
+  at most one cadence: the tick that wipes the party toasts as it lands, while
+  the stage plays that tick's blows over the cadence that follows.
 
   Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
@@ -793,8 +823,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
     for gold and its own punctuation, and does not name the boss in a reward.
 
   Bursts. A burst is what the engine's effects callback receives in one call: a
-  tick's effects, or one delivery's. Folding is computed per call and nothing
-  is held across calls; there is no timer. Toasts of one burst are raised in
+  tick's effects, or one delivery's. Folding is computed per call, over the
+  toasts the burst raises at once. A held toast leaves its burst: it is raised
+  at its show time, its lifetime starting there, and its cue plays when it is
+  raised; toasts released by one drain play each distinct cue once, after
+  them. Nothing else is held across calls, and the only timer is the stage
+  loop's own wake for the next show time. Toasts of one burst are raised in
   the table's order, so the long tier lands on top of the stack. Cues keep
   their rule: the burst's distinct cues, each played once, after the toasts.
   Only the primary session toasts, the world boss included. The primary
@@ -805,7 +839,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
   Folding. Within a burst, effects are grouped by row. A row that folds yields
   one toast carrying the count and, where the row has one, the sum; a row that
-  never folds yields one toast per effect. A folded name list shows up to three
+  never folds yields one toast per effect. A toast with a show time never
+  folds: each lands at its own show time. A folded name list shows up to three
   names, then "and N more". A folded level-up joins its heroes with "and" only
   when every hero reached the same level; otherwise it has one clause per hero,
   in effect order.
