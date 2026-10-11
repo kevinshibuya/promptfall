@@ -16,6 +16,7 @@ import {
   pane,
   paneGoldenOf,
   paneSvgOf,
+  renders,
   SCENARIOS,
   STRIP_SCENARIOS,
   scenePicture,
@@ -24,7 +25,6 @@ import {
   stripGoldenOf,
   stripPicture,
   stripSvgOf,
-  svgOf,
 } from '../plugins/promptfall/hooks/stage/scenarios'
 import { writePng } from './png'
 
@@ -46,14 +46,14 @@ const lines = [
   'export const GOLDENS: Record<Scenario, Golden> = {',
 ]
 for (const name of SCENARIOS) {
-  const s = stage(name)
-  const g = goldenOf(s)
+  const r = renders(stage(name))
+  const g = goldenOf(r)
   lines.push(
     `  ${/^\w+$/.test(name) ? name : `'${name}'`}: ${JSON.stringify(g)
       .replace(/"(\w+)":/g, '$1: ')
       .replace(/,/g, ', ')},`,
   )
-  writeFileSync(join(OUT, `${name}.svg`), `${svgOf(s)}\n`)
+  writeFileSync(join(OUT, `${name}.svg`), `${r.svg}\n`)
 }
 lines.push('}', '', 'export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {')
 // A strip's or pane's PNG lays its windows on a dark terminal background, to be looked at.
