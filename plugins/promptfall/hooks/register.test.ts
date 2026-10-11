@@ -1,14 +1,43 @@
-import type { On } from 'claude-code'
-import { expect, mock, test } from 'claude-code/testing'
-import type { GameView } from '../types'
-import { OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
-import { Ledger } from './vendor/ledger.js'
-import { MemoryKeyValue } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import type { On, UiBlitArgs } from 'claude-code'
+import { expect, mock } from 'claude-code/testing'
+import type { GameView, WorldState } from '../types'
+import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { SANDBOX_PINS_SERVER } from './sandbox'
+import { PUBLIC_SERVER } from './server'
+import { bandKey } from './stage/loop'
+import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
+import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { test } from './testing'
+import { worldRows } from './ui/band'
+import { paneText } from './ui/pane/testing'
+import { approveAs, Ledger } from './vendor/ledger.js'
+import {
+  BOSS_WINDOW_MS,
+  type ChatMessage,
+  MemoryKeyValue,
+  type WorldSnapshot,
+} from './vendor/protocol.js'
+import {
+  content,
+  createInitialState,
+  type Event,
+  GAUGE_FULL,
+  type GameState,
+  hashState,
+  step,
+} from './vendor/sim.js'
+import { CLIENT_VERSION } from './version'
+import { toAccountView, toGameView } from './view'
+import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
-/** Answers $.store from a map and records every write. */
+/**
+ * Answers $.store from a map and records every write. The machine plays in-process unless the
+ * seed names a server; a seed with `promptfall:server: undefined` is a fresh install.
+ */
 function store(on: On, seed: Record<string, unknown> = {}) {
-  const data = new Map<string, unknown>(Object.entries(seed))
+  const data = new Map<string, unknown>(
+    Object.entries({ 'promptfall:server': 'local', ...seed }).filter(([, v]) => v !== undefined),
+  )
   const writes: { key: string; value: unknown }[] = []
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {
@@ -74,12 +103,23 @@ function clock(on: On) {
   }
 }
 
-function engineBottom(on: On, toasts: string[] = []) {
+/** A toast as the host received it: its text and the timeout it was raised with. */
+type Raised = { text: string; timeoutMs: number | undefined }
+
+function engineBottom(
+  on: On,
+  toasts: string[] = [],
+  env: Record<string, string> = {},
+  onToast: (toast: Raised) => void = () => undefined,
+) {
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  // The sandbox switch reads the environment: unset unless a test turns the sandbox on.
+  mock.env(on, env)
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
   on('ui.toast', (_$, e) => {
     toasts.push(e.text)
+    onToast({ text: e.text, timeoutMs: e.timeoutMs })
     return { value: undefined }
   })
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
@@ -282,8 +322,9 @@ test('the session the player uses takes the lease back; Claude working elsewhere
   // Claude's own tool calls do not claim it.
   await $.tool.call({ tool: 'Bash', command: 'ls' })
   expect(last.get('mode')).toBe('secondary')
-  // The player typing here does.
+  // The player typing here does; the promotion lands after the prompt has gone through.
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
 })
@@ -332,27 +373,33 @@ function remote(on: On) {
     minClientVersion: '0.1.0',
     seedSource: () => 777,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'remote-player' }),
+    linkApprover: approveAs('remote-player'),
   })
   const net = {
     down: false,
+    /** Answered to every bootstrap while set, as a host's refusal. */
+    refusal: null as null | { refusal: 'rate_limited' | 'banned'; message: string },
     calls: 0,
-    requests: [] as { method: string; path: string }[],
+    requests: [] as { origin: string; method: string; path: string }[],
     ledger,
   }
   on('http.fetch', async (_$, e) => {
     net.calls += 1
-    const path = e.url.replace(/^https?:\/\/[^/]+/, '').split('?')[0] ?? ''
+    const origin = /^https?:\/\/[^/]+/.exec(e.url)?.[0] ?? ''
+    const path = e.url.slice(origin.length).split('?')[0] ?? ''
     const method = e.init?.method ?? 'GET'
     if (net.down) throw new Error('connect ECONNREFUSED')
-    net.requests.push({ method, path })
+    net.requests.push({ origin, method, path })
     const header = e.init?.headers?.authorization ?? ''
     const auth = { deviceToken: header.replace(/^Bearer /, '') }
     const body = e.init?.body ? JSON.parse(e.init.body) : undefined
     let result: unknown
-    if (method === 'POST' && path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    if (method === 'POST' && path === '/v1/bootstrap')
+      result = net.refusal ?? (await ledger.bootstrap(body))
     else if (method === 'POST' && path === '/v1/batches') result = await ledger.submit(body, auth)
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
+    else if (method === 'DELETE' && path === '/v1/account')
+      result = await ledger.deleteAccount(auth)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })
@@ -403,6 +450,113 @@ test('a session whose store points at an unreachable server rides the outage and
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
 })
 
+test('a refused bootstrap shows its message and the session retries later', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  const message = 'Too many new accounts from this address. Promptfall will try again later.'
+  net.refusal = { refusal: 'rate_limited', message }
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('notice')).toBe(message)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('view') ?? null).toBeNull()
+  expect(data.has(`promptfall:token:${URL_A}`)).toBe(false)
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  expect(boots()).toBe(1)
+  // Not a hammering retry: a minute on, still the one call.
+  await time.advance(60_000)
+  expect(boots()).toBe(1)
+  net.refusal = null
+  await time.advance(5 * 60_000)
+  expect(boots()).toBe(2)
+  expect(last.get('notice')).toBeNull()
+  expect(last.get('mode')).toBe('primary')
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(typeof data.get(`promptfall:token:${URL_A}`)).toBe('string')
+})
+
+test('a banned account is refused on bootstrap and the plugin pauses with the reason', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('primary')
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const info = await net.ledger.account({ deviceToken: token })
+  if (!('account' in info)) throw new Error(info.reason)
+  await net.ledger.host.ban(info.account.accountId, 'spam in chat')
+  const message = 'Promptfall: this account is banned: spam in chat'
+
+  // Mid-session: the next batch is refused, and play pauses with the reason.
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(16_000)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  const batches = () => net.requests.filter((r) => r.path === '/v1/batches').length
+  const sent = batches()
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(60_000)
+  expect(batches()).toBe(sent)
+
+  // A new session asks once, is refused, shows the reason and does not ask again.
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  const boots = () => net.requests.filter((r) => r.path === '/v1/bootstrap').length
+  const before = boots()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(boots()).toBe(before + 1)
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe(message)
+  await time.advance(60 * 60_000)
+  expect(boots()).toBe(before + 1)
+  expect(last.get('notice')).toBe(message)
+  // The token stays: the ban is the account's, and this machine keeps it.
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+})
+
+test('deleting the account on a remote server starts a fresh one there, and only on its word', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+
+  // Unconfirmed: the server did not answer, so nothing on this machine is reset.
+  await ui.press({ key: 'row:delete' })
+  net.down = true
+  await ui.press({ key: 'yes' })
+  expect(await paneText(ui)).toContain(`Refused: ${NOT_DELETED}`)
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+  net.down = false
+  expect(await net.ledger.knowsToken(token)).toBe(true)
+
+  await ui.press({ key: 'row:delete' })
+  await ui.press({ key: 'yes' })
+  const deletes = net.requests.filter((r) => r.method === 'DELETE' && r.path === '/v1/account')
+  expect(deletes.map((r) => r.origin)).toEqual([URL_A])
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  // A fresh account on the same server, and the message window says why.
+  const fresh = data.get(`promptfall:token:${URL_A}`)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe(token)
+  expect(await net.ledger.knowsToken(fresh as string)).toBe(true)
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
+})
+
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)
@@ -425,7 +579,7 @@ test('/promptfall server local during an outage drops the unsent events and says
     )
   // Three tool calls sat in the failed batch and one more in the buffer; ticks depend on cadence.
   expect(Number(m?.[1])).toBeGreaterThanOrEqual(4)
-  expect(data.has('promptfall:server')).toBe(false)
+  expect(data.get('promptfall:server')).toBe('local')
   expect(last.get('server')).toBeNull()
   expect(last.get('notice')).not.toBe(RETRYING_NOTICE)
   expect((last.get('view') as GameView).account.server).toBe('in-process')
@@ -442,11 +596,12 @@ test('the link flow against the in-process ledger shows Linked as player', async
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   await ui.press({ key: 'tab-account' })
-  await ui.press({ key: 'link-github' })
-  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeDefined()
+  await ui.press({ key: 'row:link' })
+  expect(await paneText(ui)).toMatch(/Enter [0-9A-Z]{8} at/)
+  expect((await ui.find({ type: 'Link' }))?.props.href).toMatch(/^https?:\/\//)
   await time.advance(5_000)
   expect((last.get('view') as GameView).account.linked).toBe('player')
-  expect(await ui.find({ text: /Linked as player/ })).toBeDefined()
+  expect(await paneText(ui)).toMatch(/Linked as player/)
   await ui.unmount()
 })
 
@@ -473,8 +628,11 @@ test('the reset on a v1 store starts a fresh account and keeps the lease', async
   expect(last.get('view') ?? null).toBeNull()
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   await ui.press({ key: 'tab-account' })
-  expect(await ui.find({ text: /Server: in-process/ })).toBeDefined()
-  await ui.press({ key: 'reset' })
+  expect(await paneText(ui)).toMatch(/Server in-process/)
+  await ui.press({ key: 'row:reset' })
+  // Reset asks first: a Yes/No (its question sits under the paused notice, the read-only rule).
+  expect(await ui.find({ key: 'no' })).toBeDefined()
+  await ui.press({ key: 'yes' })
   const view = last.get('view') as GameView
   expect(view).toBeTruthy()
   expect(view.accountId).not.toBe('acct-1')
@@ -513,6 +671,31 @@ test('a primary demoted during an outage never submits the batch it held', async
   expect(last.get('mode')).toBe('secondary')
 })
 
+test("a demoted primary's notice clears; the re-promoted engine's own notice shows", async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  net.down = true
+  await time.advance(16_000)
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+  // Another session takes the lease: the discarded engine's banner goes with it.
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(last.get('notice')).toBeNull()
+  // The lease comes back while the server is still down: the new engine raises its own.
+  data.delete(LEASE)
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(RETRYING_NOTICE)
+})
+
 test('a server that never answers is an outage after 15 s', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   store(on, { 'promptfall:server': URL_A })
@@ -531,7 +714,7 @@ test('a server that never answers is an outage after 15 s', async ($, on) => {
 })
 
 test("the player's claim follows a server switch made in another session", async ($, on) => {
-  mock.clock(on, { now: 1_000_000 })
+  const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, { [LEASE]: { owner: 'other', until: 9_999_999_999_999 } })
   const last = states(on)
   engineBottom(on)
@@ -541,6 +724,7 @@ test("the player's claim follows a server switch made in another session", async
   expect(last.get('mode')).toBe('secondary')
   data.set('promptfall:server', URL_A)
   await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
   expect(last.get('mode')).toBe('primary')
   expect(last.get('server')).toBe(URL_A)
   expect((last.get('view') as GameView).account.server).toBe(URL_A)
@@ -581,6 +765,67 @@ test('a trailing slash on the server URL is dropped', async ($, on) => {
   expect(data.has(`promptfall:token:${URL_A}`)).toBe(true)
 })
 
+test('a fresh install resolves to the public server and local is an explicit setting', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(data.has('promptfall:server')).toBe(false)
+  expect(last.get('server')).toBe(PUBLIC_SERVER)
+  expect((last.get('view') as GameView).account.server).toBe(PUBLIC_SERVER)
+  expect(net.requests.map((r) => r.origin)).toContain(PUBLIC_SERVER)
+  expect(typeof data.get(`promptfall:token:${PUBLIC_SERVER}`)).toBe('string')
+  const report = async () =>
+    ((await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })) as { text: string })
+      .text
+  expect(await report()).toBe(`Promptfall plays on the public server, ${PUBLIC_SERVER}`)
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  expect(data.get('promptfall:server')).toBe('local')
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(await report()).toBe('Promptfall plays in-process (server local)')
+
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect(data.get('promptfall:server')).toBe(URL_A)
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(await report()).toBe(`Promptfall plays on ${URL_A}`)
+})
+
+test('a stored local setting plays in-process and survives a reset', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': 'local' })
+  const last = states(on)
+  engineBottom(on)
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:reset' })
+  await ui.press({ key: 'yes' })
+  await ui.unmount()
+  expect(data.get('promptfall:server')).toBe('local')
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  expect(net.calls).toBe(0)
+})
+
+test('the sandbox plays in-process on a fresh install and never calls the public server', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  store(on, { 'promptfall:server': undefined })
+  const last = states(on)
+  engineBottom(on, [], { PROMPTFALL_SANDBOX: '1' })
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('server')).toBeNull()
+  expect((last.get('view') as GameView).account.server).toBe('in-process')
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'server' })
+  expect(r).toMatchObject({ text: SANDBOX_PINS_SERVER })
+  expect(net.calls).toBe(0)
+})
+
 test('a server switch clears a pending link code', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   store(on)
@@ -590,8 +835,8 @@ test('a server switch clears a pending link code', async ($, on) => {
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   await ui.press({ key: 'tab-account' })
-  await ui.press({ key: 'link-github' })
-  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeDefined()
+  await ui.press({ key: 'row:link' })
+  expect(await paneText(ui)).toMatch(/Enter [0-9A-Z]{8} at/)
   await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
   expect((last.get('dialog') as { link: unknown }).link).toBeNull()
   await ui.unmount()
@@ -612,8 +857,8 @@ test('pressing Link GitHub during an outage does nothing', async ($, on) => {
   await time.advance(16_000)
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   await ui.press({ key: 'tab-account' })
-  await ui.press({ key: 'link-github' })
-  expect(await ui.find({ text: /Enter [0-9A-Z]{8} at/ })).toBeUndefined()
+  await ui.press({ key: 'row:link' })
+  expect(await paneText(ui)).not.toMatch(/Enter [0-9A-Z]{8} at/)
   expect(last.get('notice')).toBe(RETRYING_NOTICE)
   await ui.unmount()
 })
@@ -633,7 +878,886 @@ test("past 120 s the dialog's read-only line is the outage notice", async ($, on
   await time.advance(16_000)
   await time.advance(120_000)
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
-  expect(await ui.find({ text: /Promptfall: server unreachable/ })).toBeDefined()
-  expect(await ui.find({ text: /not playing in this session/ })).toBeUndefined()
+  // The read-only line is the message window's first line (decoded Raster cells on a terminal).
+  expect(await paneText(ui)).toMatch(/Promptfall: server unreachable/)
+  expect(await paneText(ui)).not.toMatch(/not playing in this session/)
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// The world poll
+
+const URL_W = 'http://test'
+const URL_X = 'http://other'
+
+function snap(patch: Partial<WorldSnapshot> = {}): WorldSnapshot {
+  return {
+    serverNow: 2_000_000,
+    speed: 10,
+    online: 3,
+    zones: [{ zone: 1, count: 3 }],
+    here: ['Ashgrove'],
+    boss: null,
+    chat: [],
+    flags: { 'chat.enabled': true, 'presence.enabled': true, 'market.enabled': true },
+    ...patch,
+  }
+}
+
+const say = (id: number, text = `line ${id}`): ChatMessage => ({
+  id,
+  name: 'Brindle',
+  text,
+  at: id,
+})
+
+const LIVE_BOSS = {
+  bossId: 'wb1',
+  name: 'The Promptwyrm',
+  glyph: '☠',
+  maxHp: 4000,
+  hp: 2500,
+  spawnedAt: 1,
+  endsAt: 9_999_999_999,
+  yours: 0,
+}
+
+/**
+ * A remote server whose account routes are the vendored ledger and whose world
+ * poll answers `net.world(since, url)`. `holdWorld` keeps the next poll open
+ * until `release()`; `worldDown` throws on it.
+ */
+function worldNet(on: On) {
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => 1_000_000,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: approveAs('remote-player'),
+  })
+  const net = {
+    ledger,
+    worldDown: false,
+    holdWorld: false,
+    release: (() => undefined) as () => void,
+    polls: [] as string[],
+    world: (_since: number, _url: string): WorldSnapshot => snap(),
+  }
+  on('http.fetch', async (_$, e) => {
+    const [full, query = ''] = e.url.split('?')
+    const path = (full ?? '').replace(/^https?:\/\/[^/]+/, '')
+    const method = e.init?.method ?? 'GET'
+    const header = e.init?.headers?.authorization ?? ''
+    const auth = { deviceToken: header.replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    const ok = (result: unknown) => ({
+      value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) },
+    })
+    if (method === 'GET' && path === '/v1/world') {
+      net.polls.push(e.url)
+      if (net.worldDown) throw new Error('connect ECONNREFUSED')
+      if (net.holdWorld) {
+        net.holdWorld = false
+        await new Promise<void>((resolve) => {
+          net.release = resolve
+        })
+      }
+      const since = Number(/since=(\d+)/.exec(query)?.[1] ?? 0)
+      return ok(net.world(since, e.url))
+    }
+    if (method === 'POST' && path === '/v1/bootstrap') return ok(await ledger.bootstrap(body))
+    if (method === 'POST' && path === '/v1/batches') return ok(await ledger.submit(body, auth))
+    if (method === 'GET' && path === '/v1/account') return ok(await ledger.account(auth))
+    return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+  })
+  return net
+}
+
+const worldOf = (last: Map<string, unknown>) => last.get('world') as WorldState
+
+test('the world poll goes out on start and every 15 s, with the chat mark', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = (since) => snap({ chat: since === 0 ? [say(1), say(2), say(3)] : [] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(net.polls[0]).toBe(`${URL_W}/v1/world?since=0`)
+  const world = worldOf(last)
+  expect(world.snapshot?.online).toBe(3)
+  expect(world.messages.map((m) => m.id)).toEqual([1, 2, 3])
+  expect(world.chatMark).toBe(3)
+  expect(world.clock?.speed).toBe(10)
+  const before = net.polls.length
+  await time.advance(WORLD_POLL_MS)
+  expect(net.polls.length).toBe(before + 1)
+  expect(net.polls.at(-1)).toBe(`${URL_W}/v1/world?since=3`)
+  await time.advance(WORLD_POLL_MS)
+  expect(net.polls.length).toBe(before + 2)
+})
+
+test('a live boss polls every 5 s; a dead or gone one goes back to 15 s', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = LIVE_BOSS
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).snapshot?.boss?.hp).toBe(2500)
+  let n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(3)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  boss = null
+  await time.advance(5_000)
+  n = net.polls.length
+  await time.advance(15_000)
+  expect(net.polls.length - n).toBe(1)
+})
+
+test('at most one world poll is in flight', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = () => snap({ boss: LIVE_BOSS })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  net.holdWorld = true
+  const n = net.polls.length
+  await time.advance(5_000)
+  expect(net.polls.length).toBe(n + 1)
+  await time.advance(9_000)
+  expect(net.polls.length).toBe(n + 1)
+  net.release()
+  await time.advance(5_000)
+  expect(net.polls.length).toBe(n + 2)
+})
+
+test('a message already held is not added twice', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = (since) => snap({ chat: since === 0 ? [say(1), say(2)] : [say(2), say(3)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(WORLD_POLL_MS)
+  expect(worldOf(last).messages.map((m) => m.id)).toEqual([1, 2, 3])
+})
+
+test('a throwing world poll sets no notice; 45 s without a success is stale until the next', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).stale).toBe(false)
+  net.worldDown = true
+  const view = JSON.stringify(last.get('view'))
+  await time.advance(WORLD_STALE_MS - 1_000)
+  expect(last.get('notice') ?? null).toBeNull()
+  expect(last.get('mode')).toBe('primary')
+  expect(JSON.stringify(last.get('view'))).not.toBe(view)
+  expect(worldOf(last).stale).toBe(false)
+  await time.advance(1_000)
+  expect(worldOf(last).stale).toBe(true)
+  net.worldDown = false
+  await time.advance(WORLD_POLL_MS)
+  expect(worldOf(last).stale).toBe(false)
+  expect(last.get('notice') ?? null).toBeNull()
+})
+
+test('a secondary polls too, and a switch made elsewhere resets the world and polls the new server', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const net = worldNet(on)
+  const a = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+  const x = await net.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+  const { data } = store(on, {
+    'promptfall:server': URL_W,
+    [`promptfall:token:${URL_W}`]: a.deviceToken,
+    [`promptfall:token:${URL_X}`]: x.deviceToken,
+    [LEASE]: { owner: 'other', until: 9_999_999_999_999 },
+  })
+  const last = states(on)
+  engineBottom(on)
+  net.world = (_since, url) =>
+    url.startsWith(URL_X) ? snap({ online: 7 }) : snap({ chat: [say(1)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(1)
+  expect(last.get('mode')).toBe('secondary')
+  expect(net.polls[0]).toBe(`${URL_W}/v1/world?since=0`)
+  expect(worldOf(last).messages.map((m) => m.id)).toEqual([1])
+  data.set('promptfall:server', URL_X)
+  await time.advance(10_000)
+  expect(net.polls.some((u) => u.startsWith(`${URL_X}/v1/world?since=0`))).toBe(true)
+  expect(worldOf(last).snapshot?.online).toBe(7)
+  expect(worldOf(last).messages).toEqual([])
+})
+
+test('/promptfall server local resets the world to the in-process snapshot, chat closed', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  const net = worldNet(on)
+  net.world = () => snap({ chat: [say(1)] })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  expect(worldOf(last).messages).toHaveLength(1)
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'server local' })
+  await time.advance(1)
+  const world = worldOf(last)
+  expect(world.messages).toEqual([])
+  expect(world.snapshot?.flags['chat.enabled']).toBe(false)
+  expect(world.snapshot?.online).toBe(1)
+})
+
+// ---------------------------------------------------------------------------
+// The world boss
+
+test('the boss appearing toasts once for 8 s and going down once for 4 s', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  states(on)
+  const raised: Raised[] = []
+  engineBottom(on, [], {}, (toast) => raised.push(toast))
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = null
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  await time.advance(5_000)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  await time.advance(15_000)
+  const world = raised.filter((t) => t.text.startsWith('World boss '))
+  expect(world).toEqual([
+    { text: 'World boss The Promptwyrm has appeared', timeoutMs: 8000 },
+    { text: 'World boss The Promptwyrm is down', timeoutMs: 4000 },
+  ])
+})
+
+test("a reward's loot log line names the item", () => {
+  const state = {
+    ...createInitialState(1),
+    lootLog: [{ k: 'reward' as const, base: 'steel_longsword', rarity: 'rare' as const, gold: 45 }],
+  }
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  expect(view.loot.at(-1)?.text).toBe('boss reward Steel Longsword (+45g)')
+})
+
+test('a boss seen in the snapshot reaches the primary through its next flush, with no account call', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  let now = 10_800_000 - 1_000
+  const ledger = new Ledger({
+    kv: new MemoryKeyValue(),
+    now: async () => now,
+    minClientVersion: '0.1.0',
+    seedSource: () => 777,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: approveAs('remote-player'),
+  })
+  const requests: string[] = []
+  const behind: string[][] = []
+  on('http.fetch', async (_$, e) => {
+    const path = (e.url.split('?')[0] ?? '').replace(/^https?:\/\/[^/]+/, '')
+    const method = e.init?.method ?? 'GET'
+    requests.push(`${method} ${path}`)
+    const auth = { deviceToken: (e.init?.headers?.authorization ?? '').replace(/^Bearer /, '') }
+    const body = e.init?.body ? JSON.parse(e.init.body) : undefined
+    let result: unknown
+    if (path === '/v1/world') result = await ledger.world(auth, 0)
+    else if (path === '/v1/bootstrap') result = await ledger.bootstrap(body)
+    else if (path === '/v1/batches') {
+      const ack = await ledger.submit(body, auth)
+      if (!ack.ok && ack.reason === 'cursor_behind') {
+        behind.push(ack.delivery.events.map((x) => x.event.t))
+      }
+      result = ack
+    } else if (path === '/v1/account') result = await ledger.account(auth)
+    else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
+    return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  now = 10_800_000 + 1_000
+  await time.advance(30_000)
+  const boss = (last.get('world') as WorldState).snapshot?.boss
+  expect(boss).toBeTruthy()
+  expect((last.get('view') as GameView).boss?.bossId).toBe(boss?.bossId)
+  expect(behind.some((kinds) => kinds.includes('boss_engaged'))).toBe(true)
+  expect(requests).not.toContain('GET /v1/account')
+})
+
+test('a reload during a live boss keeps the held snapshot, so the boss is not announced again', async () => {
+  const transitions: unknown[] = []
+  const held: WorldState = {
+    snapshot: snap({ boss: LIVE_BOSS }),
+    fetchedAt: 1,
+    stale: false,
+    messages: [],
+    chatMark: 0,
+    clock: null,
+    committedDealt: null,
+  }
+  const poller = new WorldPoller({
+    now: async () => 2,
+    every: () => ({ cancel: () => undefined }),
+    after: () => ({ cancel: () => undefined }),
+    publish: async () => undefined,
+    load: async () => held,
+    fetch: async () => snap({ boss: LIVE_BOSS }),
+    transition: (t) => transitions.push(t),
+  })
+  await poller.start()
+  expect(transitions).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// The stage's renderer probe and the loop's wake
+
+const PARTY_BAND = {
+  component: 'AbovePrompt' as const,
+  requestId: 'band-probe',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 20,
+    bodyColumns: 120,
+    scroll: { offset: 0, bodyRows: 20 },
+    view: {},
+  },
+}
+
+/** A terminal session whose blits answer `answer`; records each blit. */
+function probing(on: On, answer: { deny?: string }, seed: Record<string, unknown> = {}) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  engineBottom(on)
+  const blits: (UiBlitArgs & { at: number })[] = []
+  on('ui.blit', (_$, e) => {
+    blits.push({ ...e, at: time.now() })
+    return { value: answer }
+  })
+  on('ui.invalidate', (_$, e, next) => next(e))
+  return { time, data, last, blits }
+}
+
+test('the probe settles on image when the blit is taken', async ($, on) => {
+  const { time, last, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  const mounted = await ui.find({ key: 'probe' })
+  expect(mounted).toBeDefined()
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('image')
+  const probe = blits.find((b) => b.key === 'probe')
+  expect(probe).toBeDefined()
+  expect(probe && 'source' in probe ? probe.source : null).not.toEqual(mounted?.props.source)
+  await ui.unmount()
+})
+
+test("the probe settles on raster on the alt's deny, and stays unknown on any other", async ($, on) => {
+  const { time, last, data } = probing(on, {
+    deny: `${PROBE_ALT_DENY} (env: terminal=Apple_Terminal, not asked yet, no answer)`,
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer')).toBe('raster')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'raster' })
+  await ui.unmount()
+})
+
+test('any other deny leaves the renderer unknown, and a later render probes again', async ($, on) => {
+  const { time, last, blits, data } = probing(on, {
+    deny: 'no Image of its own is mounted under key "probe" in band-probe',
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(last.get('renderer') ?? 'unknown').toBe('unknown')
+  // Nothing settled, nothing recorded.
+  expect(
+    (data.get('promptfall:settings') as { probed?: unknown } | undefined)?.probed ?? null,
+  ).toBe(null)
+  await ui.unmount()
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(2)
+  await again.unmount()
+})
+
+test('a pane drawn while the renderer is unknown probes too, and a taken blit settles on image', async ($, on) => {
+  // A docked pane collapses the band, which then never probes (UI PR 3).
+  const { time, last, blits, data } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  const probe = await ui.find({ key: 'probe' })
+  expect([probe?.type, probe?.props.columns, probe?.props.rows]).toEqual(['Image', 1, 1])
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe').map((b) => b.requestId)).toEqual(['promptfall'])
+  expect(last.get('renderer')).toBe('image')
+  expect(data.get('promptfall:settings')).toMatchObject({ renderer: 'auto', probed: 'image' })
+  await ui.unmount()
+})
+
+test('a forced renderer sends no probe', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('renderer')).toBe('raster')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  await time.advance(PROBE_DELAY_MS)
+  expect(blits.filter((b) => b.key === 'probe')).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('a collapsed band arms no probe', async ($, on) => {
+  const { time, blits } = probing(on, {})
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const narrow = { ...PARTY_BAND, props: { ...PARTY_BAND.props, bodyColumns: 80 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
+  await time.advance(PROBE_DELAY_MS * 2)
+  expect(blits).toHaveLength(0)
+  await ui.unmount()
+})
+
+test('effects with a hit wake the stage loop', async ($, on) => {
+  const { time, last, blits } = probing(
+    on,
+    {},
+    {
+      'promptfall:settings': { sound: false, motion: 'still', renderer: 'raster' },
+    },
+  )
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  for (let i = 0; i < 20 && (last.get('view') as GameView).enemies.length === 0; i++) {
+    await time.advance(5_000)
+  }
+  // Gauges start empty: the first ticks with an enemy carry no action. With motion still only
+  // effects wake the loop, so a blit right after a tick means that tick's effects woke it.
+  let next = time.now() + 5_000
+  let woke = false
+  for (let i = 0; i < 12 && !woke; i++, next += 5_000) {
+    await time.advance(next + EVENT_FRAME_MS - time.now())
+    const tick = next
+    // The Raster band (#61): the stage loop blits the one band picture, 120 × 20.
+    const key = bandKey({ columns: 120, rows: 20 })
+    woke = blits.some((b) => b.key === key && b.at >= tick && b.at <= tick + EVENT_FRAME_MS)
+  }
+  expect(woke).toBe(true)
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Sound cues
+
+/** The in-process ledger's record for an account whose state the test chose. */
+function record(state: GameState): Record<string, unknown> {
+  return {
+    'promptfall:deviceToken': 'token-1',
+    'promptfall:pf:token:token-1': 'acct-1',
+    'promptfall:pf:acct:acct-1:record': {
+      account: {
+        accountId: 'acct-1',
+        seed: state.seed,
+        createdAt: 0,
+        displayName: null,
+        linked: null,
+      },
+      state,
+      seq: 0,
+      refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
+    },
+  }
+}
+
+/** A state whose next tick kills a 1 hp Goblin Scout and drops an item of `rarity`, with no level up. */
+function dropping(rarity: string): GameState {
+  for (let seed = 1; seed < 20_000; seed++) {
+    const s0 = createInitialState(seed)
+    const s: GameState = {
+      ...s0,
+      encounter: {
+        enemies: [{ id: 'e-test', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 }],
+        queue: [],
+        waveSize: 3,
+        spawnedInWave: 3,
+      },
+      // Full party gauges: the party acts in the tick's first step and kills the 1 HP enemy.
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drop = effects.find((e) => e.k === 'drop')
+    if (
+      drop?.k === 'drop' &&
+      drop.item.rarity === rarity &&
+      !effects.some((e) => e.k === 'level_up')
+    ) {
+      return s
+    }
+  }
+  throw new Error(`no ${rarity} drop`)
+}
+
+const SOUND_ON = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'auto' } }
+
+function sounding(on: On, seed: Record<string, unknown>) {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, seed)
+  const last = states(on)
+  const raised: Raised[] = []
+  /** Toasts and cues in the order the host received them. */
+  const order: string[] = []
+  engineBottom(on, [], {}, (toast) => {
+    raised.push(toast)
+    order.push(`toast ${toast.text}`)
+  })
+  const plays: { asset: string; gain: number | undefined }[] = []
+  on('audio.play', (_$, e) => {
+    plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
+    order.push(`cue ${e.clip.asset ?? ''}`)
+    return { value: undefined }
+  })
+  return { time, data, last, plays, raised, order }
+}
+
+for (const [rarity, asset] of [
+  ['epic', 'cues/drop.wav'],
+  ['rare', 'cues/drop.wav'],
+  ['legendary', 'cues/legendary.wav'],
+] as const) {
+  test(`a ${rarity} drop on a primary with sound on plays ${asset}`, async ($, on) => {
+    const { time, plays } = sounding(on, { ...record(dropping(rarity)), ...SOUND_ON })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(plays).toEqual([{ asset, gain: CUE_GAIN }])
+  })
+}
+
+/**
+ * A state whose next tick kills two 1 hp Goblin Scouts, each dropping a rare item, and levels
+ * the party's lead: one burst with two rare drops and one level-up.
+ */
+function twoRareDropsAndALevel(): GameState {
+  for (let seed = 1; seed < 50_000; seed++) {
+    const s0 = createInitialState(seed)
+    const lead = s0.party[0]
+    const s: GameState = {
+      ...s0,
+      roster: s0.roster.map((h) =>
+        h.id === lead ? { ...h, xp: content.xpToNext(h.level) - 1 } : h,
+      ),
+      encounter: {
+        enemies: [
+          { id: 'e-a', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
+          { id: 'e-b', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
+        ],
+        queue: [],
+        waveSize: 3,
+        spawnedInWave: 3,
+      },
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drops = effects.flatMap((e) => (e.k === 'drop' ? [e.item.rarity] : []))
+    if (
+      drops.filter((r) => r === 'rare').length === 2 &&
+      !drops.some((r) => r === 'epic' || r === 'legendary') &&
+      effects.filter((e) => e.k === 'level_up').length === 1
+    ) {
+      return s
+    }
+  }
+  throw new Error('no burst with two rare drops and a level-up')
+}
+
+test('a level-up toasts its hero by name for 4 s; two rare drops fold, and each cues once after the toasts', async ($, on) => {
+  const state = twoRareDropsAndALevel()
+  const { time, last, raised, order } = sounding(on, { ...record(state), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  const lead = (last.get('view') as GameView).roster.find((h) => h.id === state.party[0])
+  // The roster's name carries the epithet: "Aldric the Steadfast", never "Aldric".
+  expect(lead?.name.split(' ').length).toBeGreaterThan(1)
+  expect(raised.filter((t) => t.text.includes(' reached level '))).toEqual([
+    { text: `${lead?.name} reached level ${lead?.level ?? 0}`, timeoutMs: 4000 },
+  ])
+  const drops = raised.filter((t) => t.text.includes(' rare drop'))
+  expect(drops.map((t) => [t.text.split(':')[0], t.timeoutMs])).toEqual([['2 rare drops', 4000]])
+  const cues = order.filter((o) => o.startsWith('cue '))
+  expect([...cues].sort()).toEqual(['cue cues/drop.wav', 'cue cues/level_up.wav'])
+  const lastToast = order.findLastIndex((o) => o.startsWith('toast '))
+  expect(order.findIndex((o) => o.startsWith('cue '))).toBeGreaterThan(lastToast)
+})
+
+test('a legendary drop toasts for 8 s and plays the legendary cue once', async ($, on) => {
+  const { time, plays, raised } = sounding(on, { ...record(dropping('legendary')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  const legendary = raised.filter((t) => t.text.startsWith('Legendary drop: '))
+  expect(legendary.map((t) => t.timeoutMs)).toEqual([8000])
+  expect(plays.map((p) => p.asset)).toEqual(['cues/legendary.wav'])
+})
+
+/** `record(state)` with `events` waiting in the ledger's log: the boot delivers them as one burst. */
+function delivering(state: GameState, events: Event[]): Record<string, unknown> {
+  const seed = record(state)
+  const key = 'promptfall:pf:acct:acct-1:record'
+  const rec = seed[key] as Record<string, unknown>
+  seed[key] = {
+    ...rec,
+    cursor: events.length,
+    log: events.map((event, i) => ({ n: i + 1, event })),
+  }
+  return seed
+}
+
+function sale(listingId: string, base: string, net: number): Event {
+  return { t: 'sold', listingId, kind: 'item', base, rarity: 'rare', price: net, net }
+}
+
+test('a delivery of three sales raises one folded toast with the sum of their gold', async ($, on) => {
+  const state = createInitialState(1)
+  const events = [
+    sale('L1', 'oak_staff', 120),
+    sale('L2', 'rune_staff', 200),
+    sale('L3', 'ember_rod', 90),
+  ]
+  const { time, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' sold for '))).toEqual([
+    { text: '3 items sold for 410 gold', timeoutMs: 4000 },
+  ])
+})
+
+test('three level-ups in one burst raise one toast and play the level-up cue once', async ($, on) => {
+  const state = createInitialState(1)
+  const events: Event[] = state.party.map((heroId) => ({ t: 'sandbox_level', heroId, level: 2 }))
+  expect(events).toHaveLength(3)
+  const { time, raised, plays } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  expect(raised.filter((t) => t.text.includes(' reached level '))).toHaveLength(1)
+  expect(plays.filter((p) => p.asset === 'cues/level_up.wav')).toHaveLength(1)
+})
+
+test('a burst with a sale, a level-up and a legendary drop toasts legendary, level-up, sale', async ($, on) => {
+  const state = createInitialState(1)
+  const lead = state.party[0] ?? ''
+  const events: Event[] = [
+    sale('L1', 'rune_staff', 200),
+    { t: 'sandbox_level', heroId: lead, level: 2 },
+    { t: 'sandbox_item', base: 'oak_staff', rarity: 'legendary' },
+  ]
+  const { time, last, raised } = sounding(on, { ...delivering(state, events), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(100)
+  const name = (last.get('view') as GameView).roster.find((h) => h.id === lead)?.name
+  expect(raised).toEqual([
+    { text: 'Legendary drop: Oak Staff', timeoutMs: 8000 },
+    { text: `${name} reached level 2`, timeoutMs: 4000 },
+    { text: 'Rune Staff sold for 200 gold', timeoutMs: 4000 },
+  ])
+})
+
+test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('common')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('sound off plays nothing on an epic drop', async ($, on) => {
+  const { time, plays } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('sound turned on in another session reaches the primary without a restart', async ($, on) => {
+  const { time, plays, data } = sounding(on, record(dropping('epic')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // Another session's /promptfall sound on writes the machine's store, not this session's atom.
+  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  await time.advance(5_000)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: CUE_GAIN }])
+})
+
+test('a secondary plays nothing', async ($, on) => {
+  const { time, plays, last } = sounding(on, {
+    ...record(dropping('epic')),
+    ...SOUND_ON,
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(5_000)
+  expect(plays).toEqual([])
+})
+
+test('/promptfall off hides the band, not the cues', async ($, on) => {
+  const { time, plays } = sounding(on, { ...record(dropping('epic')), ...SOUND_ON })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
+  await time.advance(5_000)
+  expect(plays.map((p) => p.asset)).toEqual(['cues/drop.wav'])
+})
+
+test('a world boss already up when the session starts plays no cue', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  net.world = () => snap({ boss: LIVE_BOSS })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toEqual([])
+})
+
+test('the world boss appearing plays the boss cue; going down plays none', async ($, on) => {
+  const { time, plays } = sounding(on, SOUND_ON)
+  const net = worldNet(on)
+  let boss: WorldSnapshot['boss'] = null
+  net.world = () => snap({ boss })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_W}` })
+  await time.advance(1)
+  boss = LIVE_BOSS
+  await time.advance(15_000)
+  await time.advance(5_000)
+  boss = { ...LIVE_BOSS, hp: 0 }
+  await time.advance(5_000)
+  await time.advance(15_000)
+  expect(plays.filter((p) => p.asset === 'cues/boss.wav')).toHaveLength(1)
+  expect(plays.filter((p) => p.asset !== 'cues/boss.wav')).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// The sandbox's world boss verbs: one world poll runs inside the command
+
+/** Past the sandbox grid's first window, so no grid boss is open when a test starts. */
+const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
+const APPEARED = 'World boss The Promptwyrm has appeared'
+const DOWN = 'World boss The Promptwyrm is down'
+
+function sandboxSounding(on: On, seed: Record<string, unknown> = {}) {
+  const time = mock.clock(on, { now: PAST_GRID_BOSS })
+  const { data } = store(on, { ...SOUND_ON, ...seed })
+  const last = states(on)
+  const toasts: string[] = []
+  const raised: Raised[] = []
+  engineBottom(on, toasts, { PROMPTFALL_SANDBOX: '1' }, (toast) => raised.push(toast))
+  const plays: string[] = []
+  on('audio.play', (_$, e) => {
+    plays.push(e.clip.asset ?? '')
+    return { value: undefined }
+  })
+  return { time, data, last, toasts, plays, raised }
+}
+
+test('sandbox worldboss has toasted and cued when it returns; worldboss end has toasted down', async ($, on) => {
+  const { toasts, plays, raised } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = async (args: string) =>
+    (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
+  // The clock never moves in this test: no timer poll runs, only the verbs' own.
+  expect(await run('worldboss')).toBe(`Sandbox: world boss The Promptwyrm has appeared`)
+  expect(raised.filter((t) => t.text === APPEARED)).toEqual([{ text: APPEARED, timeoutMs: 8000 }])
+  expect(plays).toEqual(['cues/boss.wav'])
+  expect(await run('worldboss end')).toBe('Sandbox: The Promptwyrm is down, rewards delivered')
+  expect(raised.filter((t) => t.text === DOWN)).toEqual([{ text: DOWN, timeoutMs: 4000 }])
+  expect(toasts.filter((t) => t === APPEARED)).toHaveLength(1)
+  expect(plays).toEqual(['cues/boss.wav'])
+  // The reward carries only the boss id, after boss mode ended: the session kept the name.
+  const shares = raised.filter((t) => t.text.startsWith('Your share of '))
+  expect(shares.map((t) => t.timeoutMs)).toEqual([8000])
+  expect(shares[0]?.text).toMatch(/^Your share of The Promptwyrm: \d+ gold/)
+})
+
+test('a read-only sandbox session raises no world boss toast and no cue; its band still shows the boss', async ($, on) => {
+  const { time, data, last, toasts, plays } = sandboxSounding(on, {
+    [`${SANDBOX_PREFIX}lease`]: { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  // The primary elsewhere: a ledger over the same sandbox save, its account the one this session reads.
+  const ledger = new Ledger({
+    kv: new StoreKeyValue(
+      {
+        get: async (key) => data.get(key),
+        set: async (key, value) => {
+          data.set(key, JSON.parse(JSON.stringify(value)))
+        },
+        delete: async (key) => {
+          data.delete(key)
+        },
+        keys: async () => [...data.keys()],
+      },
+      SANDBOX_PREFIX,
+    ),
+    now: async () => PAST_GRID_BOSS,
+    minClientVersion: '0.0.0',
+    seedSource: () => 1,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: approveAs(null),
+    flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
+  })
+  const boot = await ledger.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  data.set(`${SANDBOX_PREFIX}deviceToken`, boot.deviceToken)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect(await ledger.host.spawnBoss()).toEqual({ ok: true })
+  await time.advance(WORLD_POLL_MS)
+  expect(worldRows(last.get('view') as GameView, worldOf(last))[1]?.text).toMatch(
+    /^World boss The Promptwyrm /,
+  )
+  expect(await ledger.host.settleBoss()).toEqual({ ok: true })
+  await time.advance(WORLD_POLL_FAST_MS)
+  expect(toasts.filter((t) => t.startsWith('World boss '))).toEqual([])
+  expect(plays).toEqual([])
 })

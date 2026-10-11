@@ -15,6 +15,7 @@ import {
   SIM_VERSION,
   step,
 } from '@promptfall/sim'
+import { isBlocked } from './blocklist'
 
 export type BatchRecord = { batchId: string; hash: string; seq: number }
 export type LogEntry = { n: number; event: ServerEvent }
@@ -40,6 +41,14 @@ export type AccountRecord = {
   /** Every event with `n > committedCursor`. */
   log: LogEntry[]
   returns: PendingReturn[]
+  /** The chat token bucket; absent means full. */
+  chat?: { tokens: number; refillAt: number }
+  /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
+  bot?: true
+  /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
+  banned?: { reason: string; at: number }
+  /** The code of the account's one open GitHub link, so a new start or a delete can drop its row. */
+  linkCode?: string
 }
 
 export const BATCH_RING = 200
@@ -50,6 +59,8 @@ export const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 export const tokenKey = (token: string) => `pf:token:${token}`
 export const linkKey = (code: string) => `pf:link:${code}`
 export const RETURNS_KEY = 'pf:returns'
+/** The flags set over the admin route: loaded at start over the start flags. */
+export const FLAGS_KEY = 'pf:flags'
 
 export function everyKind(value: number): Record<BudgetKind, number> {
   const out = {} as Record<BudgetKind, number>
@@ -66,6 +77,18 @@ export function fullBuckets(): Record<BudgetKind, number> {
 /** True for a record written by this sim version; older records carry none of the phase 2 fields. */
 export function isCurrent(record: AccountRecord): boolean {
   return record.state.v === SIM_VERSION
+}
+
+/**
+ * The name others see: the display name without control characters, else
+ * `adventurer` when there is none, nothing is left, or it is blocklisted.
+ */
+export function publicName(record: AccountRecord): string {
+  const raw = record.account.displayName ?? record.account.linked?.login ?? null
+  if (raw === null) return 'adventurer'
+  const name = raw.replace(/\p{Cc}/gu, '')
+  if (name.trim() === '' || isBlocked(name)) return 'adventurer'
+  return name
 }
 
 export function newRecord(account: Account, state: GameState, now: number): AccountRecord {
@@ -103,11 +126,15 @@ export function settle(record: AccountRecord): void {
  * once. Throws, before anything is written, if the sim refuses it.
  */
 export function author(record: AccountRecord, event: ServerEvent): void {
+  const refused = tryAuthor(record, event)
+  if (refused !== null) throw new Error(`ledger authored an unapplicable event: ${refused}`)
+}
+
+/** `author` for an event the sim may refuse: the refusal's reason, with the record untouched, or null once authored. */
+export function tryAuthor(record: AccountRecord, event: ServerEvent): string | null {
   const r = step(record.state, event)
   const refused = r.effects.find((e) => e.k === 'rejected')
-  if (refused?.k === 'rejected') {
-    throw new Error(`ledger authored an unapplicable event: ${refused.reason}`)
-  }
+  if (refused?.k === 'rejected') return refused.reason
   record.state = r.state
   record.cursor += 1
   record.log.push({ n: record.cursor, event })
@@ -120,6 +147,7 @@ export function author(record: AccountRecord, event: ServerEvent): void {
     record.committedCursor = oldest.n
     record.committedHash = hashState(record.committedState)
   }
+  return null
 }
 
 /** Whether goods of this kind fit in the effective state. */
@@ -132,7 +160,11 @@ export function hasRoom(state: GameState, goods: Goods): boolean {
 /** A KeyValue view that remembers whether anything was written, so a run flushes only when it wrote. */
 export class TrackedKeyValue implements KeyValue {
   dirty = false
-  constructor(private readonly inner: KeyValue) {}
+  constructor(
+    private readonly inner: KeyValue,
+    /** Told the key of every write, before it lands (the world memo). */
+    private readonly onWrite: (key: string) => void = () => undefined,
+  ) {}
 
   get(key: string): Promise<unknown> {
     return this.inner.get(key)
@@ -140,11 +172,13 @@ export class TrackedKeyValue implements KeyValue {
 
   set(key: string, value: unknown): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.set(key, value)
   }
 
   delete(key: string): Promise<void> {
     this.dirty = true
+    this.onWrite(key)
     return this.inner.delete(key)
   }
 
@@ -167,6 +201,14 @@ export class Books {
 
   async save(record: AccountRecord): Promise<void> {
     await this.kv.set(recordKey(record.account.accountId), record)
+  }
+
+  /** Deletes the record, its token and its place on the returns queue: an account delete. */
+  async remove(record: AccountRecord, token: string): Promise<void> {
+    record.returns = []
+    await this.syncReturnsQueue(record)
+    await this.kv.delete(recordKey(record.account.accountId))
+    await this.kv.delete(tokenKey(token))
   }
 
   async accountFor(token: string): Promise<string | null> {

@@ -4,24 +4,32 @@ import { join } from 'node:path'
 import {
   AccountResponseSchema,
   BatchAckSchema,
+  BoardsResponseSchema,
+  BootstrapResponseSchema,
   BootstrapSchema,
+  ChatResultSchema,
   ErrorBodySchema,
+  type FetchLike,
   HealthSchema,
   HttpClient,
+  type KeyValue,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
   ListingPageResponseSchema,
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MemoryKeyValue,
+  MIN_CLIENT_VERSION,
   MyOrdersResponseSchema,
+  WorldResponseSchema,
 } from '@promptfall/protocol'
 import { hashState, replay, SIM_VERSION } from '@promptfall/sim'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { VirtualClock } from './clock'
 import { FileKeyValue } from './file-kv'
-import { createFakeServer } from './server'
-import { nodeFetch } from './test-support'
+import { parseFlags, parsePlayerName } from './flags'
+import { createFakeServer, type FakeServerOptions } from './server'
+import { booted, nodeFetch } from './test-support'
 
 let base = ''
 let close: () => Promise<void> = async () => {}
@@ -37,6 +45,8 @@ beforeAll(async () => {
     tokenSource: () => crypto.randomUUID(),
     playerName: 'kevin',
     seed: 9,
+    // One server for every test here, all from loopback: the cap has its own tests.
+    mintsPerHour: 100,
   })
   const listening = await server.listen(0)
   base = `http://127.0.0.1:${listening.port}`
@@ -81,6 +91,42 @@ describe('HTTP fake', () => {
     })
   })
 
+  it('answers the protocol minimum client version, the launch version', async () => {
+    const r = await raw('POST', '/v1/bootstrap', {
+      body: JSON.stringify({ clientVersion: MIN_CLIENT_VERSION, deviceToken: null }),
+    })
+    expect(BootstrapSchema.parse(r.body).config.minClientVersion).toBe(MIN_CLIENT_VERSION)
+    expect(MIN_CLIENT_VERSION).toBe('0.3.0')
+  })
+
+  it('refuses a batch from a pre-launch client with the version gate', async () => {
+    const boot = await raw('POST', '/v1/bootstrap', {
+      body: JSON.stringify({ clientVersion: '0.2.0', deviceToken: null }),
+    })
+    const b = BootstrapSchema.parse(boot.body)
+    const events = [{ t: 'tick' as const }]
+    const batch = {
+      batchId: crypto.randomUUID(),
+      accountId: b.account.accountId,
+      seq: 0,
+      clientVersion: '0.2.0',
+      simVersion: SIM_VERSION,
+      cursor: 0,
+      baseHash: b.hash,
+      resultHash: hashState(replay(b.state, events).state),
+      events: events.map((e) => ({ ...e, at: 1 })),
+    }
+    const r = await raw('POST', '/v1/batches', {
+      body: JSON.stringify(batch),
+      token: b.deviceToken,
+    })
+    expect(BatchAckSchema.parse(r.body)).toEqual({
+      ok: false,
+      reason: 'version_gate',
+      minClientVersion: MIN_CLIENT_VERSION,
+    })
+  })
+
   it('answers 400 on a bad body, a non-JSON body and a bad query', async () => {
     const a = await raw('POST', '/v1/bootstrap', { body: JSON.stringify({ clientVersion: 3 }) })
     expect(a.status).toBe(400)
@@ -99,6 +145,19 @@ describe('HTTP fake', () => {
     const r = await raw('DELETE', '/v1/listings/%E0%A4%A', { token })
     expect(r).toEqual({ status: 404, body: { error: 'route' } })
     expect((await raw('GET', '/v1/health')).status).toBe(200)
+  })
+
+  it('reads the world mark from the query: absent is 0, anything but digits is 400', async () => {
+    const token = await freshToken()
+    const absent = await raw('GET', '/v1/world', { token })
+    expect(absent.status).toBe(200)
+    expect(WorldResponseSchema.parse(absent.body)).toMatchObject({ boss: null })
+    expect((await raw('GET', '/v1/world?since=12', { token })).status).toBe(200)
+    const bad = await raw('GET', '/v1/world?since=abc', { token })
+    expect(bad.status).toBe(400)
+    expect(ErrorBodySchema.parse(bad.body)).toMatchObject({ error: 'schema' })
+    expect((await raw('GET', '/v1/world?since=-1', { token })).status).toBe(400)
+    expect((await raw('POST', '/v1/chat', { body: '{"text":3}', token })).status).toBe(400)
   })
 
   it('answers 404 on an unknown route or method', async () => {
@@ -129,7 +188,7 @@ describe('HTTP fake', () => {
       batchId: crypto.randomUUID(),
       accountId: b.account.accountId,
       seq: 0,
-      clientVersion: '0.1.0',
+      clientVersion: MIN_CLIENT_VERSION,
       simVersion: SIM_VERSION,
       cursor: 0,
       baseHash: b.hash,
@@ -181,10 +240,552 @@ describe('HTTP fake', () => {
         (await raw('POST', '/v1/orders/O1/fill', { body: '{"itemId":"i0"}', token })).body,
         MarketResultSchema,
       ],
+      [(await raw('GET', '/v1/world?since=0', { token })).body, WorldResponseSchema],
+      [(await raw('POST', '/v1/chat', { body: '{"text":"hi"}', token })).body, ChatResultSchema],
+      [(await raw('GET', '/v1/leaderboards', { token })).body, BoardsResponseSchema],
     ]
     for (const [body, schema] of checks) expect(() => schema.parse(body)).not.toThrow()
     // The client agrees: it parses the same bodies.
     expect(await http.account({ deviceToken: token })).toMatchObject({ returns: 0 })
+  })
+
+  it('DELETE /v1/account deletes the caller, whose token is unauthorized from then on', async () => {
+    const http = new HttpClient({ baseUrl: base, fetch: nodeFetch })
+    const token = await freshToken()
+    const other = await freshToken()
+    expect(await raw('DELETE', '/v1/account', { token: 'forged' })).toEqual({
+      status: 200,
+      body: { reason: 'unauthorized' },
+    })
+    expect(await http.deleteAccount({ deviceToken: token })).toEqual({ deleted: true })
+    expect(await http.account({ deviceToken: token })).toEqual({ reason: 'unauthorized' })
+    expect(await raw('DELETE', '/v1/account', { token })).toEqual({
+      status: 200,
+      body: { reason: 'unauthorized' },
+    })
+    expect(await http.account({ deviceToken: other })).toMatchObject({ returns: 0 })
+  })
+})
+
+describe('HTTP host binding', () => {
+  it('binds loopback by default and the host it is given otherwise', async () => {
+    const make = () =>
+      createFakeServer({
+        kv: new MemoryKeyValue(),
+        now: async () => T0,
+        speed: 1,
+        flags: {},
+        seedSource: () => 5,
+        tokenSource: () => crypto.randomUUID(),
+        playerName: 'kevin',
+        seed: 9,
+      })
+    const loopback = await make().listen(0)
+    const any = await make().listen(0, '0.0.0.0')
+    try {
+      expect(loopback.host).toBe('127.0.0.1')
+      expect(any.host).toBe('0.0.0.0')
+      const r = await fetch(`http://127.0.0.1:${any.port}/v1/health`)
+      expect(r.status).toBe(200)
+    } finally {
+      await loopback.close()
+      await any.close()
+    }
+  })
+})
+
+describe('HTTP host access log', () => {
+  it('writes one access log line per request, without the token, a header or a body', async () => {
+    const lines: string[] = []
+    let n = 0
+    const server = createFakeServer({
+      kv: new MemoryKeyValue(),
+      now: async () => T0,
+      speed: 1,
+      flags: {},
+      seedSource: () => 5,
+      tokenSource: () => `tok-7f3a9c-${n++}`,
+      playerName: 'kevin',
+      seed: 9,
+      log: (line) => lines.push(line),
+    })
+    const listening = await server.listen(0)
+    try {
+      const at = `http://127.0.0.1:${listening.port}`
+      const post = (path: string, body: unknown, token?: string) =>
+        fetch(at + path, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify(body),
+        }).then((r) => r.json())
+      const b = BootstrapSchema.parse(
+        await post('/v1/bootstrap', { clientVersion: '0.1.0', deviceToken: null }),
+      )
+      // A known token travels in the bootstrap body.
+      await post('/v1/bootstrap', { clientVersion: '0.1.0', deviceToken: b.deviceToken })
+      const events = [{ t: 'tick' as const }]
+      const batchId = crypto.randomUUID()
+      BatchAckSchema.parse(
+        await post(
+          '/v1/batches',
+          {
+            batchId,
+            accountId: b.account.accountId,
+            seq: 0,
+            clientVersion: '0.1.0',
+            simVersion: SIM_VERSION,
+            cursor: 0,
+            baseHash: b.hash,
+            resultHash: hashState(replay(b.state, events).state),
+            events: events.map((e) => ({ ...e, at: 1 })),
+          },
+          b.deviceToken,
+        ),
+      )
+      await fetch(`${at}/v1/nowhere?token=${b.deviceToken}`)
+
+      expect(lines).toHaveLength(4)
+      expect(lines[0]).toMatch(/^POST \/v1\/bootstrap 200 \d+ms$/)
+      expect(lines[1]).toMatch(/^POST \/v1\/bootstrap 200 \d+ms$/)
+      expect(lines[2]).toMatch(/^POST \/v1\/batches 200 \d+ms$/)
+      expect(lines[3]).toMatch(/^GET \/v1\/nowhere 404 \d+ms$/)
+      const all = lines.join('\n')
+      for (const secret of [b.deviceToken, 'Bearer', 'authorization', batchId, b.hash])
+        expect(all).not.toContain(secret)
+    } finally {
+      await listening.close()
+    }
+  })
+})
+
+describe('HTTP host GitHub link', () => {
+  const github = (options: { clientId?: string; fetch?: FetchLike }) =>
+    createFakeServer({
+      kv: new MemoryKeyValue(),
+      now: async () => T0,
+      speed: 1,
+      flags: {},
+      seedSource: () => 5,
+      tokenSource: () => crypto.randomUUID(),
+      playerName: 'kevin',
+      seed: 9,
+      link: 'github',
+      githubClientId: options.clientId,
+      githubFetch: options.fetch ?? (async () => ({ status: 500, ok: false, text: '' })),
+    })
+
+  it('a github host without a client id refuses the link start', async () => {
+    const listening = await github({}).listen(0)
+    try {
+      const client = new HttpClient({
+        baseUrl: `http://127.0.0.1:${listening.port}`,
+        fetch: nodeFetch,
+      })
+      const boot = await booted(client, { clientVersion: '0.3.0', deviceToken: null })
+      expect(await client.linkStart({ deviceToken: boot.deviceToken })).toEqual({
+        refusal: 'link_unavailable',
+        message: 'This server cannot link GitHub accounts: it has no GitHub client id.',
+      })
+    } finally {
+      await listening.close()
+    }
+  })
+
+  it('a link poll does not hold the ledger while GitHub answers', async () => {
+    let answerToken: () => void = () => undefined
+    const tokenAsked = new Promise<void>((asked) => {
+      answerToken = asked
+    })
+    let release: () => void = () => undefined
+    const released = new Promise<void>((r) => {
+      release = r
+    })
+    const json = (body: unknown) => ({ status: 200, ok: true, text: JSON.stringify(body) })
+    const fetch: FetchLike = async (url) => {
+      if (url.endsWith('/login/device/code')) {
+        return json({
+          device_code: 'dc',
+          user_code: 'WDJB-MJHT',
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        })
+      }
+      if (url.endsWith('/access_token')) {
+        answerToken()
+        await released
+        return json({ access_token: 'gho_x' })
+      }
+      return json({ login: 'octocat' })
+    }
+    const listening = await github({ clientId: 'Iv1.client', fetch }).listen(0)
+    try {
+      const client = new HttpClient({
+        baseUrl: `http://127.0.0.1:${listening.port}`,
+        fetch: nodeFetch,
+      })
+      const a = await booted(client, { clientVersion: '0.3.0', deviceToken: null })
+      const b = await booted(client, { clientVersion: '0.3.0', deviceToken: null })
+      const start = await client.linkStart({ deviceToken: a.deviceToken })
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+      const poll = client.linkPoll({ deviceToken: a.deviceToken }, start.code)
+      await tokenAsked
+      // GitHub is still answering a's poll: b's batch goes through meanwhile.
+      const events = [{ t: 'tick' as const }]
+      const ack = await client.submit(
+        {
+          batchId: crypto.randomUUID(),
+          accountId: b.account.accountId,
+          seq: 0,
+          clientVersion: '0.3.0',
+          simVersion: SIM_VERSION,
+          cursor: 0,
+          baseHash: b.hash,
+          resultHash: hashState(replay(b.state, events).state),
+          events: events.map((e) => ({ ...e, at: 1 })),
+        },
+        { deviceToken: b.deviceToken },
+      )
+      expect(ack.ok).toBe(true)
+      release()
+      const linked = await poll
+      if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
+      expect(linked.account.linked).toEqual({ provider: 'github', login: 'octocat' })
+    } finally {
+      release()
+      await listening.close()
+    }
+  })
+})
+
+/** A host on `kv` with `extra` options, listening; `at` its base URL. */
+async function hostOn(kv: KeyValue, extra: Partial<FakeServerOptions> = {}) {
+  const server = createFakeServer({
+    kv,
+    now: async () => T0,
+    speed: 1,
+    flags: {},
+    seedSource: () => 5,
+    tokenSource: () => crypto.randomUUID(),
+    playerName: 'kevin',
+    seed: 9,
+    ...extra,
+  })
+  const listening = await server.listen(0)
+  const at = `http://127.0.0.1:${listening.port}`
+  const call = async (
+    method: string,
+    path: string,
+    options: { body?: unknown; token?: string; headers?: Record<string, string> } = {},
+  ) => {
+    const r = await fetch(at + path, {
+      method,
+      headers: {
+        ...(options.body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(options.token ? { authorization: `Bearer ${options.token}` } : {}),
+        ...options.headers,
+      },
+      ...(options.body !== undefined ? { body: JSON.stringify(options.body) } : {}),
+    })
+    return { status: r.status, body: JSON.parse(await r.text()) as unknown }
+  }
+  return { at, call, close: listening.close }
+}
+
+const ADMIN = 'admin-5e1f0c-secret'
+
+describe('HTTP host admin flags', () => {
+  it('a host without an admin token has no admin routes', async () => {
+    const h = await hostOn(new MemoryKeyValue())
+    try {
+      const r = await h.call('POST', '/v1/admin/flags', {
+        body: { 'chat.enabled': false },
+        token: ADMIN,
+      })
+      expect(r).toEqual({ status: 404, body: { error: 'route' } })
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('a wrong or missing admin token is unauthorized and sets nothing', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+    })
+    try {
+      const body = { 'chat.enabled': false }
+      const wrong = await h.call('POST', '/v1/admin/flags', { body, token: 'guess' })
+      expect(wrong).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      const missing = await h.call('POST', '/v1/admin/flags', { body })
+      expect(missing).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      // The player's bearer token is not the admin's.
+      const boot = BootstrapSchema.parse(
+        (
+          await h.call('POST', '/v1/bootstrap', {
+            body: { clientVersion: '0.3.0', deviceToken: null },
+          })
+        ).body,
+      )
+      expect(boot.config.flags['chat.enabled']).toBe(true)
+      expect(lines).toHaveLength(2)
+      for (const line of lines) expect(line).toMatch(/^admin \S+Z flags - unauthorized$/)
+      expect(lines.join('\n')).not.toContain('guess')
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('a flag set over the admin route survives a restart', async () => {
+    const path = join(mkdtempSync(join(tmpdir(), 'pf-admin-')), 'fake.json')
+    const lines: string[] = []
+    const options = { adminToken: ADMIN, adminLog: (line: string) => lines.push(line) }
+    const first = await hostOn(new FileKeyValue(path), options)
+    let token = ''
+    try {
+      const set = await first.call('POST', '/v1/admin/flags', {
+        body: { 'chat.enabled': false, maintenance: true },
+        token: ADMIN,
+      })
+      expect(set.status).toBe(200)
+      expect(set.body).toMatchObject({ flags: { 'chat.enabled': false, maintenance: true } })
+      // The next call sees it.
+      const boot = BootstrapSchema.parse(
+        (
+          await first.call('POST', '/v1/bootstrap', {
+            body: { clientVersion: '0.3.0', deviceToken: null },
+          })
+        ).body,
+      )
+      token = boot.deviceToken
+      expect(boot.config.flags).toMatchObject({ 'chat.enabled': false, maintenance: true })
+      const chat = await first.call('POST', '/v1/chat', { body: { text: 'hi' }, token })
+      expect(chat.body).toEqual({ ok: false, reason: 'chat_closed' })
+    } finally {
+      await first.close()
+    }
+    // Restarted on the same file, with start flags that say otherwise.
+    const second = await hostOn(new FileKeyValue(path), {
+      ...options,
+      flags: { 'chat.enabled': true, maintenance: false },
+    })
+    try {
+      const info = AccountResponseSchema.parse(
+        (await second.call('GET', '/v1/account', { token })).body,
+      )
+      if ('reason' in info) throw new Error('unauthorized')
+      expect(info.config.flags).toMatchObject({ 'chat.enabled': false, maintenance: true })
+      const chat = await second.call('POST', '/v1/chat', { body: { text: 'hi' }, token })
+      expect(chat.body).toEqual({ ok: false, reason: 'chat_closed' })
+      const on = await second.call('POST', '/v1/admin/flags', {
+        body: { 'chat.enabled': true },
+        token: ADMIN,
+      })
+      expect(on.body).toMatchObject({ flags: { 'chat.enabled': true, maintenance: true } })
+    } finally {
+      await second.close()
+    }
+    expect(lines).toHaveLength(2)
+    expect(lines[0]).toMatch(
+      /^admin \d{4}-\d\d-\d\dT[\d:.]+Z flags chat\.enabled=false,maintenance=true ok$/,
+    )
+    expect(lines[1]).toMatch(/^admin \S+Z flags chat\.enabled=true ok$/)
+    expect(lines.join('\n')).not.toContain(ADMIN)
+  })
+
+  it('sandbox.enabled and unknown flags are refused, and nothing is set', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+    })
+    try {
+      const sandbox = await h.call('POST', '/v1/admin/flags', {
+        body: { 'sandbox.enabled': true, 'chat.enabled': false },
+        token: ADMIN,
+      })
+      expect(sandbox.status).toBe(400)
+      expect(JSON.stringify(sandbox.body)).toContain('sandbox.enabled')
+      for (const body of [{ bogus: true }, { 'chat.enabled': 'no' }, {}, [], null]) {
+        const r = await h.call('POST', '/v1/admin/flags', { body, token: ADMIN })
+        expect(r.status).toBe(400)
+      }
+      const boot = BootstrapSchema.parse(
+        (
+          await h.call('POST', '/v1/bootstrap', {
+            body: { clientVersion: '0.3.0', deviceToken: null },
+          })
+        ).body,
+      )
+      expect(boot.config.flags).toMatchObject({ 'sandbox.enabled': false, 'chat.enabled': true })
+      expect(lines).toHaveLength(6)
+      for (const line of lines) expect(line).toMatch(/^admin \S+Z flags - refused$/)
+    } finally {
+      await h.close()
+    }
+  })
+})
+
+describe('HTTP host admin ban', () => {
+  it('a ban over the admin route refuses every call of that account, and logs one line', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+      flags: { 'chat.enabled': true },
+    })
+    try {
+      const http = new HttpClient({ baseUrl: h.at, fetch: nodeFetch })
+      const boot = await booted(http, { clientVersion: '0.3.0', deviceToken: null })
+      const other = await booted(http, { clientVersion: '0.3.0', deviceToken: null })
+      const accountId = boot.account.accountId
+      const auth = { deviceToken: boot.deviceToken }
+
+      const unauthorized = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId, reason: 'spam' },
+        token: boot.deviceToken,
+      })
+      expect(unauthorized).toEqual({ status: 401, body: { error: 'unauthorized' } })
+      expect(await http.account(auth)).toMatchObject({ account: { accountId } })
+
+      const ban = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId, reason: 'spam in chat' },
+        token: ADMIN,
+      })
+      expect(ban).toEqual({
+        status: 200,
+        body: { accountId, banned: { reason: 'spam in chat', at: T0 } },
+      })
+
+      const message = 'Promptfall: this account is banned: spam in chat'
+      const refused = { ok: false, reason: 'banned', message }
+      expect(
+        await http.bootstrap({ clientVersion: '0.3.0', deviceToken: boot.deviceToken }),
+      ).toEqual({ refusal: 'banned', message })
+      const events = [{ t: 'tick' as const }]
+      const batch = {
+        batchId: crypto.randomUUID(),
+        accountId,
+        seq: boot.seq,
+        clientVersion: '0.3.0',
+        simVersion: SIM_VERSION,
+        cursor: boot.cursor,
+        baseHash: hashState(boot.state),
+        resultHash: hashState(replay(boot.state, events).state),
+        events: events.map((e) => ({ ...e, at: T0 })),
+      }
+      expect(await http.submit(batch, auth)).toEqual(refused)
+      expect(await http.browse(auth, { kind: 'item', sort: 'price', page: 0 })).toEqual({
+        reason: 'banned',
+        message,
+      })
+      expect(await http.buy(auth, 'any')).toEqual(refused)
+      expect(await http.world(auth, 0)).toEqual({ reason: 'banned', message })
+      expect(await http.chat(auth, 'hello')).toEqual(refused)
+      // Another account plays on.
+      expect(await http.chat({ deviceToken: other.deviceToken }, 'hello')).toMatchObject({
+        ok: false,
+        reason: 'not_linked',
+      })
+
+      expect(lines).toEqual([
+        expect.stringMatching(/^admin \S+Z ban - unauthorized$/),
+        expect.stringMatching(new RegExp(`^admin \\S+Z ban ${accountId} ok$`)),
+      ])
+      expect(lines.join('\n')).not.toContain(boot.deviceToken)
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('an unknown account is a 404 and a bad body a 400, each logged', async () => {
+    const lines: string[] = []
+    const h = await hostOn(new MemoryKeyValue(), {
+      adminToken: ADMIN,
+      adminLog: (line) => lines.push(line),
+    })
+    try {
+      const unknown = await h.call('POST', '/v1/admin/ban', {
+        body: { accountId: 'nobody', reason: 'spam' },
+        token: ADMIN,
+      })
+      expect(unknown).toEqual({ status: 404, body: { error: 'account' } })
+      for (const body of [
+        {},
+        { accountId: 'nobody' },
+        { accountId: 'nobody', reason: '' },
+        { accountId: 'nobody', reason: 'r'.repeat(121) },
+        { accountId: 'nobody', reason: 'two\nlines' },
+        { accountId: 'no body', reason: 'spam' },
+      ]) {
+        const r = await h.call('POST', '/v1/admin/ban', { body, token: ADMIN })
+        expect(r.status).toBe(400)
+      }
+      expect(lines[0]).toMatch(/^admin \S+Z ban nobody unknown$/)
+      expect(lines.slice(1)).toHaveLength(6)
+      for (const line of lines.slice(1)) expect(line).toMatch(/^admin \S+Z ban - refused$/)
+    } finally {
+      await h.close()
+    }
+  })
+})
+
+describe('HTTP host mint cap', () => {
+  it('the sixth mint from one address in an hour is refused and a known token passes', async () => {
+    let now = T0
+    const h = await hostOn(new MemoryKeyValue(), { now: async () => now })
+    const from = (address: string, deviceToken: string | null) =>
+      h.call('POST', '/v1/bootstrap', {
+        body: { clientVersion: '0.3.0', deviceToken },
+        headers: { 'x-forwarded-for': address },
+      })
+    try {
+      const tokens: string[] = []
+      for (let i = 0; i < 5; i++) {
+        const r = await from('203.0.113.7', null)
+        tokens.push(BootstrapSchema.parse(r.body).deviceToken)
+      }
+      now += 30 * 60_000
+      const sixth = await from('203.0.113.7', null)
+      expect(sixth.status).toBe(200)
+      const refused = BootstrapResponseSchema.parse(sixth.body)
+      expect(refused).toMatchObject({ refusal: 'rate_limited', message: expect.any(String) })
+      // An unknown token mints, so it counts as a mint.
+      expect(
+        BootstrapResponseSchema.parse((await from('203.0.113.7', 'forged')).body),
+      ).toMatchObject({ refusal: 'rate_limited' })
+      // A known token from the capped address always passes.
+      const known = BootstrapSchema.parse((await from('203.0.113.7', tokens[0] ?? '')).body)
+      expect(known.deviceToken).toBe(tokens[0])
+      // Another address has its own count; the last hop of the header is the one Caddy wrote.
+      BootstrapSchema.parse((await from('203.0.113.8', null)).body)
+      expect(
+        BootstrapResponseSchema.parse((await from('198.51.100.1, 203.0.113.7', null)).body),
+      ).toMatchObject({ refusal: 'rate_limited' })
+      // An hour after the first mint, the address mints again.
+      now += 30 * 60_000
+      BootstrapSchema.parse((await from('203.0.113.7', null)).body)
+    } finally {
+      await h.close()
+    }
+  })
+
+  it('without the forwarded header the connection address is capped', async () => {
+    const h = await hostOn(new MemoryKeyValue())
+    try {
+      const mint = () =>
+        h.call('POST', '/v1/bootstrap', { body: { clientVersion: '0.3.0', deviceToken: null } })
+      for (let i = 0; i < 5; i++) BootstrapSchema.parse((await mint()).body)
+      expect(BootstrapResponseSchema.parse((await mint()).body)).toMatchObject({
+        refusal: 'rate_limited',
+      })
+    } finally {
+      await h.close()
+    }
   })
 })
 
@@ -245,5 +846,40 @@ describe('VirtualClock', () => {
     const a = clock.nowSync()
     real -= 1000
     expect(clock.nowSync()).toBe(a)
+  })
+})
+
+describe('parseFlags', () => {
+  it('reads name=value pairs over the ledger flags', () => {
+    expect(parseFlags([])).toEqual({})
+    expect(parseFlags(['chat.enabled=false'])).toEqual({ 'chat.enabled': false })
+    expect(parseFlags(['maintenance=true', 'worldboss.enabled=false'])).toEqual({
+      maintenance: true,
+      'worldboss.enabled': false,
+    })
+    expect(parseFlags(['sandbox.enabled=true'])).toEqual({ 'sandbox.enabled': true })
+  })
+
+  it('throws on an unknown name or a value other than true and false', () => {
+    expect(() => parseFlags(['bogus=true'])).toThrow(/chat\.enabled/)
+    expect(() => parseFlags(['chat.enabled=maybe'])).toThrow()
+    expect(() => parseFlags(['chat.enabled'])).toThrow()
+  })
+})
+
+describe('parsePlayerName', () => {
+  it('takes a name of 1 to 64 characters as it is', () => {
+    expect(parsePlayerName('kevin')).toBe('kevin')
+    expect(parsePlayerName('k'.repeat(64))).toBe('k'.repeat(64))
+  })
+
+  it('rejects an empty player name', () => {
+    expect(() => parsePlayerName('')).toThrow(/--player-name wants 1 to 64 characters/)
+  })
+
+  it('rejects a player name over 64 characters', () => {
+    expect(() => parsePlayerName('k'.repeat(65))).toThrow(
+      /--player-name wants 1 to 64 characters; got 65/,
+    )
   })
 })

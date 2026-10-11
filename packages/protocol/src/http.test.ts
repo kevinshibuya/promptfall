@@ -4,6 +4,7 @@ import type { Account, Bootstrap, Delivery, ServerConfig } from './client'
 import { type FetchLike, HttpClient } from './http'
 import type { Listing, Order } from './market'
 import type { Batch } from './schemas'
+import type { Boards, WorldSnapshot } from './world'
 
 type Sent = { url: string; method: string; headers: Record<string, string>; body?: string }
 
@@ -78,6 +79,16 @@ const order: Order = {
   expiresAt: 2,
 }
 const ok = { ok: true, delivery }
+const snapshot: WorldSnapshot = {
+  serverNow: 1_700_000_000_000,
+  speed: 1,
+  online: 2,
+  zones: [{ zone: 1, count: 2 }],
+  here: ['Brindle'],
+  boss: null,
+  chat: [{ id: 12, name: 'Brindle', text: 'hello', at: 1_699_999_999_000 }],
+  flags: { 'chat.enabled': true },
+}
 
 function client(body: unknown, status = 200) {
   const c = canned(body, status)
@@ -260,6 +271,84 @@ describe('HttpClient', () => {
     const req = only(sent)
     expect([req.method, req.url]).toEqual(['POST', 'http://127.0.0.1:7777/v1/orders/O1/fill'])
     expect(JSON.parse(req.body ?? '')).toEqual({ itemId: 'i3' })
+  })
+
+  it('world gets the snapshot with since in the query and auth', async () => {
+    const { http, sent } = client(snapshot)
+    expect(await http.world(auth, 12)).toEqual(snapshot)
+    const req = only(sent)
+    expect([req.method, req.url, req.body]).toEqual([
+      'GET',
+      'http://127.0.0.1:7777/v1/world?since=12',
+      undefined,
+    ])
+    expect(req.headers).toEqual({ authorization: 'Bearer tok-1' })
+  })
+
+  it('world passes unauthorized through as a value', async () => {
+    const { http } = client({ reason: 'unauthorized' })
+    expect(await http.world(auth, 0)).toEqual({ reason: 'unauthorized' })
+  })
+
+  it('a snapshot missing flags or speed is ServerError', async () => {
+    const { flags: _flags, ...noFlags } = snapshot
+    await expect(client(noFlags).http.world(auth, 0)).rejects.toMatchObject({
+      name: 'ServerError',
+    })
+    const { speed: _speed, ...noSpeed } = snapshot
+    await expect(client(noSpeed).http.world(auth, 0)).rejects.toMatchObject({
+      name: 'ServerError',
+    })
+  })
+
+  it('chat posts the text with auth', async () => {
+    const posted = { ok: true, message: { id: 4, name: 'Ash', text: 'hi', at: 9 } }
+    const { http, sent } = client(posted)
+    expect(await http.chat(auth, 'hi')).toEqual(posted)
+    const req = only(sent)
+    expect([req.method, req.url]).toEqual(['POST', 'http://127.0.0.1:7777/v1/chat'])
+    expect(req.headers).toEqual(JSON_AUTH)
+    expect(JSON.parse(req.body ?? '')).toEqual({ text: 'hi' })
+  })
+
+  it('a chat refusal passes through as a value', async () => {
+    const { http } = client({ ok: false, reason: 'rate_limited' })
+    expect(await http.chat(auth, 'hi')).toEqual({ ok: false, reason: 'rate_limited' })
+  })
+
+  it('a bootstrap refusal passes through as a value; an unknown refusal is ServerError', async () => {
+    const limited = { refusal: 'rate_limited', message: 'Too many new accounts from here.' }
+    const input = { clientVersion: '0.1.0', deviceToken: null }
+    expect(await client(limited).http.bootstrap(input)).toEqual(limited)
+    const banned = { refusal: 'banned', message: 'Banned: spam.' }
+    expect(await client(banned).http.bootstrap(input)).toEqual(banned)
+    await expect(
+      client({ refusal: 'link_unavailable', message: 'x' }).http.bootstrap(input),
+    ).rejects.toMatchObject({ name: 'ServerError' })
+  })
+
+  it('a link refusal and an ended link pass through as values', async () => {
+    const refused = { refusal: 'link_unavailable', message: 'No client id.' }
+    expect(await client(refused).http.linkStart(auth)).toEqual(refused)
+    const ended = { status: 'ended', reason: 'expired', message: 'The code expired.' }
+    expect(await client(ended).http.linkPoll(auth, 'WDJB-MJHT')).toEqual(ended)
+  })
+
+  it('leaderboards gets the boards with auth and no body', async () => {
+    const boards: Boards = {
+      highestZone: [{ accountId: 'a1', name: 'Ash', value: 5 }],
+      damage: [],
+      weekStart: 1_699_833_600_000,
+    }
+    const { http, sent } = client(boards)
+    expect(await http.leaderboards(auth)).toEqual(boards)
+    const req = only(sent)
+    expect([req.method, req.url, req.body]).toEqual([
+      'GET',
+      'http://127.0.0.1:7777/v1/leaderboards',
+      undefined,
+    ])
+    expect(req.headers).toEqual({ authorization: 'Bearer tok-1' })
   })
 
   it('a thrown fetch is ServerUnreachable', async () => {

@@ -3,7 +3,7 @@ import { createInitialState, type GameState, type Hero, type Item } from '@promp
 import { describe, expect, it } from 'vitest'
 import type { AccountRecord } from './books'
 import { COOLDOWN_MS, EXPIRY_MS, listingFee, saleFee, saleNet, transfer } from './goods'
-import { Ledger } from './ledger'
+import { approveAs, Ledger } from './ledger'
 
 const T0 = 1_700_000_000_000
 
@@ -21,7 +21,7 @@ function world(kv = new MemoryKeyValue(), start = T0) {
       minClientVersion: '0.1.0',
       seedSource: () => 11,
       tokenSource: () => `tok-${n++}-${Math.floor(t)}`,
-      linkApprover: async () => ({ login: 'x' }),
+      linkApprover: approveAs('x'),
     })
   return {
     kv,
@@ -218,7 +218,7 @@ describe('a market closed after trading opened', () => {
       seedSource: () => 1,
       tokenSource: () => 'x',
       flags: { 'market.enabled': false },
-      linkApprover: async () => null,
+      linkApprover: approveAs(null),
     })
     const no = { ok: false, reason: 'market_closed' }
     expect(await closed.list(a.auth, { kind: 'item', id: 'iB', price: 100 })).toEqual(no)
@@ -237,5 +237,21 @@ describe('a market closed after trading opened', () => {
     const r = await record(kv, a.accountId)
     expect(r.state.gold).toBe(10_000 - 2)
     expect(r.state.inventory.map((i) => i.id).sort()).toEqual(['iA', 'iB'])
+  })
+})
+
+describe('placing an order', () => {
+  it("an order's base and affix are own properties only", async () => {
+    const w = world()
+    const a = await mint(w.ledger, 'Ann')
+    const order = { minRarity: 'rare' as const, maxPrice: 300 }
+    const unknown = { ok: false, reason: 'unknown_goods' }
+    expect(
+      await w.ledger.placeOrder(a.auth, { ...order, base: 'constructor', affixId: null }),
+    ).toEqual(unknown)
+    expect(
+      await w.ledger.placeOrder(a.auth, { ...order, base: 'steel_longsword', affixId: 'toString' }),
+    ).toEqual(unknown)
+    expect((await record(w.kv, a.accountId)).state.gold).toBe(10_000)
   })
 })

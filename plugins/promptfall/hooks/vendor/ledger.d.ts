@@ -1,5 +1,10 @@
-import { Account, BudgetKind, KeyValue, ServerClient, Bootstrap, Auth, AccountInfo, Unauthorized, BatchAck, LinkStart, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order } from './protocol.js';
-import { GameState, ServerEvent, Goods, TradeKind } from './sim.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
+
+/** Placeholder content: the mechanism is phase 3's, the word list is not. */
+declare const BLOCKED_WORDS: readonly string[];
+/** Whole-word and case-insensitive: any word of the text, split on what is not a letter or digit, in the list. */
+declare function isBlocked(text: string): boolean;
 
 type BatchRecord = {
     batchId: string;
@@ -34,8 +39,28 @@ type AccountRecord = {
     /** Every event with `n > committedCursor`. */
     log: LogEntry[];
     returns: PendingReturn[];
+    /** The chat token bucket; absent means full. */
+    chat?: {
+        tokens: number;
+        refillAt: number;
+    };
+    /** A host's bot: it plays, chats and trades, and holds no row on either board. Never on the wire. */
+    bot?: true;
+    /** Set by the operator: every authenticated call is refused with the reason. Never on the wire. */
+    banned?: {
+        reason: string;
+        at: number;
+    };
+    /** The code of the account's one open GitHub link, so a new start or a delete can drop its row. */
+    linkCode?: string;
 };
 declare const LOG_CAP = 500;
+
+/** The world bosses, one per grid point in turn. Names and glyphs only: the numbers live in the protocol package. */
+declare const WORLD_BOSSES: readonly {
+    name: string;
+    glyph: string;
+}[];
 
 declare const COOLDOWN_MS = 86400000;
 declare const EXPIRY_MS = 604800000;
@@ -55,10 +80,21 @@ declare function validPrice(price: number): boolean;
  */
 declare function transfer(goods: Goods, now: number, nextId: () => Promise<string>, receiver: GameState): Promise<Goods>;
 
-/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods), base 36 over one global counter. */
-declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't'): Promise<string>;
+/** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods, `r` boss rewards, `sb` sandbox bosses), base 36 over one global counter. */
+declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r' | 'sb'): Promise<string>;
 
-type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'maintenance';
+type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance' | 'sandbox.enabled';
+/** The flags an operator may set while the host runs: every flag but the sandbox's. */
+declare const SETTABLE_FLAGS: readonly ["market.enabled", "chat.enabled", "worldboss.enabled", "presence.enabled", "leaderboards.enabled", "maintenance"];
+type SettableFlag = (typeof SETTABLE_FLAGS)[number];
+/** What a sandbox host call answers: the refusal is an answer, not a throw. */
+type SandboxOutcome = {
+    ok: true;
+} | {
+    ok: false;
+    reason: 'sandbox_off' | 'boss_live' | 'no_boss' | 'unapplicable';
+    detail?: string;
+};
 type LedgerOptions = {
     kv: KeyValue;
     now: () => Promise<number>;
@@ -69,17 +105,20 @@ type LedgerOptions = {
     /** Device tokens, account ids and link codes. */
     tokenSource: () => string;
     flags?: Partial<Record<LedgerFlag, boolean>>;
-    /** Links approve on the first poll with this login (the fakes). Phase 5 replaces it with GitHub. */
-    linkApprover: (code: string) => Promise<{
-        login: string;
-    } | null>;
+    /** Who approves a link: `approveAs` in the fakes, GitHub's device flow on a `github` host. */
+    linkApprover: LinkApprover;
+    /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
+    presenceTtlMs?: number;
+    /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
+    log?: (line: string) => void;
 };
 type LedgerHost = {
-    /** Mints an account with a given state and name (bots, tests). */
+    /** Mints an account with a given state and name (bots, tests). `bot` marks it off the boards. */
     mint(input: {
         state: GameState;
         name: string;
         linked: boolean;
+        bot?: boolean;
     }): Promise<{
         accountId: string;
         deviceToken: string;
@@ -90,9 +129,64 @@ type LedgerHost = {
     settle(accountId: string): Promise<void>;
     /** Expires listings and orders past `expiresAt` and delivers returns where a slot is free. */
     sweep(): Promise<void>;
+    /**
+     * Authors a sandbox grant in cursor position. With the flag off it answers `sandbox_off` before
+     * anything else; with it on it throws on an unknown account or a non-sandbox event.
+     */
+    sandbox(accountId: string, event: SandboxEvent): Promise<SandboxOutcome>;
+    /** Spawns a world boss whose window starts now and engages the online accounts. */
+    spawnBoss(): Promise<SandboxOutcome>;
+    /** Settles the open world boss now, paying every engaged account. */
+    settleBoss(): Promise<SandboxOutcome>;
+    /**
+     * Sets flags over the start flags, from the next call on, and stores them so the next start
+     * loads them too. Answers the resolved flags.
+     */
+    setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>;
+    /**
+     * Bans an account: from the next call on, every authenticated call it makes is refused with
+     * `reason`. Answers the ban as stored, or null when no account has the id.
+     */
+    ban(accountId: string, reason: string): Promise<{
+        reason: string;
+        at: number;
+    } | null>;
 };
+/**
+ * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged. A
+ * secondary session reads with both off: those writes are the primary's, under its lease.
+ */
+type ReadOptions = {
+    expire?: boolean;
+    advance?: boolean;
+};
+/** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
+declare const PLAYER_NAME_MAX = 64;
 declare const LINK_URL = "https://github.com/login/device";
 declare const LINK_INTERVAL_MS = 5000;
+/**
+ * The two calls of a link. Both run outside the ledger's mutex, so a slow answer stalls only
+ * the caller. `start` gets a code the ledger drew; an approver with its own codes ignores it.
+ * `deviceCode` stays in the link record and never reaches the client.
+ */
+type LinkApprover = {
+    start(code: string): Promise<(LinkStart & {
+        deviceCode: string;
+    }) | LinkRefused>;
+    poll(deviceCode: string): Promise<{
+        status: 'pending';
+    } | {
+        status: 'approved';
+        login: string;
+    } | {
+        status: 'ended';
+        reason: LinkEnd;
+        message: string;
+    }>;
+};
+/** The fakes' approver: the ledger's code, the first poll approves as `login`; `null` never does. */
+declare function approveAs(login: string | null): LinkApprover;
 /**
  * The account ledger: records, batch replay, server events and the market.
  * Every operation, `host` included, runs through one in-process mutex and
@@ -104,6 +198,12 @@ declare class Ledger implements ServerClient {
     private readonly kv;
     private readonly books;
     private chain;
+    private readonly presence;
+    private readonly memo;
+    /** The flags under `pf:flags`, over the start flags. */
+    private stored;
+    /** The stored flags read at start; every operation waits on it. */
+    private readonly loaded;
     constructor(options: LedgerOptions);
     /**
      * The flush runs even when `fn` threw, so an operation must validate before
@@ -111,19 +211,35 @@ declare class Ledger implements ServerClient {
      */
     private run;
     private flags;
+    private setFlags;
+    private ban;
     private config;
     private marketContext;
+    private worldContext;
+    /** A null token always mints, so only a known token can be refused. */
+    bootstrap(input: {
+        clientVersion: string;
+        deviceToken: null;
+    }): Promise<Bootstrap>;
     bootstrap(input: {
         clientVersion: string;
         deviceToken: string | null;
-    }): Promise<Bootstrap>;
+    }): Promise<Bootstrap | BootstrapRefused>;
+    /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+    knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
-    account(auth: Auth): Promise<AccountInfo | Unauthorized>;
+    account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
+    /**
+     * Deletes the caller's account. Its open listings and orders close with nothing returned or
+     * refunded, its rows leave both boards and presence, and its record and token go. Nothing
+     * else is settled: a counterparty, the boss record and the chat history are untouched.
+     */
+    deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
     /** A state-carrying refusal: the client adopts the effective state, so the committed point moves there. */
     private adopt;
-    linkStart(auth: Auth): Promise<LinkStart | Unauthorized>;
-    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized>;
+    linkStart(auth: Auth): Promise<LinkStart | LinkRefused | Unauthorized | Banned>;
+    linkPoll(auth: Auth, code: string): Promise<LinkPoll | Unauthorized | Banned>;
     /** Eight uppercase letters and digits drawn from the token source. */
     private linkCode;
     private marketRead;
@@ -131,10 +247,10 @@ declare class Ledger implements ServerClient {
     /**
      * The caller's current record, after expiring what is due. Expiry runs only
      * for an authenticated caller, and the record is read after it, since
-     * expiring the caller's own listing changes the caller's record.
+     * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
      */
     private authenticated;
-    browse(auth: Auth, query: ListingQuery): Promise<ListingPage | Unauthorized>;
+    browse(auth: Auth, query: ListingQuery, { expire }?: ReadOptions): Promise<ListingPage | Unauthorized | Banned>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -142,16 +258,24 @@ declare class Ledger implements ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth): Promise<MyOrders | Unauthorized>;
+    myOrders(auth: Auth, { expire }?: ReadOptions): Promise<MyOrders | Unauthorized | Banned>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string): Promise<Order[] | Unauthorized>;
+    matchingOrders(auth: Auth, itemId: string, { expire }?: ReadOptions): Promise<Order[] | Unauthorized | Banned>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
+    world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized | Banned>;
+    chat(auth: Auth, text: string): Promise<ChatResult>;
+    leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
     private mint;
+    /** Offers the account's row to the highest-zone board; a bot's is never offered. */
+    private offerZone;
     private currentRecord;
     private credit;
+    private sandbox;
+    private spawnBoss;
+    private settleBoss;
     private settleAccount;
     private sweep;
 }
 
-export { type AccountRecord, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LogEntry, MAX_PRICE, MIN_PRICE, type PendingReturn, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };
+export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, SETTABLE_FLAGS, type SandboxOutcome, type SettableFlag, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

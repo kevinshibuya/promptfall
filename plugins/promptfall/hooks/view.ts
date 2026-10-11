@@ -8,9 +8,17 @@ import type {
   LootView,
   OrderView,
   RosterHeroView,
+  WorldState,
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
-import { content, type GameState, heroStats, type Item, type LootEntry } from './vendor/sim.js'
+import {
+  content,
+  fill,
+  type GameState,
+  heroStats,
+  type Item,
+  type LootEntry,
+} from './vendor/sim.js'
 
 const LOOT_LINES = 12
 
@@ -62,6 +70,8 @@ export function listingView(listing: Listing): ListingView {
   if (g.kind === 'item') {
     return {
       ...common,
+      base: g.item.base,
+      cls: null,
       name: tradeName('item', g.item.base),
       rarity: g.item.rarity,
       detail: affixLine(g.item) || 'no affixes',
@@ -70,6 +80,8 @@ export function listingView(listing: Listing): ListingView {
   const traits = g.hero.traits.map((t) => content.traits[t.id]?.name ?? t.id).join(', ')
   return {
     ...common,
+    base: null,
+    cls: g.hero.cls,
     name: heroName(g.hero.template, g.hero.epithet),
     rarity: g.hero.rarity,
     detail: [g.hero.cls, traits].filter(Boolean).join(' · '),
@@ -92,26 +104,52 @@ function lootLine(entry: LootEntry): LootView {
   if (entry.k === 'hero') {
     const glyph = content.heroTemplates[entry.template]?.glyph ?? '@'
     const name = content.heroTemplates[entry.template]?.name ?? entry.template
-    return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
+    return {
+      text: `${glyph} ${name} joined (${entry.rarity})`,
+      rarity: entry.rarity,
+      kind: 'market',
+      itemId: null,
+    }
+  }
+  if (entry.k === 'reward') {
+    const name = content.itemBases[entry.base]?.name ?? entry.base
+    return {
+      text: `boss reward ${name} (+${entry.gold}g)`,
+      rarity: entry.rarity,
+      kind: 'market',
+      itemId: null,
+    }
   }
   if (entry.k === 'trade') {
     const name = tradeName(entry.kind, entry.base)
     const text =
       entry.what === 'returned' ? `${name} returned` : `${entry.what} ${name} for ${entry.gold}g`
-    return { text, rarity: entry.rarity }
+    return { text, rarity: entry.rarity, kind: 'market', itemId: null }
   }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
   if (entry.vendoredFor !== null) {
-    return { text: `${name} sold for ${entry.vendoredFor}g`, rarity: entry.rarity }
+    return {
+      text: `${name} sold for ${entry.vendoredFor}g`,
+      rarity: entry.rarity,
+      // A hero contract a full roster sells never had a chest: nothing waits for it.
+      kind: entry.base === 'contract' ? 'market' : 'vendored',
+      itemId: entry.itemId,
+    }
   }
-  return { text: `${base?.glyph ?? '?'} ${name} (${entry.rarity})`, rarity: entry.rarity }
+  return {
+    text: `${base?.glyph ?? '?'} ${name} (${entry.rarity})`,
+    rarity: entry.rarity,
+    kind: 'drop',
+    itemId: entry.itemId,
+  }
 }
 
 function itemView(item: Item): ItemView {
   const base = content.itemBases[item.base]
   return {
     id: item.id,
+    base: item.base,
     name: base?.name ?? item.base,
     glyph: base?.glyph ?? '?',
     slot: base?.slot ?? 'weapon',
@@ -135,12 +173,44 @@ export function toAccountView(
   config: ServerConfig | null,
   server: string,
   returns: number,
+  sandbox = false,
 ): AccountView {
   return {
     linked: account?.linked?.login ?? null,
     server,
     marketOpen: config?.flags['market.enabled'] ?? true,
+    chatOpen: config?.flags['chat.enabled'] ?? true,
+    presenceOpen: config?.flags['presence.enabled'] ?? true,
+    leaderboardsOpen: config?.flags['leaderboards.enabled'] ?? true,
+    bossOpen: config?.flags['worldboss.enabled'] ?? true,
     returns,
+    sandbox,
+  }
+}
+
+export type Gates = {
+  chatOpen: boolean
+  presenceOpen: boolean
+  leaderboardsOpen: boolean
+  bossOpen: boolean
+  marketOpen: boolean
+}
+
+/**
+ * What is open: the latest world snapshot's flags once there is one, the
+ * bootstrap config before, so a restarted server's flags reach every surface
+ * within one poll.
+ */
+export function gates(world: WorldState | null, account: AccountView): Gates {
+  const flags = world?.snapshot?.flags
+  const open = (name: string, fallback: boolean) =>
+    flags ? (flags[name] ?? fallback) !== false : fallback
+  return {
+    chatOpen: open('chat.enabled', account.chatOpen),
+    presenceOpen: open('presence.enabled', account.presenceOpen),
+    leaderboardsOpen: open('leaderboards.enabled', account.leaderboardsOpen),
+    bossOpen: open('worldboss.enabled', account.bossOpen),
+    marketOpen: open('market.enabled', account.marketOpen),
   }
 }
 
@@ -151,23 +221,45 @@ export function toGameView(
   account: AccountView,
 ): GameView {
   const heroes: HeroView[] = []
+  // An older version's state has no battle; the band shows its reset notice over empty gauges.
+  const battle = state.battle ?? { gauges: [], queue: [], busy: 0 }
   for (const id of state.party) {
     const hero = state.roster.find((h) => h.id === id)
     if (!hero) continue
+    const stats = heroStats(state, hero)
     heroes.push({
       id: hero.id,
       name: heroName(hero.template, hero.epithet),
+      shortName: content.heroTemplates[hero.template]?.name ?? hero.template,
       cls: hero.cls,
       glyph: content.heroTemplates[hero.template]?.glyph ?? '@',
       level: hero.level,
       hp: hero.hp,
-      maxHp: heroStats(state, hero).hp,
+      maxHp: stats.hp,
       alive: hero.hp > 0,
+      rarity: hero.rarity,
+      gauge: battle.gauges.find((g) => g.id === hero.id)?.g ?? 0,
+      queued: battle.queue.includes(hero.id),
+      gaugePerStep: fill(stats.spd),
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {
+    // The world boss has no content entry: its name and glyph travel with boss_engaged.
+    if (e.kind === 'world_boss' && state.boss) {
+      return {
+        id: e.id,
+        def: 'world_boss',
+        name: state.boss.name,
+        glyph: state.boss.glyph,
+        hp: e.hp,
+        maxHp: e.maxHp,
+        kind: e.kind,
+      }
+    }
     const def = content.enemies[e.def]
     return {
+      id: e.id,
+      def: e.def,
       name: def?.name ?? e.def,
       glyph: def?.glyph ?? '?',
       hp: e.hp,
@@ -215,5 +307,13 @@ export function toGameView(
     accountId,
     firstRun,
     account,
+    boss: state.boss
+      ? {
+          bossId: state.boss.bossId,
+          name: state.boss.name,
+          glyph: state.boss.glyph,
+          dealt: state.boss.dealt,
+        }
+      : null,
   }
 }

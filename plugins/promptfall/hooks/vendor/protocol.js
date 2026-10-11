@@ -5,6 +5,7 @@ var __export = (target, all) => {
 };
 
 // packages/protocol/src/client.ts
+var MIN_CLIENT_VERSION = "0.3.0";
 var BUDGETS = {
   tick: { refillMs: 2e3, capacity: 70 },
   tool_call: { refillMs: 1e3, capacity: 140 },
@@ -4059,6 +4060,7 @@ var id = external_exports.string().min(1).max(64);
 var at = external_exports.number().int().nonnegative();
 var int = external_exports.number().int();
 var count = external_exports.number().int().nonnegative();
+var positive = external_exports.number().int().positive();
 var slot = external_exports.enum(["weapon", "armour", "accessory"]);
 var RaritySchema = external_exports.enum([
   "common",
@@ -4128,6 +4130,12 @@ var GoodsSchema = external_exports.discriminatedUnion("kind", [
   external_exports.object({ kind: external_exports.literal("item"), item: ItemSchema }),
   external_exports.object({ kind: external_exports.literal("hero"), hero: HeroSchema })
 ]);
+var StatsSchema = external_exports.object({
+  hp: count,
+  atk: count,
+  def: count,
+  spd: count
+});
 var ServerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({
     t: external_exports.literal("listed"),
@@ -4159,7 +4167,32 @@ var ServerEventSchema = external_exports.discriminatedUnion("t", [
     price: count,
     net: count
   }),
-  external_exports.object({ t: external_exports.literal("credited"), gold: count, reason: external_exports.string().max(64) })
+  external_exports.object({ t: external_exports.literal("credited"), gold: count, reason: external_exports.string().max(64) }),
+  external_exports.object({
+    t: external_exports.literal("boss_engaged"),
+    bossId: id,
+    name: external_exports.string().max(128),
+    glyph: external_exports.string().max(8),
+    stats: StatsSchema
+  }),
+  external_exports.object({ t: external_exports.literal("boss_disengaged"), bossId: id }),
+  external_exports.object({
+    t: external_exports.literal("rewarded"),
+    bossId: id,
+    goods: GoodsSchema.nullable(),
+    gold: count
+  }),
+  // Sandbox grants: only a host with the sandbox on authors them.
+  external_exports.object({
+    t: external_exports.literal("sandbox_boss"),
+    zone: positive,
+    boss: external_exports.enum(["zone_boss", "turn_boss"])
+  }),
+  external_exports.object({ t: external_exports.literal("sandbox_item"), base: id, rarity: RaritySchema }),
+  external_exports.object({ t: external_exports.literal("sandbox_level"), heroId: id, level: positive }),
+  external_exports.object({ t: external_exports.literal("sandbox_zone"), zone: positive }),
+  external_exports.object({ t: external_exports.literal("sandbox_recruit"), rarity: RaritySchema }),
+  external_exports.object({ t: external_exports.literal("sandbox_wipe") })
 ]);
 var GameStateSchema = external_exports.object({
   v: count,
@@ -4244,15 +4277,26 @@ var MARKET_REFUSALS = [
   "bad_price",
   "not_enough_gold",
   "no_space",
+  "buyer_full",
   "self_trade",
   "gone",
   "not_owner",
   "no_match",
   "unauthorized"
 ];
+var BannedSchema = external_exports.object({
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
+var RefusedBannedSchema = external_exports.object({
+  ok: external_exports.literal(false),
+  reason: external_exports.literal("banned"),
+  message: external_exports.string().min(1).max(200)
+});
 var MarketResultSchema = external_exports.union([
   external_exports.object({ ok: external_exports.literal(true), delivery: DeliverySchema }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) })
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.enum(MARKET_REFUSALS) }),
+  RefusedBannedSchema
 ]);
 var NewOrderSchema = external_exports.object({
   base: id2,
@@ -4270,20 +4314,97 @@ var UnauthorizedSchema = external_exports.object({
 });
 var NewListingSchema = external_exports.object({ kind: TradeKindSchema, id: id2, price });
 
-// packages/protocol/src/responses.ts
+// packages/protocol/src/world.ts
+var PRESENCE_TTL_MS = 45e3;
+var HERE_MAX = 10;
+var CHAT_MAX_CHARS = 200;
+var CHAT_BUCKET_CAPACITY = 5;
+var CHAT_REFILL_MS = 1e4;
+var CHAT_KEEP = 200;
+var CHAT_SERVE = 50;
+var BOARD_ROWS = 20;
+var BOSS_GRID_MS = 108e5;
+var BOSS_WINDOW_MS = 12e5;
+var BOSS_BASE_HP = 4e3;
+var BOSS_THRESHOLD_BP = 500;
+var BOSS_TOP_BONUS = 3;
+var DAY_MS = 864e5;
+function weekStartOf(now) {
+  const days = Math.floor(now / DAY_MS);
+  return (days - (days + 3) % 7) * DAY_MS;
+}
 var count3 = external_exports.number().int().nonnegative();
+var ChatMessageSchema = external_exports.object({
+  id: external_exports.number().int().positive(),
+  name: external_exports.string().max(128),
+  text: external_exports.string().min(1).max(CHAT_MAX_CHARS),
+  at: count3
+});
+var ChatResultSchema = external_exports.union([
+  external_exports.object({ ok: external_exports.literal(true), message: ChatMessageSchema }),
+  external_exports.object({
+    ok: external_exports.literal(false),
+    reason: external_exports.enum([
+      "not_linked",
+      "chat_closed",
+      "empty",
+      "too_long",
+      "rate_limited",
+      "blocked",
+      "unauthorized"
+    ])
+  }),
+  RefusedBannedSchema
+]);
+var ChatBodySchema = external_exports.object({ text: external_exports.string().max(2e3) });
+var BossViewSchema = external_exports.object({
+  bossId: external_exports.string().min(1).max(64),
+  name: external_exports.string().max(128),
+  glyph: external_exports.string().max(8),
+  maxHp: count3,
+  hp: count3,
+  spawnedAt: count3,
+  endsAt: count3,
+  yours: count3
+});
+var WorldSnapshotSchema = external_exports.object({
+  serverNow: count3,
+  speed: external_exports.number().positive(),
+  online: count3,
+  zones: external_exports.array(
+    external_exports.object({ zone: external_exports.number().int().positive(), count: external_exports.number().int().positive() })
+  ),
+  here: external_exports.array(external_exports.string().max(128)).max(HERE_MAX),
+  boss: BossViewSchema.nullable(),
+  chat: external_exports.array(ChatMessageSchema),
+  flags: external_exports.record(external_exports.boolean())
+});
+var BoardRowSchema = external_exports.object({
+  accountId: external_exports.string().min(1).max(128),
+  name: external_exports.string().max(128),
+  value: count3
+});
+var BoardsSchema = external_exports.object({
+  highestZone: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
+  damage: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
+  // An integer, not a count: the week holding the first days of the epoch began in 1969.
+  weekStart: external_exports.number().int()
+});
+
+// packages/protocol/src/responses.ts
+var count4 = external_exports.number().int().nonnegative();
 var AccountSchema = external_exports.object({
   accountId: external_exports.string().min(1).max(128),
-  seed: count3,
-  createdAt: count3,
+  seed: count4,
+  createdAt: count4,
   displayName: external_exports.string().max(128).nullable(),
   linked: external_exports.object({ provider: external_exports.literal("github"), login: external_exports.string().min(1).max(64) }).nullable()
 });
 var ServerConfigSchema = external_exports.object({
   minClientVersion: external_exports.string(),
-  simVersion: count3,
+  simVersion: count4,
   flags: external_exports.record(external_exports.boolean()),
-  serverNow: count3,
+  serverNow: count4,
   speed: external_exports.number().positive()
 });
 var BootstrapSchema = external_exports.object({
@@ -4291,71 +4412,87 @@ var BootstrapSchema = external_exports.object({
   account: AccountSchema,
   config: ServerConfigSchema,
   state: GameStateSchema,
-  seq: count3,
+  seq: count4,
   hash: HEX16,
-  cursor: count3,
+  cursor: count4,
   delivery: DeliverySchema
 });
+var BootstrapRefusedSchema = external_exports.object({
+  refusal: external_exports.enum(["rate_limited", "banned"]),
+  message: external_exports.string().min(1).max(200)
+});
+var BootstrapResponseSchema = external_exports.union([BootstrapRefusedSchema, BootstrapSchema]);
 var adopt = {
   ok: external_exports.literal(false),
-  seq: count3,
+  seq: count4,
   state: GameStateSchema,
   hash: HEX16,
-  cursor: count3
+  cursor: count4
 };
 var BatchAckSchema = external_exports.union([
   external_exports.object({
     ok: external_exports.literal(true),
-    seq: count3,
+    seq: count4,
     hash: HEX16,
     duplicate: external_exports.boolean(),
     delivery: DeliverySchema
   }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("unauthorized") }),
+  RefusedBannedSchema,
   external_exports.object({
     ok: external_exports.literal(false),
     reason: external_exports.literal("version_gate"),
     minClientVersion: external_exports.string()
   }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count3 }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count4 }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("cursor_behind"), delivery: DeliverySchema }),
   external_exports.object({ ...adopt, reason: external_exports.enum(["seq_mismatch", "cursor_mismatch"]) }),
   external_exports.object({ ...adopt, reason: external_exports.literal("hash_mismatch"), revokedItemIds: external_exports.array(external_exports.string()) }),
   external_exports.object({ ...adopt, reason: external_exports.literal("rate_capped"), kind: PlayerEventKindSchema })
 ]);
 function orUnauthorized(schema) {
-  return external_exports.union([UnauthorizedSchema, schema]);
+  return external_exports.union([UnauthorizedSchema, BannedSchema, schema]);
 }
 var AccountInfoSchema = external_exports.object({
   account: AccountSchema,
-  returns: count3,
+  returns: count4,
   config: ServerConfigSchema,
   delivery: DeliverySchema
 });
 var LinkStartSchema = external_exports.object({
   code: external_exports.string().min(1).max(32),
   url: external_exports.string().min(1),
-  intervalMs: count3
+  intervalMs: count4
+});
+var LinkRefusedSchema = external_exports.object({
+  refusal: external_exports.literal("link_unavailable"),
+  message: external_exports.string().min(1).max(200)
 });
 var LinkPollSchema = external_exports.union([
   external_exports.object({ status: external_exports.literal("pending") }),
-  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema })
+  external_exports.object({ status: external_exports.literal("linked"), account: AccountSchema }),
+  external_exports.object({
+    status: external_exports.literal("ended"),
+    reason: external_exports.enum(["denied", "expired", "unavailable"]),
+    message: external_exports.string().min(1).max(200)
+  })
 ]);
 var HealthSchema = external_exports.object({
   ok: external_exports.literal(true),
-  simVersion: count3,
-  seed: count3,
+  simVersion: count4,
+  seed: count4,
   speed: external_exports.number().positive(),
-  now: count3
+  now: count4
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
-var LinkStartResponseSchema = orUnauthorized(LinkStartSchema);
+var AccountDeletedResponseSchema = orUnauthorized(external_exports.object({ deleted: external_exports.literal(true) }));
+var LinkStartResponseSchema = orUnauthorized(external_exports.union([LinkRefusedSchema, LinkStartSchema]));
 var LinkPollResponseSchema = orUnauthorized(LinkPollSchema);
 var ListingPageResponseSchema = orUnauthorized(ListingPageSchema);
 var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
-var MatchingOrdersResponseSchema = orUnauthorized(
-  external_exports.array(OrderSchema)
-);
+var MatchingOrdersResponseSchema = orUnauthorized(external_exports.array(OrderSchema));
+var WorldResponseSchema = orUnauthorized(WorldSnapshotSchema);
+var BoardsResponseSchema = orUnauthorized(BoardsSchema);
 var ErrorBodySchema = external_exports.union([
   external_exports.object({ error: external_exports.literal("schema"), issues: external_exports.array(external_exports.unknown()) }),
   external_exports.object({ error: external_exports.literal("route") }),
@@ -4368,6 +4505,7 @@ var ROUTES = {
   bootstrap: { method: "POST", path: "/v1/bootstrap" },
   submit: { method: "POST", path: "/v1/batches" },
   account: { method: "GET", path: "/v1/account" },
+  deleteAccount: { method: "DELETE", path: "/v1/account" },
   linkStart: { method: "POST", path: "/v1/link/github" },
   linkPoll: { method: "POST", path: "/v1/link/github/poll" },
   browse: { method: "GET", path: "/v1/listings" },
@@ -4378,7 +4516,10 @@ var ROUTES = {
   placeOrder: { method: "POST", path: "/v1/orders" },
   cancelOrder: { method: "DELETE", path: "/v1/orders/:id" },
   matchingOrders: { method: "GET", path: "/v1/orders/matching" },
-  fillOrder: { method: "POST", path: "/v1/orders/:id/fill" }
+  fillOrder: { method: "POST", path: "/v1/orders/:id/fill" },
+  world: { method: "GET", path: "/v1/world" },
+  chat: { method: "POST", path: "/v1/chat" },
+  leaderboards: { method: "GET", path: "/v1/leaderboards" }
 };
 function failure(name, message, status) {
   const error = new Error(message);
@@ -4441,13 +4582,16 @@ var HttpClient = class {
     return parsed.data;
   }
   bootstrap(input) {
-    return this.call("bootstrap", BootstrapSchema, { body: input });
+    return this.call("bootstrap", BootstrapResponseSchema, { body: input });
   }
   submit(batch, auth) {
     return this.call("submit", BatchAckSchema, { auth, body: batch });
   }
   account(auth) {
     return this.call("account", AccountResponseSchema, { auth });
+  }
+  deleteAccount(auth) {
+    return this.call("deleteAccount", AccountDeletedResponseSchema, { auth });
   }
   linkStart(auth) {
     return this.call("linkStart", LinkStartResponseSchema, { auth });
@@ -4486,6 +4630,15 @@ var HttpClient = class {
   fillOrder(auth, orderId, itemId) {
     return this.call("fillOrder", MarketResultSchema, { auth, id: orderId, body: { itemId } });
   }
+  world(auth, since) {
+    return this.call("world", WorldResponseSchema, { auth, query: { since } });
+  }
+  chat(auth, text) {
+    return this.call("chat", ChatResultSchema, { auth, body: { text } });
+  }
+  leaderboards(auth) {
+    return this.call("leaderboards", BoardsResponseSchema, { auth });
+  }
 };
 
 // packages/protocol/src/kv.ts
@@ -4509,17 +4662,40 @@ var MemoryKeyValue = class {
 // packages/protocol/src/index.ts
 var PROTOCOL_VERSION = 1;
 export {
+  AccountDeletedResponseSchema,
   AccountInfoSchema,
   AccountResponseSchema,
   AccountSchema,
+  BOARD_ROWS,
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_TOP_BONUS,
+  BOSS_WINDOW_MS,
   BUDGETS,
+  BannedSchema,
   BatchAckSchema,
   BatchSchema,
+  BoardRowSchema,
+  BoardsResponseSchema,
+  BoardsSchema,
+  BootstrapRefusedSchema,
+  BootstrapResponseSchema,
   BootstrapSchema,
+  BossViewSchema,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  ChatBodySchema,
+  ChatMessageSchema,
+  ChatResultSchema,
   DeliverySchema,
   ErrorBodySchema,
   GameStateSchema,
   GoodsSchema,
+  HERE_MAX,
   HEX16,
   HealthSchema,
   HeroSchema,
@@ -4528,6 +4704,7 @@ export {
   LISTINGS_PER_PAGE,
   LinkPollResponseSchema,
   LinkPollSchema,
+  LinkRefusedSchema,
   LinkStartResponseSchema,
   LinkStartSchema,
   ListingPageResponseSchema,
@@ -4535,6 +4712,7 @@ export {
   ListingQuerySchema,
   ListingSchema,
   MARKET_REFUSALS,
+  MIN_CLIENT_VERSION,
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MemoryKeyValue,
@@ -4544,11 +4722,17 @@ export {
   NewOrderSchema,
   OrderSchema,
   PLAYER_EVENT_KINDS,
+  PRESENCE_TTL_MS,
   PROTOCOL_VERSION,
   ROUTES,
+  RefusedBannedSchema,
   ServerConfigSchema,
   ServerEventSchema,
+  StatsSchema,
   TimedEventSchema,
   UnauthorizedSchema,
-  compareSemver
+  WorldResponseSchema,
+  WorldSnapshotSchema,
+  compareSemver,
+  weekStartOf
 };

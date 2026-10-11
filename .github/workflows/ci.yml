@@ -18,4 +18,11 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test
+      - run: pnpm exec playwright install --with-deps --only-shell chromium
+      - run: pnpm smoke:desktop
       - run: pnpm vendor:check
+      - run: pnpm sprites:check
+      - run: pnpm font:check
+      - run: pnpm content:check
+      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config -q
+      - run: deploy/smoke.sh

@@ -26,6 +26,8 @@ export function createInitialState(seed: number): GameState {
     pendingTurnBoss: false,
     lootLog: [],
     stats: { kills: 0, bosses: 0, wipes: 0 },
+    boss: null,
+    battle: { gauges: [], queue: [], busy: 0 },
   }
   // Starters draw their epithets from the seed's stream; rng is reset to the seed after.
   const roster = ['knight_1', 'black_mage_1', 'white_mage_1', 'archer_1'].map((id) =>

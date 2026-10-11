@@ -7,19 +7,20 @@ import {
   UNREACHABLE_NOTICE,
   UPDATE_NOTICE,
 } from './engine'
-import { Ledger } from './vendor/ledger.js'
+import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   type Auth,
   type Batch,
   type BatchAck,
   type Bootstrap,
+  type BootstrapRefused,
   type ListingQuery,
   type MarketResult,
   MemoryKeyValue,
   type NewOrder,
   type ServerClient,
 } from './vendor/protocol.js'
-import { createInitialState, type GameState, hashState } from './vendor/sim.js'
+import { createInitialState, type GameState, hashState, SIM_VERSION } from './vendor/sim.js'
 
 type Patch = Partial<PluginState['promptfall']>
 type Timer = { ms: number; fn: () => void; done: boolean }
@@ -36,6 +37,10 @@ class Recorder implements ServerClient {
   refuseNextSubmit: number | null = null
   failBootstraps = 0
   fakeNextAck: BatchAck | null = null
+  /** Every submit answers `cursor_behind` with nothing new: the loop that waits for a resync. */
+  alwaysBehind = false
+  /** Called with each submit's count as it goes out. */
+  onSubmit: (count: number) => void = () => undefined
   hold: Promise<void> | null = null
   holdBootstrap: Promise<void> | null = null
   constructor(readonly inner: Ledger) {}
@@ -43,7 +48,7 @@ class Recorder implements ServerClient {
   async bootstrap(input: {
     clientVersion: string
     deviceToken: string | null
-  }): Promise<Bootstrap> {
+  }): Promise<Bootstrap | BootstrapRefused> {
     this.bootstraps += 1
     if (this.holdBootstrap) await this.holdBootstrap
     if (this.failBootstraps > 0) {
@@ -59,6 +64,7 @@ class Recorder implements ServerClient {
     this.corruptNextSeq = false
     this.corruptNextCursor = false
     this.batches.push(sent)
+    this.onSubmit(this.batches.length)
     if (this.hold) await this.hold
     if (this.failSubmits > 0) {
       this.failSubmits -= 1
@@ -71,6 +77,15 @@ class Recorder implements ServerClient {
       })
       this.refuseNextSubmit = null
       throw error
+    }
+    if (this.alwaysBehind) {
+      const ack: BatchAck = {
+        ok: false,
+        reason: 'cursor_behind',
+        delivery: { cursor: batch.cursor, events: [] },
+      }
+      this.acks.push(ack)
+      return ack
     }
     if (this.fakeNextAck) {
       const fake = this.fakeNextAck
@@ -86,6 +101,9 @@ class Recorder implements ServerClient {
   account(auth: Auth) {
     this.accounts += 1
     return this.inner.account(auth)
+  }
+  deleteAccount(auth: Auth) {
+    return this.inner.deleteAccount(auth)
   }
   linkStart(auth: Auth) {
     return this.inner.linkStart(auth)
@@ -120,9 +138,19 @@ class Recorder implements ServerClient {
   fillOrder(auth: Auth, orderId: string, itemId: string) {
     return this.inner.fillOrder(auth, orderId, itemId)
   }
+  world(auth: Auth, since: number) {
+    return this.inner.world(auth, since)
+  }
+  chat(auth: Auth, text: string) {
+    return this.inner.chat(auth, text)
+  }
+  leaderboards(auth: Auth) {
+    return this.inner.leaderboards(auth)
+  }
 }
 
-function setup(kv = new MemoryKeyValue()) {
+/** `flags`: the ledger's, e.g. the sandbox switch for item grants. */
+function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
   let t = 1_000_000
   const now = async () => t
   const timers: Timer[] = []
@@ -132,11 +160,16 @@ function setup(kv = new MemoryKeyValue()) {
     minClientVersion: '0.1.0',
     seedSource: () => 4242,
     tokenSource: () => crypto.randomUUID(),
-    linkApprover: async () => ({ login: 'player' }),
+    linkApprover: approveAs('player'),
+    ...(flags ? { flags } : {}),
   })
   const client = new Recorder(ledger)
   const patches: Patch[] = []
   const effects: string[] = []
+  const calls: { count: number; view: boolean }[] = []
+  /** The arrival time each batch holding a drop came with. */
+  const drops: (number | undefined)[] = []
+  const toasts: { text: string; timeoutMs: number | undefined }[] = []
   const engine = new GameEngine({
     client,
     kv,
@@ -145,8 +178,13 @@ function setup(kv = new MemoryKeyValue()) {
     publish: async (patch) => {
       patches.push(patch)
     },
-    onEffects: (list) => {
+    onEffects: (list, _at, view, arrived) => {
       for (const e of list) effects.push(e.k)
+      calls.push({ count: list.length, view: view !== null })
+      if (list.some((e) => e.k === 'drop')) drops.push(arrived)
+    },
+    toast: (text, timeoutMs) => {
+      toasts.push({ text, timeoutMs })
     },
     after: (ms, fn) => {
       timers.push({ ms, fn, done: false })
@@ -170,6 +208,9 @@ function setup(kv = new MemoryKeyValue()) {
     engine,
     patches,
     effects,
+    calls,
+    drops,
+    toasts,
     timers,
     fire,
     notices,
@@ -264,6 +305,7 @@ test('cursor_behind keeps the batch, applies the delivery and resubmits with the
     clientVersion: '0.1.0',
     deviceToken: String(await kv.get('deviceToken')),
   })
+  if ('refusal' in boot) throw new Error(boot.refusal)
   expect(boot.seq).toBe(1)
   expect(boot.cursor).toBe(1)
   expect(boot.state).toEqual(engine.state())
@@ -295,12 +337,12 @@ test('a cursor_mismatch adopts the state and cursor', async () => {
   expect(client.acks[1]).toMatchObject({ ok: true, seq: 1 })
 })
 
-test('a v1 state at bootstrap pauses with the reset notice and publishes no view', async () => {
+/** A store whose account `old` holds a state at sim version `v`, its token saved as the device's. */
+async function savedAt(v: number): Promise<MemoryKeyValue> {
   const kv = new MemoryKeyValue()
-  const old = { ...createInitialState(3), v: 1 }
   await kv.set('pf:acct:old:record', {
     account: { accountId: 'old', seed: 3, createdAt: 1, displayName: null, linked: null },
-    state: old,
+    state: { ...createInitialState(3), v },
     seq: 2,
     refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
     buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
@@ -308,14 +350,39 @@ test('a v1 state at bootstrap pauses with the reset notice and publishes no view
   })
   await kv.set('pf:token:t-old', 'old')
   await kv.set('deviceToken', 't-old')
-  const { engine, patches, client, at } = setup(kv)
+  return kv
+}
+
+test('an older save raises the reset notice, pauses and publishes no view', async () => {
+  const { engine, patches, client, at, notices } = setup(await savedAt(1))
   await engine.start()
   expect(engine.isPaused()).toBe(true)
   expect(patches).toContainEqual({ view: null, mode: 'paused', notice: OLD_VERSION_NOTICE })
+  expect(notices()).not.toContain(UPDATE_NOTICE)
   expect(patches.some((p) => p.view)).toBe(false)
   engine.apply({ t: 'tick' }, at())
   await engine.flush()
   expect(client.batches).toHaveLength(0)
+})
+
+test('a newer server raises the update notice, never the reset notice', async () => {
+  const { engine, patches, client, at, notices } = setup(await savedAt(SIM_VERSION + 1))
+  await engine.start()
+  expect(engine.isPaused()).toBe(true)
+  expect(patches).toContainEqual({ view: null, mode: 'paused', notice: UPDATE_NOTICE })
+  expect(notices()).not.toContain(OLD_VERSION_NOTICE)
+  expect(patches.some((p) => p.view)).toBe(false)
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  expect(client.batches).toHaveLength(0)
+})
+
+test('a save at the client sim version raises no version notice', async () => {
+  const { engine, notices } = setup(await savedAt(SIM_VERSION))
+  await engine.start()
+  expect(engine.isPaused()).toBe(false)
+  expect(notices()).not.toContain(UPDATE_NOTICE)
+  expect(notices()).not.toContain(OLD_VERSION_NOTICE)
 })
 
 test('a thrown submit keeps the batch and retries it verbatim on the backoff', async () => {
@@ -339,13 +406,12 @@ test('a thrown submit keeps the batch and retries it verbatim on the backoff', a
   expect(timers.map((x) => x.ms)).toContain(2000)
   advance(61_000)
   await fire(2000)
-  // Answered on the third attempt: the same batch both times, then the rest.
-  expect(client.batches).toHaveLength(3)
-  expect(new Set(client.batches.map((b) => b.batchId)).size).toBe(1)
+  // Answered on the third attempt: the same batch every time, then the buffer at once.
+  expect(client.batches).toHaveLength(4)
+  expect(new Set(client.batches.slice(0, 3).map((b) => b.batchId)).size).toBe(1)
   expect(client.batches[2]?.events).toHaveLength(1)
   expect(client.acks[0]).toMatchObject({ ok: true })
   expect(notices().at(-1)).toBeNull()
-  await engine.flush()
   expect(client.batches[3]?.events).toHaveLength(1)
   expect(client.acks[1]).toMatchObject({ ok: true, seq: 2 })
 })
@@ -477,9 +543,23 @@ test('a flush that pauses the engine stops the trade', async () => {
       called = true
       return { ok: false, reason: 'gone' } as MarketResult
     }),
-  ).rejects.toThrow('not_primary')
+  ).rejects.toThrow('paused')
   expect(called).toBe(false)
   expect(engine.isPaused()).toBe(true)
+})
+
+test('a paused primary refuses a trade as paused', async () => {
+  const { engine } = setup()
+  await engine.start()
+  engine.setPaused(UPDATE_NOTICE)
+  let called = false
+  const trade = engine.trade(async () => {
+    called = true
+    return { ok: false, reason: 'gone' } as MarketResult
+  })
+  await expect(trade).rejects.toThrow('paused')
+  await expect(trade).rejects.not.toThrow('not_primary')
+  expect(called).toBe(false)
 })
 
 test("a stopped engine's in-flight bootstrap writes nothing", async () => {
@@ -517,17 +597,84 @@ test('a server event that invalidates a buffered event re-steps it as rejected',
   expect(client.acks.at(-1)).toMatchObject({ ok: false, reason: 'cursor_mismatch' })
 })
 
-test('a submit the server refuses with a 4xx pauses with the update notice, not an outage', async () => {
-  const { engine, client, at, notices, timers } = setup()
+test('a submit the server refuses with a 4xx is an outage, retried on the backoff', async () => {
+  const { engine, client, at, notices, timers, fire } = setup()
   await engine.start()
   engine.apply({ t: 'tick' }, at())
   client.refuseNextSubmit = 400
   await engine.flush()
   await engine.settled()
-  expect(engine.isPaused()).toBe(true)
+  expect(engine.isPaused()).toBe(false)
+  expect(engine.isUnreachable()).toBe(true)
+  expect(notices().at(-1)).toBe(RETRYING_NOTICE)
+  expect(notices()).not.toContain(UPDATE_NOTICE)
+  expect(timers.map((x) => x.ms)).toContain(1000)
+  await fire(1000)
+  expect(client.batches).toHaveLength(2)
+  expect(client.acks[0]).toMatchObject({ ok: true })
   expect(engine.isUnreachable()).toBe(false)
-  expect(notices().at(-1)).toBe(UPDATE_NOTICE)
-  expect(timers).toHaveLength(0)
+  expect(notices().at(-1)).toBeNull()
+})
+
+test('a version-gate ack and a sim-version ack pause with the update notice', async () => {
+  for (const ack of [
+    { ok: false, reason: 'version_gate', minClientVersion: '9.0.0' },
+    { ok: false, reason: 'sim_version', simVersion: SIM_VERSION + 1 },
+  ] as const) {
+    const { engine, client, at, notices, timers } = setup()
+    await engine.start()
+    engine.apply({ t: 'tick' }, at())
+    client.fakeNextAck = ack
+    await engine.flush()
+    await engine.settled()
+    expect(engine.isPaused()).toBe(true)
+    expect(engine.isUnreachable()).toBe(false)
+    expect(notices().at(-1)).toBe(UPDATE_NOTICE)
+    expect(timers).toHaveLength(0)
+  }
+})
+
+test('the first success after an outage flushes the buffer, before the next scheduled flush', async () => {
+  const { engine, client, at, advance, fire } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.failSubmits = 1
+  await engine.flush()
+  expect(engine.isUnreachable()).toBe(true)
+  // Buffered during the outage.
+  advance(5_000)
+  engine.apply({ t: 'tick' }, at())
+  engine.apply({ t: 'tool_call' }, at())
+  await fire(1000)
+  // The retried batch, then the buffer at once: no 15-second wait.
+  expect(client.batches).toHaveLength(3)
+  expect(client.batches[1]?.batchId).toBe(client.batches[0]?.batchId)
+  expect(client.batches[1]?.events).toHaveLength(1)
+  expect(client.batches[2]?.events.map((e) => e.t)).toEqual(['tick', 'tool_call'])
+  expect(client.acks).toMatchObject([
+    { ok: true, seq: 1 },
+    { ok: true, seq: 2 },
+  ])
+  expect(engine.unsentCount()).toBe(0)
+})
+
+test('a success outside an outage leaves the buffer to the next scheduled flush', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  // Buffered while the batch is in flight.
+  engine.apply({ t: 'tick' }, at())
+  release()
+  client.hold = null
+  await flushed
+  expect(client.batches).toHaveLength(1)
+  expect(engine.unsentCount()).toBe(1)
 })
 
 test('a 5xx on submit stays an outage', async () => {
@@ -539,4 +686,244 @@ test('a 5xx on submit stays an outage', async () => {
   expect(engine.isPaused()).toBe(false)
   expect(engine.isUnreachable()).toBe(true)
   expect(notices().at(-1)).toBe(RETRYING_NOTICE)
+})
+
+test('committedBoss follows the committed state, not the local one', async () => {
+  const { engine, ledger, kv, advance, at } = setup()
+  await engine.start()
+  const auth = { deviceToken: String(await kv.get('deviceToken')) }
+  advance(10_800_000 - at() - 1_000)
+  await ledger.world(auth, 0)
+  advance(2_000)
+  await ledger.world(auth, 0)
+  expect(engine.committedBoss()).toBeNull()
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  const committed = engine.committedBoss()
+  expect(committed?.bossId).toMatch(/^wb/)
+  for (let i = 0; i < 3; i++) engine.apply({ t: 'tick' }, at())
+  expect(engine.state()?.boss?.dealt).toBeGreaterThan(committed?.dealt ?? 0)
+  expect(engine.committedBoss()).toEqual(committed)
+})
+
+test('the effects dep fires on every applied tick, an effect-less one too, with the view', async () => {
+  const a = setup()
+  await a.engine.start()
+  a.calls.length = 0
+  // The first tick of a fight is pure filling: gauges start empty, nobody acts.
+  a.engine.apply({ t: 'tick' }, a.at())
+  expect(a.calls).toHaveLength(1)
+  expect(a.calls[0]).toEqual({ count: 0, view: true })
+})
+
+// ---------------------------------------------------------------------------
+// A discarded engine: its notice clears, its flush goes quiet
+
+test('a discarded engine clears its notice', async () => {
+  const { engine, client, at, fire, notices, patches } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.failSubmits = 100
+  await engine.flush()
+  expect(notices().at(-1)).toBe(RETRYING_NOTICE)
+  engine.stop()
+  await engine.settled()
+  expect(notices().at(-1)).toBeNull()
+  // Its retries and its notice timers publish nothing more, and it takes no event.
+  expect(engine.accepting()).toBe(false)
+  const before = patches.length
+  await fire()
+  expect(patches).toHaveLength(before)
+})
+
+test("a stopped engine's flush submits and toasts nothing", async () => {
+  const { engine, client, ledger, effects, toasts, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  // The server holds gold the engine has not seen: the submit answers cursor_behind with it.
+  await ledger.host.credit(engine.accountId() ?? '', 99, 'behind')
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  expect(client.batches).toHaveLength(1)
+  engine.stop()
+  release()
+  await flushed
+  expect(client.acks.map((a) => (a.ok ? 'ok' : a.reason))).toEqual(['cursor_behind'])
+  expect(client.batches).toHaveLength(1)
+  expect(effects).not.toContain('gold')
+  expect(toasts).toEqual([])
+})
+
+test('a stopped engine caught in a cursor-behind loop stops looping', async () => {
+  const { engine, client, at } = setup()
+  await engine.start()
+  engine.apply({ t: 'tick' }, at())
+  client.alwaysBehind = true
+  client.onSubmit = (count) => {
+    if (count === 2) engine.stop()
+  }
+  await engine.flush()
+  // Without the stop, five stuck answers end in a resync: a second bootstrap.
+  expect(client.batches).toHaveLength(2)
+  expect(client.bootstraps).toBe(1)
+})
+
+test('a bootstrap hands on only the events past the cursor the last primary showed', async () => {
+  const a = setup()
+  await a.engine.start()
+  const account = a.engine.accountId() ?? ''
+  await a.ledger.host.credit(account, 40, 'gift')
+  // The primary receives the gift unflushed and toasts it.
+  await a.engine.sync()
+  await a.engine.settled()
+  expect(a.effects).toContain('gold')
+  expect(await a.kv.get('deviceToken:shown')).toEqual({ account, cursor: 1 })
+  // A sale fills before anyone has received it; then another session takes over.
+  await a.ledger.host.credit(account, 30, 'sale')
+  const promoted = setup(a.kv)
+  await promoted.engine.start()
+  expect(gold(promoted.engine.state())).toBe(70)
+  expect(promoted.effects.filter((k) => k === 'gold')).toHaveLength(1)
+  expect(promoted.patches.some((p) => p.view)).toBe(true)
+})
+
+test('a start with nothing shown hands the whole delivery on', async () => {
+  const a = setup()
+  await a.engine.start()
+  await a.ledger.host.credit(a.engine.accountId() ?? '', 40, 'gift')
+  await a.kv.delete('deviceToken:shown')
+  const first = setup(a.kv)
+  await first.engine.start()
+  expect(first.effects).toContain('gold')
+})
+
+test('a shown cursor of another account is ignored', async () => {
+  const a = setup()
+  await a.engine.start()
+  await a.ledger.host.credit(a.engine.accountId() ?? '', 40, 'gift')
+  await a.kv.set('deviceToken:shown', { account: 'other', cursor: 99 })
+  const next = setup(a.kv)
+  await next.engine.start()
+  expect(next.effects).toContain('gold')
+})
+
+test('a stopped engine records nothing as shown', async () => {
+  const { engine, client, ledger, kv, at } = setup()
+  await engine.start()
+  await engine.settled()
+  const before = await kv.get('deviceToken:shown')
+  engine.apply({ t: 'tick' }, at())
+  // The server holds gold the engine has not seen: the submit answers cursor_behind with it.
+  await ledger.host.credit(engine.accountId() ?? '', 99, 'behind')
+  let release: () => void = () => undefined
+  client.hold = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const flushed = engine.flush()
+  for (let i = 0; i < 20 && client.batches.length === 0; i++) await Promise.resolve()
+  engine.stop()
+  release()
+  await flushed
+  await engine.settled()
+  expect(await kv.get('deviceToken:shown')).toEqual(before)
+})
+
+// ---------------------------------------------------------------------------
+// The revoked toast: a hash-mismatch ack names what it took, from the state held before adopting it
+
+test('a delivered drop carries the time it arrived, not the last tick', async () => {
+  const s = setup(new MemoryKeyValue(), { 'sandbox.enabled': true })
+  await s.engine.start()
+  s.engine.apply({ t: 'tick' }, s.at())
+  await s.engine.flush()
+  s.advance(3000)
+  const accountId = s.engine.accountId() ?? ''
+  await s.ledger.host.sandbox(accountId, {
+    t: 'sandbox_item',
+    base: 'iron_sword',
+    rarity: 'common',
+  })
+  await s.engine.sync()
+  expect(s.drops).toEqual([s.at()])
+})
+
+/** An engine on a sandbox ledger that holds an Oak Staff, a Rune Staff and an Iron Sword, granted and synced. */
+async function holding() {
+  const s = setup(new MemoryKeyValue(), { 'sandbox.enabled': true })
+  await s.engine.start()
+  const accountId = s.engine.accountId() ?? ''
+  for (const base of ['oak_staff', 'rune_staff', 'iron_sword']) {
+    expect(
+      await s.ledger.host.sandbox(accountId, { t: 'sandbox_item', base, rarity: 'rare' }),
+    ).toEqual({
+      ok: true,
+    })
+  }
+  await s.engine.sync()
+  const ids = (s.engine.state()?.inventory ?? []).map((i) => i.id)
+  expect(ids).toHaveLength(3)
+  return { ...s, ids }
+}
+
+/** The next submit answers a hash mismatch that revokes `ids` and hands back the initial state. */
+function revoking(client: Recorder, ids: string[]): void {
+  const state = createInitialState(4242)
+  client.fakeNextAck = {
+    ok: false,
+    reason: 'hash_mismatch',
+    seq: 1,
+    state,
+    hash: hashState(state),
+    cursor: 3,
+    revokedItemIds: ids,
+  }
+}
+
+test('a hash-mismatch ack that revokes one committed item toasts it by name for 8 s', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  await engine.flush()
+  expect(client.acks.at(-1)).toMatchObject({ ok: true })
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [ids[0] ?? ''])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked Oak Staff', timeoutMs: 8000 }])
+  expect(engine.state()?.inventory).toEqual([])
+})
+
+test('a hash-mismatch ack that revokes three items folds them into one toast', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, ids)
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked 3 items', timeoutMs: 8000 }])
+})
+
+test('a revoked id in neither state toasts the unnamed form', async () => {
+  const { engine, client, toasts, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, ['no-such-item'])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked an item', timeoutMs: 8000 }])
+})
+
+test('an item only in the local, unflushed state is still named when revoked', async () => {
+  const { engine, client, toasts, ids, at } = await holding()
+  // Granted and synced, never flushed: the committed state has no Rune Staff yet.
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [ids[1] ?? ''])
+  await engine.flush()
+  expect(toasts).toEqual([{ text: 'The server revoked Rune Staff', timeoutMs: 8000 }])
+})
+
+test('a hash-mismatch ack that revokes nothing raises no toast', async () => {
+  const { engine, client, toasts, at } = await holding()
+  engine.apply({ t: 'tick' }, at())
+  revoking(client, [])
+  await engine.flush()
+  expect(toasts).toEqual([])
 })

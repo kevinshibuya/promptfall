@@ -1,5 +1,7 @@
 import {
+  content,
   createInitialState,
+  GAUGE_FULL,
   type GameState,
   type Hero,
   hashState,
@@ -9,12 +11,31 @@ import {
   replay,
   type ServerEvent,
   SIM_VERSION,
-  step,
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
-import type { Auth, Bootstrap, Delivery, ServerClient } from '../client'
+import type { Auth, BatchAck, Delivery, ServerClient } from '../client'
+import { type KeyValue, MemoryKeyValue } from '../kv'
 import type { MarketResult } from '../market'
-import { type Batch, compareSemver, type TimedEvent } from '../schemas'
+import { Mirror } from '../mirror'
+import { compareSemver } from '../schemas'
+import {
+  BOARD_ROWS,
+  BOSS_BASE_HP,
+  BOSS_GRID_MS,
+  BOSS_THRESHOLD_BP,
+  BOSS_WINDOW_MS,
+  CHAT_BUCKET_CAPACITY,
+  CHAT_KEEP,
+  CHAT_MAX_CHARS,
+  CHAT_REFILL_MS,
+  CHAT_SERVE,
+  type ChatMessage,
+  type ChatResult,
+  PRESENCE_TTL_MS,
+  type WorldSnapshot,
+  WorldSnapshotSchema,
+  weekStartOf,
+} from '../world'
 
 export type ContractClock = { now: () => Promise<number>; advance: (ms: number) => void }
 
@@ -32,7 +53,8 @@ export type ContractHost = {
 
 export type ContractMake = (
   clock: ContractClock,
-  options: { flags: Record<string, boolean> },
+  /** `kv`: a store shared between two hosts (rule 40); a fresh one when absent. */
+  options: { flags: Record<string, boolean>; kv?: KeyValue },
 ) => Promise<{ client: ServerClient; host?: ContractHost }>
 
 function makeClock(start = 1_700_000_000_000): ContractClock {
@@ -47,71 +69,6 @@ function makeClock(start = 1_700_000_000_000): ContractClock {
 
 const tick: PlayerEvent = { t: 'tick' }
 const EMPTY: Delivery = { cursor: 0, events: [] }
-
-/** A client-side mirror of the engine: committed state, pending server events, cursor, seq. */
-export class Mirror {
-  committed: GameState
-  pending: ServerEvent[] = []
-  local: GameState
-  cursor: number
-  seq: number
-
-  constructor(readonly boot: Bootstrap) {
-    this.committed = boot.state
-    this.local = boot.state
-    this.cursor = boot.cursor
-    this.seq = boot.seq
-    this.receive(boot.delivery)
-  }
-
-  batch(events: PlayerEvent[], overrides: Partial<Batch> = {}): Batch {
-    const timed: TimedEvent[] = events.map((e, i) => ({ ...e, at: 1000 + i }))
-    return {
-      batchId: crypto.randomUUID(),
-      accountId: this.boot.account.accountId,
-      seq: this.seq,
-      clientVersion: this.boot.config.minClientVersion,
-      simVersion: SIM_VERSION,
-      cursor: this.cursor,
-      baseHash: hashState(this.committed),
-      resultHash: hashState(replay(this.local, events).state),
-      events: timed,
-      ...overrides,
-    }
-  }
-
-  /** Advances the mirror as if the batch committed. */
-  commit(events: PlayerEvent[]): void {
-    this.committed = replay(this.local, events).state
-    this.pending = []
-    this.local = this.committed
-    this.seq += 1
-  }
-
-  /** Applies each delivered event once. */
-  receive(delivery: Delivery): void {
-    for (const { n, event } of delivery.events) {
-      if (n <= this.cursor) continue
-      this.pending.push(event)
-      this.local = step(this.local, event).state
-      this.cursor = n
-    }
-    this.cursor = Math.max(this.cursor, delivery.cursor)
-  }
-
-  /** Adopts the state of a state-carrying refusal. */
-  adopt(ack: { state: GameState; cursor: number; seq: number }): void {
-    this.committed = ack.state
-    this.local = ack.state
-    this.pending = []
-    this.cursor = ack.cursor
-    this.seq = ack.seq
-  }
-
-  auth() {
-    return { deviceToken: this.boot.deviceToken }
-  }
-}
 
 const DAY = 86_400_000
 const WEEK = 604_800_000
@@ -131,10 +88,14 @@ function commonItem(id: string): Item {
   }
 }
 
-/** A minted trader: linked, 10,000 gold, the given inventory, and spare heroes out of the party. */
+/**
+ * A minted trader: linked, 10,000 gold, the given inventory, and spare heroes out of the party.
+ * Every party hero's gauge starts full, so a one-tick commit already deals damage (grill 1.12).
+ */
 function traderState(seed: number, patch: Partial<GameState> = {}, spares: Hero[] = []): GameState {
   const s = createInitialState(seed)
-  return { ...s, gold: 10_000, roster: [...s.roster, ...spares], ...patch }
+  const battle = { gauges: s.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 }
+  return { ...s, gold: 10_000, roster: [...s.roster, ...spares], battle, ...patch }
 }
 
 function spareHero(seed: number, id: string, patch: Partial<Hero> = {}): Hero {
@@ -160,6 +121,97 @@ function lastOrder(d: Delivery): string {
   return e.orderId
 }
 
+async function snapshot(client: ServerClient, auth: Auth, since = 0): Promise<WorldSnapshot> {
+  const w = await client.world(auth, since)
+  if ('reason' in w) throw new Error('unauthorized')
+  return w
+}
+
+function posted(r: ChatResult): ChatMessage {
+  if (!r.ok) throw new Error(`refused: ${r.reason}`)
+  return r.message
+}
+
+async function boards(client: ServerClient, auth: Auth) {
+  const b = await client.leaderboards(auth)
+  if ('reason' in b) throw new Error('unauthorized')
+  return b
+}
+
+const CLOCK_START = 1_700_000_000_000
+/** The first grid point after the suite's clock start, which is 73 minutes past one (and its window). */
+const NEXT_GRID = CLOCK_START + BOSS_GRID_MS - (CLOCK_START % BOSS_GRID_MS)
+const bossIdAt = (t: number) => `wb${Math.floor(t / BOSS_GRID_MS).toString(36)}`
+const ZONE1_BOSS = content.enemies[content.zones[0]?.boss ?? '']?.stats
+
+/** A minted trader whose party is level 40 at full HP: about 240 a tick on the zone 1 world boss. */
+function strongState(seed: number, patch: Partial<GameState> = {}): GameState {
+  const s = traderState(seed, { gold: 50_000, ...patch })
+  const leveled = {
+    ...s,
+    roster: s.roster.map((h) => (s.party.includes(h.id) ? { ...h, level: 40 } : h)),
+  }
+  return {
+    ...leveled,
+    roster: leveled.roster.map((h) =>
+      s.party.includes(h.id) ? { ...h, hp: heroStats(leveled, h).hp } : h,
+    ),
+  }
+}
+
+const kindsOf = (d: Delivery) => d.events.map((e) => e.event.t)
+const eventsOf = <K extends ServerEvent['t']>(d: Delivery, t: K) =>
+  d.events.map((e) => e.event).filter((e): e is Extract<ServerEvent, { t: K }> => e.t === t)
+
+type Trader = { auth: Auth; mirror: Mirror; accountId: string; refresh(): Promise<unknown> }
+
+/** Commits `n` ticks from the mirror; answers the ack and what the batch dealt to the boss. */
+async function commitTicks(
+  client: ServerClient,
+  t: Trader,
+  n: number,
+): Promise<{ ack: BatchAck; dealt: number }> {
+  const events = Array.from({ length: n }, () => tick)
+  const before = t.mirror.local.boss?.dealt ?? 0
+  const dealt = (replay(t.mirror.local, events).state.boss?.dealt ?? before) - before
+  const batch = t.mirror.batch(events)
+  const ack = await client.submit(batch, t.auth)
+  expect(ack).toMatchObject({ ok: true, hash: batch.resultHash })
+  if (ack.ok) {
+    t.mirror.commit(events)
+    t.mirror.receive(ack.delivery)
+  }
+  return { ack, dealt }
+}
+
+/** Stamps every trader present just before the grid point, crosses it, polls the first: the spawn. */
+async function spawn(client: ServerClient, clock: ContractClock, traders: Trader[]) {
+  clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+  for (const t of traders) await snapshot(client, t.auth)
+  clock.advance(10_000)
+  const first = traders[0]
+  if (!first) throw new Error('no trader')
+  const w = await snapshot(client, first.auth)
+  for (const t of traders) await t.refresh()
+  return w
+}
+
+/** A bootstrap the rule expects answered: a refusal fails the rule. */
+async function booted(
+  client: ServerClient,
+  input: { clientVersion: string; deviceToken: string | null },
+) {
+  const boot = await client.bootstrap(input)
+  if ('refusal' in boot) throw new Error(`bootstrap refused: ${boot.refusal}`)
+  return boot
+}
+
+async function infoOf(client: ServerClient, auth: Auth) {
+  const info = await client.account(auth)
+  if ('reason' in info) throw new Error('unauthorized')
+  return info
+}
+
 function lowerThan(version: string): string | null {
   return compareSemver(version, '0.0.0') > 0 ? '0.0.0' : null
 }
@@ -168,7 +220,7 @@ export function runServerContract(name: string, make: ContractMake): void {
   const setup = async (flags: Record<string, boolean> = {}) => {
     const clock = makeClock()
     const { client, host } = await make(clock, { flags })
-    const boot = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
     return { clock, client, host, boot, mirror: new Mirror(boot) }
   }
 
@@ -182,7 +234,7 @@ export function runServerContract(name: string, make: ContractMake): void {
     }
     const trader = async (name: string, state: GameState, linked = true) => {
       const m = await host.mint({ state, name, linked })
-      const boot = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+      const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: m.deviceToken })
       const auth: Auth = { deviceToken: m.deviceToken }
       const mirror = new Mirror(boot)
       return {
@@ -246,7 +298,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const ack = await client.submit(mirror.batch(events), mirror.auth())
       expect(ack.ok).toBe(true)
       mirror.commit(events)
-      const again = await client.bootstrap({
+      const again = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -256,7 +308,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(again.state).toEqual(mirror.committed)
       expect(again.cursor).toBe(0)
       expect(again.delivery).toEqual(EMPTY)
-      const stranger = await client.bootstrap({
+      const stranger = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: 'nobody-knows-me',
       })
@@ -272,7 +324,7 @@ export function runServerContract(name: string, make: ContractMake): void {
 
     it('rule 3: another account token naming this account is unauthorized', async () => {
       const { client, mirror } = await setup()
-      const other = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const other = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
       const ack = await client.submit(mirror.batch([tick]), { deviceToken: other.deviceToken })
       expect(ack).toEqual({ ok: false, reason: 'unauthorized' })
     })
@@ -311,7 +363,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         hash: (first as { hash: string }).hash,
         delivery: EMPTY,
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -346,7 +398,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         cursor: 0,
         revokedItemIds: [],
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -465,7 +517,7 @@ export function runServerContract(name: string, make: ContractMake): void {
         hash: hashState(mirror.committed),
         delivery: EMPTY,
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -495,7 +547,7 @@ export function runServerContract(name: string, make: ContractMake): void {
           events: [{ n: 1, event: { t: 'credited', gold: 120, reason: 'test' } }],
         },
       })
-      const after = await client.bootstrap({
+      const after = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -535,7 +587,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(info.delivery).toEqual(delivery)
       expect(info.returns).toBe(0)
       for (let i = 0; i < 2; i++) {
-        const again = await client.bootstrap({
+        const again = await booted(client, {
           clientVersion: '0.1.0',
           deviceToken: boot.deviceToken,
         })
@@ -556,7 +608,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const later = await client.account(mirror.auth())
       if ('reason' in later) throw new Error('unauthorized')
       expect(later.delivery).toEqual({ cursor: 1, events: [] })
-      const boot2 = await client.bootstrap({
+      const boot2 = await booted(client, {
         clientVersion: '0.1.0',
         deviceToken: boot.deviceToken,
       })
@@ -597,11 +649,11 @@ export function runServerContract(name: string, make: ContractMake): void {
     it('rule 13: the link flow approves the caller only', async () => {
       const { client, mirror } = await setup()
       const start = await client.linkStart(mirror.auth())
-      if ('reason' in start) throw new Error('unauthorized')
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
       expect(start.code).toMatch(/^[0-9A-Z]{8}$/)
       expect(start.url).toBe('https://github.com/login/device')
       expect(start.intervalMs).toBe(5000)
-      const other = await client.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+      const other = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
       expect(await client.linkPoll({ deviceToken: other.deviceToken }, start.code)).toEqual({
         status: 'pending',
       })
@@ -919,7 +971,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       await seller.inSync()
     })
 
-    it('rule 23: a fill into a full inventory is no_space and the order stays open', async (ctx) => {
+    it("rule 23: a fill refused for the buyer's slot says buyer_full and the order stays open", async (ctx) => {
       const { client, trader } = await market(ctx)
       const buyer = await trader(
         'Bea',
@@ -938,7 +990,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       )
       expect(await client.fillOrder(seller.auth, id, 'iS')).toEqual({
         ok: false,
-        reason: 'no_space',
+        reason: 'buyer_full',
       })
       const mine = await client.myOrders(buyer.auth)
       if ('reason' in mine) throw new Error('unauthorized')
@@ -1000,6 +1052,387 @@ export function runServerContract(name: string, make: ContractMake): void {
         }),
       ).toEqual(no)
       expect(await client.fillOrder(u.auth, order, 'iU')).toEqual(no)
+    })
+    it('rule 25: presence counts heartbeats inside the TTL, one entry per account', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ashgrove', traderState(60))
+      const b = await trader('Brindle', traderState(61))
+      expect(await snapshot(client, a.auth)).toMatchObject({
+        online: 1,
+        zones: [{ zone: 1, count: 1 }],
+        here: [],
+      })
+      expect(await snapshot(client, b.auth)).toMatchObject({
+        online: 2,
+        zones: [{ zone: 1, count: 2 }],
+        here: ['Ashgrove'],
+      })
+      // One ms before the TTL A still counts; at the TTL it does not (open at the far end).
+      clock.advance(PRESENCE_TTL_MS - 1)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 2, here: ['Ashgrove'] })
+      clock.advance(1)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 1, here: [] })
+      await snapshot(client, a.auth)
+      await snapshot(client, a.auth)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 2, here: ['Ashgrove'] })
+    })
+
+    it('rule 26: chat needs a link and an open channel', async (ctx) => {
+      const open = await market(ctx)
+      const u = await open.trader('Una', traderState(62), false)
+      expect(await open.client.chat(u.auth, 'hello')).toEqual({ ok: false, reason: 'not_linked' })
+      const closed = await market(ctx, { 'chat.enabled': false })
+      const a = await closed.trader('Ann', traderState(63))
+      expect(await closed.client.chat(a.auth, 'hello')).toEqual({
+        ok: false,
+        reason: 'chat_closed',
+      })
+      const w = await snapshot(closed.client, a.auth)
+      expect(w.flags['chat.enabled']).toBe(false)
+      expect(w.chat).toEqual([])
+    })
+
+    it('rule 27: length in UTF-16 units, trimming, control characters', async (ctx) => {
+      const { client, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(64))
+      const tooLong = { ok: false, reason: 'too_long' }
+      expect(await client.chat(a.auth, 'a'.repeat(CHAT_MAX_CHARS + 1))).toEqual(tooLong)
+      posted(await client.chat(a.auth, 'a'.repeat(CHAT_MAX_CHARS)))
+      expect(await client.chat(a.auth, '😀'.repeat(CHAT_MAX_CHARS / 2 + 1))).toEqual(tooLong)
+      posted(await client.chat(a.auth, '😀'.repeat(CHAT_MAX_CHARS / 2)))
+      WorldSnapshotSchema.parse(await snapshot(client, a.auth))
+      const empty = { ok: false, reason: 'empty' }
+      expect(await client.chat(a.auth, '   ')).toEqual(empty)
+      expect(await client.chat(a.auth, '\n\t')).toEqual(empty)
+      expect(posted(await client.chat(a.auth, '  hi  ')).text).toBe('hi')
+      const last = posted(await client.chat(a.auth, 'hi\u001b[31m'))
+      expect(last.text).toBe('hi[31m')
+      expect((await snapshot(client, a.auth)).chat.at(-1)).toEqual(last)
+    })
+
+    it('rule 28: a token bucket per account', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(65))
+      const limited = { ok: false, reason: 'rate_limited' }
+      for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) posted(await client.chat(a.auth, `m${i}`))
+      expect(await client.chat(a.auth, 'one more')).toEqual(limited)
+      clock.advance(CHAT_REFILL_MS)
+      posted(await client.chat(a.auth, 'refilled'))
+      expect(await client.chat(a.auth, 'again')).toEqual(limited)
+      clock.advance(CHAT_BUCKET_CAPACITY * CHAT_REFILL_MS)
+      for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) posted(await client.chat(a.auth, `n${i}`))
+      expect(await client.chat(a.auth, 'over')).toEqual(limited)
+    })
+
+    it('rule 29: the blocklist refuses words and masks names', async (ctx) => {
+      const { client, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(66))
+      posted(await client.chat(a.auth, 'hello'))
+      const before = (await snapshot(client, a.auth)).chat
+      expect(await client.chat(a.auth, 'what the heck')).toEqual({ ok: false, reason: 'blocked' })
+      expect((await snapshot(client, a.auth)).chat).toEqual(before)
+      const h = await trader('heck', traderState(67))
+      expect(posted(await client.chat(h.auth, 'hi')).name).toBe('adventurer')
+      await snapshot(client, h.auth)
+      expect((await snapshot(client, a.auth)).here).toEqual(['adventurer'])
+    })
+
+    it('rule 30: history keeps the last 200 and serves the last 50 without a mark', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(68))
+      const ids: number[] = []
+      const round = async () => {
+        for (let i = 0; i < CHAT_BUCKET_CAPACITY; i++) {
+          ids.push(posted(await client.chat(a.auth, `line ${ids.length + 1}`)).id)
+        }
+        clock.advance(CHAT_BUCKET_CAPACITY * CHAT_REFILL_MS)
+      }
+      while (ids.length < 60) await round()
+      const cold = (await snapshot(client, a.auth, 0)).chat
+      expect(cold.map((m) => m.id)).toEqual(ids.slice(-CHAT_SERVE))
+      const mark = ids[54] ?? 0
+      expect((await snapshot(client, a.auth, mark)).chat.map((m) => m.id)).toEqual(ids.slice(55))
+      while (ids.length < 210) await round()
+      expect((await snapshot(client, a.auth, 0)).chat.map((m) => m.id)).toEqual(
+        ids.slice(-CHAT_SERVE),
+      )
+      const first = ids[0] ?? 0
+      expect((await snapshot(client, a.auth, first)).chat.map((m) => m.id)).toEqual(
+        ids.slice(-CHAT_KEEP),
+      )
+    })
+
+    it('rule 31: the highest-zone board', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ashgrove', traderState(69, { highestZone: 5 }))
+      await a.inSync()
+      const b = await trader('Brindle', traderState(70))
+      const top = await boards(client, a.auth)
+      expect(top.highestZone.slice(0, 2)).toEqual([
+        { accountId: a.accountId, name: 'Ashgrove', value: 5 },
+        { accountId: b.accountId, name: 'Brindle', value: 1 },
+      ])
+      expect(top.damage).toEqual([])
+      expect(top.weekStart).toBe(weekStartOf(await clock.now()))
+      for (let z = 2; z <= 26; z++) await trader(`z${z}`, traderState(100 + z, { highestZone: z }))
+      const full = await boards(client, a.auth)
+      expect(full.highestZone).toHaveLength(BOARD_ROWS)
+      expect(full.highestZone[0]?.value).toBe(26)
+      expect(full.highestZone.some((r) => r.accountId === b.accountId)).toBe(false)
+
+      const closed = await market(ctx, { 'leaderboards.enabled': false })
+      const c = await closed.trader('Cora', traderState(71))
+      expect(await boards(closed.client, c.auth)).toMatchObject({ highestZone: [], damage: [] })
+
+      const fresh = await market(ctx)
+      const h = await fresh.trader('heck', traderState(72))
+      expect((await boards(fresh.client, h.auth)).highestZone).toEqual([
+        { accountId: h.accountId, name: 'adventurer', value: 1 },
+      ])
+      const boot = await booted(fresh.client, { clientVersion: '0.1.0', deviceToken: null })
+      const mirror = new Mirror(boot)
+      const commit = async () => {
+        const ack = await fresh.client.submit(mirror.batch([tick]), mirror.auth())
+        expect(ack.ok).toBe(true)
+        mirror.commit([tick])
+      }
+      await commit()
+      const row = async () =>
+        (await boards(fresh.client, mirror.auth())).highestZone.find(
+          (r) => r.accountId === boot.account.accountId,
+        )
+      expect((await row())?.name).toBe('adventurer')
+      const start = await fresh.client.linkStart(mirror.auth())
+      if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+      const linked = await fresh.client.linkPoll(mirror.auth(), start.code)
+      if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
+      await commit()
+      expect((await row())?.name).toBe(linked.account.linked?.login)
+    })
+
+    it('rule 32: presence off counts nobody', async (ctx) => {
+      const { client, trader } = await market(ctx, { 'presence.enabled': false })
+      const a = await trader('Ann', traderState(73))
+      const b = await trader('Bo', traderState(74))
+      const w = await snapshot(client, a.auth)
+      expect(w).toMatchObject({ online: 0, zones: [], here: [] })
+      expect(w.flags['presence.enabled']).toBe(false)
+      expect(await snapshot(client, b.auth)).toMatchObject({ online: 0, zones: [], here: [] })
+    })
+    it('rule 33: the boss spawns on the grid with HP for who is online, and engages them', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(80))
+      const b = await trader('Bo', traderState(81))
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect((await snapshot(client, b.auth)).boss).toBeNull()
+      clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+      await snapshot(client, a.auth)
+      await snapshot(client, b.auth)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      clock.advance(10_000)
+      const w = await snapshot(client, a.auth)
+      expect(w.boss).toEqual({
+        bossId: bossIdAt(NEXT_GRID),
+        name: expect.any(String),
+        glyph: expect.any(String),
+        maxHp: 2 * BOSS_BASE_HP,
+        hp: 2 * BOSS_BASE_HP,
+        spawnedAt: NEXT_GRID,
+        endsAt: NEXT_GRID + BOSS_WINDOW_MS,
+        yours: 0,
+      })
+      const engagedOf = async (auth: Auth) =>
+        eventsOf((await infoOf(client, auth)).delivery, 'boss_engaged')
+      const engaged = await engagedOf(a.auth)
+      expect(engaged).toHaveLength(1)
+      expect(engaged[0]?.stats).toEqual(ZONE1_BOSS)
+      expect(ZONE1_BOSS).toEqual({ hp: 630, atk: 14, def: 4, spd: 5 })
+      await snapshot(client, a.auth)
+      expect(await engagedOf(a.auth)).toHaveLength(1)
+      expect(await engagedOf(b.auth)).toHaveLength(1)
+      const c = await trader('Cy', traderState(82))
+      expect(await engagedOf(c.auth)).toHaveLength(0)
+      const late = await snapshot(client, c.auth)
+      expect(late.boss?.maxHp).toBe(2 * BOSS_BASE_HP)
+      expect(await engagedOf(c.auth)).toHaveLength(1)
+    })
+
+    it('rule 34: a committed batch contributes its dealt delta', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(83))
+      const b = await trader('Bo', traderState(84))
+      await spawn(client, clock, [a, b])
+      expect(a.mirror.local.boss?.bossId).toBe(bossIdAt(NEXT_GRID))
+      const { dealt } = await commitTicks(client, a, 20)
+      expect(dealt).toBeGreaterThan(0)
+      expect(dealt).toBe(a.mirror.local.boss?.dealt)
+      const w = await snapshot(client, a.auth)
+      expect(w.boss?.hp).toBe(2 * BOSS_BASE_HP - dealt)
+      expect(w.boss?.yours).toBe(dealt)
+      expect((await boards(client, a.auth)).damage).toEqual([
+        { accountId: a.accountId, name: 'Ann', value: dealt },
+      ])
+    })
+
+    it('rule 35: the killing commit rewards the contributors and disengages them', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(85))
+      const b = await trader('Bo', traderState(86))
+      await spawn(client, clock, [a, b])
+      const { dealt: small } = await commitTicks(client, b, 1)
+      expect(small).toBeGreaterThan(0)
+      let total = 0
+      let killing: Delivery | null = null
+      for (let i = 0; i < 5 && !killing; i++) {
+        if (i > 0) clock.advance(120_000)
+        const { ack, dealt } = await commitTicks(client, a, 60)
+        total += dealt
+        if (ack.ok && kindsOf(ack.delivery).includes('boss_disengaged')) killing = ack.delivery
+      }
+      if (!killing) throw new Error('the boss never died')
+      expect(kindsOf(killing)).toEqual(['rewarded', 'rewarded', 'boss_disengaged'])
+      for (const r of eventsOf(killing, 'rewarded')) {
+        expect(r.goods?.kind).toBe('item')
+        if (r.goods?.kind === 'item') expect(r.goods.item.id).toMatch(/^r/)
+        expect(r.gold).toBeGreaterThan(0)
+      }
+      expect(a.mirror.local.boss).toBeNull()
+      expect(kindsOf((await infoOf(client, b.auth)).delivery)).toEqual([
+        'rewarded',
+        'boss_disengaged',
+      ])
+      const dead = await snapshot(client, a.auth)
+      expect(dead.boss).toMatchObject({ bossId: bossIdAt(NEXT_GRID), hp: 0, yours: total })
+      expect(total).toBeGreaterThan(2 * BOSS_BASE_HP)
+      const board = (await boards(client, a.auth)).damage
+      // The mirror applied the rewards and the disengage: the next batch's hashes match.
+      await commitTicks(client, a, 1)
+      expect((await snapshot(client, a.auth)).boss?.yours).toBe(total)
+      expect((await boards(client, a.auth)).damage).toEqual(board)
+      clock.advance(BOSS_WINDOW_MS)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+    })
+
+    it('rule 36: past the threshold with no free slot, both rewards wait in returns', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(87))
+      const full = Array.from({ length: 30 }, (_, i) => commonItem(`ic${i}`))
+      const c = await trader('Cy', strongState(88, { inventory: full }))
+      const w = await spawn(client, clock, [a, c])
+      const { dealt } = await commitTicks(client, c, 3)
+      expect(dealt).toBeGreaterThanOrEqual(Math.floor((BOSS_BASE_HP * BOSS_THRESHOLD_BP) / 10000))
+      for (let i = 0; i < 5; i++) {
+        if (i > 0) clock.advance(120_000)
+        const { ack } = await commitTicks(client, a, 60)
+        if (ack.ok && kindsOf(ack.delivery).includes('boss_disengaged')) break
+      }
+      const info = await infoOf(client, c.auth)
+      const rewards = eventsOf(info.delivery, 'rewarded')
+      expect(rewards).toHaveLength(2)
+      for (const r of rewards) {
+        expect(r.goods).toBeNull()
+        expect(r.gold).toBeGreaterThan(0)
+      }
+      expect(info.returns).toBe(2)
+      c.mirror.receive(info.delivery)
+      const events: PlayerEvent[] = [{ t: 'vendor', itemId: 'ic0' }]
+      const batch = c.mirror.batch(events)
+      const ack = await client.submit(batch, c.auth)
+      if (!ack.ok) throw new Error(`refused: ${ack.reason}`)
+      const returned = eventsOf(ack.delivery, 'returned')
+      expect(returned).toHaveLength(1)
+      expect(returned[0]?.listingId).toBe(w.boss?.bossId)
+      expect((await infoOf(client, c.auth)).returns).toBe(1)
+    })
+
+    it('rule 37: an expired boss pays the threshold drop only', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(89))
+      const b = await trader('Bo', traderState(90))
+      await spawn(client, clock, [a, b])
+      await commitTicks(client, a, 3)
+      await commitTicks(client, b, 1)
+      clock.advance(BOSS_WINDOW_MS)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect(kindsOf((await infoOf(client, a.auth)).delivery)).toEqual([
+        'rewarded',
+        'boss_disengaged',
+      ])
+      expect(kindsOf((await infoOf(client, b.auth)).delivery)).toEqual(['boss_disengaged'])
+    })
+
+    it('rule 38: with the world boss off nothing spawns', async (ctx) => {
+      const { client, clock, trader } = await market(ctx, { 'worldboss.enabled': false })
+      const a = await trader('Ann', traderState(91))
+      clock.advance(NEXT_GRID - 10_000 - (await clock.now()))
+      await snapshot(client, a.auth)
+      clock.advance(10_000)
+      expect((await snapshot(client, a.auth)).boss).toBeNull()
+      expect(kindsOf((await infoOf(client, a.auth)).delivery)).not.toContain('boss_engaged')
+    })
+
+    it('rule 39: the damage board is weekly', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', strongState(92))
+      const b = await trader('Bo', traderState(93))
+      await spawn(client, clock, [a, b])
+      await commitTicks(client, a, 5)
+      const now = await clock.now()
+      const before = await boards(client, a.auth)
+      expect(before.weekStart).toBe(weekStartOf(now))
+      expect(before.damage).toHaveLength(1)
+      clock.advance(weekStartOf(now) + WEEK - now)
+      const after = await boards(client, a.auth)
+      expect(after.damage).toEqual([])
+      expect(after.weekStart).toBe(weekStartOf(now) + WEEK)
+      expect(await boards(client, a.auth)).toEqual(after)
+    })
+
+    it('rule 40: a restarted host resumes the live boss from the store', async (ctx) => {
+      const clock = makeClock()
+      const kv = new MemoryKeyValue()
+      const first = await make(clock, { flags: {}, kv })
+      if (!first.host) {
+        ctx.skip()
+        return
+      }
+      const m = await first.host.mint({ state: strongState(94), name: 'Ann', linked: true })
+      const auth = { deviceToken: m.deviceToken }
+      const boot = await booted(first.client, {
+        clientVersion: '0.1.0',
+        deviceToken: m.deviceToken,
+      })
+      const a: Trader = {
+        auth,
+        accountId: m.accountId,
+        mirror: new Mirror(boot),
+        async refresh() {
+          a.mirror.receive((await infoOf(first.client, auth)).delivery)
+        },
+      }
+      const other = await first.host.mint({ state: traderState(95), name: 'Bo', linked: true })
+      const otherAuth = { deviceToken: other.deviceToken }
+      const b: Trader = {
+        auth: otherAuth,
+        accountId: other.accountId,
+        mirror: new Mirror(
+          await booted(first.client, { clientVersion: '0.1.0', deviceToken: other.deviceToken }),
+        ),
+        async refresh() {
+          b.mirror.receive((await infoOf(first.client, otherAuth)).delivery)
+        },
+      }
+      await spawn(first.client, clock, [a, b])
+      await commitTicks(first.client, a, 5)
+      const before = await snapshot(first.client, auth)
+      expect(before.online).toBe(2)
+      const second = await make(clock, { flags: {}, kv })
+      const after = await snapshot(second.client, auth)
+      expect(after.boss).toEqual(before.boss)
+      expect(after.boss?.hp).toBeLessThan(2 * BOSS_BASE_HP)
+      // Presence lives in the host's memory: the new host counts only who polled it.
+      expect(after.online).toBe(1)
+      expect((await snapshot(first.client, otherAuth)).online).toBe(2)
     })
   })
 }

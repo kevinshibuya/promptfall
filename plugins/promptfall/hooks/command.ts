@@ -1,29 +1,62 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { DialogTab, MarketState, Mode, OrdersState } from '../types'
-import type { GameHandle } from './engine'
-import { MARKET_DEFAULT, ORDERS_DEFAULT } from './state'
+import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
+import { type GameHandle, PAUSED_LINE } from './engine'
+import { runSandbox, SANDBOX_PINS_SERVER } from './sandbox'
+import { SERVER_KEY, serverReport } from './server'
+import {
+  BOARDS_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
+  settingCommand,
+} from './state'
+import { PREFIX } from './storage'
+import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
+import { PANE_ROWS } from './windows/tuning'
 
 export const PANE_ID = 'promptfall'
 
-export const COMMAND = {
-  name: 'promptfall',
-  description: 'Promptfall: open the game, or off / on / farm / server',
-  argumentHint:
-    '[inventory|heroes|market|orders|account|odds|off|on|farm|server <url>|server local]',
-  immediate: true,
-} as const
+const HINT =
+  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local|sound on|off|motion full|still|renderer auto|image|raster'
 
-const TABS: readonly DialogTab[] = ['inventory', 'heroes', 'market', 'orders', 'account', 'odds']
+/** The command, its hint naming the sandbox verb only while the sandbox is on. */
+export function commandSpec(sandbox: boolean) {
+  return {
+    name: 'promptfall',
+    description:
+      'Promptfall: open the game, or off / on / farm / server / sound / motion / renderer',
+    argumentHint: `[${HINT}${sandbox ? '|sandbox <verb>' : ''}]`,
+    immediate: true,
+  } as const
+}
+
+const TABS: readonly DialogTab[] = [
+  'inventory',
+  'heroes',
+  'market',
+  'orders',
+  'account',
+  'odds',
+  'chat',
+  'leaderboards',
+]
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const dialogTabAtom = atom({ plugin: 'promptfall', key: 'dialogTab' } as const, 'inventory')
+const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG_DEFAULT)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 
-const SERVER_USAGE = 'Usage: /promptfall server <http(s) URL> or /promptfall server local'
+const SERVER_USAGE =
+  'Usage: /promptfall server, /promptfall server <http(s) URL> or /promptfall server local'
 
 /** `server local` → null; `server <url>` → the URL; anything else → undefined. */
 function serverTarget(rest: string): string | null | undefined {
@@ -33,10 +66,18 @@ function serverTarget(rest: string): string | null | undefined {
   return /^https?:\/\/\S+$/i.test(url) ? url : undefined
 }
 
-export function registerCommand(on: On, game: () => GameHandle | null): void {
+export function registerCommand(
+  on: On,
+  game: () => GameHandle | null,
+  sandbox: () => boolean,
+): void {
   on('command.run', { command: 'promptfall' }, async ($, e) => {
     const raw = e.args.trim()
     const arg = raw.toLowerCase()
+    // The verbs claim the lease themselves, all but `reset`; off, they touch nothing.
+    if (arg === 'sandbox' || arg.startsWith('sandbox ')) {
+      return { text: await runSandbox(raw.slice('sandbox'.length).trim(), sandbox(), game()) }
+    }
     // Typing the command means the player is in this session: it takes the lease.
     if (arg !== 'off') await game()?.claim()
 
@@ -48,7 +89,20 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
       return { text: off ? 'Promptfall band is off for this session' : 'Promptfall band is on' }
     }
 
+    // Per machine: the store holds them, the atom mirrors them for the drawings.
+    const setting = settingCommand(arg)
+    if (setting && 'usage' in setting) return { text: setting.usage }
+    if (setting) {
+      const key = `promptfall:${SETTINGS_KEY}`
+      const next: Settings = { ...parseSettings(await $.store.get(key)), ...setting.patch }
+      await $.store.set(key, next)
+      await update($, settingsAtom, () => next)
+      return { text: setting.text }
+    }
+
     if (arg === 'server' || arg.startsWith('server ')) {
+      if (sandbox()) return { text: SANDBOX_PINS_SERVER }
+      if (arg === 'server') return { text: serverReport(await $.store.get(PREFIX + SERVER_KEY)) }
       const target = serverTarget(raw.slice('server'.length).trim())
       if (target === undefined) return { text: SERVER_USAGE }
       const running = game()
@@ -65,6 +119,7 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
     if (arg === 'farm') {
       const view = await read($, viewAtom)
       const running = game()
+      if (running?.isPaused()) return { text: PAUSED_LINE }
       if (!view || !running?.canApply())
         return { text: 'Promptfall is not playing in this session' }
       running.apply({ t: 'set_farm', on: !view.farm }, await $.clock.now())
@@ -74,13 +129,15 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
 
     const tab = TABS.find((t) => t === arg) ?? 'inventory'
     await update($, dialogTabAtom, () => tab)
+    // The pane opens on the tab's list: a sub-window or a sell flow left open stays behind.
+    await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, menu: null, sell: null }))
     await $.ui.open({
       id: PANE_ID,
       title: 'Promptfall',
       focus: true,
       closeOnEscape: true,
       holdToasts: true,
-      rows: 20,
+      rows: PANE_ROWS,
     })
     const running = game()
     const after = (ms: number, fn: () => void) => {
@@ -102,6 +159,15 @@ export function registerCommand(on: On, game: () => GameHandle | null): void {
         running,
         async (fn) => {
           await update($, ordersAtom, (o: OrdersState | undefined) => fn(o ?? ORDERS_DEFAULT))
+        },
+        after,
+      )
+    }
+    if (running && tab === 'leaderboards') {
+      await loadBoards(
+        running,
+        async (fn) => {
+          await update($, boardsAtom, (b: BoardsState | undefined) => fn(b ?? BOARDS_DEFAULT))
         },
         after,
       )

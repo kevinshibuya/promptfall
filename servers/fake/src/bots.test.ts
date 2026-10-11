@@ -1,52 +1,93 @@
-import { type AccountRecord, Ledger } from '@promptfall/ledger'
-import { type Listing, MemoryKeyValue } from '@promptfall/protocol'
+import type { AccountRecord, Ledger } from '@promptfall/ledger'
+import { BOSS_BASE_HP, HttpClient, type Listing, MemoryKeyValue } from '@promptfall/protocol'
 import { RARITIES, type Rarity } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
+import { BOT_NAMES, BOT_TICK_MS, botName } from './bot-config'
 import { rollBotState } from './bot-seed'
 import { startBots } from './bots'
+import { nodeFetch } from './node-fetch'
+import { createFakeServer } from './server'
+import { booted } from './test-support'
 
 const rarePlus = (r: Rarity) => RARITIES.indexOf(r) >= RARITIES.indexOf('rare')
+const COUNT = 12
 
-/** A seeded ledger, a manual clock, and bots that act only when the test ticks them. */
-async function run(seed: number, ticks: number) {
+/** A fake listening on port 0 with a manual clock, and bots that act only when the test ticks them. */
+async function run(
+  seed: number,
+  ticks: number,
+  start = 1_700_000_000_000,
+  /** Runs before the bots start, over the same store and ledger. */
+  prepare?: (ledger: Ledger, kv: MemoryKeyValue) => Promise<void>,
+) {
   const kv = new MemoryKeyValue()
-  let t = 1_700_000_000_000
+  let t = start
   let n = 0
-  const ledger = new Ledger({
+  const server = createFakeServer({
     kv,
     now: async () => t,
-    minClientVersion: '0.1.0',
+    speed: 1,
+    flags: {},
     seedSource: () => 1,
     tokenSource: () => `tok-${n++}`,
-    linkApprover: async () => null,
+    playerName: 'player',
+    seed,
   })
+  const listening = await server.listen(0)
+  const client = new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch })
+  await prepare?.(server.ledger, kv)
+  const calls: string[] = []
+  const host = {
+    mint: server.ledger.host.mint,
+    credit: server.ledger.host.credit,
+    settle: async (accountId: string) => {
+      calls.push(`settle ${accountId}`)
+    },
+  }
+  const lines: string[] = []
   const bots = startBots({
-    ledger,
+    client,
+    host,
     kv,
     seed,
-    count: 12,
+    count: COUNT,
     speed: 1,
     schedule: () => ({ cancel: () => undefined }),
+    log: (line) => lines.push(line),
   })
-  for (let i = 0; i < ticks; i++) {
-    await bots.tick()
-    t += 60_000
-  }
-  bots.stop()
-  const viewer = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
-  const auth = { deviceToken: viewer.deviceToken }
-  const all: Listing[] = []
-  for (const kind of ['item', 'hero'] as const) {
-    for (let page = 0; ; page++) {
-      const r = await ledger.browse(auth, { kind, sort: 'newest', page })
-      if ('reason' in r) throw new Error('unauthorized')
-      all.push(...r.listings)
-      if ((page + 1) * 10 >= r.total) break
+  try {
+    for (let i = 0; i < ticks; i++) {
+      await bots.tick()
+      t += Math.floor(BOT_TICK_MS / COUNT)
     }
+    bots.stop()
+    const viewer = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: viewer.deviceToken }
+    const world = await client.world(auth, 0)
+    if ('reason' in world) throw new Error('unauthorized')
+    const boards = await client.leaderboards(auth)
+    if ('reason' in boards) throw new Error('unauthorized')
+    const all: Listing[] = []
+    for (const kind of ['item', 'hero'] as const) {
+      for (let page = 0; ; page++) {
+        const r = await client.browse(auth, { kind, sort: 'newest', page })
+        if ('reason' in r) throw new Error('unauthorized')
+        all.push(...r.listings)
+        if ((page + 1) * 10 >= r.total) break
+      }
+    }
+    let orders = 0
+    const records: AccountRecord[] = []
+    for (let i = 0; i < COUNT; i++) {
+      const saved = (await kv.get(`pf:bot:${i}`)) as { accountId: string; deviceToken: string }
+      const mine = await client.myOrders({ deviceToken: saved.deviceToken })
+      if (!('reason' in mine)) orders += mine.orders.length
+      records.push((await kv.get(`pf:acct:${saved.accountId}:record`)) as AccountRecord)
+    }
+    return { all, world, boards, orders, records, lines, calls }
+  } finally {
+    await listening.close()
   }
-  const records = kv.keys().filter((k) => k.endsWith(':record'))
-  const states = await Promise.all(records.map(async (k) => (await kv.get(k)) as AccountRecord))
-  return { ledger, kv, all, states }
 }
 
 describe('bot population', () => {
@@ -69,28 +110,86 @@ describe('bot population', () => {
   }, 60_000)
 })
 
-describe('bots', () => {
-  it('after 60 ticks there are listings of both kinds, an order, and a sale between bots', async () => {
-    const { all, states } = await run(1, 60)
-    expect(all.some((l) => l.goods.kind === 'item')).toBe(true)
-    expect(all.some((l) => l.goods.kind === 'hero')).toBe(true)
-    const names = new Set(all.map((l) => l.sellerName))
-    expect(names.size).toBeGreaterThan(1)
-    const sold = states.some((r) =>
-      r.state.lootLog.some((e) => e.k === 'trade' && e.what === 'sold'),
+describe('bots over HTTP', () => {
+  it('after three rounds every bot has committed batches and shows as online', async () => {
+    const { records, world, calls } = await run(1, 3 * COUNT)
+    for (let i = 0; i < COUNT; i++) {
+      const record = records[i]
+      expect(record?.seq).toBeGreaterThanOrEqual(3)
+      expect(record?.state.tick).toBeGreaterThan(rollBotState(1, i).tick)
+    }
+    expect(world.online).toBe(COUNT + 1)
+    // Presence per zone matches where each bot's committed state stands, plus the viewer in zone 1.
+    const counts = new Map<number, number>([[1, 1]])
+    for (const r of records) if (r) counts.set(r.state.zone, (counts.get(r.state.zone) ?? 0) + 1)
+    const expected = [...counts].map(([zone, count]) => ({ zone, count }))
+    expect([...world.zones].sort((a, b) => a.zone - b.zone)).toEqual(
+      expected.sort((a, b) => a.zone - b.zone),
     )
-    expect(sold).toBe(true)
+    expect(calls).toEqual([])
   }, 120_000)
 
-  it('places buy orders', async () => {
-    const { ledger, kv } = await run(1, 60)
-    let orders = 0
-    for (let i = 0; i < 12; i++) {
-      const saved = (await kv.get(`pf:bot:${i}`)) as { deviceToken: string }
-      const mine = await ledger.myOrders({ deviceToken: saved.deviceToken })
-      if (!('reason' in mine)) orders += mine.orders.length
-    }
+  it('after 120 ticks they chat, list both kinds, order, sell and fill', async () => {
+    const { all, world, orders, records, lines, calls } = await run(1, 120)
+    const speakers = new Set(world.chat.map((m) => m.name))
+    expect(speakers.size).toBeGreaterThanOrEqual(2)
+    for (const name of speakers) expect(BOT_NAMES.map((_, i) => botName(i))).toContain(name)
+    // Hero listings sell fast (bots buy at the asking price), so the kinds listed are read
+    // from the open listings and from what was sold or returned.
+    const trades = records.flatMap((r) => r.state.lootLog.filter((e) => e.k === 'trade'))
+    const listed = new Set([
+      ...all.map((l) => l.goods.kind),
+      ...trades.filter((e) => e.what !== 'bought').map((e) => e.kind),
+    ])
+    expect([...listed].sort()).toEqual(['hero', 'item'])
+    expect(all.length).toBeGreaterThan(0)
     expect(orders).toBeGreaterThan(0)
+    expect(trades.some((e) => e.what === 'sold')).toBe(true)
+    expect(lines.some((l) => / fill ok$/.test(l))).toBe(true)
+    expect(calls).toEqual([])
+  }, 120_000)
+
+  it('bots engaged at a grid point fight the boss through their batches', async () => {
+    const grid = 1_700_006_400_000
+    // One round to stamp everyone present, then two more across the grid point.
+    const { world, boards } = await run(1, 3 * COUNT, grid - BOT_TICK_MS - 1)
+    const boss = world.boss
+    if (!boss) throw new Error('no boss')
+    expect(boss.spawnedAt).toBe(grid)
+    expect(boss.maxHp).toBe(COUNT * BOSS_BASE_HP)
+    expect(boss.hp).toBeLessThan(boss.maxHp)
+    // Only bots played and fought: neither board holds a row.
+    expect(boards.damage).toEqual([])
+    expect(boards.highestZone).toEqual([])
+  }, 120_000)
+
+  it('bots are minted with the mark and named as bots', async () => {
+    const { records, world } = await run(1, COUNT)
+    expect(records.map((r) => r.account.displayName)).toEqual(
+      Array.from({ length: COUNT }, (_, i) => `[bot] ${BOT_NAMES[i % BOT_NAMES.length]}`),
+    )
+    for (const record of records) {
+      expect(record.bot).toBe(true)
+      // The mark is the record's alone: the account is what the wire carries.
+      expect(record.account).not.toHaveProperty('bot')
+    }
+    // Still in presence like anyone else.
+    expect(world.online).toBe(COUNT + 1)
+  }, 120_000)
+
+  it('a bot saved before the mark is minted again, marked and named as a bot', async () => {
+    let unmarked = ''
+    const { records } = await run(1, COUNT, undefined, async (ledger, kv) => {
+      const saved = await ledger.host.mint({
+        state: rollBotState(1, 0),
+        name: 'Ashgrove',
+        linked: true,
+      })
+      unmarked = saved.accountId
+      await kv.set('pf:bot:0', saved)
+    })
+    expect(records[0]?.account.accountId).not.toBe(unmarked)
+    expect(records[0]).toMatchObject({ bot: true, account: { displayName: '[bot] Ashgrove' } })
   }, 120_000)
 
   it('two runs with the same seed list the same ids at the same prices', async () => {
@@ -100,4 +199,29 @@ describe('bots', () => {
     expect(key(a.all).length).toBeGreaterThan(0)
     expect(key(a.all)).toEqual(key(b.all))
   }, 120_000)
+})
+
+describe('a failed bot start', () => {
+  it('leaves the ticks resolving and reports once', async () => {
+    const errors: string[] = []
+    const bots = startBots({
+      client: {} as never,
+      host: {
+        mint: async () => {
+          throw new Error('store is gone')
+        },
+        credit: async () => undefined,
+      },
+      kv: new MemoryKeyValue(),
+      seed: 1,
+      count: 2,
+      speed: 1,
+      schedule: () => ({ cancel: () => undefined }),
+      onError: (line) => errors.push(line),
+    })
+    await bots.tick()
+    await bots.tick()
+    bots.stop()
+    expect(errors).toEqual(['promptfall fake: bots failed to start: Error: store is gone'])
+  })
 })

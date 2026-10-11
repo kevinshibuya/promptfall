@@ -1,6 +1,9 @@
+import { SPAWN_GAUGE_MAX } from './battle'
+import { content } from './content'
 import { clone, draft, reject } from './draft'
-import { pushLog } from './heroes'
-import { findHero } from './progression'
+import { generateHero, pushLog, recruitHero } from './heroes'
+import { rollItemOf, takeDrop } from './loot'
+import { changeZone, checkWipe, draw, findHero, grantXp, newId, partyHeroes } from './progression'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -127,5 +130,139 @@ export function credited(state: GameState, event: Of<'credited'>): StepResult {
   return draft(state, (s, effects) => {
     s.gold += event.gold
     effects.push({ k: 'gold', amount: event.gold })
+  })
+}
+
+export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepResult {
+  if (state.boss !== null) return unapplicable(state, event, 'already_engaged')
+  return draft(state, (s) => {
+    const { hp } = event.stats
+    const id = newId(s, 'e')
+    // The old encounter and queue go; a pending turn boss and the turn's tool calls stay.
+    s.encounter = {
+      enemies: [{ id, def: 'world_boss', kind: 'world_boss', hp, maxHp: hp }],
+      queue: [],
+      waveSize: 0,
+      spawnedInWave: 0,
+    }
+    s.battle.gauges.push({ id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
+    s.boss = {
+      bossId: event.bossId,
+      name: event.name,
+      glyph: event.glyph,
+      stats: { ...event.stats },
+      dealt: 0,
+    }
+  })
+}
+
+export function bossDisengaged(state: GameState, event: Of<'boss_disengaged'>): StepResult {
+  if (state.boss?.bossId !== event.bossId) return unapplicable(state, event, 'not_engaged')
+  return draft(state, (s) => {
+    const id = s.encounter?.enemies.find((e) => e.kind === 'world_boss')?.id
+    s.battle.gauges = s.battle.gauges.filter((e) => e.id !== id)
+    s.battle.queue = s.battle.queue.filter((q) => q !== id)
+    s.encounter = null
+    s.boss = null
+  })
+}
+
+export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
+  const goods = event.goods
+  if (goods) {
+    const full = noRoom(state, goods)
+    if (full) return unapplicable(state, event, full)
+  }
+  return draft(state, (s, effects) => {
+    s.gold += event.gold
+    if (goods) {
+      insert(s, goods)
+      const { base, rarity } =
+        goods.kind === 'item'
+          ? goods.item
+          : { base: goods.hero.template, rarity: goods.hero.rarity }
+      pushLog(s, { k: 'reward', base, rarity, gold: event.gold })
+    }
+    effects.push({ k: 'rewarded', bossId: event.bossId, goods: clone(goods), gold: event.gold })
+  })
+}
+
+// Sandbox grants: each hands out what play would earn, through the path play takes.
+
+function noSuchZone(zone: number): boolean {
+  return !Number.isInteger(zone) || content.zones[zone - 1] === undefined
+}
+
+function noSuchRarity(rarity: string): boolean {
+  return !Object.hasOwn(content.rarity, rarity)
+}
+
+/** The encounter goes with no drops and no XP, and the battle resets as a wipe resets it. */
+function endEncounter(s: GameState): void {
+  s.encounter = null
+  s.battle = { gauges: [], queue: [], busy: 0 }
+}
+
+export function sandboxBoss(state: GameState, event: Of<'sandbox_boss'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
+  return draft(state, (s) => {
+    if (s.zone !== event.zone) changeZone(s, event.zone)
+    endEncounter(s)
+    // The next empty tick spawns it: the zone boss at the boss wave, the turn boss when pending.
+    if (event.boss === 'zone_boss') {
+      s.wave = 11
+      s.pendingTurnBoss = false
+    } else s.pendingTurnBoss = true
+  })
+}
+
+export function sandboxItem(state: GameState, event: Of<'sandbox_item'>): StepResult {
+  if (!Object.hasOwn(content.itemBases, event.base)) {
+    return unapplicable(state, event, 'unknown_base')
+  }
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, 'unknown_rarity')
+  return draft(state, (s, effects) => {
+    takeDrop(s, rollItemOf(s, event.base, event.rarity), effects)
+  })
+}
+
+export function sandboxLevel(state: GameState, event: Of<'sandbox_level'>): StepResult {
+  const hero = findHero(state, event.heroId)
+  if (!hero) return unapplicable(state, event, 'unknown_hero')
+  if (event.level <= hero.level) return unapplicable(state, event, 'level_not_above')
+  const cap = content.rarity[hero.rarity].levelCap
+  if (hero.level >= cap) return unapplicable(state, event, 'level_cap')
+  return draft(state, (s, effects) => {
+    const h = findHero(s, event.heroId)
+    // One grant per level, each exactly what the level still needs, so each pushes its level_up.
+    while (h && h.level < event.level && h.level < cap) {
+      grantXp(s, h, content.xpToNext(h.level) - h.xp, effects)
+    }
+  })
+}
+
+export function sandboxZone(state: GameState, event: Of<'sandbox_zone'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
+  return draft(state, (s) => {
+    changeZone(s, event.zone)
+    endEncounter(s)
+  })
+}
+
+export function sandboxRecruit(state: GameState, event: Of<'sandbox_recruit'>): StepResult {
+  if (noSuchRarity(event.rarity)) return unapplicable(state, event, 'unknown_rarity')
+  if (state.roster.length >= state.rosterCap) return unapplicable(state, event, 'roster_full')
+  return draft(state, (s, effects) => {
+    recruitHero(s, generateHero(s, event.rarity), 'sandbox', effects)
+  })
+}
+
+export function sandboxWipe(state: GameState, event: Of<'sandbox_wipe'>): StepResult {
+  if (state.boss) return unapplicable(state, event, 'boss_mode')
+  return draft(state, (s, effects) => {
+    for (const hero of partyHeroes(s)) hero.hp = 0
+    checkWipe(s, effects)
   })
 }

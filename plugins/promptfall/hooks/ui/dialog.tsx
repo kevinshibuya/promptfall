@@ -1,5 +1,9 @@
+// The pane: all eight tabs drawn as Dragon Quest V windows (UI PR 2 and 3), and the pane before a
+// game view exists. Each tab's builder returns a PaneBuild; the mount draws it and runs its actions.
 import { atom, type On, read, update } from 'claude-code'
 import type {
+  BoardsState,
+  ChatState,
   DialogState,
   DialogTab,
   GameView,
@@ -8,18 +12,60 @@ import type {
   OrdersState,
   Prefs,
   SellState,
+  Settings,
+  WorldState,
 } from '../../types'
 import type { GameHandle } from '../engine'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT, PREFS_DEFAULT } from '../state'
-import { content, type PlayerEvent, RARITIES, SIM_VERSION } from '../vendor/sim.js'
-import { CLIENT_VERSION } from '../version'
-import { CLASS_LABEL, formatGold } from './format'
-import { confirmBuy, loadMarket, marketBody } from './market'
-import { loadOrders, ordersBody, ordersTrade } from './orders'
-import { RARITY_COLOR } from './parts'
-import { openSell, sellBody, sellTrade } from './sell'
+import { PROBE_DELAY_MS } from '../stage/tuning'
+import {
+  BOARDS_DEFAULT,
+  CHAT_DEFAULT,
+  DIALOG_DEFAULT,
+  MARKET_DEFAULT,
+  ORDERS_DEFAULT,
+  PREFS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
+  WORLD_DEFAULT,
+} from '../state'
+import { validPrice } from '../vendor/ledger.js'
+import type { PlayerEvent } from '../vendor/sim.js'
+import { FIELD_ROWS, LINK_ROWS, PANE_MAX_COLUMNS, PANE_ROWS } from '../windows/tuning'
+import { postChat } from './chat'
+import { loadBoards } from './leaderboards'
+import { loadMarket } from './market'
+import { loadOrders, placeOrder } from './orders'
+import { accountPane, noViewPane } from './pane/account'
+import { chatPane } from './pane/chat'
+import { paneLayout } from './pane/frame'
+import { heroesPane } from './pane/heroes'
+import type { PaneInput } from './pane/input'
+import { inventoryPane } from './pane/inventory'
+import { boardsPane } from './pane/leaderboards'
+import { marketPane } from './pane/market'
+import {
+  type ActionContext,
+  hiddenRing,
+  type PaneDraw,
+  paneElement,
+  paneWindow,
+  placed,
+  refocusKey,
+  registerPaneHooks,
+  remember,
+  ringOnInput,
+  runAction,
+  stepCursor,
+  stopsSignature,
+  withCursor,
+} from './pane/mount'
+import { oddsPane } from './pane/odds'
+import { ordersPane } from './pane/orders'
+import type { PaneAction, PaneBuild } from './pane/types'
+import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
 import { formatRemaining, remainingRealMs } from './time'
-import type { After, Els, Updater } from './trade'
+import type { After, Updater } from './trade'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
@@ -31,63 +77,45 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const serverAtom = atom({ plugin: 'promptfall', key: 'server' } as const, null)
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
+const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 
-const TRADEABLE = new Set(['rare', 'epic', 'legendary'])
-
-const TABS: { tab: DialogTab; label: string; hotkey: string }[] = [
-  { tab: 'inventory', label: 'Inventory', hotkey: 'i' },
-  { tab: 'heroes', label: 'Heroes', hotkey: 'h' },
-  { tab: 'market', label: 'Market', hotkey: 'm' },
-  { tab: 'orders', label: 'Orders', hotkey: 'r' },
-  { tab: 'account', label: 'Account', hotkey: 'a' },
-  { tab: 'odds', label: 'Odds', hotkey: 'o' },
-]
-
-function percent(weight: number, total: number): string {
-  if (total <= 0) return '0%'
-  const hundredths = Math.floor((weight * 10000) / total)
-  return `${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, '0')}%`
-}
-
-function oddsLine(weights: Record<string, number>): string {
-  const total = RARITIES.reduce((sum, r) => sum + (weights[r] ?? 0), 0)
-  return RARITIES.map((r) => `${r} ${percent(weights[r] ?? 0, total)}`).join(' · ')
+/** Each tab's builder. */
+const BUILDERS: Record<DialogTab, (input: PaneInput) => PaneBuild> = {
+  inventory: inventoryPane,
+  heroes: heroesPane,
+  market: marketPane,
+  orders: ordersPane,
+  account: accountPane,
+  odds: oddsPane,
+  chat: chatPane,
+  leaderboards: boardsPane,
 }
 
 export function registerDialog(on: On, game: () => GameHandle | null): void {
+  registerPaneHooks(on)
   on('ui.render', { component: 'Pane', requestId: 'promptfall' }, async ($, e) => {
     const table = $.ui.resolve(e)
-    const { Box, Text, Button, Link } = table
-    const Select = 'Select' in table ? table.Select : undefined
-    /** A Select where the surface has one; one Button per option elsewhere (mobile). */
-    const pick = (
-      key: string,
-      label: string,
-      options: { value: string; label: string }[],
-      onPick: (value: string) => Promise<void>,
-      value?: string,
-    ) =>
-      Select ? (
-        <Select
-          key={key}
-          label={label}
-          options={options}
-          {...(value !== undefined ? { value } : {})}
-          onSelect={(picked: string) => void onPick(picked)}
-        />
-      ) : (
-        <Box key={key} flexDirection="column">
-          <Text dimColor>{label}</Text>
-          {options.map((o) => (
-            <Button key={`${key}-${o.value}`} label={o.label} onPress={() => onPick(o.value)} />
-          ))}
-        </Box>
-      )
     const view: GameView | null = await read($, viewAtom)
     const mode: Mode = (await read($, modeAtom)) ?? 'primary'
     const tab: DialogTab = (await read($, dialogTabAtom)) ?? 'inventory'
-    const dialog: DialogState = (await read($, dialogAtom)) ?? DIALOG_DEFAULT
+    const renderer = (await read($, rendererAtom)) ?? 'unknown'
+    const dialog: DialogState = { ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }
     const notice = await read($, noticeAtom)
+    const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
+    const market: MarketState = (await read($, marketAtom)) ?? MARKET_DEFAULT
+    const orders: OrdersState = (await read($, ordersAtom)) ?? ORDERS_DEFAULT
+    const chat: ChatState = (await read($, chatAtom)) ?? CHAT_DEFAULT
+    const boards: BoardsState = (await read($, boardsAtom)) ?? BOARDS_DEFAULT
+    const server: string = (await read($, serverAtom)) ?? 'in-process'
+    const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
+    const leaseOwner = (await read($, leaseOwnerAtom)) ?? null
+    // The atom keeps this render subscribed; the store is the truth (another session may write it).
+    await read($, settingsAtom)
+    const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
 
     const readOnly = mode === 'secondary' || mode === 'paused' || !game()?.canApply()
     const act = async (event: PlayerEvent) => {
@@ -96,15 +124,17 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       running.apply(event, await $.clock.now())
       await running.settled()
     }
-    const setDialog = (patch: Partial<DialogState>) =>
-      update($, dialogAtom, (d) => ({ ...(d ?? DIALOG_DEFAULT), ...patch }))
-    const market: MarketState = (await read($, marketAtom)) ?? MARKET_DEFAULT
-    const orders: OrdersState = (await read($, ordersAtom)) ?? ORDERS_DEFAULT
     const updMarket: Updater<MarketState> = async (fn) => {
       await update($, marketAtom, (m) => fn(m ?? MARKET_DEFAULT))
     }
     const updOrders: Updater<OrdersState> = async (fn) => {
       await update($, ordersAtom, (o) => fn(o ?? ORDERS_DEFAULT))
+    }
+    const updChat: Updater<ChatState> = async (fn) => {
+      await update($, chatAtom, (c) => fn(c ?? CHAT_DEFAULT))
+    }
+    const updBoards: Updater<BoardsState> = async (fn) => {
+      await update($, boardsAtom, (b) => fn(b ?? BOARDS_DEFAULT))
     }
     const updDialog: Updater<DialogState> = async (fn) => {
       await update($, dialogAtom, (d) => fn(d ?? DIALOG_DEFAULT))
@@ -114,482 +144,185 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const after: After = (ms, fn) => {
       $.clock.after(ms, fn)
     }
-    const els: Els = { Box, Text, Button, Input: 'Input' in table ? table.Input : undefined }
+    /** Merges into the store, not a render's copy: another session may have changed it. */
+    const setSettings = async (patch: Partial<Settings>) => {
+      const next = { ...parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)), ...patch }
+      await $.store.set(`promptfall:${SETTINGS_KEY}`, next)
+      await update($, settingsAtom, () => next)
+    }
     const clientNow = await $.clock.now()
     const serverClock = game()?.clock() ?? null
     const remainingMs = (deadline: number) =>
       serverClock ? remainingRealMs(deadline, serverClock, clientNow) : deadline - clientNow
-    /** Opening the Market or Orders tab syncs and loads it. */
+    /** Opening the Market, Orders or Leaderboards tab syncs and loads it. */
     const openTab = async (next: DialogTab) => {
       await update($, dialogTabAtom, () => next)
       const running = game()
       if (!running) return
       if (next === 'market') await loadMarket(running, market.query, updMarket, after)
       if (next === 'orders') await loadOrders(running, updOrders, after)
+      if (next === 'leaderboards') await loadBoards(running, updBoards, after)
     }
-
-    const tabs = (
-      <Box key="tabs" flexDirection="row" gap={2}>
-        {TABS.map((t) => (
-          <Button
-            key={`tab-${t.tab}`}
-            label={t.label}
-            hotkey={t.hotkey}
-            plain
-            dimColor={t.tab !== tab}
-            onPress={() => openTab(t.tab)}
-          />
-        ))}
-      </Box>
-    )
-
-    const header = []
-    if (readOnly) {
-      const why =
-        mode === 'secondary'
-          ? 'Playing in another session: this view is read-only.'
-          : mode === 'paused'
-            ? (notice ?? 'Promptfall is paused.')
-            : (notice ?? 'Promptfall is not playing in this session.')
-      header.push(
-        <Box key="read-only" flexDirection="row" gap={1}>
-          <Text color="yellow" wrap="truncate">
-            {why}
-          </Text>
-          {mode === 'secondary' ? (
-            <Button key="play-here" label="play here" onPress={() => game()?.claim()} />
-          ) : null}
-        </Box>,
-      )
-    }
-    if (dialog.paneNotice) {
-      header.push(
-        <Text key="pane-notice" color="red" wrap="truncate">
-          {`Refused: ${dialog.paneNotice}`}
-        </Text>,
-      )
-    }
-
-    const server: string = (await read($, serverAtom)) ?? 'in-process'
-    const resetRow = (
-      <Box key="account-reset" flexDirection="row" gap={2}>
-        <Button key="reset" label="Reset this machine's data" onPress={() => game()?.reset()} />
-      </Box>
-    )
-
-    if (!view) {
-      // The Account tab works without a game view: a state from an older version is reset here.
-      const body =
-        tab === 'account' && game()
-          ? [
-              <Text key="account-server" wrap="truncate">
-                {`Server: ${server}`}
-              </Text>,
-              <Text key="account-client" wrap="truncate">
-                {`Client ${CLIENT_VERSION} · sim v${SIM_VERSION}`}
-              </Text>,
-              resetRow,
-            ]
-          : [
-              <Text key="not-started" dimColor>
-                Promptfall has not started in this session.
-              </Text>,
-            ]
-      return (
-        <Box key="dialog" flexDirection="column">
-          {tabs}
-          {header}
-          {body}
-        </Box>
-      )
-    }
-
-    const heroNameById = new Map(view.roster.map((h) => [h.id, h.name]))
-    const body = []
 
     const running = game()
-    if ((tab === 'inventory' || tab === 'heroes') && dialog.sell && running) {
-      const sell = dialog.sell
-      const close = () => updDialog((d) => ({ ...d, sell: null }))
-      const goods =
-        sell.kind === 'item'
-          ? view.inventory.find((i) => i.id === sell.id)
-          : view.roster.find((h) => h.id === sell.id)
-      const tradeableAt = goods?.tradeableAt ?? null
-      const remaining = tradeableAt === null ? undefined : formatRemaining(remainingMs(tradeableAt))
-      body.push(
-        ...sellBody(els, view, sell, remainingMs, {
-          close,
-          setPrice: (text) => updSell((s) => ({ ...s, price: text })),
-          list: (price) =>
-            sellTrade(
-              running,
-              (client, auth) => client.list(auth, { kind: sell.kind, id: sell.id, price }),
-              updSell,
-              close,
-              after,
-              remaining,
-            ),
-          accept: (orderId) =>
-            sellTrade(
-              running,
-              (client, auth) => client.fillOrder(auth, orderId, sell.id),
-              updSell,
-              close,
-              after,
-              remaining,
-            ),
-          unequip: (heroId, slot) => act({ t: 'unequip', heroId, slot }),
-        }),
-      )
-    } else if (tab === 'market' && running) {
-      body.push(
-        ...marketBody(els, pick, view, market, readOnly, {
-          setQuery: (q) => loadMarket(running, q, updMarket, after),
-          ask: (id) => updMarket((m) => ({ ...m, confirm: id })),
-          confirm: async () =>
-            confirmBuy(running, (await read($, marketAtom)) ?? market, updMarket, after),
-        }),
-      )
-    } else if (tab === 'orders' && running) {
-      body.push(
-        ...ordersBody(els, pick, view, orders, readOnly, remainingMs, {
-          cancelListing: async (id) => {
-            await ordersTrade(running, (c, a) => c.cancelListing(a, id), updOrders, after)
-          },
-          cancelOrder: async (id) => {
-            await ordersTrade(running, (c, a) => c.cancelOrder(a, id), updOrders, after)
-          },
-          openForm: () =>
-            updOrders((o) => ({
-              ...o,
-              form: { base: 'steel_longsword', minRarity: 'rare', affixId: null, maxPrice: '' },
-            })),
-          closeForm: () => updOrders((o) => ({ ...o, form: null })),
-          setForm: (patch) =>
-            updOrders((o) => (o.form ? { ...o, form: { ...o.form, ...patch } } : o)),
-          submit: async () => {
-            const current = (await read($, ordersAtom)) ?? orders
-            const form = current.form
-            // Enter and `place` both submit: one order at a time.
-            if (current.busy || !form || !/^\d+$/.test(form.maxPrice)) return
-            await updOrders((o) => ({ ...o, busy: true }))
-            const input = {
-              base: form.base,
-              minRarity: form.minRarity,
-              affixId: form.affixId,
-              maxPrice: Number(form.maxPrice),
-            }
-            const done = await ordersTrade(
-              running,
-              (c, a) => c.placeOrder(a, input),
-              updOrders,
-              after,
-            )
-            if (done) await updOrders((o) => ({ ...o, form: null }))
-          },
-        }),
-      )
-    } else if (tab === 'inventory') {
-      body.push(
-        <Text key="inv-head" bold>
-          {`Inventory ${view.inventory.length}/${view.inventoryCap} · ${formatGold(view.gold)}`}
-        </Text>,
-      )
-      if (view.inventory.length === 0)
-        body.push(
-          <Text key="inv-empty" dimColor>
-            Nothing yet.
-          </Text>,
-        )
-      for (const item of view.inventory) {
-        const wearer = item.equippedBy ? heroNameById.get(item.equippedBy) : null
-        // Two rows per item, so a docked pane never truncates a button.
-        body.push(
-          <Box key={`item-${item.id}`} flexDirection="column">
-            <Box key={`item-name-${item.id}`} flexDirection="row" gap={1}>
-              <Text
-                color={RARITY_COLOR[item.rarity]}
-                dimColor={item.rarity === 'common'}
-                wrap="truncate"
-              >
-                {`${item.glyph} ${item.name} (${item.rarity}, ${item.slot})`}
-              </Text>
-              {item.affixes.length > 0 ? (
-                <Text dimColor wrap="truncate">
-                  {item.affixes.join(', ')}
-                </Text>
-              ) : null}
-            </Box>
-            <Box key={`item-actions-${item.id}`} flexDirection="row" gap={1} paddingLeft={2}>
-              {wearer ? <Text color="cyan" wrap="truncate">{`[${wearer}]`}</Text> : null}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`equip-${item.id}`}
-                  label="equip"
-                  onPress={() =>
-                    setDialog({
-                      itemPick: dialog.itemPick === `equip:${item.id}` ? null : `equip:${item.id}`,
-                    })
-                  }
-                />
-              )}
-              {readOnly || !item.equippedBy ? null : (
-                <Button
-                  key={`unequip-${item.id}`}
-                  label="unequip"
-                  onPress={() => {
-                    const heroId = item.equippedBy
-                    const slot = item.slot
-                    if (
-                      heroId &&
-                      (slot === 'weapon' || slot === 'armour' || slot === 'accessory')
-                    ) {
-                      return act({ t: 'unequip', heroId, slot })
-                    }
-                  }}
-                />
-              )}
-              {readOnly || item.equippedBy ? null : (
-                <Button
-                  key={`vendor-${item.id}`}
-                  label={`vendor ${item.vendorValue}g`}
-                  onPress={() => act({ t: 'vendor', itemId: item.id })}
-                />
-              )}
-              {readOnly || item.equippedBy || !TRADEABLE.has(item.rarity) || !running ? null : (
-                <Button
-                  key={`sell-${item.id}`}
-                  label="sell"
-                  onPress={() => openSell(running, 'item', item.id, updDialog)}
-                />
-              )}
-              {readOnly || item.affixes.length === 0 ? null : (
-                <Button
-                  key={`reforge-${item.id}`}
-                  label={`reforge ${item.reforgeCost}g`}
-                  onPress={() =>
-                    setDialog({
-                      itemPick:
-                        dialog.itemPick === `reforge:${item.id}` ? null : `reforge:${item.id}`,
-                    })
-                  }
-                />
-              )}
-            </Box>
-          </Box>,
-        )
-        if (!readOnly && dialog.itemPick === `equip:${item.id}`) {
-          const options = view.roster
-            .filter((h) => item.classes.includes(h.cls))
-            .map((h) => ({ value: h.id, label: `${h.name} (${CLASS_LABEL[h.cls] ?? h.cls})` }))
-          body.push(
-            options.length > 0 ? (
-              pick(`equip-to-${item.id}`, 'Equip on', options, async (heroId) => {
-                await setDialog({ itemPick: null })
-                await act({ t: 'equip', heroId, itemId: item.id })
-              })
-            ) : (
-              <Text key={`equip-none-${item.id}`} dimColor>
-                No hero of a class that can wear it.
-              </Text>
-            ),
-          )
-        }
-        if (!readOnly && dialog.itemPick === `reforge:${item.id}`) {
-          body.push(
-            pick(
-              `reforge-pick-${item.id}`,
-              `Reforge which affix (${item.reforgeCost}g)`,
-              item.affixes.map((label, i) => ({ value: String(i), label })),
-              async (value) => {
-                await setDialog({ itemPick: null })
-                await act({ t: 'reforge', itemId: item.id, affixIndex: Number.parseInt(value, 10) })
-              },
-            ),
-          )
-        }
-      }
-    } else if (tab === 'heroes') {
-      body.push(
-        <Box key="heroes-head" flexDirection="row" gap={2}>
-          <Text
-            bold
-          >{`Roster ${view.roster.length}/${view.rosterCap} · ${formatGold(view.gold)}`}</Text>
-          {readOnly ? null : (
-            <Button
-              key="recruit"
-              label={`Recruit ${view.tavernPrice}g`}
-              onPress={() => act({ t: 'recruit' })}
-            />
-          )}
-        </Box>,
-      )
-      if (dialog.partyPick.length > 0) {
-        body.push(
-          <Text key="party-pick" dimColor>
-            {`New party: ${dialog.partyPick.map((id) => heroNameById.get(id) ?? id).join(', ')} (pick ${3 - dialog.partyPick.length} more)`}
-          </Text>,
-        )
-      }
-      for (const hero of view.roster) {
-        const picked = dialog.partyPick.includes(hero.id)
-        const marker = hero.inParty ? '[party]' : hero.inPendingParty ? '[next zone]' : ''
-        body.push(
-          <Box key={`hero-${hero.id}`} flexDirection="row" gap={1}>
-            <Text color={RARITY_COLOR[hero.rarity]} wrap="truncate">
-              {`${hero.glyph} ${hero.name} · ${CLASS_LABEL[hero.cls] ?? hero.cls} L${hero.level} (${hero.rarity})`}
-            </Text>
-            {hero.traits.length > 0 ? (
-              <Text dimColor wrap="truncate">
-                {hero.traits.join(', ')}
-              </Text>
-            ) : null}
-            {marker ? <Text color="cyan">{marker}</Text> : null}
-            {readOnly || !TRADEABLE.has(hero.rarity) || !running ? null : (
-              <Button
-                key={`sell-${hero.id}`}
-                label="sell"
-                onPress={() => openSell(running, 'hero', hero.id, updDialog)}
-              />
-            )}
-            {readOnly ? null : (
-              <Button
-                key={`party-${hero.id}`}
-                label={picked ? 'picked' : 'party'}
-                onPress={async () => {
-                  const next = picked
-                    ? dialog.partyPick.filter((id) => id !== hero.id)
-                    : [...dialog.partyPick, hero.id]
-                  const [a, b, c] = next
-                  if (next.length === 3 && a && b && c) {
-                    await setDialog({ partyPick: [] })
-                    await act({ t: 'set_party', heroIds: [a, b, c] })
-                  } else {
-                    await setDialog({ partyPick: next })
-                  }
-                }}
-              />
-            )}
-            {readOnly || hero.inParty || hero.inPendingParty ? null : (
-              <Button
-                key={`dismiss-${hero.id}`}
-                label="dismiss"
-                onPress={() => act({ t: 'dismiss', heroId: hero.id })}
-              />
-            )}
-          </Box>,
-        )
-      }
-      body.push(
-        <Text key="heroes-help" dimColor>
-          A new party takes the field at the next zone change.
-        </Text>,
-      )
-    } else if (tab === 'account') {
-      const leaseOwner = await read($, leaseOwnerAtom)
-      const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
-      for (const [k, line] of [
-        ['server', `Server: ${server}`],
-        ['account', `Account ${view.accountId}`],
-        ['client', `Client ${CLIENT_VERSION} · sim v${SIM_VERSION}`],
-        ['mode', `Mode ${mode}`],
-        ['lease', `Session ${leaseOwner ?? 'none'}`],
-        [
-          'progress',
-          `Highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}`,
-        ],
-      ] as const) {
-        body.push(
-          <Text key={`account-${k}`} wrap="truncate">
-            {line}
-          </Text>,
-        )
-      }
-      body.push(
-        <Box key="account-actions" flexDirection="row" gap={2}>
-          <Button
-            key="collapse-band"
-            label={prefs.collapsed ? 'expand band' : 'collapse band'}
-            onPress={() =>
-              update($, prefsAtom, (p) => ({
-                ...(p ?? PREFS_DEFAULT),
-                collapsed: !prefs.collapsed,
-              }))
-            }
-          />
-          <Button key="band-off" label="band off" onPress={() => game()?.setOff(true)} />
-        </Box>,
-      )
-      if (view.account.linked) {
-        body.push(
-          <Text key="account-linked" color="green" wrap="truncate">
-            {`Linked as ${view.account.linked}`}
-          </Text>,
-        )
-      } else if (dialog.link) {
-        body.push(
-          <Box key="account-link" flexDirection="row" gap={1}>
-            <Text wrap="truncate">{`Enter ${dialog.link.code} at`}</Text>
-            <Link key="link-url" href={dialog.link.url} label={dialog.link.url} />
-          </Box>,
-        )
-      } else if (!readOnly) {
-        body.push(
-          <Box key="account-link" flexDirection="row" gap={2}>
-            <Button key="link-github" label="Link GitHub" onPress={() => game()?.link()} />
-          </Box>,
-        )
-      }
-      body.push(resetRow)
-    } else {
-      const zone = content.zones[view.zone - 1]
-      const tavernTotal = RARITIES.reduce((sum, r) => sum + content.tavern.odds[r], 0)
-      const lines: [string, string][] = [
-        ['zone', `Drops in zone ${view.zone}: ${zone ? oddsLine(zone.rarityWeights) : '-'}`],
-        ['boss', `Boss drops: ${zone ? oddsLine(zone.bossRarityWeights) : '-'}`],
-        [
-          'tavern',
-          `Tavern: ${RARITIES.map((r) => `${r} ${percent(content.tavern.odds[r], tavernTotal)}`).join(' · ')}`,
-        ],
-      ]
-      for (const [k, line] of lines) {
-        body.push(
-          <Text key={`odds-${k}`} wrap="wrap">
-            {line}
-          </Text>,
-        )
-      }
-      body.push(
-        <Box key="odds-expand" flexDirection="row" gap={2}>
-          {readOnly || view.nextInventoryCost === null ? (
-            <Text dimColor>{view.nextInventoryCost === null ? 'Inventory at max' : ''}</Text>
-          ) : (
-            <Button
-              key="expand-inventory"
-              label={`+${content.expansions.inventory.step} slots ${view.nextInventoryCost}g`}
-              onPress={() => act({ t: 'expand_inventory' })}
-            />
-          )}
-          {readOnly || view.nextRosterCost === null ? (
-            <Text dimColor>{view.nextRosterCost === null ? 'Roster at max' : ''}</Text>
-          ) : (
-            <Button
-              key="expand-roster"
-              label={`+${content.expansions.roster.step} heroes ${view.nextRosterCost}g`}
-              onPress={() => act({ t: 'expand_roster' })}
-            />
-          )}
-        </Box>,
-      )
-    }
+    // Each draw of the Chat tab keeps the world poll fast while it is shown.
+    if (view && tab === 'chat' && running) running.chatSeen(clientNow)
 
-    return (
-      <Box key="dialog" flexDirection="column">
-        {tabs}
-        {header}
-        {body}
-      </Box>
-    )
+    const terminal = e.surface === 'terminal'
+    const hasInput = 'Input' in table
+    const bodyRows = terminal ? e.props.scroll.bodyRows : PANE_ROWS
+    /** The picture's rows: the body less what sits under it, at most PANE_ROWS. */
+    const pictureRows = (under: number) => Math.min(PANE_ROWS, bodyRows - under)
+    const frame = (rows: number) => ({
+      tab,
+      dialog,
+      mode,
+      readOnly,
+      notice,
+      columns: Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns),
+      rows,
+    })
+    const buildAt = (rows: number, input = hasInput, shortPane = false): PaneBuild =>
+      view
+        ? BUILDERS[tab]({
+            ...frame(rows),
+            view,
+            world,
+            running: running !== null,
+            art: !terminal || renderer === 'image',
+            hasInput: input,
+            ...(shortPane ? { shortPane: true as const } : {}),
+            remainingMs,
+            market,
+            orders,
+            chat,
+            boards,
+            account: { server, leaseOwner, settings, renderer, collapsed: prefs.collapsed },
+          })
+        : // The Account tab works without a game view: a state from an older version is reset here.
+          noViewPane({ ...frame(rows), server, hasGame: running !== null, hasInput: input })
+    // On a terminal a field or the Link takes rows under the picture: build again without them.
+    let build = buildAt(pictureRows(0))
+    if (terminal && build.field) {
+      // A field whose row would push the picture under its floor is left out: the picture keeps
+      // its rows and the pane builds as a surface without an Input (presets for prices). Else the
+      // pane would read "needs more room", and the band would take the rows it freed.
+      const room =
+        paneLayout(Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns), pictureRows(FIELD_ROWS))
+          .kind !== 'small'
+      build = room ? buildAt(pictureRows(FIELD_ROWS)) : buildAt(pictureRows(0), false, true)
+    } else if (terminal && build.link) build = buildAt(pictureRows(LINK_ROWS))
+    remember(e.requestId, tab, build)
+
+    const requestId = e.requestId
+    const signature = stopsSignature(build, paneWindow(dialog, tab, orders.form !== null))
+    const key = refocusKey(requestId, signature, build, hiddenRing(e.surface))
+    if (key !== false) {
+      if (key === null) placed(requestId, signature)
+      else {
+        // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
+        // Recorded only once it took: a pane without the keyboard tries again next drawing.
+        $.clock.after(0, () => {
+          void $.ui.focus({ requestId, key }).then(
+            (r) => {
+              if (r.deny === undefined) placed(requestId, signature)
+            },
+            () => undefined,
+          )
+        })
+      }
+    }
+    const ctx: ActionContext = {
+      upd: updDialog,
+      game,
+      act,
+      openTab,
+      after,
+      remaining: (sell) => {
+        const goods =
+          sell.kind === 'item'
+            ? view?.inventory.find((i) => i.id === sell.id)
+            : view?.roster.find((h) => h.id === sell.id)
+        const at = goods?.tradeableAt ?? null
+        return at === null ? undefined : formatRemaining(remainingMs(at))
+      },
+      focusField: async (key) => {
+        const r = await $.ui.focus({ requestId, key })
+        if (r.deny === undefined) ringOnInput(requestId, true)
+      },
+      dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
+      updMarket,
+      updOrders,
+      market: async () => (await read($, marketAtom)) ?? MARKET_DEFAULT,
+      orders: async () => (await read($, ordersAtom)) ?? ORDERS_DEFAULT,
+      setSettings,
+      setCollapsed: async (collapsed) => {
+        await update($, prefsAtom, (p) => ({ ...(p ?? PREFS_DEFAULT), collapsed }))
+      },
+      tab: async () => (await read($, dialogTabAtom)) ?? 'inventory',
+    }
+    const run = (a: PaneAction) => void runAction(a, ctx)
+    // A docked pane collapses the band, which then never probes: the pane probes too.
+    const probe = terminal ? probeElement(table as PaneDraw['els'], renderer) : null
+    if (probe && armProbe()) {
+      $.clock.after(PROBE_DELAY_MS, () => {
+        void (async () => {
+          // A blit that throws settles nothing, like any other deny.
+          const deny = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B }).then(
+            (r) => r.deny,
+            (error: unknown) => String(error),
+          )
+          const verdict = probeVerdict(deny)
+          if (verdict === null) return
+          await update($, rendererAtom, () => verdict)
+          // For the next session's band while its own probe is pending; the player's choice stays.
+          const key = `promptfall:${SETTINGS_KEY}`
+          await $.store.set(key, { ...parseSettings(await $.store.get(key)), probed: verdict })
+        })()
+      })
+    }
+    return paneElement({
+      els: table as PaneDraw['els'],
+      surface: e.surface,
+      renderer,
+      bodyColumns: e.props.bodyColumns,
+      build,
+      run,
+      move: (by) => {
+        const stop = stepCursor(build, by)
+        if (stop) void updDialog((d) => withCursor(d, tab, stop))
+      },
+      probe,
+      field: {
+        onInput: (key, text) => {
+          if (key === 'price') void updSell((s) => ({ ...s, price: text }))
+          if (key === 'order-price')
+            void updOrders((o) => (o.form ? { ...o, form: { ...o.form, maxPrice: text } } : o))
+          if (key === 'compose') void updChat((c) => ({ ...c, draft: text }))
+        },
+        onSubmit: (key, text) => {
+          if (key === 'price') {
+            if (/^\d+$/.test(text) && validPrice(Number(text)))
+              run({ t: 'list', price: Number(text) })
+            else void updSell((s) => ({ ...s, price: text }))
+            return
+          }
+          const current = game()
+          if (key === 'order-price') {
+            void (async () => {
+              await updOrders((o) => (o.form ? { ...o, form: { ...o.form, maxPrice: text } } : o))
+              if (current)
+                await placeOrder(current, (await read($, ordersAtom)) ?? orders, updOrders, after)
+            })()
+            return
+          }
+          void (async () => {
+            // One post at a time: a double Enter while the first is in flight sends nothing.
+            if (!current || ((await read($, chatAtom)) ?? chat).busy) return
+            await postChat(current, text, updChat, after)
+          })()
+        },
+      },
+    })
   })
 }

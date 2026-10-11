@@ -1,5 +1,5 @@
 /** 1240 -> "1,240", without Intl. */
-export function formatGold(n: number): string {
+export function formatCount(n: number): string {
   const sign = n < 0 ? '-' : ''
   const digits = String(Math.abs(Math.trunc(n)))
   let out = ''
@@ -7,7 +7,12 @@ export function formatGold(n: number): string {
     if (i > 0 && (digits.length - i) % 3 === 0) out += ','
     out += digits[i]
   }
-  return `${sign}${out}g`
+  return `${sign}${out}`
+}
+
+/** 1240 -> "1,240g". */
+export function formatGold(n: number): string {
+  return `${formatCount(n)}g`
 }
 
 /** Cuts to `width` cells with an ellipsis; never wraps. */
@@ -46,3 +51,6 @@ export const CLASS_INITIAL: Record<string, string> = {
 export function waveLabel(wave: number): string {
   return wave >= 11 ? 'boss' : `wave ${wave}/10`
 }
+
+/** How a row's text meets its width: cut on a terminal's cell grid, wrapped in proportional text. */
+export type TextFit = 'truncate' | 'wrap'

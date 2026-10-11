@@ -1,13 +1,25 @@
-import type { Event } from './types'
+import type { Event, Item } from './types'
+
+const GOLDEN_BOSS = 'wbgold'
+const GOLDEN_REWARD: Item = {
+  id: 'r0',
+  base: 'steel_longsword',
+  rarity: 'rare',
+  affixes: [],
+  equippedBy: null,
+  tradeableAt: null,
+}
 
 export const GOLDEN_SEED = 20261002
 
 /**
- * A fixed 300-event script mixing world events and commands. Ids are the ones
- * the initial state mints (h0 to h3) plus guesses, so some commands are
- * rejected; rejections are part of the contract too.
+ * A fixed 300-event script mixing world events, commands and a world boss
+ * stretch (engaged after turn 3, disengaged after turn 6, a reward after
+ * turn 7). Ids are the ones the initial state mints (h0 to h3) plus guesses,
+ * so some commands are rejected; rejections are part of the contract too.
  */
-export function goldenEvents(): Event[] {
+export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
+  const boss = options.boss ?? true
   const events: Event[] = [
     { t: 'set_party', heroIds: ['h0', 'h3', 'h2'] },
     { t: 'set_farm', on: false },
@@ -20,6 +32,24 @@ export function goldenEvents(): Event[] {
       if (i % 3 === 0) events.push({ t: 'tool_call' })
     }
     events.push({ t: 'turn_end' })
+    if (boss && turn === 3) {
+      events.push({
+        t: 'boss_engaged',
+        bossId: GOLDEN_BOSS,
+        name: 'Golden Wyrm',
+        glyph: '☠',
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+      })
+    }
+    if (boss && turn === 6) events.push({ t: 'boss_disengaged', bossId: GOLDEN_BOSS })
+    if (boss && turn === 7) {
+      events.push({
+        t: 'rewarded',
+        bossId: GOLDEN_BOSS,
+        goods: { kind: 'item', item: GOLDEN_REWARD },
+        gold: 45,
+      })
+    }
     if (turn === 2) events.push({ t: 'equip', heroId: 'h0', itemId: 'i10' })
     if (turn === 4) events.push({ t: 'set_party', heroIds: ['h0', 'h1', 'h2'] })
     if (turn === 5) events.push({ t: 'dismiss', heroId: 'h3' })
@@ -39,4 +69,4 @@ export function goldenEvents(): Event[] {
 }
 
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
-export const GOLDEN_HASH = '261e337c034123fa'
+export const GOLDEN_HASH = 'ea7e36dbcb84b67d'

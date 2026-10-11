@@ -3,7 +3,8 @@ import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
 import { compareCodeUnits } from './rng'
-import type { Affix, Effect, GameState, Item, StepResult } from './types'
+import { createInitialState } from './state'
+import type { Affix, Effect, GameState, HeroClass, Item, Rarity, StepResult } from './types'
 
 export function vendorValue(item: Item): number {
   const minZone = content.itemBases[item.base]?.minZone ?? 1
@@ -11,10 +12,18 @@ export function vendorValue(item: Item): number {
 }
 
 function rollItem(s: GameState, boss: boolean): Item | null {
+  return rollItemFor(
+    s,
+    boss,
+    partyHeroes(s).map((h) => h.cls),
+  )
+}
+
+/** The draw order of ordinary drops: rarity, then base, then affixes. */
+function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[]): Item | null {
   const zone = content.zones[s.zone - 1]
   if (!zone) return null
   const rarity = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights)
-  const classes = partyHeroes(s).map((h) => h.cls)
   const bases = Object.keys(content.itemBases)
     .sort(compareCodeUnits)
     .filter((id) => {
@@ -23,6 +32,17 @@ function rollItem(s: GameState, boss: boolean): Item | null {
     })
   if (bases.length === 0) return null
   const baseId = bases[draw(s, bases.length)] ?? ''
+  return rollItemOf(s, baseId, rarity)
+}
+
+/** An item of this base and rarity: its affixes, then its id. */
+export function rollItemOf(s: GameState, baseId: string, rarity: Rarity): Item {
+  const affixes = rollAffixes(s, baseId, rarity)
+  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
+}
+
+/** The affixes of an item of this base and rarity: each one's id, then its value. */
+function rollAffixes(s: GameState, baseId: string, rarity: Rarity): Affix[] {
   const slot = content.itemBases[baseId]?.slot
   const pool = Object.keys(content.affixes)
     .sort(compareCodeUnits)
@@ -35,7 +55,37 @@ function rollItem(s: GameState, boss: boolean): Item | null {
     const [min, max] = def.range
     affixes.push({ id, value: min + draw(s, max - min + 1) })
   }
-  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
+  return affixes
+}
+
+/** A boss-rarity item of the zone for a party of these classes, drawn from `seed` alone. `id` is '' for the caller to replace. */
+export function rollRewardItem(
+  seed: number,
+  zone: number,
+  classes: readonly HeroClass[],
+): Item | null {
+  const scratch: GameState = { ...createInitialState(seed), zone }
+  const item = rollItemFor(scratch, true, classes)
+  return item ? { ...item, id: '' } : null
+}
+
+/** Takes a dropped item in on a draft: into the inventory, or vendored when it is full. */
+export function takeDrop(s: GameState, item: Item, effects: Effect[]): void {
+  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item)
+  if (gold === null) {
+    s.inventory.push(item)
+    effects.push({ k: 'drop', item })
+  } else {
+    s.gold += gold
+    effects.push({ k: 'drop_vendored', item, gold })
+  }
+  pushLog(s, {
+    k: 'item',
+    itemId: item.id,
+    base: item.base,
+    rarity: item.rarity,
+    vendoredFor: gold,
+  })
 }
 
 /**
@@ -48,30 +98,7 @@ export function rollDrops(state: GameState, def: EnemyDef): StepResult {
   const boss = def.kind !== 'wave'
   if (drawBp(s) < def.dropBp) {
     const item = rollItem(s, boss)
-    if (item) {
-      if (s.inventory.length < s.inventoryCap) {
-        s.inventory.push(item)
-        effects.push({ k: 'drop', item })
-        pushLog(s, {
-          k: 'item',
-          itemId: item.id,
-          base: item.base,
-          rarity: item.rarity,
-          vendoredFor: null,
-        })
-      } else {
-        const gold = vendorValue(item)
-        s.gold += gold
-        effects.push({ k: 'drop_vendored', item, gold })
-        pushLog(s, {
-          k: 'item',
-          itemId: item.id,
-          base: item.base,
-          rarity: item.rarity,
-          vendoredFor: gold,
-        })
-      }
-    }
+    if (item) takeDrop(s, item, effects)
   }
   if (boss && def.contractBp > 0 && drawBp(s) < def.contractBp) rollContract(s, effects)
   return { state: s, effects }

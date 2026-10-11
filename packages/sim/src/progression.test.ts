@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { GAUGE_FULL } from './battle'
 import { content } from './content'
 import { heroStats } from './progression'
 import { createInitialState } from './state'
@@ -8,6 +9,14 @@ import type { Effect, Enemy, EnemyKind, Event, GameState } from './types'
 const toolCall = { t: 'tool_call' } as const
 const turnEnd = { t: 'turn_end' } as const
 const tick = { t: 'tick' } as const
+
+/** Every party hero's gauge one point short of full: the party acts in the next tick's first steps. */
+function ready(s: GameState): GameState {
+  return {
+    ...s,
+    battle: { gauges: s.party.map((id) => ({ id, g: GAUGE_FULL - 1 })), queue: [], busy: 0 },
+  }
+}
 
 function killAll(s: GameState): GameState {
   if (!s.encounter) return s
@@ -31,6 +40,60 @@ describe('turn boss', () => {
     })
     expect(r.state.pendingTurnBoss).toBe(false)
     expect(r.state.encounter?.enemies.map((e) => e.kind)).toEqual(['turn_boss'])
+  })
+
+  it("a turn boss spawned mid-wave leaves the wave's progress alone", () => {
+    // Wave 3 of 3 monsters, one already beaten, and a turn boss due.
+    let s: GameState = {
+      ...createInitialState(1),
+      wave: 3,
+      pendingTurnBoss: true,
+      encounter: { enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 },
+    }
+    s = run(s, [tick]).state
+    expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['turn_boss'])
+    expect(s.encounter).toMatchObject({ waveSize: 3, spawnedInWave: 1 })
+
+    let r = run(finishFront(s), [tick])
+    expect(r.state.stats).toMatchObject({ kills: 1, bosses: 1 })
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.wave).toBe(3)
+    expect(r.state.encounter).toEqual({ enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 })
+
+    // The wave goes on where it was: two more monsters, then the clear.
+    for (const spawned of [2, 3]) {
+      s = run(r.state, [tick]).state
+      expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['wave'])
+      expect(s.encounter?.spawnedInWave).toBe(spawned)
+      r = run(finishFront(s), [tick])
+    }
+    expect(r.effects).toContainEqual({ k: 'wave_cleared', zone: 1, wave: 3 })
+    expect(r.state.wave).toBe(4)
+    expect(r.state.encounter).toBeNull()
+  })
+
+  it("a turn boss killed after the wave's last monster still clears the wave", () => {
+    const s0 = createInitialState(1)
+    let s: GameState = {
+      ...s0,
+      wave: 3,
+      encounter: { enemies: [], queue: [], waveSize: 2, spawnedInWave: 2 },
+    }
+    s = injectEnemy(s, 'wild_boar', 'turn_boss')
+    const r = run(finishFront(s), [tick])
+    expect(r.effects).toContainEqual({ k: 'wave_cleared', zone: 1, wave: 3 })
+    expect(r.state.wave).toBe(4)
+    expect(r.state.encounter).toBeNull()
+  })
+
+  it('a turn boss in an encounter of its own closes it when it dies', () => {
+    let s: GameState = { ...createInitialState(1), wave: 3, pendingTurnBoss: true }
+    s = run(s, [tick]).state
+    expect(s.encounter).toMatchObject({ waveSize: 0, spawnedInWave: 0 })
+    const r = run(finishFront(s), [tick])
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.wave).toBe(3)
+    expect(r.state.encounter).toBeNull()
   })
 
   it('nine tool calls then turn_end do not', () => {
@@ -87,8 +150,8 @@ describe('zone boss and pending party', () => {
     if (!enc) throw new Error('enc')
     const boss = enc.enemies[0]
     if (!boss) throw new Error('boss')
-    // Leave the boss at 1 hp so the next round kills it.
-    s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+    // Leave the boss at 1 hp and the party ready so the next tick kills it.
+    s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
     const r = run(s, [tick])
     expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 1, advancedTo: 2 })
     expect(r.effects).toContainEqual({ k: 'party_applied', heroIds: [k.id, b.id, a.id] })
@@ -112,7 +175,7 @@ describe('zone boss and pending party', () => {
       const enc = s.encounter
       const boss = enc?.enemies[0]
       if (!enc || !boss) throw new Error('enc')
-      s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+      s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
       const r = run(s, [tick])
       expect(r.state.zone).toBe(2)
       const fallen = pending ? a : w
@@ -129,7 +192,7 @@ describe('zone boss and pending party', () => {
     const enc = s.encounter
     const boss = enc?.enemies[0]
     if (!enc || !boss) throw new Error('enc')
-    s = { ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } }
+    s = ready({ ...s, encounter: { ...enc, enemies: [{ ...boss, hp: 1 }] } })
     const r = run(s, [tick])
     expect(r.state.zone).toBe(1)
     expect(r.state.wave).toBe(1)
@@ -152,6 +215,38 @@ describe('rest', () => {
 })
 
 describe('waves', () => {
+  it('the wave clear heals 15% and revives the fallen at 15%, capped at max', () => {
+    const s0 = createInitialState(1)
+    const [k, b, , a] = s0.roster
+    if (!k || !b || !a) throw new Error('roster')
+    const max = (id: string) => {
+      const hero = s0.roster.find((h) => h.id === id)
+      if (!hero) throw new Error(id)
+      return heroStats(s0, hero).hp
+    }
+    // No white mage: nobody heals before the clear. Kill xp is far below a level.
+    let s: GameState = {
+      ...s0,
+      party: [k.id, b.id, a.id],
+      roster: s0.roster.map((h) =>
+        h.id === k.id ? { ...h, hp: max(k.id) - 1 } : h.id === b.id ? { ...h, hp: 0 } : h,
+      ),
+      encounter: { enemies: [], queue: [], waveSize: 1, spawnedInWave: 1 },
+    }
+    s = injectEnemy(s, 'field_rat')
+    s = finishFront(s)
+    const archerHp = 5
+    s = { ...s, roster: s.roster.map((h) => (h.id === a.id ? { ...h, hp: archerHp } : h)) }
+    const r = run(s, [tick])
+    expect(r.effects).toContainEqual({ k: 'wave_cleared', zone: 1, wave: 1 })
+    const hp = (id: string) => r.state.roster.find((h) => h.id === id)?.hp
+    const heal = (id: string) => Math.max(1, Math.floor((max(id) * 1500) / 10000))
+    expect(hp(k.id)).toBe(max(k.id))
+    expect(hp(b.id)).toBe(heal(b.id))
+    expect(hp(a.id)).toBe(archerHp + heal(a.id))
+    expect(r.state.wave).toBe(2)
+  })
+
   it('clears waves and advances over time', () => {
     const r = run(createInitialState(11), times(200, tick))
     expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(true)
@@ -164,7 +259,60 @@ describe('waves', () => {
   })
 })
 
+describe('wipe', () => {
+  /** The whole party down, mid-fight: gauges part-filled, one unit queued, an action running. */
+  function beaten(s: GameState): GameState {
+    const ids = [...s.party, ...(s.encounter?.enemies.map((e) => e.id) ?? [])]
+    return {
+      ...s,
+      roster: s.roster.map((h) => (s.party.includes(h.id) ? { ...h, hp: 0 } : h)),
+      battle: { gauges: ids.map((id) => ({ id, g: 4000 })), queue: [ids[0] ?? ''], busy: 3 },
+    }
+  }
+
+  it('a wipe in boss mode empties every gauge and clears the queue, then heals in place', () => {
+    const engaged = run(createInitialState(1), [
+      {
+        t: 'boss_engaged',
+        bossId: 'wb1',
+        name: 'The Promptwyrm',
+        glyph: '☠',
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+      },
+    ]).state
+    const s = beaten(engaged)
+    const r = run(s, [tick])
+    expect(r.state.battle).toEqual({ gauges: [], queue: [], busy: 0 })
+    expect(r.state.encounter).toEqual(s.encounter)
+    expect(r.state.stats.wipes).toBe(0)
+    expect(r.effects.some((e) => e.k === 'wipe')).toBe(false)
+    for (const id of r.state.party) {
+      const hero = r.state.roster.find((h) => h.id === id)
+      if (!hero) throw new Error(id)
+      expect(hero.hp).toBe(heroStats(r.state, hero).hp)
+    }
+  })
+
+  it('a wipe outside boss mode resets the battle the same way', () => {
+    const s = beaten(
+      injectEnemy({ ...createInitialState(1), zone: 2, highestZone: 2 }, 'field_rat'),
+    )
+    const r = run(s, [tick])
+    expect(r.effects).toContainEqual({ k: 'wipe', retreatedTo: 1 })
+    expect(r.state.battle).toEqual({ gauges: [], queue: [], busy: 0 })
+    expect(r.state.encounter).toBeNull()
+  })
+})
+
 // Helpers
+
+/** The front enemy at 1 hp and the party ready: the next tick kills it. */
+function finishFront(s: GameState): GameState {
+  const enc = s.encounter
+  const [front, ...rest] = enc?.enemies ?? []
+  if (!enc || !front) throw new Error('no enemy')
+  return ready({ ...s, encounter: { ...enc, enemies: [{ ...front, hp: 1 }, ...rest] } })
+}
 
 function run(state: GameState, events: Event[]): { state: GameState; effects: Effect[] } {
   let s = state

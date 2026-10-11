@@ -59,8 +59,8 @@ const rich: GameState = {
 }
 
 describe('server events', () => {
-  it('covers nine kinds', () => {
-    expect(SERVER_EVENT_KINDS).toHaveLength(9)
+  it('covers eighteen kinds', () => {
+    expect(SERVER_EVENT_KINDS).toHaveLength(18)
   })
 
   describe('listed', () => {

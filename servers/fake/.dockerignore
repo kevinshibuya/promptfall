@@ -1,0 +1,3 @@
+# The image takes the bundle alone.
+*
+!dist/cli.js

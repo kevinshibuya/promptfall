@@ -1,0 +1,306 @@
+// The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
+// what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
+// queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
+// drop's line waits for its reveal: held aside until its item has risen, then takes its place in
+// the queue at that time.
+import type { GameView, Settings } from '../../types'
+import { heroNameById } from '../toasts'
+import { content, type Effect, type Rarity } from '../vendor/sim.js'
+import { tradeName } from '../view'
+import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
+import { groups, type StageTimeline } from './timeline'
+import { RARITY_RGB } from './tuning'
+
+export type LogLine = {
+  text: string
+  /** The rarity colour for drops; the window's text colour otherwise. */
+  rgb?: number
+  /** Never skipped: everything but hit and heal lines. */
+  key: boolean
+  /** Wall ms the line starts typing. */
+  at: number
+  charMs: number
+}
+
+type Known = { name: string; kind: string; hp?: number }
+
+type Said = { text: string; key: boolean; rgb?: number }
+
+/**
+ * A drop or vendored line waiting for its item's reveal. `showAt` is the show time the timeline
+ * last answered: a chest it no longer holds leaves its line due then.
+ */
+type Held = { line: Said; itemId: string; showAt: number; cadenceMs: number }
+
+/** Enemies the log remembers past their view, so a kill can name them; older ones are dropped. */
+const KNOWN_KEEP = 200
+
+const length = (text: string) => Array.from(text).length
+const typed = (line: LogLine) => line.at + length(line.text) * line.charMs
+
+function list(amounts: readonly number[]): string {
+  if (amounts.length <= 1) return String(amounts[0] ?? '')
+  return `${amounts.slice(0, -1).join(', ')} and ${amounts.at(-1)}`
+}
+
+function itemName(base: string): string {
+  return base === 'contract' ? 'Hero contract' : tradeName('item', base)
+}
+
+/** "Rare drop", "Epic drop": the rarity leads when it is the news, as in the toast table. */
+function dropWord(rarity: Rarity): string {
+  if (rarity !== 'rare' && rarity !== 'epic' && rarity !== 'legendary') return 'Drop'
+  return `${rarity.charAt(0).toUpperCase()}${rarity.slice(1)} drop`
+}
+
+export class MessageLog {
+  private lines: LogLine[] = []
+  private held: Held[] = []
+  private known = new Map<string, Known>()
+  /** The stage's timeline, asked for each held line's show time whenever the log is read. */
+  private timeline: StageTimeline | null = null
+
+  /** Every applied batch, after timeline.onEffects; `starts` is its answer. */
+  onEffects(
+    effects: readonly Effect[],
+    starts: readonly number[],
+    view: GameView,
+    now: number,
+    cadenceMs: number,
+    timeline: StageTimeline,
+  ): void {
+    this.timeline = timeline
+    // Held lines due by now arrived before this batch: each takes its place at its show time.
+    const due = this.due(now)
+    this.held = this.held.filter((h) => !due.includes(h))
+    let from = 0
+    for (const h of due) from = this.insert(this.lines, h.line, h.showAt, h.cadenceMs, from) + 1
+    // HP as the log last saw it, before this batch's view: a kill is a hit that empties it.
+    const hpBefore = new Map([...this.known].map(([id, k]) => [id, k.hp]))
+    for (const k of timeline.known())
+      this.remember(k.id, { name: k.name, kind: k.kind, hp: this.known.get(k.id)?.hp })
+    for (const h of view.heroes) this.remember(h.id, { name: h.shortName, kind: 'hero' })
+    for (const e of view.enemies) this.remember(e.id, { name: e.name, kind: e.kind, hp: e.hp })
+    // An enemy spawned and killed inside one tick is in no view: it is a Foe.
+    const name = (id: string) => this.known.get(id)?.name ?? 'Foe'
+    const live = new Set(view.enemies.map((e) => e.id))
+    // A wipe clears the encounter: enemies leave the view alive, so only an emptied HP is a kill.
+    const wiped = effects.some((e) => e.k === 'wipe')
+    const hpLeft = new Map(hpBefore)
+
+    const all = groups(effects)
+    // The group holding each target's last hit: a kill prints after that action.
+    const lastHit = new Map<string, number>()
+    for (const [i, g] of all.entries())
+      for (const e of g.effects) if (e.k === 'hit') lastHit.set(e.target, i)
+
+    for (const [i, g] of all.entries()) {
+      const start = starts[i] ?? now
+      const out: Said[] = []
+      const hits = g.effects.filter((e): e is Extract<Effect, { k: 'hit' }> => e.k === 'hit')
+      if (hits.length >= 2 && hits.every((h) => h.by === hits[0]?.by)) {
+        out.push({
+          text: `${name(hits[0]?.by ?? '')} hits ${hits.length} foes for ${list(hits.map((h) => h.amount))}.`,
+          key: false,
+        })
+      } else {
+        for (const h of hits)
+          out.push({ text: `${name(h.by)} hits ${name(h.target)} for ${h.amount}.`, key: false })
+      }
+      for (const e of g.effects)
+        if (e.k === 'heal')
+          out.push({ text: `${name(e.by)} heals ${name(e.target)} for ${e.amount}.`, key: false })
+      for (const h of hits) {
+        const hp = hpLeft.get(h.target)
+        if (hp !== undefined) hpLeft.set(h.target, hp - h.amount)
+      }
+      for (const h of hits) {
+        const who = this.known.get(h.target)
+        if (lastHit.get(h.target) !== i || live.has(h.target) || who?.kind === 'hero') continue
+        if (who?.kind === 'world_boss') continue
+        const hp = hpLeft.get(h.target)
+        if (wiped && (hp === undefined || hp > 0)) continue
+        const text = `${who?.name ?? 'Foe'} is defeated!`
+        if (out.some((l) => l.text === text)) continue
+        out.push({ text, key: true })
+      }
+      for (const e of g.effects) {
+        const line = this.consequence(e, view, name)
+        if (!line) continue
+        // A drop's line waits for its chest's reveal; one with no chest prints with its action.
+        const itemId = e.k === 'drop' || e.k === 'drop_vendored' ? e.item.id : null
+        const showAt = itemId === null ? null : timeline.showAt(itemId)
+        if (itemId === null || showAt === null) out.push(line)
+        else this.held.push({ line, itemId, showAt, cadenceMs })
+      }
+      for (const l of out) this.schedule(this.lines, l, start, cadenceMs)
+    }
+    if (this.lines.length > LOG_KEEP) this.lines = this.lines.slice(-LOG_KEEP)
+  }
+
+  private consequence(e: Effect, view: GameView, name: (id: string) => string): Said | null {
+    switch (e.k) {
+      case 'drop':
+        return {
+          text: `${dropWord(e.item.rarity)}: ${itemName(e.item.base)}.`,
+          key: true,
+          rgb: RARITY_RGB[e.item.rarity],
+        }
+      case 'drop_vendored':
+        return {
+          text: `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`,
+          key: true,
+        }
+      case 'level_up':
+        // The toast's lookup, so the log and the toast name one hero the same way.
+        return {
+          text: `${heroNameById(view, e.heroId) ?? 'A hero'} reached level ${e.level}.`,
+          key: true,
+        }
+      case 'hero_fell':
+        return { text: `${name(e.heroId)} falls!`, key: true }
+      case 'boss_spawned': {
+        const boss = view.enemies.find((x) => x.def === e.def)
+        return { text: `${boss?.name ?? e.def} appears!`, key: true }
+      }
+      case 'zone_cleared': {
+        if (e.advancedTo <= e.zone) return { text: `Zone ${e.zone} cleared.`, key: true }
+        const zone = content.zones[e.advancedTo - 1]?.name
+        return {
+          text: `The party reached zone ${e.advancedTo}${zone ? `, ${zone}` : ''}.`,
+          key: true,
+        }
+      }
+      case 'wipe':
+        return { text: `The party fell, retreating to zone ${e.retreatedTo}.`, key: true }
+      case 'traded': {
+        const t = e.entry
+        // Grill 1.16's table has the sale only; purchases and returns print nothing.
+        return t.what === 'sold'
+          ? { text: `${tradeName(t.kind, t.base)} sold for ${t.gold}G.`, key: true }
+          : null
+      }
+      case 'rewarded': {
+        // The log does not name the boss: the sim has left boss mode by the time the reward lands.
+        const goods = e.goods
+        const what = !goods
+          ? ''
+          : ` and ${goods.kind === 'item' ? itemName(goods.item.base) : tradeName('hero', goods.hero.template)}`
+        return { text: `Your share of the boss: ${e.gold}G${what}.`, key: true }
+      }
+      default:
+        return null
+    }
+  }
+
+  /** Queues `l` at the end of `lines`, starting no earlier than `start`. */
+  private schedule(lines: LogLine[], l: Said, start: number, cadenceMs: number): void {
+    const prev = lines.at(-1)
+    const at = prev ? Math.max(start, prev.at + LINE_MIN_MS, typed(prev)) : start
+    // Grill 1.13's safety valve: a hit or heal line more than a tick behind its action is dropped.
+    if (!l.key && at > start + cadenceMs) return
+    const waiting = lines.filter((x) => typed(x) > start).length
+    lines.push({
+      text: l.text,
+      ...(l.rgb !== undefined ? { rgb: l.rgb } : {}),
+      key: l.key,
+      at,
+      charMs: waiting >= 2 ? CHAR_FAST_MS : CHAR_MS,
+    })
+  }
+
+  /**
+   * Queues `l` at `start` among `lines`, no earlier than index `from`: ahead of the first line
+   * queued for later, which moves back with every line after it, each by the queue's rule from the
+   * time it had. Lines queued by `start` never move. Answers the index `l` took, so held lines due
+   * together keep their show order.
+   */
+  private insert(
+    lines: LogLine[],
+    l: Said,
+    start: number,
+    cadenceMs: number,
+    from: number,
+  ): number {
+    const k = lines.findIndex((x, i) => i >= from && x.at > start)
+    const tail = k < 0 ? [] : lines.splice(k)
+    this.schedule(lines, l, start, cadenceMs)
+    const at = lines.length - 1
+    for (const x of tail)
+      this.schedule(
+        lines,
+        { text: x.text, key: x.key, ...(x.rgb !== undefined ? { rgb: x.rgb } : {}) },
+        x.at,
+        cadenceMs,
+      )
+    return at
+  }
+
+  /** Held lines whose show time has passed by `now`, in show order, each read afresh. */
+  private due(now: number): Held[] {
+    for (const h of this.held) h.showAt = this.timeline?.showAt(h.itemId) ?? h.showAt
+    return this.held.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
+  }
+
+  /**
+   * The lines as they stand at `now`: the queued ones, with each held line due by `now` in its
+   * place at its show time, as if it had just arrived. Reading never commits a held line, so a
+   * read ahead of time (the desktop's SMIL) leaves the next batch its place.
+   */
+  private linesAt(now: number): LogLine[] {
+    const due = this.due(now)
+    if (due.length === 0) return this.lines
+    const lines = [...this.lines]
+    let from = 0
+    for (const h of due) from = this.insert(lines, h.line, h.showAt, h.cadenceMs, from) + 1
+    return lines
+  }
+
+  /** Lines shown by `now`, oldest first, each revealed to its typed length. */
+  shown(
+    now: number,
+    motion: Settings['motion'],
+  ): { text: string; rgb?: number; revealed: number }[] {
+    return this.linesAt(now)
+      .filter((l) => l.at <= now)
+      .map((l) => ({
+        text: l.text,
+        ...(l.rgb !== undefined ? { rgb: l.rgb } : {}),
+        revealed:
+          motion === 'still'
+            ? length(l.text)
+            : Math.min(length(l.text), Math.floor((now - l.at) / l.charMs)),
+      }))
+  }
+
+  private remember(id: string, k: Known): void {
+    this.known.delete(id)
+    this.known.set(id, k)
+    if (this.known.size > KNOWN_KEEP) {
+      const oldest = this.known.keys().next().value
+      if (oldest !== undefined) this.known.delete(oldest)
+    }
+  }
+
+  /** The newest line shown by `now` while it is still typing, and how much of it shows. */
+  typing(now: number, motion: Settings['motion']): (LogLine & { revealed: number }) | null {
+    if (motion === 'still') return null
+    const line = this.linesAt(now)
+      .filter((l) => l.at <= now)
+      .at(-1)
+    if (!line || typed(line) <= now) return null
+    return { ...line, revealed: Math.floor((now - line.at) / line.charMs) }
+  }
+
+  /** A line is waiting, held for its reveal, or still typing. */
+  isBusy(now: number, motion: Settings['motion']): boolean {
+    const lines = this.linesAt(now)
+    if (this.held.some((h) => h.showAt > now)) return true
+    return lines.some((l) => l.at > now || (motion !== 'still' && typed(l) > now))
+  }
+
+  /** Lines starting in (now, now + horizonMs], for SMIL; a held line at its show time as known now. */
+  upcoming(now: number, horizonMs: number): readonly LogLine[] {
+    return this.linesAt(now + horizonMs).filter((l) => l.at > now && l.at <= now + horizonMs)
+  }
+}

@@ -1,3 +1,4 @@
+import { SPAWN_GAUGE_MAX } from './battle'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
 import { rollDrops } from './loot'
@@ -135,6 +136,7 @@ function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: Ene
   const hp = def ? def.stats.hp : 1
   const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp }
   encounter.enemies.push(enemy)
+  s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
 }
 
 function pickWaveEnemy(s: GameState): string {
@@ -146,6 +148,8 @@ function pickWaveEnemy(s: GameState): string {
 
 export function onToolCall(s: GameState): void {
   s.turnToolCalls += 1
+  // Boss mode: the call still counts toward the turn boss, and nothing spawns.
+  if (s.boss) return
   const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3))
   const defId = pickWaveEnemy(s)
   if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, 'wave')
@@ -196,7 +200,7 @@ export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
 // ---------------------------------------------------------------------------
 // Kills, xp, waves, zones, wipes
 
-function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void {
+export function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void {
   const cap = content.rarity[hero.rarity].levelCap
   if (hero.level >= cap) {
     hero.xp = 0
@@ -214,7 +218,7 @@ function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[]): void 
   if (hero.level >= cap) hero.xp = 0
 }
 
-function changeZone(s: GameState, zone: number): void {
+export function changeZone(s: GameState, zone: number): void {
   s.zone = zone
   s.wave = 1
   if (zone > s.highestZone) s.highestZone = zone
@@ -254,12 +258,10 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
     return
   }
 
+  // A turn boss spawned mid-wave joined the wave's encounter: its death is checked like a
+  // wave monster's, so the wave keeps its progress and clears when its last monster is gone.
   const current = s.encounter
   if (!current || current.enemies.length > 0 || current.queue.length > 0) return
-  if (enemy.kind === 'turn_boss') {
-    s.encounter = null
-    return
-  }
   if (current.waveSize > 0 && current.spawnedInWave >= current.waveSize) {
     healParty(s, 1500)
     effects.push({ k: 'wave_cleared', zone: s.zone, wave: s.wave })
@@ -273,6 +275,13 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {
   if (livingParty(s).length > 0) return false
+  s.battle = { gauges: [], queue: [], busy: 0 }
+  if (s.boss) {
+    // Boss mode: the battle resets, the party heals in place. No retreat, no wipe, the
+    // encounter and the pending party kept.
+    fullHealParty(s)
+    return true
+  }
   const retreatedTo = Math.max(1, s.zone - 1)
   effects.push({ k: 'wipe', retreatedTo })
   s.encounter = null

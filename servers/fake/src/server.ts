@@ -1,17 +1,31 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { Ledger, type LedgerFlag } from '@promptfall/ledger'
+import {
+  approveAs,
+  Ledger,
+  type LedgerFlag,
+  SETTABLE_FLAGS,
+  type SettableFlag,
+} from '@promptfall/ledger'
 import {
   type Auth,
   BatchSchema,
+  type BootstrapRefused,
+  ChatBodySchema,
+  type FetchLike,
   type KeyValue,
   ListingQuerySchema,
+  MIN_CLIENT_VERSION,
   NewListingSchema,
   NewOrderSchema,
   ROUTES,
 } from '@promptfall/protocol'
 import { SIM_VERSION } from '@promptfall/sim'
 import { type ZodType, z } from 'zod'
+import { githubApprover } from './github'
+import { MINTS_PER_HOUR, MintCap } from './mint-cap'
+import { nodeFetch } from './node-fetch'
 
 export type FakeServerOptions = {
   kv: KeyValue
@@ -22,15 +36,37 @@ export type FakeServerOptions = {
   tokenSource: () => string
   playerName: string
   seed: number
+  /** The access log: one line per request, method, path, status and milliseconds. */
+  log?: (line: string) => void
+  /** Who approves a link: `fake` approves the first poll as `playerName`; `github` runs GitHub's device flow. Default `fake`. */
+  link?: 'fake' | 'github'
+  /** The GitHub OAuth app's client id; a `github` host without one refuses link starts. */
+  githubClientId?: string | undefined
+  /** How a `github` host reaches GitHub. Default Node's fetch. */
+  githubFetch?: FetchLike
+  /** Operator notes from the GitHub approver, never a code or a token. */
+  githubLog?: (line: string) => void
+  /** The bearer token of the admin routes; a host without one has no admin routes. */
+  adminToken?: string | undefined
+  /** One line per admin call: its time, action, target and outcome, never the token. */
+  adminLog?: (line: string) => void
+  /** Accounts one client address may mint per hour of the server's clock. Default 5. */
+  mintsPerHour?: number
 }
 
 export type FakeServer = {
-  listen(port: number): Promise<{ port: number; close(): Promise<void> }>
+  /** Binds `host`, loopback unless told otherwise; a container passes 0.0.0.0. */
+  listen(
+    port: number,
+    host?: string,
+  ): Promise<{ host: string; port: number; close(): Promise<void> }>
   ledger: Ledger
 }
 
 type Request = {
   auth: Auth
+  /** The client's address: the last hop of `x-forwarded-for`, else the connection's. */
+  address: string
   params: Record<string, string>
   query: Record<string, string>
   body: unknown
@@ -54,6 +90,76 @@ const BootstrapBody = z.object({
 const CodeBody = z.object({ code: z.string().min(1).max(32) })
 const ItemIdBody = z.object({ itemId: z.string().min(1).max(64) })
 
+const rateLimited: BootstrapRefused = {
+  refusal: 'rate_limited',
+  message: 'Too many new accounts from this address. Promptfall will try again later.',
+}
+
+/** What an admin route did: its answer, and the target and outcome its log line names. */
+type AdminDone = { target: string; answer: unknown; status?: number; outcome?: string }
+
+/** An admin route: what it does with a body. */
+type AdminRoute = {
+  method: 'POST'
+  path: string
+  action: string
+  run(body: unknown): Promise<AdminDone>
+}
+
+/** `POST /v1/admin/ban`'s body: the account and the reason its player reads, on one line. */
+const BanBody = z.object({
+  // One token: it is the log line's target.
+  accountId: z
+    .string()
+    .min(1)
+    .max(128)
+    .regex(/^[^\s\p{Cc}]+$/u),
+  reason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(120)
+    .refine((r) => !/\p{Cc}/u.test(r), 'the reason is one line of text'),
+})
+
+/** `POST /v1/admin/flags`'s body: settable flags to booleans, at least one. */
+function flagsBody(body: unknown): Partial<Record<SettableFlag, boolean>> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body))
+    throw new SchemaError([{ message: 'flags want an object of flag names to true or false' }])
+  const entries = Object.entries(body)
+  if (entries.length === 0) throw new SchemaError([{ message: 'flags want at least one flag' }])
+  const out: Partial<Record<SettableFlag, boolean>> = {}
+  for (const [name, value] of entries) {
+    if (name === 'sandbox.enabled')
+      throw new SchemaError([{ message: 'sandbox.enabled is refused on the admin route' }])
+    const flag = SETTABLE_FLAGS.find((f) => f === name)
+    if (!flag || typeof value !== 'boolean') {
+      throw new SchemaError([
+        { message: `flags want true or false for ${SETTABLE_FLAGS.join(', ')}; got ${name}` },
+      ])
+    }
+    out[flag] = value
+  }
+  return out
+}
+
+/** Equal tokens, compared in time that does not depend on where they differ. */
+function sameToken(a: string, b: string): boolean {
+  const digest = (s: string) => createHash('sha256').update(s).digest()
+  return timingSafeEqual(digest(a), digest(b))
+}
+
+/**
+ * The client's address. Behind Caddy the last hop of `x-forwarded-for` is the address Caddy saw;
+ * a client can forge the hops before it, never that one.
+ */
+function addressOf(req: IncomingMessage): string {
+  const forwarded = req.headers['x-forwarded-for']
+  const header = Array.isArray(forwarded) ? forwarded[forwarded.length - 1] : forwarded
+  const last = header?.split(',').pop()?.trim()
+  return last || req.socket.remoteAddress || 'unknown'
+}
+
 function parse<T>(schema: ZodType<T>, value: unknown): T {
   const r = schema.safeParse(value)
   if (!r.success) throw new SchemaError(r.error.issues)
@@ -69,6 +175,15 @@ function listingQuery(query: Record<string, string>): unknown {
   const page = query.page
   out.page = page !== undefined && /^\d+$/.test(page) ? Number(page) : page
   return out
+}
+
+/** `GET /v1/world`'s chat mark: absent is 0, digits are the number, anything else is 400. */
+function sinceOf(query: Record<string, string>): number {
+  const since = query.since
+  if (since === undefined) return 0
+  if (!/^\d+$/.test(since))
+    throw new SchemaError([{ message: 'since wants a non-negative integer' }])
+  return Number(since)
 }
 
 function authOf(req: IncomingMessage): Auth {
@@ -132,12 +247,21 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     kv: options.kv,
     now: options.now,
     speed: options.speed,
-    minClientVersion: '0.1.0',
+    minClientVersion: MIN_CLIENT_VERSION,
     seedSource: options.seedSource,
     tokenSource: options.tokenSource,
     flags: options.flags as Partial<Record<LedgerFlag, boolean>>,
-    linkApprover: async () => ({ login: options.playerName }),
+    linkApprover:
+      options.link === 'github'
+        ? githubApprover({
+            clientId: options.githubClientId,
+            fetch: options.githubFetch ?? nodeFetch,
+            log: options.githubLog,
+          })
+        : approveAs(options.playerName),
   })
+
+  const mintCap = new MintCap(options.mintsPerHour ?? MINTS_PER_HOUR)
 
   const handlers: Record<keyof typeof ROUTES, Handler> = {
     health: async () => ({
@@ -147,9 +271,17 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
       speed: options.speed,
       now: await options.now(),
     }),
-    bootstrap: (r) => ledger.bootstrap(parse(BootstrapBody, r.body)),
+    bootstrap: async (r) => {
+      const input = parse(BootstrapBody, r.body)
+      // A known token never mints, so the cap never applies to it; the ledger stays address-blind.
+      if (input.deviceToken !== null && (await ledger.knowsToken(input.deviceToken)))
+        return ledger.bootstrap(input)
+      if (!mintCap.take(r.address, await options.now())) return rateLimited
+      return ledger.bootstrap(input)
+    },
     submit: (r) => ledger.submit(parse(BatchSchema, r.body), r.auth),
     account: (r) => ledger.account(r.auth),
+    deleteAccount: (r) => ledger.deleteAccount(r.auth),
     linkStart: (r) => ledger.linkStart(r.auth),
     linkPoll: (r) => ledger.linkPoll(r.auth, parse(CodeBody, r.body).code),
     browse: (r) => ledger.browse(r.auth, parse(ListingQuerySchema, listingQuery(r.query))),
@@ -161,6 +293,9 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     cancelOrder: (r) => ledger.cancelOrder(r.auth, r.params.id ?? ''),
     matchingOrders: (r) => ledger.matchingOrders(r.auth, parse(ItemIdBody, r.query).itemId),
     fillOrder: (r) => ledger.fillOrder(r.auth, r.params.id ?? '', parse(ItemIdBody, r.body).itemId),
+    world: (r) => ledger.world(r.auth, sinceOf(r.query)),
+    chat: (r) => ledger.chat(r.auth, parse(ChatBodySchema, r.body).text),
+    leaderboards: (r) => ledger.leaderboards(r.auth),
   }
 
   const table = (Object.keys(ROUTES) as (keyof typeof ROUTES)[]).map((name) => ({
@@ -168,10 +303,86 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     handler: handlers[name],
   }))
 
+  const adminToken = options.adminToken
+  const adminRoutes: AdminRoute[] = adminToken
+    ? [
+        {
+          method: 'POST',
+          path: '/v1/admin/flags',
+          action: 'flags',
+          run: async (body) => {
+            const flags = flagsBody(body)
+            const target = Object.entries(flags)
+              .map(([name, value]) => `${name}=${value}`)
+              .join(',')
+            return { target, answer: { flags: await ledger.host.setFlags(flags) } }
+          },
+        },
+        {
+          method: 'POST',
+          path: '/v1/admin/ban',
+          action: 'ban',
+          run: async (body) => {
+            const { accountId, reason } = parse(BanBody, body)
+            const banned = await ledger.host.ban(accountId, reason)
+            if (!banned) {
+              return {
+                target: accountId,
+                answer: { error: 'account' },
+                status: 404,
+                outcome: 'unknown',
+              }
+            }
+            return { target: accountId, answer: { accountId, banned } }
+          },
+        },
+      ]
+    : []
+
+  /** An admin call: the admin token, then the route; one log line whatever the outcome. */
+  async function admin(
+    route: AdminRoute,
+    req: IncomingMessage,
+    res: ServerResponse,
+    token: string,
+  ): Promise<void> {
+    const write = (target: string, outcome: string) =>
+      options.adminLog?.(`admin ${new Date().toISOString()} ${route.action} ${target} ${outcome}`)
+    if (!sameToken(authOf(req).deviceToken, token)) {
+      req.resume()
+      write('-', 'unauthorized')
+      send(res, 401, { error: 'unauthorized' })
+      return
+    }
+    let done: AdminDone
+    try {
+      done = await route.run(await readBody(req))
+    } catch (error) {
+      write('-', error instanceof SchemaError ? 'refused' : 'failed')
+      throw error
+    }
+    write(done.target, done.outcome ?? 'ok')
+    send(res, done.status ?? 200, done.answer)
+  }
+
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const log = options.log
+    if (log) {
+      // The path without its query, and never a header or a body: no token reaches the log.
+      const started = performance.now()
+      const path = (req.url ?? '/').split('?')[0]
+      res.once('finish', () => {
+        log(`${req.method} ${path} ${res.statusCode} ${Math.round(performance.now() - started)}ms`)
+      })
+    }
     // Everything, routing included, sits inside the try: one bad request never escapes.
     try {
       const url = new URL(req.url ?? '/', 'http://fake')
+      const adminRoute = adminRoutes.find((r) => r.method === req.method && r.path === url.pathname)
+      if (adminRoute && adminToken) {
+        await admin(adminRoute, req, res, adminToken)
+        return
+      }
       let route: { handler: Handler; params: Record<string, string> } | null = null
       for (const entry of table) {
         if (entry.method !== req.method) continue
@@ -190,7 +401,13 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
       const body = await readBody(req)
       const query: Record<string, string> = {}
       for (const [key, value] of url.searchParams) query[key] = value
-      const result = await route.handler({ auth: authOf(req), params: route.params, query, body })
+      const result = await route.handler({
+        auth: authOf(req),
+        address: addressOf(req),
+        params: route.params,
+        query,
+        body,
+      })
       send(res, 200, result)
     } catch (error) {
       if (error instanceof SchemaError) send(res, 400, { error: 'schema', issues: error.issues })
@@ -205,15 +422,16 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
 
   return {
     ledger,
-    listen(port: number) {
+    listen(port: number, host = '127.0.0.1') {
       const server = createServer((req, res) => {
         void handle(req, res)
       })
       return new Promise((resolve, reject) => {
         server.once('error', reject)
-        server.listen(port, '127.0.0.1', () => {
+        server.listen(port, host, () => {
           const address = server.address() as AddressInfo
           resolve({
+            host: address.address,
             port: address.port,
             close: () =>
               new Promise<void>((done, fail) => {

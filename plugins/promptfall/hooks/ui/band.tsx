@@ -1,16 +1,45 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { GameView, Mode, Prefs } from '../../types'
-import { PREFS_DEFAULT } from '../state'
-import { CLASS_INITIAL, clip, formatGold, padEnd, padStart, waveLabel } from './format'
-import { ClassGlyph, HpBar, RarityText } from './parts'
+import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
+import type { GameHandle } from '../engine'
+import { GaugeTrack } from '../stage/gauges'
+import { cellsOf, layoutFor } from '../stage/layout'
+import { MessageLog } from '../stage/log'
+import { bandCells, bandFrame, bandKey } from '../stage/loop'
+import { altText } from '../stage/model'
+import { svgFit } from '../stage/playfield'
+import { stagedState } from '../stage/staged'
+import { stageSvg } from '../stage/svg'
+import { StageTimeline } from '../stage/timeline'
+import {
+  DESKTOP_COLUMN_PX_CEILING,
+  FULL_MIN_COLUMNS,
+  IMAGE_MAX_COLUMNS,
+  PROBE_DELAY_MS,
+  RASTER_MAX_COLUMNS,
+  STAGE_MAX_COLUMNS,
+  SVG_INTERACTIVE,
+  SVG_SMIL,
+} from '../stage/tuning'
+import {
+  PREFS_DEFAULT,
+  parseSettings,
+  SETTINGS_DEFAULT,
+  SETTINGS_KEY,
+  WORLD_DEFAULT,
+} from '../state'
+import { sceneSvg } from '../windows/svg'
+import { STRIP_MAX_COLUMNS } from '../windows/tuning'
+import { CLASS_INITIAL, clip, formatGold } from './format'
+import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
+import { type StripInput, stripScene, stripTracks } from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
 const modeAtom = atom({ plugin: 'promptfall', key: 'mode' } as const, 'primary')
 const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
-
-const MIN_COLUMNS = 100
-const REST_ROWS = 4
+const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
+const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 
 /** The one-line form: `Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`. */
 export function collapsedLine(view: GameView, mode: Mode, notice: string | null): string {
@@ -22,13 +51,41 @@ export function collapsedLine(view: GameView, mode: Mode, notice: string | null)
   return mode === 'secondary' ? `playing in another session · ${line}` : line
 }
 
-export function registerBand(on: On): void {
+export { type ShownBoss, shownBoss } from './boss'
+
+import { worldRows } from './world-rows'
+
+export { worldRows }
+
+/** The desktop strip's SMIL horizon: the idle cadence, 5 s, plus a second. */
+const SVG_STRIP_HORIZON_MS = 6000
+
+/** For a band drawn without a running game (a hot reload before session.start): drawing only. */
+const looseTimeline = new StageTimeline()
+const looseGauges = new GaugeTrack()
+const looseLog = new MessageLog()
+
+const HOTKEYS = [
+  { hotkey: 'p', label: 'party' },
+  { hotkey: 'l', label: 'loot' },
+  { hotkey: 'w', label: 'world' },
+  { hotkey: 'c', label: '▾' },
+  { hotkey: 'f', label: 'farm' },
+] as const
+
+export function registerBand(on: On, game: () => GameHandle | null): void {
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const view = await read($, viewAtom)
     const mode = await read($, modeAtom)
-    if (e.props.hasSurvey || mode === 'off') return next(e)
+    const handle = game()
+    const loop = handle?.stage.loopFor(e.surface) ?? null
+    if (e.props.hasSurvey || mode === 'off') {
+      loop?.mount(null)
+      return next(e)
+    }
     const notice = await read($, noticeAtom)
     if (view === null) {
+      loop?.mount(null)
       // No game to draw (an older version's data, or no server yet): the notice alone, on one line.
       // Every notice already names the game.
       if (!notice) return next(e)
@@ -43,20 +100,44 @@ export function registerBand(on: On): void {
       )
     }
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
-    const { Box, Text, Button } = $.ui.resolve(e)
-    const els = { Text }
+    const world: WorldState = (await read($, worldAtom)) ?? WORLD_DEFAULT
+    // Per machine: the store is the truth, so a motion change in another session reaches this
+    // band; the atom keeps this render subscribed to this session's own changes.
+    await read($, settingsAtom)
+    const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
+    const now = await $.clock.now()
+    const els = $.ui.resolve(e)
+    const { Box, Text, Button } = els
     const width = Math.max(20, e.props.bodyColumns)
+    const terminal = e.surface === 'terminal'
 
     const setPrefs = (patch: Partial<Prefs>) =>
       update($, prefsAtom, (p) => ({ ...(p ?? PREFS_DEFAULT), ...patch }))
 
-    const collapsed =
-      prefs.collapsed ||
-      mode !== 'primary' ||
-      e.props.bodyColumns < MIN_COLUMNS ||
-      e.props.maxRows < REST_ROWS
+    const tab = prefs.bandTab
+    const party = tab === 'party'
+    const timeline = handle?.stage.timeline ?? looseTimeline
+    // Hotkeys need Buttons on screen (spike sheet): hidden in a zero-width Box on terminals and
+    // the desktop (rung a′), a row of their own on VS Code and mobile, untested there (rung c).
+    const hiddenKeys = terminal || e.surface === 'desktop'
+    const extra: 0 | 1 = hiddenKeys ? 0 : 1
+    // Every tab: the strip's enemy window reads the staged state the timeline holds.
+    timeline.observe(view, now)
+    const rendererNow = terminal && 'Raster' in els ? await read($, rendererAtom) : 'svg'
+    // While the probe is pending, the verdict the last session recorded, else the half-block
+    // rules: from the second session on the band keeps its height when the probe lands.
+    const laidOut = rendererNow === 'unknown' ? (settings.probed ?? 'raster') : rendererNow
+    const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
+      tab,
+      extra,
+      minRows: party ? timeline.minRowsAt(view, now) : undefined,
+      scalable: laidOut === 'image',
+    })
+    // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
+    const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
 
     if (collapsed) {
+      loop?.mount(null)
       return (
         <Box key="band" flexDirection="column">
           <Box key="row-collapsed" flexDirection="row">
@@ -74,109 +155,260 @@ export function registerBand(on: On): void {
       )
     }
 
-    const enemyWidth = Math.floor(width / 3)
-    const leftWidth = width - enemyWidth
-    const nameWidth = Math.max(6, Math.min(30, leftWidth - 33))
-
-    const rows = []
-    if (prefs.bandTab === 'party') {
-      for (let i = 0; i < 3; i++) {
-        const hero = view.heroes[i]
-        const enemy = view.enemies[i]
-        const enemyText = enemy
-          ? `${i === 0 ? '⚔' : ' '} ${enemy.glyph} ${enemy.name} ${enemy.hp}/${enemy.maxHp}`
-          : ''
-        rows.push(
-          <Box key={`row-${i}`} flexDirection="row">
-            {hero ? ClassGlyph(els, hero.cls) : <Text>{padEnd('', 7)}</Text>}
-            <Text dimColor={hero ? !hero.alive : true} wrap="truncate">
-              {padEnd(hero?.name ?? '', nameWidth)}
-            </Text>
-            <Text wrap="truncate">{hero ? ` L${padEnd(String(hero.level), 3)}` : ''}</Text>
-            {hero ? HpBar(els, hero.hp, hero.maxHp) : <Text> </Text>}
-            <Text wrap="truncate">{hero ? padStart(`${hero.hp}/${hero.maxHp}`, 9) : ''}</Text>
-            <Text wrap="truncate">{padEnd(` ${clip(enemyText, enemyWidth - 2)}`, enemyWidth)}</Text>
-          </Box>,
-        )
-      }
-    } else if (prefs.bandTab === 'loot') {
-      const lines = view.loot.slice(-3)
-      for (let i = 0; i < 3; i++) {
-        const line = lines[i]
-        rows.push(
-          <Box key={`row-${i}`} flexDirection="row">
-            {line ? (
-              RarityText(els, clip(line.text, width), line.rarity)
-            ) : (
-              <Text dimColor>{i === 0 ? 'No loot yet' : ' '}</Text>
-            )}
-          </Box>,
-        )
-      }
-    } else {
-      const world = [
-        `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`,
-        'Multiplayer arrives in phase 2',
-        ' ',
-      ]
-      world.forEach((text, i) => {
-        rows.push(
-          <Box key={`row-${i}`} flexDirection="row">
-            <Text dimColor={i > 0} wrap="truncate">
-              {clip(text, width)}
-            </Text>
-          </Box>,
-        )
-      })
+    // The window strip: under the stage, beside the compact stage, or alone on Loot and World.
+    const kind = layout.kind === 'full' ? 'full' : layout.kind === 'compact' ? 'compact' : 'bare'
+    const stripColumns = terminal
+      ? Math.min(width, STRIP_MAX_COLUMNS)
+      : Math.min(Math.max(e.props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
+    const input: StripInput = {
+      view,
+      world,
+      tab,
+      kind,
+      columns: stripColumns,
+      now,
+      notice,
+      motion: settings.motion,
+      timeline,
+      gauges: handle?.stage.gauges ?? looseGauges,
+      log: handle?.stage.log ?? looseLog,
     }
+    const { scene } = stripScene(input)
 
-    const tail = notice ?? (view.lastDrop ? `last: ${view.lastDrop.text}` : 'no drops yet')
-    const status = `Zone ${view.zone} ${view.zoneName} · ${waveLabel(view.wave)} · ${formatGold(view.gold)} · ${tail}`
-    const tabsWidth = 36
-    rows.push(
-      <Box key="row-status" flexDirection="row">
-        <Text wrap="truncate">{padEnd(status, width - tabsWidth)}</Text>
-        <Button
-          key="tab-party"
-          label="party"
-          hotkey="p"
-          plain
-          dimColor={prefs.bandTab !== 'party'}
-          onPress={() => setPrefs({ bandTab: 'party' })}
-        />
-        <Text> </Text>
-        <Button
-          key="tab-loot"
-          label="loot"
-          hotkey="l"
-          plain
-          dimColor={prefs.bandTab !== 'loot'}
-          onPress={() => setPrefs({ bandTab: 'loot' })}
-        />
-        <Text> </Text>
-        <Button
-          key="tab-world"
-          label="world"
-          hotkey="w"
-          plain
-          dimColor={prefs.bandTab !== 'world'}
-          onPress={() => setPrefs({ bandTab: 'world' })}
-        />
-        <Text> </Text>
-        <Button
-          key="collapse"
-          label="▾"
-          hotkey="c"
-          plain
-          dimColor
-          onPress={() => setPrefs({ collapsed: true })}
-        />
-      </Box>,
+    const press: Record<(typeof HOTKEYS)[number]['hotkey'], () => void> = {
+      p: () => void setPrefs({ bandTab: 'party' }),
+      l: () => void setPrefs({ bandTab: 'loot' }),
+      w: () => void setPrefs({ bandTab: 'world' }),
+      c: () => void setPrefs({ collapsed: true }),
+      f: () => {
+        // The path `/promptfall farm` takes (hooks/command.ts).
+        if (handle?.canApply()) handle.apply({ t: 'set_farm', on: !view.farm }, now)
+      },
+    }
+    // Not `h`: that name is the JSX factory.
+    const buttons = HOTKEYS.map((k) => (
+      <Button
+        key={`hot-${k.hotkey}`}
+        label={k.label}
+        hotkey={k.hotkey}
+        plain
+        dimColor={k.hotkey !== 'c' && k.hotkey !== 'f' && k.label !== tab}
+        onPress={press[k.hotkey]}
+      />
+    ))
+    // On the desktop the strip sits in a column: an absolute Box takes no row there.
+    const hidden = (
+      <Box
+        key="hotkeys"
+        width={0}
+        overflow="hidden"
+        {...(terminal ? {} : { position: 'absolute' as const, top: 0, left: 0 })}
+      >
+        {buttons}
+      </Box>
     )
 
+    // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
+    // strip composed on the shell, the band's box up to the host's widest element, centred past it.
+    // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
+    // Loot and World are the strip alone on the same shell, the playfield as wide and centred;
+    // compact is its small stage beside its window inside one line (#64).
+    const picture =
+      rendererNow === 'image' && 'Image' in els
+        ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
+        : rendererNow === 'raster' && 'Raster' in els
+          ? { renderer: 'raster' as const, max: RASTER_MAX_COLUMNS }
+          : null
+    if (terminal && picture) {
+      const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
+      const key = bandKey(box)
+      // The stage and its alt draw the staged state, as everywhere else.
+      const shown = layout.box ? stagedState(view, world, timeline, now) : view
+      let element = null
+      if (picture.renderer === 'raster' && 'Raster' in els) {
+        const { Raster } = els
+        const { cells } = bandCells(shown, timeline, now, layout, settings.motion, box, scene)
+        element = <Raster key={key} columns={box.columns} rows={box.rows} cells={cells} />
+      } else if ('Image' in els) {
+        const { Image } = els
+        // As the stage's: a redraw of the site the loop is drawing reuses the picture it last
+        // sent, the loop's next frame a beat away; anything new composes the first frame here.
+        const source =
+          loop?.stageSource(key, layout, tab) ??
+          bandFrame(shown, timeline, now, layout, settings.motion, box, scene)
+        element = (
+          <Image
+            key={key}
+            source={source}
+            columns={box.columns}
+            rows={box.rows}
+            alt={party ? `${altText(shown)}\n${scene.alt}` : scene.alt}
+          />
+        )
+      }
+      loop?.mount({
+        requestId: e.requestId,
+        key,
+        band: box,
+        layout,
+        renderer: picture.renderer,
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
+      return (
+        <Box key="band" flexDirection="column">
+          <Box key="row-band" flexDirection="row" justifyContent="center">
+            {element}
+            {hidden}
+          </Box>
+        </Box>
+      )
+    }
+
+    let stage = null
+    let strip = null
+    let probe = null
+    let renderer: 'raster' | 'image' | 'svg' | 'unknown' = 'svg'
+    if (terminal && 'Raster' in els) {
+      renderer = await read($, rendererAtom)
+      if (renderer === 'unknown') {
+        // Empty rows while the probe decides, so the band's height does not jump when it lands.
+        strip = (
+          <Box key="strip-empty" flexDirection="column">
+            {Array.from({ length: scene.rows }, (_, i) => (
+              <Text key={`strip-empty-${i}`}> </Text>
+            ))}
+          </Box>
+        )
+        // A renderer forced at session start set the atom; one forced later applies from the next
+        // start, so this session still probes.
+        probe = probeElement(els, renderer)
+        if (probe && armProbe()) {
+          const requestId = e.requestId
+          $.clock.after(PROBE_DELAY_MS, () => {
+            void (async () => {
+              // A blit that throws settles nothing, like any other deny.
+              const deny = await $.ui.blit({ requestId, key: 'probe', source: PROBE_B }).then(
+                (r) => r.deny,
+                (error: unknown) => String(error),
+              )
+              const verdict = probeVerdict(deny)
+              if (verdict === null) return
+              await update($, rendererAtom, () => verdict)
+              // For the next session's band while its own probe is pending; the player's choice stays.
+              const key = `promptfall:${SETTINGS_KEY}`
+              await $.store.set(key, { ...parseSettings(await $.store.get(key)), probed: verdict })
+            })()
+          })
+        }
+      }
+    } else if (!terminal && 'Svg' in els) {
+      const { Svg } = els
+      const tracks = SVG_SMIL ? stripTracks(input, SVG_STRIP_HORIZON_MS) : []
+      strip = (
+        <Svg
+          key="strip"
+          source={sceneSvg(scene, tracks, {
+            smil: SVG_SMIL,
+            width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+            band: party ? 'bottom' : 'both',
+          })}
+          alt={scene.alt}
+          isInteractive={SVG_INTERACTIVE}
+        />
+      )
+    }
+
+    // The stage: an element sized to the layout's box, its first frame drawn here so a redraw
+    // is never blank; the loop blits every frame after it. It draws the staged state.
+    const box = layout.box
+    const staged = box ? stagedState(view, world, timeline, now) : view
+    if (box && !terminal && 'Svg' in els) {
+      // The band's width, its share of the shell and line drawn around the stage; on a short band
+      // the whole stage scales down to the rows the strip leaves, centred on the shell (ADR 0004).
+      // The 1.5x art, or the 1x art when its markup would pass the engine's cap.
+      const source = stageSvg(staged, timeline, now, box, {
+        smil: SVG_SMIL,
+        // Wider than the band: the desktop scales it down to the band's width (ADR 0004).
+        width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
+        motion: settings.motion,
+        fit: svgFit(e.props, box, scene, extra),
+      })
+      const { Svg } = els
+      stage = (
+        <Svg key="stage" source={source} alt={altText(staged)} isInteractive={SVG_INTERACTIVE} />
+      )
+    } else if (box && terminal && renderer === 'unknown') {
+      // Empty rows while the probe decides; a known renderer drew the band as one picture above.
+      stage = (
+        <Box key="stage-empty" flexDirection="column">
+          {Array.from({ length: (cellsOf(layout) ?? box).rows }, (_, i) => (
+            <Text key={`stage-empty-${i}`}> </Text>
+          ))}
+        </Box>
+      )
+    }
+
+    // The loop: the terminals' band picture mounts it above; the desktop runs on SMIL.
+    if (!terminal && !SVG_SMIL) {
+      loop?.mount({
+        requestId: e.requestId,
+        key: 'stage',
+        layout,
+        renderer: 'svg',
+        props: e.props,
+        surface: e.surface,
+        strip: { kind, columns: stripColumns, tab, extra },
+      })
+    } else {
+      loop?.mount(null)
+    }
+
+    // On the desktop a row would leave the strip's frame at its default 300 points, as the stage's.
+    const stripRow = (
+      <Box key="row-strip" flexDirection={terminal ? 'row' : 'column'}>
+        {strip}
+        {probe}
+        {hiddenKeys ? hidden : null}
+      </Box>
+    )
+    const hotkeyRow = hiddenKeys ? null : (
+      <Box key="row-hotkeys" flexDirection="row">
+        {buttons.flatMap((b, i) => (i === 0 ? [b] : [<Text key={`hot-gap-${i}`}> </Text>, b]))}
+      </Box>
+    )
+
+    if (layout.kind === 'compact') {
+      return (
+        <Box key="band" flexDirection="column">
+          <Box key="row-compact" flexDirection="row">
+            <Box key="compact-stage" flexDirection="column">
+              <Text key="compact-above"> </Text>
+              {stage}
+              <Text key="compact-below"> </Text>
+            </Box>
+            {strip}
+            {probe}
+            {hidden}
+          </Box>
+        </Box>
+      )
+    }
     return (
       <Box key="band" flexDirection="column">
-        {rows}
+        {stage ? (
+          // On the desktop a row would leave the stage's frame at its default 300 points.
+          <Box
+            key="row-stage"
+            flexDirection={terminal ? 'row' : 'column'}
+            {...(terminal ? { justifyContent: 'center' as const } : {})}
+          >
+            {stage}
+          </Box>
+        ) : null}
+        {stripRow}
+        {hotkeyRow}
       </Box>
     )
   })
