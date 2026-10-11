@@ -952,6 +952,18 @@ test('an engine stopped between an unknown refusal and its restart bootstraps no
   expect(notices()).toEqual([null])
 })
 
+test('an engine stopped while its restart reads the token sends no minting bootstrap', async () => {
+  const kv = new WatchedKeyValue()
+  await kv.set('deviceToken', 'stale')
+  const { engine, client } = setup(kv)
+  // The third read is the restart's, after the compare-and-clear: a null token there would mint.
+  kv.onTokenRead = (count) => {
+    if (count === 3) void engine.stop()
+  }
+  await engine.start()
+  expect(client.bootstraps).toBe(1)
+})
+
 test('an unknown refusal on a running engine clears the token and mints, with no pause', async () => {
   const kv = new MemoryKeyValue()
   await kv.set('deviceToken', 'stale')

@@ -407,6 +407,8 @@ function remote(on: On) {
     else if (method === 'GET' && path === '/v1/account') result = await ledger.account(auth)
     else if (method === 'DELETE' && path === '/v1/account')
       result = await ledger.deleteAccount(auth)
+    // The world poll as the host serves it: a banned account is refused here too.
+    else if (method === 'GET' && path === '/v1/world') result = await ledger.world(auth, 0)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })

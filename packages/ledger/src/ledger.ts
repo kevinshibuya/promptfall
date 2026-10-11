@@ -387,7 +387,8 @@ export class Ledger implements ServerClient {
     deviceToken: string | null
   }): Promise<Bootstrap | BootstrapRefused> {
     return this.run(async (): Promise<Bootstrap | BootstrapRefused> => {
-      if (input.deviceToken) {
+      // Only a null token mints: any string, the empty one too, is a token the books must know.
+      if (input.deviceToken !== null) {
         // A known token writes nothing: a secondary session bootstraps every few seconds.
         const record = await this.books.authenticate({ deviceToken: input.deviceToken })
         const banned = record && bannedOf(record)
