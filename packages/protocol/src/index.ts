@@ -18,7 +18,7 @@ export {
   type ServerClient,
   type ServerConfig,
 } from './client'
-export { type FetchLike, HttpClient, ROUTES } from './http'
+export { type AbortSignalLike, type FetchLike, HttpClient, ROUTES } from './http'
 export { type KeyValue, MemoryKeyValue } from './kv'
 export {
   type Banned,
