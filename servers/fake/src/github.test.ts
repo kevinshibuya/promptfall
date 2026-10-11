@@ -57,6 +57,17 @@ async function player(ledger: Ledger) {
   return { deviceToken: boot.deviceToken }
 }
 
+/** A wall clock the test moves by hand. */
+function wallClock(start = 1_700_000_000_000) {
+  let t = start
+  return {
+    now: () => t,
+    advance: (ms: number) => {
+      t += ms
+    },
+  }
+}
+
 /** Everything the store holds, as text: what a secret must never be part of. */
 async function dump(kv: MemoryKeyValue): Promise<string> {
   const values = await Promise.all(kv.keys().map(async (k) => [k, await kv.get(k)]))
@@ -70,8 +81,9 @@ describe('the GitHub approver', () => {
       { error: 'slow_down', interval: 10 },
       { access_token: 'gho_token-secret', token_type: 'bearer', scope: '' },
     ])
+    const wall = wallClock()
     const { ledger, kv } = makeLedger(
-      githubApprover({ clientId: 'Iv1.client', fetch: github.fetch }),
+      githubApprover({ clientId: 'Iv1.client', fetch: github.fetch, now: wall.now }),
     )
     const auth = await player(ledger)
     const start = await ledger.linkStart(auth)
@@ -82,6 +94,9 @@ describe('the GitHub approver', () => {
     })
     expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
     expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
+    // The slow_down's 10 s have not passed: pending, and GitHub is not asked.
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
+    wall.advance(10_000)
     const linked = await ledger.linkPoll(auth, 'WDJB-MJHT')
     if ('reason' in linked || linked.status !== 'linked') throw new Error('expected linked')
     expect(linked.account.linked).toEqual({ provider: 'github', login: 'octocat' })
@@ -100,6 +115,134 @@ describe('the GitHub approver', () => {
     expect(stored).toContain('octocat')
     expect(stored).not.toContain('gho_token-secret')
     expect(stored).not.toContain('device-secret')
+  })
+
+  it('a slow_down delays the next GitHub call by the new interval and answers pending meanwhile', async () => {
+    const github = mockGitHub([
+      { error: 'slow_down', interval: 12 },
+      { error: 'slow_down' },
+      { error: 'slow_down' },
+      { error: 'access_denied' },
+    ])
+    const wall = wallClock()
+    const { ledger } = makeLedger(
+      githubApprover({ clientId: 'Iv1.client', fetch: github.fetch, now: wall.now }),
+    )
+    const auth = await player(ledger)
+    await ledger.linkStart(auth)
+    const tokenCalls = () => github.calls.filter((c) => c.url === TOKEN).length
+    const poll = () => ledger.linkPoll(auth, 'WDJB-MJHT')
+
+    // The slow_down carries 12 s: no GitHub call until they pass.
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(1)
+    wall.advance(11_999)
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(1)
+    wall.advance(1)
+    // A slow_down without an interval adds 5 s to the last one: 17 s.
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(2)
+    wall.advance(16_999)
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(2)
+    wall.advance(1)
+    // A second one compounds: 22 s.
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(3)
+    wall.advance(21_999)
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(3)
+    wall.advance(1)
+    expect(await poll()).toMatchObject({ status: 'ended', reason: 'denied' })
+    expect(tokenCalls()).toBe(4)
+  })
+
+  it('after a slow_down every GitHub call keeps the slower pace', async () => {
+    const github = mockGitHub([
+      { error: 'slow_down', interval: 10 },
+      { error: 'authorization_pending' },
+      { error: 'access_denied' },
+    ])
+    const wall = wallClock()
+    const { ledger } = makeLedger(
+      githubApprover({ clientId: 'Iv1.client', fetch: github.fetch, now: wall.now }),
+    )
+    const auth = await player(ledger)
+    await ledger.linkStart(auth)
+    const tokenCalls = () => github.calls.filter((c) => c.url === TOKEN).length
+    const poll = () => ledger.linkPoll(auth, 'WDJB-MJHT')
+
+    await poll()
+    wall.advance(10_000)
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(2)
+    // The plugin polls again 5 s on; GitHub's pace is 10 s now, so it is not asked.
+    wall.advance(5_000)
+    expect(await poll()).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(2)
+    wall.advance(5_000)
+    expect(await poll()).toMatchObject({ status: 'ended', reason: 'denied' })
+    expect(tokenCalls()).toBe(3)
+  })
+
+  it("one player's slow_down does not delay another player's poll", async () => {
+    const calls: string[] = []
+    let devices = 0
+    const fetch: FetchLike = async (url, init) => {
+      const json = (body: unknown) => ({ status: 200, ok: true, text: JSON.stringify(body) })
+      if (url === DEVICE) {
+        const n = devices++
+        return json({
+          device_code: `device-${n}`,
+          user_code: `CODE-${n}`,
+          verification_uri: 'https://github.com/login/device',
+          expires_in: 900,
+          interval: 5,
+        })
+      }
+      const device = new URLSearchParams(init.body).get('device_code') ?? ''
+      calls.push(device)
+      return json(
+        device === 'device-0'
+          ? { error: 'slow_down', interval: 30 }
+          : { error: 'authorization_pending' },
+      )
+    }
+    const wall = wallClock()
+    const { ledger } = makeLedger(githubApprover({ clientId: 'Iv1.client', fetch, now: wall.now }))
+    const a = await player(ledger)
+    const b = await player(ledger)
+    await ledger.linkStart(a)
+    await ledger.linkStart(b)
+
+    expect(await ledger.linkPoll(a, 'CODE-0')).toEqual({ status: 'pending' })
+    expect(await ledger.linkPoll(a, 'CODE-0')).toEqual({ status: 'pending' })
+    expect(await ledger.linkPoll(b, 'CODE-1')).toEqual({ status: 'pending' })
+    expect(await ledger.linkPoll(b, 'CODE-1')).toEqual({ status: 'pending' })
+    expect(calls).toEqual(['device-0', 'device-1', 'device-1'])
+  })
+
+  it('a device code past its 15-minute lifetime is no longer held back', async () => {
+    const github = mockGitHub([{ error: 'slow_down', interval: 3600 }, { error: 'expired_token' }])
+    const wall = wallClock()
+    const { ledger } = makeLedger(
+      githubApprover({ clientId: 'Iv1.client', fetch: github.fetch, now: wall.now }),
+    )
+    const auth = await player(ledger)
+    await ledger.linkStart(auth)
+    const tokenCalls = () => github.calls.filter((c) => c.url === TOKEN).length
+
+    await ledger.linkPoll(auth, 'WDJB-MJHT')
+    wall.advance(15 * 60_000)
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toEqual({ status: 'pending' })
+    expect(tokenCalls()).toBe(1)
+    wall.advance(1)
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toMatchObject({
+      status: 'ended',
+      reason: 'expired',
+    })
+    expect(tokenCalls()).toBe(2)
   })
 
   it('a declined code ends the link unlinked with its message', async () => {
@@ -140,6 +283,27 @@ describe('the GitHub approver', () => {
       reason: 'unavailable',
       message: 'GitHub did not answer the link. Link again to retry.',
     })
+  })
+
+  it('a GitHub call that times out is aborted', async () => {
+    const github = mockGitHub([])
+    const signals: ({ readonly aborted: boolean } | undefined)[] = []
+    const fetch: FetchLike = (url, init) => {
+      if (url !== TOKEN) return github.fetch(url, init)
+      signals.push(init.signal)
+      return new Promise(() => undefined)
+    }
+    const { ledger } = makeLedger(githubApprover({ clientId: 'Iv1.client', fetch, timeoutMs: 20 }))
+    const auth = await player(ledger)
+    await ledger.linkStart(auth)
+    expect(await ledger.linkPoll(auth, 'WDJB-MJHT')).toMatchObject({
+      status: 'ended',
+      reason: 'unavailable',
+    })
+    expect(signals).toHaveLength(1)
+    expect(signals[0]?.aborted).toBe(true)
+    const info = await ledger.account(auth)
+    expect('account' in info && info.account.linked).toBeNull()
   })
 
   it('a start GitHub refuses, or a missing client id, answers a refusal and asks GitHub nothing more', async () => {
