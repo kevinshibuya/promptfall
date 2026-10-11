@@ -215,9 +215,20 @@ _Avoid_: loot box, crate, drop (that is the item)
 
 **Reveal**:
 The chest opening and the item rising out of it on a glow in its rarity colour, held longer the
-rarer the item. The combat log and the Loot rows carry a drop once its item has risen; a toast
-reads the state, as always. The next enemy enters after it.
+rarer the item. Its show time is the item fully risen. The next enemy enters after it.
 _Avoid_: drop animation, unboxing, loot pop
+
+**Show time**:
+The moment the stage plays an event the words also tell: a drop's item fully risen, a zone
+arrival's backdrop changed. A line or toast about such an event lands at its show time, not
+before; an event the stage never plays, or plays while no band is drawn, has none, and its words
+land with the state.
+_Avoid_: reveal time (that is one show time), animation end, delay
+
+**Held line**:
+A combat log line or toast that waits for its show time. A drop's and a zone arrival's are held;
+a hit line, a wipe's or a level-up's is not.
+_Avoid_: delayed line, queued toast, deferred message
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
