@@ -16,6 +16,7 @@ function model(overrides: Partial<StageModel> = {}): StageModel {
     backdrop: null,
     actors: [],
     numbers: [],
+    chests: [],
     drops: [],
     effects: [],
     alt: '',

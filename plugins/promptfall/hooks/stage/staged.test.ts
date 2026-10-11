@@ -96,6 +96,52 @@ test('the wave and zone hold while a departed enemy of them is held; newcomers w
   })
 })
 
+test("a zone boss's chest plays whole: the zone and wave hold through its reveal", () => {
+  const t = new StageTimeline()
+  t.observe(boss(), NOW - 1)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e9', amount: 500 },
+      {
+        k: 'drop',
+        item: {
+          id: 'i1',
+          base: 'iron_sword',
+          rarity: 'legendary',
+          affixes: [],
+          equippedBy: null,
+          tradeableAt: null,
+        },
+      },
+    ],
+    NOW,
+    2000,
+  )
+  // The zone boss fell: the sim moved on to zone 2, wave 1, and brought the next wave.
+  const next: GameView = { ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+  t.observe(next, NOW)
+  const at = (now: number) => {
+    const s = stagedState(next, WORLD_DEFAULT, t, now)
+    return { zone: s.zone, wave: s.wave, enemies: s.enemies.map((e) => e.name) }
+  }
+  const shown = t.showAt('i1') ?? 0
+  const ended = endOf(t, 'e9', 'chest')
+  const held = { zone: 1, wave: 11, enemies: ['Bandit Captain'] }
+  // Redraws through the reveal neither cut the chest nor let the next zone's wave on.
+  for (const now of [shown, ended - 1]) {
+    t.observe(next, now)
+    expect(at(now)).toEqual(held)
+    expect(endOf(t, 'e9', 'chest', now)).toBe(ended)
+  }
+  t.observe(next, ended + WAVE_GAP_MS)
+  expect(at(ended + WAVE_GAP_MS)).toEqual({
+    zone: 2,
+    wave: 1,
+    enemies: ['Goblin Scout', 'Field Rat', 'Road Slime'],
+  })
+})
+
 /** A poll of The Promptwyrm at `hp`, this party's committed tally `committed` at the time. */
 const polled = (hp: number, committed: number): WorldState => ({
   ...WORLD_DEFAULT,
@@ -258,7 +304,7 @@ test('a wipe: each hero stands until his blow lands, lies fallen while the field
   ])
 })
 
-test('a wave clear: the hero killed in the clearing tick is down from his blow until the killer has faded and dropped, then up at 15%', () => {
+test('a wave clear: the hero killed in the clearing tick is down from his blow until the killer has faded and its chest played, then up at 15%', () => {
   const lone: GameView = { ...wave(), enemies: wave().enemies.slice(0, 1) }
   const t = new StageTimeline()
   t.observe(withHero(lone, 'h3', 5), NOW - 1)
@@ -286,7 +332,7 @@ test('a wave clear: the hero killed in the clearing tick is down from his blow u
   // The wave is clear: the fallen hero is revived at 15% (7 of 50).
   const view: GameView = withHero({ ...lone, enemies: [] }, 'h3', 7)
   t.observe(view, NOW)
-  const dropped = endOf(t, 'e1', 'drop')
+  const dropped = endOf(t, 'e1', 'chest')
   const h3 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).heroes[2]
   const e1 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).enemies[0]?.hp
   expect(h3(felled - 1)).toMatchObject({ hp: 5, alive: true })

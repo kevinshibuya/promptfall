@@ -1,13 +1,12 @@
 import { expect, test } from 'claude-code/testing'
-import { ACTION_STEPS, type Effect, STEP_MS } from '../vendor/sim.js'
+import { ACTION_STEPS, type Effect, type Rarity, STEP_MS } from '../vendor/sim.js'
 import { boss, wave, worldBoss } from './fixtures'
-import { ACTION_MS, type Motion, StageTimeline } from './timeline'
+import { ACTION_MS, chestPhaseAt, type Motion, StageTimeline } from './timeline'
 import {
   BOLT_MS,
   BOSS_MIN_ROWS,
   BURST_MS,
   DISSOLVE_MS,
-  DROP_MS,
   FLASH_MS,
   LUNGE_MS,
   NUMBER_MS,
@@ -36,10 +35,10 @@ const act = (
   action,
   at,
 })
-const item = (base: string) => ({
-  id: 'i1',
+const item = (base: string, rarity: Rarity = 'rare', id = 'i1') => ({
+  id,
   base,
-  rarity: 'rare' as const,
+  rarity,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,
@@ -140,7 +139,7 @@ test('hits with no act play as one action at offset 0, without a lunge', () => {
   ])
 })
 
-test("a black mage's kill of the first of two targets drops from the first", () => {
+test("a black mage's kill of the first of two targets leaves its chest on the first", () => {
   const t = observed()
   t.onEffects(
     [
@@ -152,9 +151,10 @@ test("a black mage's kill of the first of two targets drops from the first", () 
     ],
     NOW,
   )
-  expect(of(t.active(NOW), 'drop')[0]).toMatchObject({
+  // It lands as e1's fade ends: its 300 ms fall starts before.
+  expect(of(t.active(NOW), 'chest')[0]).toMatchObject({
     actor: 'e1',
-    from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + FLASH_MS + DISSOLVE_MS,
+    from: NOW + WINDUP_HOLD_MS + WINDUP_MS + BOLT_MS + FLASH_MS + DISSOLVE_MS - 300,
   })
 })
 
@@ -354,17 +354,39 @@ test('minRowsAt is the tallest actor: 17 with a boss through its dissolve, 8 at 
   expect(observed().minRowsAt(wave(), NOW)).toBe(STAGE_MIN_ROWS)
 })
 
-test('a drop pops from the target of the hit before it, once its fade is over', () => {
+test('a chest lands where the target of the hit before it stood; a vendored drop plays the same chest', () => {
   const t = observed()
   t.onEffects([hit('h1', 'e3'), { k: 'drop', item: item('iron_sword') }], NOW)
-  const drop = of(t.active(NOW), 'drop')[0]
-  expect(drop).toMatchObject({ actor: 'e3', item: 'item:iron_sword' })
-  expect(drop?.from).toBe(NOW + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS)
-  expect(drop?.until).toBe((drop?.from ?? 0) + DROP_MS)
+  const chest = of(t.active(NOW), 'chest')[0]
+  expect(chest).toMatchObject({
+    actor: 'e3',
+    itemId: 'i1',
+    rarity: 'rare',
+    spriteId: 'item:iron_sword',
+  })
+  expect(chest?.from).toBe(NOW + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS - 300)
   expect(t.known().find((k) => k.id === 'e3')?.slot).toBe(2)
   const t2 = observed()
   t2.onEffects([hit('h2', 'e2'), { k: 'drop_vendored', item: item('iron_sword'), gold: 3 }], NOW)
-  expect(of(t2.active(NOW), 'drop')[0]?.actor).toBe('e2')
+  expect(of(t2.active(NOW), 'chest')).toEqual([{ ...chest, actor: 'e2' }])
+})
+
+test('a lone drop plays its chest on the front slot from now', () => {
+  // A sandbox item: no kill in its burst.
+  const t = observed()
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(t.active(NOW), 'chest')).toEqual([
+    {
+      kind: 'chest',
+      actor: 'e1',
+      itemId: 'i1',
+      rarity: 'common',
+      spriteId: 'item:iron_sword',
+      from: NOW,
+      until: NOW + 2400,
+    },
+  ])
+  expect(t.showAt('i1')).toBe(NOW + 1400)
 })
 
 test('a hit naming an unknown actor is dropped', () => {
@@ -628,18 +650,19 @@ test('a stage two rounds behind drops the attacks that have not started', () => 
   expect(starts).toContain(0 + WINDUP_HOLD_MS)
 })
 
-test('a kill whose blow the backlog cap drops fades and drops from then, not from the dropped blow', () => {
+test("a chest whose blow the backlog cap drops is re-timed to the fade's end", () => {
   const t = observed()
   // Six attacks queue ahead of the blow that kills e1 and drops a sword, three seconds out.
   const queue = Array.from({ length: 6 }, () => [act('e2', 0), hit('e2', 'h1')]).flat()
   t.onEffects(
-    [...queue, act('h1', 0), hit('h1', 'e1'), { k: 'drop', item: item('iron_sword') }],
+    [...queue, act('h1', 0), hit('h1', 'e1'), { k: 'drop', item: item('iron_sword', 'common') }],
     NOW,
     2000,
   )
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
   t.observe(v, NOW + 1)
+  const shown = t.showAt('i1') ?? 0
   // The next round pushes the stage two rounds behind: the queue, the killing blow with it, goes.
   const cut = NOW + 2000
   t.onEffects(Array.from({ length: 10 }, () => [act('e2', 0), hit('e2', 'h1')]).flat(), cut, 2000)
@@ -647,11 +670,19 @@ test('a kill whose blow the backlog cap drops fades and drops from then, not fro
   expect(of(t.active(cut), 'dissolve')).toEqual([
     { kind: 'dissolve', actor: 'e1', from: cut, until: cut + DISSOLVE_MS },
   ])
-  const dropFrom = cut + DISSOLVE_MS
-  expect(of(t.active(cut), 'drop')[0]).toMatchObject({ actor: 'e1', from: dropFrom })
-  // The pause after it starts from the re-timed drop.
+  // The chest lands as the new fade ends, and its show time moves with it.
+  const landed = cut + DISSOLVE_MS
+  expect(of(t.active(cut), 'chest')[0]).toMatchObject({
+    actor: 'e1',
+    from: landed - 300,
+    until: landed - 300 + 2400,
+  })
+  expect(t.showAt('i1')).toBe(landed + 1100)
+  expect(t.showAt('i1')).toBeLessThan(shown)
+  // The pause after it starts from the re-timed chest.
   t.observe(v, cut + 1)
-  expect(t.isBusy(dropFrom + DROP_MS + WAVE_GAP_MS - 1)).toBe(true)
+  const end = landed - 300 + 2400
+  expect(t.isBusy(end + WAVE_GAP_MS - 1)).toBe(true)
   const next = wave()
   next.enemies = next.enemies.filter((e) => e.id !== 'e1')
   next.enemies.push({
@@ -659,21 +690,21 @@ test('a kill whose blow the backlog cap drops fades and drops from then, not fro
     id: 'e4',
     name: 'Road Slime',
   } as (typeof next.enemies)[number])
-  t.observe(next, dropFrom + DROP_MS + WAVE_GAP_MS)
+  t.observe(next, end + WAVE_GAP_MS - 1)
+  expect(t.known().map((k) => k.id)).not.toContain('e4')
+  t.observe(next, end + WAVE_GAP_MS)
   expect(t.known().map((k) => k.id)).toContain('e4')
 })
 
-test('a kill plays in beats: the fade, then the drop, then a pause, then the next enemy', () => {
+test('a kill without a drop plays in beats: the fade, then a pause, then the next enemy', () => {
   const t = observed()
-  t.onEffects([hit('h1', 'e1'), { k: 'drop', item: item('iron_sword') }], NOW)
+  t.onEffects([hit('h1', 'e1')], NOW)
   const flashEnd = NOW + LUNGE_MS / 2 + FLASH_MS
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
   t.observe(v, NOW + 10)
   expect(of(t.active(NOW + 10), 'dissolve')[0]).toMatchObject({ from: flashEnd })
-  // The drop pops once the fade is over.
-  const dropFrom = flashEnd + DISSOLVE_MS
-  expect(of(t.active(NOW + 10), 'drop')[0]).toMatchObject({ actor: 'e1', from: dropFrom })
+  expect(of(t.active(NOW + 10), 'chest')).toEqual([])
   // The next enemy arrives in the view right away, but waits off stage for the pause.
   v.enemies.push({
     ...v.enemies[0],
@@ -681,11 +712,113 @@ test('a kill plays in beats: the fade, then the drop, then a pause, then the nex
     def: 'road_slime',
     name: 'Road Slime',
   } as (typeof v.enemies)[number])
-  const settled = dropFrom + DROP_MS
+  const settled = flashEnd + DISSOLVE_MS
   t.observe(v, settled + WAVE_GAP_MS - 1)
   expect(t.known().map((k) => k.id)).not.toContain('e4')
   expect(t.isBusy(settled + WAVE_GAP_MS - 1)).toBe(true)
   t.observe(v, settled + WAVE_GAP_MS)
   expect(t.known().map((k) => k.id)).toContain('e4')
   expect(of(t.active(settled + WAVE_GAP_MS), 'spawn').map((m) => m.actor)).toEqual(['e4'])
+})
+
+test('a chest falls as the enemy fades, sits, opens, rises, holds by rarity and fades before the pause', () => {
+  const holds = { common: 800, uncommon: 1000, rare: 1200, epic: 1600, legendary: 2000 } as const
+  for (const [rarity, hold] of Object.entries(holds) as [Rarity, number][]) {
+    const t = observed()
+    t.onEffects([hit('h1', 'e1'), { k: 'drop', item: item('iron_sword', rarity) }], NOW)
+    const v = wave()
+    v.enemies = v.enemies.filter((e) => e.id !== 'e1')
+    t.observe(v, NOW + 10)
+    const faded = of(t.active(NOW + 10), 'dissolve')[0]?.until ?? 0
+    const chest = of(t.active(NOW + 10), 'chest')[0]
+    if (chest?.kind !== 'chest') throw new Error('no chest')
+    // Fall 300, landing as the fade ends; sit 300; open 500; rise 300; hold; fade 200.
+    const from = faded - 300
+    expect([chest.from, chest.until]).toEqual([from, from + 1600 + hold])
+    const phases = [
+      [from, 'fall'],
+      [faded - 1, 'fall'],
+      [faded, 'sit'],
+      [faded + 300, 'open'],
+      [faded + 800, 'rise'],
+      [faded + 1100, 'hold'],
+      [faded + 1100 + hold - 1, 'hold'],
+      [faded + 1100 + hold, 'fade'],
+      [from + 1600 + hold - 1, 'fade'],
+    ] as const
+    for (const [at, phase] of phases)
+      expect([at, chestPhaseAt(chest, at).phase]).toEqual([at, phase])
+    // The next enemy enters once the pause after the fade is over, not before.
+    v.enemies.push({
+      ...v.enemies[0],
+      id: 'e4',
+      def: 'road_slime',
+      name: 'Road Slime',
+    } as (typeof v.enemies)[number])
+    const enter = chest.until + WAVE_GAP_MS
+    t.observe(v, enter - 1)
+    expect(t.known().map((k) => k.id)).not.toContain('e4')
+    expect(t.isBusy(enter - 1)).toBe(true)
+    t.observe(v, enter)
+    expect(of(t.active(enter), 'spawn').map((m) => m.actor)).toEqual(['e4'])
+  }
+})
+
+test('two kills in one tick reveal one after the other in kill order', () => {
+  const t = observed()
+  t.onEffects(
+    [
+      act('h1', 0),
+      hit('h1', 'e2'),
+      { k: 'drop', item: item('iron_sword', 'legendary', 'i1') },
+      act('h2', 500),
+      hit('h2', 'e1'),
+      { k: 'drop', item: item('oak_staff', 'common', 'i2') },
+    ],
+    NOW,
+  )
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id === 'e3')
+  t.observe(v, NOW + 10)
+  const chests = of(t.active(NOW + 10), 'chest')
+  expect(chests.map((m) => m.actor)).toEqual(['e2', 'e1'])
+  const first = t.showAt('i1') ?? 0
+  const second = t.showAt('i2') ?? 0
+  expect(second).toBeGreaterThan(first)
+  // Each plays whole: the first chest still holds its slot through its legendary hold.
+  const last = Math.max(...chests.map((m) => m.until))
+  t.observe(v, first + 1999)
+  expect(t.isDeparted('e2')).toBe(true)
+  // The common one, shown half a second later, held 800 ms and faded, is over by then.
+  expect(of(t.active(first + 1999), 'chest').map((m) => m.actor)).toEqual(['e2'])
+  expect(t.isBusy(last + WAVE_GAP_MS - 1)).toBe(true)
+})
+
+test('showAt answers the end of the rise and pendingReveals counts the chests still to show', () => {
+  const t = observed()
+  // Two lone drops, a common and a legendary: their chests fall from now and rise together.
+  t.onEffects(
+    [
+      { k: 'drop', item: item('iron_sword', 'common', 'i1') },
+      { k: 'drop_vendored', item: item('oak_staff', 'legendary', 'i2'), gold: 3 },
+    ],
+    NOW,
+  )
+  // The show time is the end of the rise, whatever the rarity: the hold comes after it.
+  expect(t.showAt('i1')).toBe(NOW + 1400)
+  expect(t.showAt('i2')).toBe(NOW + 1400)
+  expect(t.showAt('i9')).toBeNull()
+  expect(of(t.active(NOW), 'chest').map((m) => m.until - NOW)).toEqual([2400, 3600])
+  expect(t.pendingReveals(NOW)).toBe(2)
+  expect(t.pendingReveals(NOW + 1399)).toBe(2)
+  expect(t.pendingReveals(NOW + 1400)).toBe(0)
+  // A kill's chest later in the tick is still to show once the lone ones have shown.
+  t.onEffects([hit('h1', 'e2'), { k: 'drop', item: item('oak_staff', 'rare', 'i3') }], NOW + 1000)
+  const landed = NOW + 1000 + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
+  expect(t.showAt('i3')).toBe(landed + 1100)
+  expect(t.pendingReveals(NOW + 1400)).toBe(1)
+  expect(t.pendingReveals(landed + 1100)).toBe(0)
+  // Once a chest is over, the timeline no longer holds its item.
+  t.onEffects([], NOW + 3600)
+  expect(t.showAt('i2')).toBeNull()
 })

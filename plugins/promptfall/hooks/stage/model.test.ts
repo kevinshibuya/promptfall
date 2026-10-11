@@ -473,3 +473,70 @@ test('the step is the same distance for a world boss and a goblin', () => {
   }
   expect(compact(slimeHits) - compact([])).toBe(STEP_PX)
 })
+
+/** e1 killed at NOW with a common sword: its chest falls from NOW + 400 and lands at NOW + 700. */
+function chestAt(now: number, box: { columns: number; rows: number }, opts: Opts) {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW)
+  const sword = {
+    id: 'i1',
+    base: 'iron_sword',
+    rarity: 'common' as const,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
+  t.onEffects([hit('h1', 'e1'), { k: 'drop', item: sword }], NOW)
+  const view: GameView = { ...wave(), enemies: wave().enemies.filter((e) => e.id !== 'e1') }
+  t.observe(view, NOW + 10)
+  const m = stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts)
+  const place = (x: { x: number; y: number; alpha: number } | undefined) => x && [x.x, x.y, x.alpha]
+  return {
+    chest: m.chests[0] && { phase: m.chests[0].phase, at: place(m.chests[0]) },
+    item: place(m.drops[0]),
+    chestArt: m.chests[0]?.art,
+  }
+}
+
+test("a chest falls from above the dead enemy's centre to its ground, sits closed, and its item rises from its top", () => {
+  const FULL = { columns: 116, rows: 17 }
+  // 1x: e1 at x 4, 16 px, centre (12, 26). The chest's bottom starts at that centre and falls to
+  // the ground (y 18); the item's centre starts at the closed chest's top (row 5) and rises 10 px.
+  const closed = spriteFor('chest', 'closed')
+  const lo = (now: number) => chestAt(now, FULL, STILL)
+  expect(lo(NOW + 399).chest).toBeUndefined()
+  expect(lo(NOW + 400).chest).toEqual({ phase: 'fall', at: [4, 10, 1] })
+  // Eased in: a quarter of the way down at half the fall.
+  expect(lo(NOW + 550).chest).toEqual({ phase: 'fall', at: [4, 12, 1] })
+  for (const [now, phase] of [
+    [NOW + 700, 'sit'],
+    [NOW + 1200, 'open'],
+    [NOW + 1650, 'rise'],
+    [NOW + 2000, 'hold'],
+  ] as const) {
+    expect(lo(now).chest).toEqual({ phase, at: [4, 18, 1] })
+    expect(lo(now).chestArt).toBe(closed.full)
+  }
+  expect(lo(NOW + 1200).item).toBeUndefined()
+  expect(lo(NOW + 1500).item).toEqual([4, 15, 1])
+  expect(lo(NOW + 1650).item).toEqual([4, 10, 1])
+  expect(lo(NOW + 2000).item).toEqual([4, 5, 1])
+  // The fade takes the chest and the item together.
+  expect(lo(NOW + 2700)).toMatchObject({ chest: { phase: 'fade', at: [4, 18, 0.5] } })
+  expect(lo(NOW + 2700).item).toEqual([4, 5, 0.5])
+  expect(lo(NOW + 2800).chest).toBeUndefined()
+  // 1.5x: e1 at x 6, 24 px, centre (18, 39); the chest falls from 15 to 27, the item rises from 22.
+  const hi = (now: number) => chestAt(now, FULL, { ...STILL, scale: HIRES_SCALE })
+  expect(hi(NOW + 400).chest).toEqual({ phase: 'fall', at: [6, 15, 1] })
+  expect(hi(NOW + 1200).chest).toEqual({ phase: 'open', at: [6, 27, 1] })
+  expect(hi(NOW + 1200).chestArt).toBe(closed.hires)
+  expect(hi(NOW + 1500).item).toEqual([6, 22, 1])
+  expect(hi(NOW + 2000).item).toEqual([6, 7, 1])
+  // The compact stage: the 8 px chest on its ground, the item kept inside the frame.
+  const compact = chestAt(NOW + 2000, BOX_COMPACT, { ...STILL, compact: true })
+  expect(compact).toEqual({
+    chest: { phase: 'hold', at: [0, 0, 1] },
+    item: [0, 0, 1],
+    chestArt: closed.compact,
+  })
+})

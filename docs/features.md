@@ -64,8 +64,12 @@ that fall behind are dropped; kills, drops, level-ups, deaths and sales always g
 
 **Drops and rarities.** Kills drop items. An item is a base type, a rarity (Common, Uncommon,
 Rare, Epic, Legendary) and one rolled affix for each rarity step above Common, and rarer items
-carry higher base stats. Deeper zones and bosses roll rarer drops. A drop pops out of the
-defeated enemy on the stage, and the Loot tab shows the last two, coloured by rarity.
+carry higher base stats. Deeper zones and bosses roll rarer drops. A kill that drops an item
+leaves a chest where the enemy stood: it falls out of the enemy as it fades, sits closed, opens,
+and the item rises out of it and holds, longer the rarer the item (under a second for a Common,
+two for a Legendary), then fades; the next enemy steps on after it. An auto-vendored drop plays
+the same chest, and a sandbox item plays its chest on the front monster. The Loot tab shows the
+last two drops, coloured by rarity.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its
@@ -231,14 +235,14 @@ lands at its full size. Actors bob between two idle drawings and wind up and str
 hero or monster, the world boss included, steps toward its target as it winds up, the same few
 pixels for all, holds there through its blow and steps back as its action ends; the knight and the
 enemies lunge from the stepped position. Fireballs, arrows and light bursts fly, hits flash white
-with a rising damage number, heals rise green, the dead dissolve and drops pop out. A hero stands
-and fights until the blow that kills him lands, then dims, and the party window's HP drops with each
-hit as it lands, not when the game applies it. The stage is 17 rows in every fight and never changes
-height, the party small on the zone's painting, so a boss lands at its full size. A monster that
-steps on partway through a tick plays its first actions animated, on the desktop too. It draws
-inside the band's picture, as described under the playfield above. A terminal session asks which
-picture it can draw, and lays the band out with the last session's answer while it waits, so the
-band holds its height from the second session on.
+with a rising damage number, heals rise green, the dead dissolve and a drop leaves a chest. A hero
+stands and fights until the blow that kills him lands, then dims, and the party window's HP drops
+with each hit as it lands, not when the game applies it. The stage is 17 rows in every fight and
+never changes height, the party small on the zone's painting, so a boss lands at its full size. A
+monster that steps on partway through a tick plays its first actions animated, on the desktop too.
+It draws inside the band's picture, as described under the playfield above. A terminal session asks
+which picture it can draw, and lays the band out with the last session's answer while it waits, so
+the band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right

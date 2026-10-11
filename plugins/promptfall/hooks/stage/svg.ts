@@ -9,6 +9,8 @@ import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
 import {
   actionOffset,
+  CHEST,
+  chestPlace,
   effectAt,
   type Pose,
   type StageActor,
@@ -18,16 +20,18 @@ import {
   variant,
 } from './model'
 import { svgFrame } from './playfield'
-import { bobbingAt, type Motion, type StageTimeline } from './timeline'
+import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './timeline'
 import {
   BLINK_MS,
+  CHEST_FALL_MS,
   COMPACT_STAGE_ROWS,
-  DROP_RISE_PX,
   HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LUNGE_PX,
   NUMBER_RISE_PX,
+  REVEAL_FADE_MS,
+  REVEAL_RISE_MS,
   STEP_OUT_MS,
   STEP_PX,
   SVG_FALLBACK_FRAME_MS,
@@ -394,7 +398,7 @@ export function renderSvg(
     const mine = live.filter((m) => m.actor === actor.key)
     const spawning = mine.some((m) => m.kind === 'spawn')
     if (actor.alpha <= 0 && !(opts.smil && spawning)) {
-      // Not drawn, but a drop still rising from it needs its anchor.
+      // Not drawn, but a chest still on its ground needs its anchor.
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
@@ -477,6 +481,10 @@ export function renderSvg(
   }
 
   if (!opts.smil) {
+    for (const c of model.chests) {
+      const op = c.alpha < 1 ? ` opacity="${Number(c.alpha.toFixed(2))}"` : ''
+      body.push(`<use href="#${define(c.art, null)}" transform="translate(${c.x} ${c.y})"${op}/>`)
+    }
     for (const d of model.drops) {
       const op = d.alpha < 1 ? ` opacity="${Number(d.alpha.toFixed(2))}"` : ''
       body.push(`<use href="#${define(d.art, null)}" transform="translate(${d.x} ${d.y})"${op}/>`)
@@ -506,17 +514,27 @@ export function renderSvg(
         const rise = clamp(at.y + px(2) - px(NUMBER_RISE_PX), 0, H - glyphH) - top
         const anim = `<animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/>`
         body.push(text(m.text, x, top, m.rgb, block, anim, ' opacity="0"'))
-      } else if (m.kind === 'drop') {
-        const sprite = SPRITES[m.item]
+      } else if (m.kind === 'chest') {
+        const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
-        const art = compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
-        const cx = at.x + at.actor.poses.idle.art.width / 2
-        const cy = at.y + at.actor.poses.idle.art.height / 2
-        const x = clamp(Math.round(cx - art.width / 2), 0, Math.max(0, W - art.width))
-        const y = clamp(Math.round(cy - art.height / 2), 0, Math.max(0, H - art.height))
-        const rise = clamp(y - px(DROP_RISE_PX), 0, H) - y
+        const chest = variant(CHEST, compact, scale)
+        const item = variant(sprite, compact, scale)
+        const idle = at.actor.poses.idle.art
+        // Where the actor stood: on the ground, whatever its bob.
+        const stood = { x: at.x, y: H - idle.height, width: idle.width, height: idle.height }
+        const place = chestPlace(stood, chest, item, { width: W, height: H }, scale)
+        /** Visible from `from` to the chest's end, fading over its last REVEAL_FADE_MS. */
+        const shown = (from: number) => {
+          const fade = Number((1 - REVEAL_FADE_MS / (m.until - from)).toFixed(3))
+          return `<animate attributeName="opacity" values="1;1;0" keyTimes="0;${fade};1" begin="${seconds(from - opts.now)}" dur="${seconds(m.until - from)}"/>`
+        }
+        // The fall eases in (a quadratic), as the pixel surfaces draw it.
         body.push(
-          `<use href="#${define(art, null)}" transform="translate(${x} ${y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.667;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
+          `<use href="#${define(chest, null)}" transform="translate(${place.x} ${place.groundY})" opacity="0">${shown(m.from)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 ${place.fromY - place.groundY};0 0" calcMode="spline" keyTimes="0;1" keySplines="0.333 0 0.667 0.333" begin="${begin(m)}" dur="${seconds(CHEST_FALL_MS)}"/></use>`,
+        )
+        const rise = m.from + CHEST_SHOW_MS - REVEAL_RISE_MS
+        body.push(
+          `<use href="#${define(item, null)}" transform="translate(${place.itemX} ${place.itemY})" opacity="0">${shown(rise)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${place.risenY - place.itemY}" begin="${seconds(rise - opts.now)}" dur="${seconds(REVEAL_RISE_MS)}" fill="freeze"/></use>`,
         )
       } else if (m.kind === 'effect') {
         const to = base.get(m.target)

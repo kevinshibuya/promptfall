@@ -151,7 +151,7 @@ function actor(
   }
 }
 
-/** Three heroes lunging, three numbers rising, a drop popping. */
+/** Three heroes lunging, three numbers rising, a chest revealing its item. */
 function busyMotions(boss: string): Motion[] {
   return [
     ...['h1', 'h2', 'h3'].map(
@@ -168,14 +168,23 @@ function busyMotions(boss: string): Motion[] {
       }),
     ),
     { kind: 'flash', actor: boss, from: NOW - 10, until: NOW + 150 },
-    { kind: 'drop', actor: boss, item: 'item:iron_sword', from: NOW - 300, until: NOW + 300 },
+    {
+      kind: 'chest',
+      actor: boss,
+      itemId: 'i1',
+      rarity: 'legendary',
+      spriteId: 'item:iron_sword',
+      from: NOW - 1500,
+      until: NOW + 2100,
+    },
   ]
 }
 
-test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbers and a drop', () => {
+test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbers and a chest', () => {
   const boss = spriteFor('enemy', 'bandit_captain').full
   const heroes = ['knight', 'black_mage', 'white_mage'].map((c) => spriteFor('hero', c).full)
   const drop = spriteFor('item', 'iron_sword').full
+  const chest = spriteFor('chest', 'closed')
   const model: StageModel = {
     box: { columns: 160, rows: 17 },
     ground: ZONE_GROUND[0] ?? 0,
@@ -194,6 +203,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
       ),
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
+    chests: [{ spriteId: 'chest:closed', art: chest.full, x: 20, y: 18, alpha: 1, phase: 'hold' }],
     drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
     effects: [],
     alt: 'worst',
@@ -222,6 +232,16 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
       ...heroes.map((art, i) => actor(`h${i + 1}`, `hero:${i}`, art, 210 - i * 27, 27, true)),
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 15 + i * 30, y: 3, rgb: 0xffffff })),
+    chests: [
+      {
+        spriteId: 'chest:closed',
+        art: spriteFor('chest', 'closed').hires,
+        x: 30,
+        y: 27,
+        alpha: 1,
+        phase: 'hold',
+      },
+    ],
     drops: [
       {
         spriteId: 'item:iron_sword',
@@ -247,7 +267,7 @@ function checker(width: number, height: number, a: number, b: number): SpriteArt
   return { width, height, palette: [0, a, b], pixels: encode(px) }
 }
 
-test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a checker drop', () => {
+test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a checker chest and drop', () => {
   const boss = checker(48, 34, 0x102030, 0xf0e0d0)
   const heroes = [0, 1, 2].map((i) =>
     checker(16, 16, 0x400000 + i * 0x101010, 0x00c000 + i * 0x000a0a),
@@ -264,6 +284,16 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
       ),
     ],
     numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
+    chests: [
+      {
+        spriteId: 'adversarial:chest',
+        art: checker(16, 16, 0x604020, 0xf0c040),
+        x: 20,
+        y: 18,
+        alpha: 0.5,
+        phase: 'hold',
+      },
+    ],
     drops: [{ spriteId: 'adversarial:drop', art: drop, x: 20, y: 6, alpha: 0.5 }],
     effects: [],
     alt: 'adversarial',
@@ -271,7 +301,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
   }
   withinBudgets(
     model,
-    busyMotions('e1').filter((m) => m.kind !== 'drop'),
+    busyMotions('e1').filter((m) => m.kind !== 'chest'),
     NOW,
   )
 })
@@ -429,6 +459,16 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
       ),
     ],
     numbers: [{ text: '-999', x: k(10), y: k(2), rgb: 0xff5050 }],
+    chests: [
+      {
+        spriteId: 'adversarial:chest',
+        art: checker(k(16), k(16), 0x604020, 0xf0c040),
+        x: k(20),
+        y: k(18),
+        alpha: 0.5,
+        phase: 'hold',
+      },
+    ],
     drops: [
       {
         spriteId: 'adversarial:drop',
@@ -447,7 +487,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
 test('adversarial legal art at 1.5 (a 72 × 51 checker boss, 24 × 24 heroes) keeps the 1.5x Svg under the cap', () => {
   const hi = adversarial(1.5)
   const lo = adversarial(1)
-  const motions = busyMotions('e1').filter((m) => m.kind !== 'drop')
+  const motions = busyMotions('e1').filter((m) => m.kind !== 'chest')
   for (const smil of [true, false]) {
     const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
     const svg = svgWithFallback(hi, lo, motions, opts)
@@ -460,7 +500,7 @@ test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
   // Past legal art: every hero a 72 × 51 checker, so the 1.5x markup passes the cap.
   const hi = adversarial(1.5, { width: 48, height: 34 })
   const lo = adversarial(1)
-  const motions = busyMotions('e1').filter((m) => m.kind !== 'drop')
+  const motions = busyMotions('e1').filter((m) => m.kind !== 'chest')
   for (const smil of [true, false]) {
     const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
     expect(renderSvg(hi, motions, opts).length).toBeGreaterThanOrEqual(SVG_MAX_CHARS)
@@ -470,23 +510,23 @@ test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
   }
 })
 
-test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg, 113,047 characters", () => {
+test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg with its chest, 114,469 characters", () => {
   const hi = fullerFrame(1.5, false, NOW)
   const lo = fullerFrame(1, false, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
-  expect(svg.length).toBe(113_047)
+  expect(svg.length).toBe(114_469)
 })
 
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 216,408 characters at 1.5x, so the 1x Svg (51,396)', () => {
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 217,832 characters at 1.5x with its chest, so the 1x Svg (52,340)', () => {
   const hi = fullerFrame(1.5, true, NOW)
   const lo = fullerFrame(1, true, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(216_408)
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(217_832)
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(51_396)
+  expect(svg.length).toBe(52_340)
 })
 
 test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 53,279 characters over the zone 1 backdrop, under the cap', () => {

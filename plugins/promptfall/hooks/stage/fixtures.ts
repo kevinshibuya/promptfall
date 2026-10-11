@@ -178,7 +178,7 @@ function placed(
 /**
  * ADR 0006's fuller legal frame at `scale`: a 48 × 34 (72 × 51) boss and four 16 × 16 (24 × 24)
  * enemies dithered with index (x + 3y) % 16 + 1, two of the enemies dissolving, three checker
- * heroes with distinct palettes, a drop. `acting`: the boss 60 ms into a lunge action with its
+ * heroes with distinct palettes, a chest and its item. `acting`: the boss 60 ms into a lunge action with its
  * wind-up and strike as dithered frames of its own, the first hero taking the hit.
  */
 export function fullerFrame(
@@ -223,7 +223,15 @@ export function fullerFrame(
   const motions: Motion[] = [
     { kind: 'dissolve', actor: 'e1', from: now - 100, until: now + 320 },
     { kind: 'dissolve', actor: 'e2', from: now - 100, until: now + 320 },
-    { kind: 'drop', actor: 'e1', item: 'item:iron_sword', from: now - 100, until: now + 500 },
+    {
+      kind: 'chest',
+      actor: 'e1',
+      itemId: 'i1',
+      rarity: 'common',
+      spriteId: 'item:iron_sword',
+      from: now - 100,
+      until: now + 2300,
+    },
   ]
   if (acting) {
     motions.push(
@@ -249,6 +257,16 @@ export function fullerFrame(
       backdrop: null,
       actors,
       numbers: [],
+      chests: [
+        {
+          spriteId: 'adversarial:chest',
+          art: checkered(k(16), k(16), 0x604020, 0xf0c040),
+          x: k(60),
+          y: k(18),
+          alpha: 1,
+          phase: 'hold',
+        },
+      ],
       drops: [
         {
           spriteId: 'adversarial:drop',
