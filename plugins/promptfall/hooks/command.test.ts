@@ -1,4 +1,4 @@
-import { expect } from 'claude-code/testing'
+import { describe, expect, type TestBody } from 'claude-code/testing'
 import type { WorldState } from '../types'
 import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
@@ -431,84 +431,195 @@ test(
   },
 )
 
-// The whole band's picture, composed and encoded at full size: more than the default budget.
-test(
-  'in play, one band element at 165 columns: the strip is inside the picture, not beside it',
-  { timeoutMs: 15_000 },
-  async ($, on) => {
+type Mounting = Parameters<TestBody>[0]
+
+/** The Image band at 165 columns: one element, the strip inside the picture, not beside it. */
+async function imageAt165($: Mounting) {
+  const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+  const root = await ui.find({ key: 'band' })
+  const rows = (root?.children ?? []) as { props: Record<string, unknown>; children: unknown[] }[]
+  expect(rows, '165 image: the band is one row').toHaveLength(1)
+  const children = (rows[0]?.children ?? []) as {
+    type?: string
+    props: Record<string, unknown>
+  }[]
+  // One picture at the band's width; beside it only the zero-width hotkey box.
+  const pictures = children.filter((c) => c.type === 'Image')
+  expect(pictures, '165 image: one picture').toHaveLength(1)
+  expect(pictures[0]?.props, '165 image: the picture is 165 by 22').toMatchObject({
+    columns: 165,
+    rows: 22,
+  })
+  expect(
+    children.filter((c) => c.type !== 'Image').map((c) => c.props.key),
+    '165 image: only the hotkeys beside the picture',
+  ).toEqual(['hotkeys'])
+  expect(await ui.find({ key: 'strip-windows' }), '165 image: no strip windows').toBeUndefined()
+  await ui.unmount()
+}
+
+/** The Raster band at 165 columns with the shell around the playfield, then cropped at 160 by 16. */
+async function rasterAt165($: Mounting) {
+  const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
+  const row = await ui.find({ key: 'row-band' })
+  const children = (row?.children ?? []) as Found[]
+  // One Raster at the band's box; beside it only the zero-width hotkey box.
+  expect(
+    children.map((c) => [c.type, c.props.key]),
+    '165 raster: one Raster and the hotkeys',
+  ).toEqual([
+    ['Raster', bandKey({ columns: 165, rows: 22 })],
+    ['Box', 'hotkeys'],
+  ])
+  expect(children[0]?.props, '165 raster: the Raster is 165 by 22').toMatchObject({
+    columns: 165,
+    rows: 22,
+  })
+  for (const key of ['stage', 'strip', 'row-stage', 'row-strip'])
+    expect(await ui.find({ key }), `165 raster: no ${key}`).toBeUndefined()
+  const g = rasterCells(children[0] as Found)
+  const shell = { ch: ' ', fg: FIELD_RGB, bg: FIELD_RGB }
+  const line = (ch: string) => ({ ch, fg: BORDER_RGB, bg: FIELD_RGB })
+  // Two cells of shell on the left, three on the right, the line in the inner one.
+  for (const y of [0, 8, 21])
+    expect(
+      [g[y]?.[0], g[y]?.[163], g[y]?.[164]],
+      `165 raster: the shell at the edges of row ${y}`,
+    ).toEqual([shell, shell, shell])
+  expect([g[0]?.[1], g[0]?.[80], g[0]?.[162]], '165 raster: the line along the top').toEqual([
+    line('╭'),
+    line('─'),
+    line('╮'),
+  ])
+  expect([g[8]?.[1], g[19]?.[162]], '165 raster: the line down the sides').toEqual([
+    line('│'),
+    line('│'),
+  ])
+  expect([g[21]?.[1], g[21]?.[162]], '165 raster: the line along the bottom').toEqual([
+    line('╰'),
+    line('╯'),
+  ])
+  // Inside the line: the stage's half-block cells above the strip's windows.
+  expect(
+    g[8]?.slice(2, 162).every((c) => c.ch === '▀' || c.ch === '▄' || /\d/.test(c.ch)),
+    '165 raster: half-block stage cells inside the line',
+  ).toBe(true)
+  expect(g[17]?.[2]?.ch, "165 raster: the strip's window below the stage").toBe('╭')
+  await ui.unmount()
+
+  // A tall prompt crops the Raster to the stage's bottom rows: the line goes around them.
+  const short = { ...BAND, props: { ...BAND.props, maxRows: 16, bodyColumns: 160 } }
+  const cropped = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
+  const raster = await bandRaster(cropped)
+  expect([raster?.props.columns, raster?.props.rows], '160x16 raster: its size').toEqual([160, 16])
+  const c = rasterCells(raster as Found)
+  expect(c[0]?.map((x) => x.ch).join(''), '160x16 raster: the line along the top').toBe(
+    `╭${'─'.repeat(158)}╮`,
+  )
+  expect(
+    [c[5]?.[0]?.ch, c[11]?.[0]?.ch, c[11]?.[159]?.ch, c[15]?.[0]?.ch],
+    '160x16 raster: the line around the cropped rows',
+  ).toEqual(['│', '├', '┤', '╰'])
+  await cropped.unmount()
+}
+
+/** Compact at 110 columns: one element on the shell, the line around the stage. */
+async function compactAt110($: Mounting, renderer: 'image' | 'raster') {
+  const narrow = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 110 } }
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
+  const band = await ui.find({ key: 'band' })
+  expect(
+    ((band?.children ?? []) as Found[]).map((c) => c.props.key),
+    `110 ${renderer}: the band is one row`,
+  ).toEqual(['row-band'])
+  const row = await ui.find({ key: 'row-band' })
+  const children = (row?.children ?? []) as Found[]
+  // One element at the band's width and compact's 6 rows; beside it only the hotkeys.
+  expect(
+    children.map((c) => [c.type, c.props.key]),
+    `110 ${renderer}: one element and the hotkeys`,
+  ).toEqual([
+    [renderer === 'image' ? 'Image' : 'Raster', bandKey({ columns: 110, rows: 6 })],
+    ['Box', 'hotkeys'],
+  ])
+  expect(children[0]?.props, `110 ${renderer}: the element is 110 by 6`).toMatchObject({
+    columns: 110,
+    rows: 6,
+  })
+  for (const key of ['row-compact', 'compact-stage', 'stage', 'strip', 'strip-windows'])
+    expect(await ui.find({ key }), `110 ${renderer}: no ${key}`).toBeUndefined()
+  if (renderer === 'image') {
+    const picture = pixels(children[0]?.props.source as { png: string } | undefined)
+    expect([picture.width, picture.height], '110 image: the picture in pixels').toEqual([
+      110 * CELL_W,
+      6 * CELL_H,
+    ])
+    // The line around the stage, over the window's own at the top, bottom and right: its
+    // left side 2 pixels in, its top and bottom over the window's lines, 10 pixels in.
+    expect(
+      [picture.at(0, 48), picture.at(2, 48), picture.at(3, 48)],
+      "110 image: the line's left side",
+    ).toEqual([FIELD_RGB, BORDER_RGB, BORDER_RGB])
+    expect(
+      [picture.at(200, 5), picture.at(200, 10), picture.at(200, 85)],
+      "110 image: the line's top and bottom",
+    ).toEqual([FIELD_RGB, BORDER_RGB, BORDER_RGB])
+    expect(picture.at(110 * CELL_W - 3, 48), "110 image: the line's right side").toBe(BORDER_RGB)
+    // The window's title tab breaks the line: drawn over it, not under it.
+    const title = Array.from({ length: 80 }, (_, i) => picture.at(52 * CELL_W + 16 + i, 10))
+    expect(
+      title.some((px) => px !== BORDER_RGB),
+      '110 image: the title tab over the line',
+    ).toBe(true)
+  } else {
+    const g = rasterCells(children[0] as Found)
+    const text = (y: number) => g[y]?.map((c) => c.ch).join('') ?? ''
+    // The line over the stage's outer column, the window's title and command line kept, its
+    // left side meeting the line.
+    expect(text(0), '110 raster: the top line and the title').toMatch(/^╭─{51}┬.*Z\d+ · .*╮$/)
+    expect(text(5), '110 raster: the bottom line and the command line').toMatch(
+      /^╰─{51}┴.*Party.*╯$/,
+    )
+    for (const y of [1, 2, 3, 4])
+      expect([g[y]?.[0]?.ch, g[y]?.[52]?.ch], `110 raster: the sides on row ${y}`).toEqual([
+        '│',
+        '│',
+      ])
+    expect(
+      g[2]?.slice(1, 52).every((c) => c.ch === '▀' || c.ch === '▄' || c.ch === ' '),
+      '110 raster: half-block stage cells inside the line',
+    ).toBe(true)
+  }
+  await ui.unmount()
+}
+
+// One engine boot per group. Tests whose setup before the first call on the engine is the same
+// (the harness, store seeds, env and clock) and that, after the session starts, only mount the
+// band and read it share one test: the checks in sequence, each assertion naming its check, so a
+// red group says which check failed. A test that presses a key, advances the clock, runs a
+// command or writes state after the session starts keeps its own test and its own boot. Each
+// group composes and encodes several full-size pictures, so it keeps the wrapper's 30 s budget.
+describe('in play, the Image band read at 165 and 110 columns, one boot', () => {
+  test('one element, the strip inside the picture; compact one element on the shell', async ($, on) => {
     await sandboxOn(on, $, {
       'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
     })
-    const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
-    const root = await ui.find({ key: 'band' })
-    const rows = (root?.children ?? []) as { props: Record<string, unknown>; children: unknown[] }[]
-    expect(rows).toHaveLength(1)
-    const children = (rows[0]?.children ?? []) as {
-      type?: string
-      props: Record<string, unknown>
-    }[]
-    // One picture at the band's width; beside it only the zero-width hotkey box.
-    const pictures = children.filter((c) => c.type === 'Image')
-    expect(pictures).toHaveLength(1)
-    expect(pictures[0]?.props).toMatchObject({ columns: 165, rows: 22 })
-    expect(children.filter((c) => c.type !== 'Image').map((c) => c.props.key)).toEqual(['hotkeys'])
-    expect(await ui.find({ key: 'strip-windows' })).toBeUndefined()
-    await ui.unmount()
-  },
-)
+    await imageAt165($)
+    await compactAt110($, 'image')
+  })
+})
 
-test(
-  'in play, the Raster band is one element with the shell around the playfield',
-  { timeoutMs: 15_000 },
-  async ($, on) => {
+describe('in play, the Raster band read at 165, 160 by 16 and 110 columns, one boot', () => {
+  test('one element with the shell around the playfield, cropped and compact', async ($, on) => {
     await sandboxOn(on, $, {
       'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
     })
-    const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
-    const row = await ui.find({ key: 'row-band' })
-    const children = (row?.children ?? []) as Found[]
-    // One Raster at the band's box; beside it only the zero-width hotkey box.
-    expect(children.map((c) => [c.type, c.props.key])).toEqual([
-      ['Raster', bandKey({ columns: 165, rows: 22 })],
-      ['Box', 'hotkeys'],
-    ])
-    expect(children[0]?.props).toMatchObject({ columns: 165, rows: 22 })
-    for (const key of ['stage', 'strip', 'row-stage', 'row-strip'])
-      expect(await ui.find({ key })).toBeUndefined()
-    const g = rasterCells(children[0] as Found)
-    const shell = { ch: ' ', fg: FIELD_RGB, bg: FIELD_RGB }
-    const line = (ch: string) => ({ ch, fg: BORDER_RGB, bg: FIELD_RGB })
-    // Two cells of shell on the left, three on the right, the line in the inner one.
-    for (const y of [0, 8, 21])
-      expect([g[y]?.[0], g[y]?.[163], g[y]?.[164]]).toEqual([shell, shell, shell])
-    expect([g[0]?.[1], g[0]?.[80], g[0]?.[162]]).toEqual([line('╭'), line('─'), line('╮')])
-    expect([g[8]?.[1], g[19]?.[162]]).toEqual([line('│'), line('│')])
-    expect([g[21]?.[1], g[21]?.[162]]).toEqual([line('╰'), line('╯')])
-    // Inside the line: the stage's half-block cells above the strip's windows.
-    expect(g[8]?.slice(2, 162).every((c) => c.ch === '▀' || c.ch === '▄' || /\d/.test(c.ch))).toBe(
-      true,
-    )
-    expect(g[17]?.[2]?.ch).toBe('╭')
-    await ui.unmount()
-
-    // A tall prompt crops the Raster to the stage's bottom rows: the line goes around them.
-    const short = { ...BAND, props: { ...BAND.props, maxRows: 16, bodyColumns: 160 } }
-    const cropped = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...short })
-    const raster = await bandRaster(cropped)
-    expect([raster?.props.columns, raster?.props.rows]).toEqual([160, 16])
-    const c = rasterCells(raster as Found)
-    expect(c[0]?.map((x) => x.ch).join('')).toBe(`╭${'─'.repeat(158)}╮`)
-    expect([c[5]?.[0]?.ch, c[11]?.[0]?.ch, c[11]?.[159]?.ch, c[15]?.[0]?.ch]).toEqual([
-      '│',
-      '├',
-      '┤',
-      '╰',
-    ])
-    await cropped.unmount()
-  },
-)
+    await rasterAt165($)
+    await compactAt110($, 'raster')
+  })
+})
 
 // The whole band's picture, composed and encoded at full size: more than the default budget.
 for (const renderer of ['image', 'raster'] as const) {
@@ -563,65 +674,6 @@ for (const renderer of ['image', 'raster'] as const) {
           expect([at(0, 0), at(1, 0), at(162, 0), at(164, rows - 1)]).toEqual([' ', '╭', '╮', ' '])
           expect([at(1, rows - 1), at(162, rows - 1), at(1, 2)]).toEqual(['╰', '╯', '│'])
         }
-      }
-      await ui.unmount()
-    },
-  )
-}
-
-// The whole band's picture, composed and encoded at full size: more than the default budget.
-for (const renderer of ['image', 'raster'] as const) {
-  test(
-    `in play, compact is one element on the shell at 110 columns (${renderer})`,
-    { timeoutMs: 15_000 },
-    async ($, on) => {
-      await sandboxOn(on, $, {
-        'promptfall:settings': { sound: false, motion: 'full', renderer },
-      })
-      const narrow = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 110 } }
-      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...narrow })
-      const band = await ui.find({ key: 'band' })
-      expect(((band?.children ?? []) as Found[]).map((c) => c.props.key)).toEqual(['row-band'])
-      const row = await ui.find({ key: 'row-band' })
-      const children = (row?.children ?? []) as Found[]
-      // One element at the band's width and compact's 6 rows; beside it only the hotkeys.
-      expect(children.map((c) => [c.type, c.props.key])).toEqual([
-        [renderer === 'image' ? 'Image' : 'Raster', bandKey({ columns: 110, rows: 6 })],
-        ['Box', 'hotkeys'],
-      ])
-      expect(children[0]?.props).toMatchObject({ columns: 110, rows: 6 })
-      for (const key of ['row-compact', 'compact-stage', 'stage', 'strip', 'strip-windows'])
-        expect(await ui.find({ key })).toBeUndefined()
-      if (renderer === 'image') {
-        const picture = pixels(children[0]?.props.source as { png: string } | undefined)
-        expect([picture.width, picture.height]).toEqual([110 * CELL_W, 6 * CELL_H])
-        // The line around the stage, over the window's own at the top, bottom and right: its
-        // left side 2 pixels in, its top and bottom over the window's lines, 10 pixels in.
-        expect([picture.at(0, 48), picture.at(2, 48), picture.at(3, 48)]).toEqual([
-          FIELD_RGB,
-          BORDER_RGB,
-          BORDER_RGB,
-        ])
-        expect([picture.at(200, 5), picture.at(200, 10), picture.at(200, 85)]).toEqual([
-          FIELD_RGB,
-          BORDER_RGB,
-          BORDER_RGB,
-        ])
-        expect(picture.at(110 * CELL_W - 3, 48)).toBe(BORDER_RGB)
-        // The window's title tab breaks the line: drawn over it, not under it.
-        const title = Array.from({ length: 80 }, (_, i) => picture.at(52 * CELL_W + 16 + i, 10))
-        expect(title.some((px) => px !== BORDER_RGB)).toBe(true)
-      } else {
-        const g = rasterCells(children[0] as Found)
-        const text = (y: number) => g[y]?.map((c) => c.ch).join('') ?? ''
-        // The line over the stage's outer column, the window's title and command line kept, its
-        // left side meeting the line.
-        expect(text(0)).toMatch(/^╭─{51}┬.*Z\d+ · .*╮$/)
-        expect(text(5)).toMatch(/^╰─{51}┴.*Party.*╯$/)
-        for (const y of [1, 2, 3, 4]) expect([g[y]?.[0]?.ch, g[y]?.[52]?.ch]).toEqual(['│', '│'])
-        expect(g[2]?.slice(1, 52).every((c) => c.ch === '▀' || c.ch === '▄' || c.ch === ' ')).toBe(
-          true,
-        )
       }
       await ui.unmount()
     },
