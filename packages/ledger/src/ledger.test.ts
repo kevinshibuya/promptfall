@@ -16,6 +16,12 @@ import { approveAs, Ledger, type LedgerOptions, type LinkApprover } from './ledg
 class CountingKeyValue extends MemoryKeyValue {
   flushes = 0
   writes = 0
+  /** Gets of an account record. */
+  accountReads = 0
+  async get(key: string): Promise<unknown> {
+    if (key.startsWith('pf:acct:')) this.accountReads += 1
+    return super.get(key)
+  }
   async set(key: string, value: unknown): Promise<void> {
     this.writes += 1
     await super.set(key, value)
@@ -165,6 +171,14 @@ describe('Ledger flags', () => {
     expect(await ledger.knowsToken('forged')).toBe(false)
     expect((kv as CountingKeyValue).writes).toBe(writes)
   })
+  it('only a null token mints: an empty token is unknown and writes nothing', async () => {
+    const { ledger, kv } = makeLedger()
+    const writes = (kv as CountingKeyValue).writes
+    expect(await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: '' })).toMatchObject({
+      refusal: 'unknown',
+    })
+    expect((kv as CountingKeyValue).writes).toBe(writes)
+  })
 })
 
 describe('Ledger bans', () => {
@@ -214,6 +228,103 @@ describe('Ledger bans', () => {
     expect(await ledger.leaderboards(auth)).toEqual(banned)
     // Still known: the mint cap lets the token past, and the bootstrap refuses it.
     expect(await ledger.knowsToken(m.deviceToken)).toBe(true)
+  })
+
+  /** A fresh account's link through to the approver's answer: the poll and the account after it. */
+  async function freshLink(ledger: Ledger) {
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: boot.deviceToken }
+    const start = await ledger.linkStart(auth)
+    if (!('code' in start)) throw new Error('expected a link start')
+    const polled = await ledger.linkPoll(auth, start.code)
+    return { polled, after: await ledger.account(auth) }
+  }
+
+  it('a ban records the linked login and link approval refuses it', async () => {
+    const approved = { login: 'GRIM' }
+    const { ledger, kv } = makeLedger({
+      linkApprover: {
+        ...approveAs(null),
+        poll: async () => ({ status: 'approved', login: approved.login }),
+      },
+    })
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    await ledger.host.ban(m.accountId, 'cheating')
+    expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toEqual({
+      reason: 'cheating',
+      at: 1_700_000_000_000,
+      accountIds: [m.accountId],
+    })
+
+    // Any case of the login: the link ends denied with the ban's message, nothing more.
+    for (const login of ['GRIM', 'grim', 'gRiM']) {
+      approved.login = login
+      const { polled, after } = await freshLink(ledger)
+      expect(polled).toEqual({
+        status: 'ended',
+        reason: 'denied',
+        message: 'Promptfall: this GitHub account is banned: cheating',
+      })
+      expect(after).toMatchObject({ account: { linked: null, displayName: null } })
+    }
+
+    // A login never banned links as today.
+    approved.login = 'octocat'
+    const { polled } = await freshLink(ledger)
+    expect(polled).toMatchObject({
+      status: 'linked',
+      account: { linked: { provider: 'github', login: 'octocat' } },
+    })
+  })
+
+  it('unban lifts a login ban with the account gone, and the ban of the account still there', async () => {
+    for (const order of [
+      [0, 1],
+      [1, 0],
+    ]) {
+      const { ledger, kv } = makeLedger({ linkApprover: approveAs('grim') })
+      expect(await ledger.host.unban('grim')).toBeNull()
+      // Linking never made a login unique: two accounts carry it.
+      const pair = [
+        await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true }),
+        await ledger.host.mint({ state: createInitialState(6), name: 'grim', linked: true }),
+      ]
+      const [gone, kept] = order.map((i) => pair[i])
+      if (!gone || !kept) throw new Error('two accounts')
+      await ledger.host.ban(gone.accountId, 'cheating')
+      await ledger.host.ban(kept.accountId, 'alt account')
+      expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toEqual({
+        reason: 'cheating',
+        at: 1_700_000_000_000,
+        accountIds: [gone.accountId, kept.accountId],
+      })
+      expect(await ledger.deleteAccount({ deviceToken: gone.deviceToken })).toEqual({
+        deleted: true,
+      })
+
+      expect(await ledger.host.unban('GriM')).toEqual({
+        login: 'grim',
+        lifted: [kept.accountId],
+      })
+
+      expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toBeUndefined()
+      expect(await ledger.account({ deviceToken: kept.deviceToken })).toMatchObject({
+        account: { accountId: kept.accountId },
+      })
+      expect((await record(kv as MemoryKeyValue, kept.accountId)).banned).toBeUndefined()
+      expect((await freshLink(ledger)).polled).toMatchObject({ status: 'linked' })
+      expect(await ledger.host.unban('grim')).toBeNull()
+    }
+  })
+
+  it('a ban on an account that never linked records no login', async () => {
+    const { ledger, kv } = makeLedger()
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: false })
+    await ledger.host.ban(m.accountId, 'cheating')
+    expect((kv as MemoryKeyValue).keys().filter((k) => k.startsWith('pf:ban:'))).toEqual([])
+    expect(await ledger.account({ deviceToken: m.deviceToken })).toMatchObject({
+      reason: 'banned',
+    })
   })
 
   it('a ban names an account the ledger holds; another account plays on', async () => {
@@ -278,8 +389,11 @@ describe('Ledger account delete', () => {
 
     expect(await ledger.deleteAccount(mine)).toEqual({ deleted: true })
 
-    // The token is dead: every call is unauthorized, and a bootstrap with it mints anew.
+    // The token is dead: every call is unauthorized, and a bootstrap with it is unknown.
     expect(await ledger.account(mine)).toEqual({ reason: 'unauthorized' })
+    expect(
+      await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: leaver.deviceToken }),
+    ).toMatchObject({ refusal: 'unknown' })
     expect(await ledger.deleteAccount(mine)).toEqual({ reason: 'unauthorized' })
     expect(await ledger.knowsToken(leaver.deviceToken)).toBe(false)
     expect(await store.get(`pf:acct:${leaver.accountId}:record`)).toBeUndefined()
@@ -305,15 +419,38 @@ describe('Ledger account delete', () => {
     expect(await record(store, other.accountId)).toEqual(before)
   })
 
-  it('a banned account cannot delete itself', async () => {
+  it('a banned account may delete itself and leave', async () => {
     const { ledger, kv } = makeLedger()
-    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    const store = kv as MemoryKeyValue
+    const m = await ledger.host.mint({
+      state: { ...createInitialState(5), gold: 1000, inventory: [rareItem('b-1')] },
+      name: 'Grim',
+      linked: true,
+    })
+    const auth = { deviceToken: m.deviceToken }
+    expect((await ledger.list(auth, { kind: 'item', id: 'b-1', price: 100 })).ok).toBe(true)
     await ledger.host.ban(m.accountId, 'cheating')
-    expect(await ledger.deleteAccount({ deviceToken: m.deviceToken })).toEqual({
+    expect(await ledger.account(auth)).toEqual({
       reason: 'banned',
       message: 'Promptfall: this account is banned: cheating',
     })
-    expect(await record(kv as MemoryKeyValue, m.accountId)).toBeTruthy()
+
+    expect(await ledger.deleteAccount(auth)).toEqual({ deleted: true })
+
+    expect(await ledger.account(auth)).toEqual({ reason: 'unauthorized' })
+    expect(await ledger.knowsToken(m.deviceToken)).toBe(false)
+    expect(await store.get(`pf:acct:${m.accountId}:record`)).toBeUndefined()
+    expect(await store.get(`pf:token:${m.deviceToken}`)).toBeUndefined()
+    const other = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(
+      await ledger.browse(
+        { deviceToken: other.deviceToken },
+        { kind: 'item', sort: 'price', page: 0 },
+      ),
+    ).toMatchObject({ total: 0 })
+    expect(await ledger.leaderboards({ deviceToken: other.deviceToken })).toMatchObject({
+      highestZone: [],
+    })
   })
 })
 
@@ -788,5 +925,90 @@ describe('Ledger link', () => {
     release({ status: 'approved', login: 'octocat' })
     const linked = await poll
     expect('status' in linked && linked.status).toBe('linked')
+  })
+})
+
+describe('Ledger link sweep', () => {
+  const MINUTE = 60_000
+  const linkRows = (kv: unknown) =>
+    (kv as MemoryKeyValue).keys().filter((k) => k.startsWith('pf:link:'))
+  const indexed = async (kv: unknown) =>
+    (((await (kv as MemoryKeyValue).get('pf:links')) ?? []) as { code: string }[]).map(
+      (e) => `pf:link:${e.code}`,
+    )
+
+  async function starter(ledger: Ledger) {
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: boot.deviceToken }
+    const start = await ledger.linkStart(auth)
+    if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+    return { auth, code: start.code, accountId: boot.account.accountId }
+  }
+
+  it('the sweep removes a link row older than its lifetime and keeps a younger one', async () => {
+    const { ledger, kv, advance } = makeLedger({ linkApprover: approveAs(null) })
+    const a = await starter(ledger)
+    advance(14 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([`pf:link:${a.code}`])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBe(a.code)
+
+    advance(2 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect(await indexed(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
+    expect(await ledger.linkPoll(a.auth, a.code)).toEqual({ status: 'pending' })
+  })
+
+  it('scales the lifetime by the speed: at 60 it is 900 virtual minutes', async () => {
+    const { ledger, kv, advance } = makeLedger({ linkApprover: approveAs(null), speed: 60 })
+    const a = await starter(ledger)
+    advance(840 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([`pf:link:${a.code}`])
+    advance(120 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
+  })
+
+  it('link cleanup reads no account while no link has expired', async () => {
+    const quiet = makeLedger({ linkApprover: approveAs(null) })
+    const open = makeLedger({ linkApprover: approveAs(null) })
+    await quiet.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    await starter(open.ledger)
+    for (const w of [quiet, open]) w.advance(14 * MINUTE)
+    const reads = async (w: typeof quiet) => {
+      const counting = w.kv as CountingKeyValue
+      const before = counting.accountReads
+      await w.ledger.host.sweep()
+      return counting.accountReads - before
+    }
+    expect(await reads(open)).toBe(await reads(quiet))
+  })
+
+  it('a start, a second start, a final poll and a delete keep the index on the rows', async () => {
+    const { ledger, kv, advance } = makeLedger()
+    // Starts twice and never polls.
+    const a = await starter(ledger)
+    const again = await ledger.linkStart(a.auth)
+    if ('reason' in again || 'refusal' in again) throw new Error('expected a start')
+    expect(await indexed(kv)).toEqual(linkRows(kv))
+    // Polls to the final answer.
+    const b = await starter(ledger)
+    expect(await ledger.linkPoll(b.auth, b.code)).toMatchObject({ status: 'linked' })
+    // Deletes the account with its link open.
+    const c = await starter(ledger)
+    expect(await ledger.deleteAccount(c.auth)).toEqual({ deleted: true })
+
+    expect(linkRows(kv)).toEqual([`pf:link:${again.code}`])
+    expect(await indexed(kv)).toEqual(linkRows(kv))
+
+    advance(16 * MINUTE)
+    await ledger.host.sweep()
+    expect(linkRows(kv)).toEqual([])
+    expect(await indexed(kv)).toEqual([])
+    expect((await record(kv as MemoryKeyValue, a.accountId)).linkCode).toBeUndefined()
   })
 })

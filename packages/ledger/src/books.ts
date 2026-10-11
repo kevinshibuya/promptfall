@@ -20,6 +20,15 @@ import { isBlocked } from './blocklist'
 export type BatchRecord = { batchId: string; hash: string; seq: number }
 export type LogEntry = { n: number; event: ServerEvent }
 export type PendingReturn = { listingId: string; goods: Goods }
+/** Keyed by the code the player sees. Records from before the device code fall back to the key. */
+export type Link = { accountId: string; createdAt: number; deviceCode?: string }
+/** One open link in `pf:links`, so the sweep finds a stale row without scanning accounts. */
+export type OpenLink = { code: string; createdAt: number }
+/**
+ * A banned GitHub login: the first ban's reason and time, and every banned account that carried
+ * the login. A link is never unique to one account, so two may share it.
+ */
+export type LoginBan = { reason: string; at: number; accountIds: string[] }
 
 /** Everything the ledger knows about one account, written in one `set`. */
 export type AccountRecord = {
@@ -58,7 +67,11 @@ export const KINDS = Object.keys(BUDGETS) as BudgetKind[]
 export const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 export const tokenKey = (token: string) => `pf:token:${token}`
 export const linkKey = (code: string) => `pf:link:${code}`
+/** GitHub logins are case-insensitive: the key holds the login lowercased. */
+export const loginBanKey = (login: string) => `pf:ban:${login.toLowerCase()}`
 export const RETURNS_KEY = 'pf:returns'
+/** The open link codes with their start times. Rows written before it existed are not in it. */
+export const LINKS_KEY = 'pf:links'
 /** The flags set over the admin route: loaded at start over the start flags. */
 export const FLAGS_KEY = 'pf:flags'
 
@@ -221,6 +234,11 @@ export class Books {
     return accountId ? this.load(accountId) : null
   }
 
+  async loginBan(login: string): Promise<LoginBan | null> {
+    const raw = await this.kv.get(loginBanKey(login))
+    return raw ? (raw as LoginBan) : null
+  }
+
   async returnsQueue(): Promise<string[]> {
     const raw = await this.kv.get(RETURNS_KEY)
     return Array.isArray(raw) ? (raw as string[]) : []
@@ -238,6 +256,26 @@ export class Books {
         RETURNS_KEY,
         queue.filter((q) => q !== id),
       )
+  }
+
+  async openLinks(): Promise<OpenLink[]> {
+    const raw = await this.kv.get(LINKS_KEY)
+    return Array.isArray(raw) ? (raw as OpenLink[]) : []
+  }
+
+  /** Writes a link row and its entry in `pf:links`. */
+  async putLink(code: string, link: Link): Promise<void> {
+    await this.kv.set(linkKey(code), link)
+    const open = (await this.openLinks()).filter((e) => e.code !== code)
+    await this.kv.set(LINKS_KEY, [...open, { code, createdAt: link.createdAt }])
+  }
+
+  /** Deletes a link row and its entry in `pf:links`, if it has one. */
+  async dropLink(code: string): Promise<void> {
+    await this.kv.delete(linkKey(code))
+    const open = await this.openLinks()
+    const kept = open.filter((e) => e.code !== code)
+    if (kept.length !== open.length) await this.kv.set(LINKS_KEY, kept)
   }
 
   /**

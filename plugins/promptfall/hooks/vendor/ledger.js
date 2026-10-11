@@ -21,7 +21,9 @@ var KINDS = Object.keys(BUDGETS);
 var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
+var loginBanKey = (login) => `pf:ban:${login.toLowerCase()}`;
 var RETURNS_KEY = "pf:returns";
+var LINKS_KEY = "pf:links";
 var FLAGS_KEY = "pf:flags";
 function everyKind(value) {
   const out = {};
@@ -146,6 +148,10 @@ var Books = class {
     const accountId = await this.accountFor(auth.deviceToken);
     return accountId ? this.load(accountId) : null;
   }
+  async loginBan(login) {
+    const raw = await this.kv.get(loginBanKey(login));
+    return raw ? raw : null;
+  }
   async returnsQueue() {
     const raw = await this.kv.get(RETURNS_KEY);
     return Array.isArray(raw) ? raw : [];
@@ -162,6 +168,23 @@ var Books = class {
         RETURNS_KEY,
         queue.filter((q) => q !== id)
       );
+  }
+  async openLinks() {
+    const raw = await this.kv.get(LINKS_KEY);
+    return Array.isArray(raw) ? raw : [];
+  }
+  /** Writes a link row and its entry in `pf:links`. */
+  async putLink(code, link) {
+    await this.kv.set(linkKey(code), link);
+    const open2 = (await this.openLinks()).filter((e) => e.code !== code);
+    await this.kv.set(LINKS_KEY, [...open2, { code, createdAt: link.createdAt }]);
+  }
+  /** Deletes a link row and its entry in `pf:links`, if it has one. */
+  async dropLink(code) {
+    await this.kv.delete(linkKey(code));
+    const open2 = await this.openLinks();
+    const kept = open2.filter((e) => e.code !== code);
+    if (kept.length !== open2.length) await this.kv.set(LINKS_KEY, kept);
   }
   /**
    * Delivers waiting returns where a slot is free, oldest first. An entry
@@ -1000,6 +1023,7 @@ function settable(raw) {
 var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
+var LINK_TTL_MS = 15 * 6e4;
 function approveAs(login) {
   return {
     start: async (code) => ({
@@ -1012,6 +1036,10 @@ function approveAs(login) {
   };
 }
 var unauthorized = { reason: "unauthorized" };
+var unknownToken = {
+  refusal: "unknown",
+  message: "The server does not know this account."
+};
 var pending = { status: "pending" };
 var refusedUnauthorized = { ok: false, reason: "unauthorized" };
 var chatUnauthorized = { ok: false, reason: "unauthorized" };
@@ -1045,7 +1073,8 @@ var Ledger = class {
       spawnBoss: () => this.run(() => this.spawnBoss()),
       settleBoss: () => this.run(() => this.settleBoss()),
       setFlags: (flags) => this.run(() => this.setFlags(flags)),
-      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason))
+      ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
+      unban: (login) => this.run(() => this.unban(login))
     };
   }
   options;
@@ -1098,7 +1127,28 @@ var Ledger = class {
     if (!record) return null;
     record.banned = { reason, at: await this.options.now() };
     await this.books.save(record);
+    const login = record.account.linked?.login;
+    if (login) {
+      const prior = await this.books.loginBan(login);
+      const ban = prior ?? { ...record.banned, accountIds: [] };
+      if (!ban.accountIds.includes(accountId)) ban.accountIds = [...ban.accountIds, accountId];
+      await this.kv.set(loginBanKey(login), ban);
+    }
     return record.banned;
+  }
+  async unban(login) {
+    const ban = await this.books.loginBan(login);
+    if (!ban) return null;
+    await this.kv.delete(loginBanKey(login));
+    const lifted = [];
+    for (const accountId of ban.accountIds) {
+      const record = await this.books.load(accountId);
+      if (!record?.banned) continue;
+      delete record.banned;
+      await this.books.save(record);
+      lifted.push(accountId);
+    }
+    return { login: login.toLowerCase(), lifted };
   }
   async config() {
     return {
@@ -1128,11 +1178,12 @@ var Ledger = class {
   }
   bootstrap(input) {
     return this.run(async () => {
-      if (input.deviceToken) {
+      if (input.deviceToken !== null) {
         const record2 = await this.books.authenticate({ deviceToken: input.deviceToken });
         const banned = record2 && bannedOf(record2);
         if (banned) return { refusal: "banned", message: banned.message };
         if (record2) return this.bootFor(input.deviceToken, record2);
+        return unknownToken;
       }
       const now = await this.options.now();
       const seed = this.options.seedSource() >>> 0;
@@ -1148,7 +1199,7 @@ var Ledger = class {
       return this.bootFor(deviceToken, record);
     });
   }
-  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  /** Whether `deviceToken` names an account: a read that writes nothing. */
   knowsToken(deviceToken) {
     return this.run(async () => await this.books.authenticate({ deviceToken }) !== null);
   }
@@ -1194,19 +1245,18 @@ var Ledger = class {
   /**
    * Deletes the caller's account. Its open listings and orders close with nothing returned or
    * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   * else is settled: a counterparty, the boss record and the chat history are untouched. The
+   * one call a ban lets through: a banned player may leave. A login ban stays behind.
    */
   deleteAccount(auth) {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
-      const banned = bannedOf(record);
-      if (banned) return banned;
       const id = record.account.accountId;
       await closeAllOf(await this.marketContext(), id);
       await dropFromBoards(this.kv, id);
       if (this.presence.delete(id)) this.memo.presenceChanged();
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
+      if (record.linkCode) await this.books.dropLink(record.linkCode);
       await this.books.remove(record, auth.deviceToken);
       return { deleted: true };
     });
@@ -1327,9 +1377,12 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record || record.account.accountId !== accountId) return unauthorized;
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
-      const link = { accountId, createdAt: await this.options.now(), deviceCode };
-      await this.kv.set(linkKey(start.code), link);
+      if (record.linkCode) await this.books.dropLink(record.linkCode);
+      await this.books.putLink(start.code, {
+        accountId,
+        createdAt: await this.options.now(),
+        deviceCode
+      });
       record.linkCode = start.code;
       await this.books.save(record);
       return start;
@@ -1357,11 +1410,20 @@ var Ledger = class {
       if (!link || link.accountId !== record.account.accountId) {
         return record.account.linked ? { status: "linked", account: record.account } : pending;
       }
-      await this.kv.delete(linkKey(code));
+      await this.books.dropLink(code);
       if (record.linkCode === code) delete record.linkCode;
       if (answer.status === "ended") {
         await this.books.save(record);
         return answer;
+      }
+      const loginBan = await this.books.loginBan(answer.login);
+      if (loginBan) {
+        await this.books.save(record);
+        return {
+          status: "ended",
+          reason: "denied",
+          message: `Promptfall: this GitHub account is banned: ${loginBan.reason}`.slice(0, 200)
+        };
       }
       record.account = {
         ...record.account,
@@ -1579,6 +1641,20 @@ var Ledger = class {
       const record = await this.books.load(accountId);
       if (!record) continue;
       await this.books.deliverReturns(record);
+      await this.books.save(record);
+    }
+    await this.sweepLinks();
+  }
+  /** Drops the link rows past their lifetime and clears each account's pointer to one. */
+  async sweepLinks() {
+    const cutoff = await this.options.now() - LINK_TTL_MS * (this.options.speed ?? 1);
+    for (const { code, createdAt } of await this.books.openLinks()) {
+      if (createdAt > cutoff) continue;
+      const link = await this.kv.get(linkKey(code));
+      await this.books.dropLink(code);
+      const record = link ? await this.books.load(link.accountId) : null;
+      if (record?.linkCode !== code) continue;
+      delete record.linkCode;
       await this.books.save(record);
     }
   }

@@ -927,3 +927,53 @@ test('a hash-mismatch ack that revokes nothing raises no toast', async () => {
   await engine.flush()
   expect(toasts).toEqual([])
 })
+
+/** A store that runs `onTokenRead` on each read of the device token, before answering it. */
+class WatchedKeyValue extends MemoryKeyValue {
+  onTokenRead: (count: number) => void = () => undefined
+  private reads = 0
+  override get(key: string): Promise<unknown> {
+    if (key === 'deviceToken') this.onTokenRead(++this.reads)
+    return super.get(key)
+  }
+}
+
+test('an engine stopped between an unknown refusal and its restart bootstraps no second time', async () => {
+  const kv = new WatchedKeyValue()
+  await kv.set('deviceToken', 'stale')
+  const { engine, client, notices } = setup(kv)
+  // The first read is the start's; the second is the compare-and-clear after the refusal.
+  kv.onTokenRead = (count) => {
+    if (count === 2) void engine.stop()
+  }
+  await engine.start()
+  expect(client.bootstraps).toBe(1)
+  expect(engine.isPaused()).toBe(false)
+  expect(notices()).toEqual([null])
+})
+
+test('an engine stopped while its restart reads the token sends no minting bootstrap', async () => {
+  const kv = new WatchedKeyValue()
+  await kv.set('deviceToken', 'stale')
+  const { engine, client } = setup(kv)
+  // The third read is the restart's, after the compare-and-clear: a null token there would mint.
+  kv.onTokenRead = (count) => {
+    if (count === 3) void engine.stop()
+  }
+  await engine.start()
+  expect(client.bootstraps).toBe(1)
+})
+
+test('an unknown refusal on a running engine clears the token and mints, with no pause', async () => {
+  const kv = new MemoryKeyValue()
+  await kv.set('deviceToken', 'stale')
+  const { engine, client, notices } = setup(kv)
+  await engine.start()
+  expect(client.bootstraps).toBe(2)
+  const token = await kv.get('deviceToken')
+  expect(typeof token).toBe('string')
+  expect(token).not.toBe('stale')
+  expect(engine.accountId()).not.toBeNull()
+  expect(engine.isPaused()).toBe(false)
+  expect(notices()).toEqual([])
+})
