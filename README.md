@@ -112,6 +112,7 @@ out. To have anything else removed, ask in GitHub Discussions.
 ## Talk to us
 
 Questions, bugs and ideas go to [GitHub Discussions](https://github.com/kevinshibuya/promptfall/discussions).
+To chat with other players, join the [Discord server](https://discord.gg/U4R2G46Jhs).
 Promptfall is @promptfall on [TikTok](https://www.tiktok.com/@promptfall),
 [Instagram](https://www.instagram.com/promptfall/) and [X](https://x.com/promptfall). What comes
 next is in [docs/roadmap.md](docs/roadmap.md).
