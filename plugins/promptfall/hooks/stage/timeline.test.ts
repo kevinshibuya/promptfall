@@ -389,6 +389,29 @@ test('a lone drop plays its chest on the front slot from now', () => {
   expect(t.showAt('i1')).toBe(NOW + 1400)
 })
 
+test('a lone drop in a delivery falls when it arrived, not at the last tick it is stamped with', () => {
+  // A sandbox item synced three seconds after the last tick: at the tick's time its chest would
+  // have risen before it was ever drawn.
+  const t = observed()
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common') }], NOW, 5000, NOW + 3000)
+  expect(of(t.active(NOW + 3000), 'chest')).toMatchObject([
+    { actor: 'e1', from: NOW + 3000, until: NOW + 3000 + 2400 },
+  ])
+  expect(t.showAt('i1')).toBe(NOW + 3000 + 1400)
+})
+
+test('a lone drop with no live enemy falls on the one still leaving', () => {
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id === 'e1')
+  const t = observed(v)
+  // e1 is killed: it leaves the view and dissolves.
+  t.onEffects([hit('h1', 'e1')], NOW)
+  t.observe({ ...v, enemies: [] }, NOW + 10)
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common', 'i2') }], NOW + 20)
+  expect(of(t.active(NOW + 20), 'chest')).toMatchObject([{ actor: 'e1', itemId: 'i2' }])
+  expect(t.showAt('i2')).toBe(NOW + 20 + 1400)
+})
+
 test('a hit naming an unknown actor is dropped', () => {
   const t = observed()
   t.onEffects([hit('nobody', 'ghost')], NOW)

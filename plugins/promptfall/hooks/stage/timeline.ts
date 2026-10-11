@@ -517,9 +517,15 @@ export class StageTimeline {
    * One action at a time: each `act` starts its action at its battle-time offset stretched to the
    * cadence (grill 1.6), never before the previous action is over. The actor winds up and strikes
    * in its shape (the choreography of the frames plan); every hit and heal of the action lands at
-   * one impact. Each animation keeps its own speed whatever the cadence.
+   * one impact. Each animation keeps its own speed whatever the cadence. A lone drop's chest falls
+   * at `arrivedAt`, the wall time the batch came in, which a delivery's stale `now` is not.
    */
-  onEffects(effects: readonly Effect[], now: number, cadenceMs: number = TICK_MS): number[] {
+  onEffects(
+    effects: readonly Effect[],
+    now: number,
+    cadenceMs: number = TICK_MS,
+    arrivedAt: number = now,
+  ): number[] {
     // observe prunes too, but nothing observes while the band is hidden or on another tab.
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
@@ -655,10 +661,10 @@ export class StageTimeline {
           })
           shown = true
         } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
-          const actor = last?.target ?? this.front()
+          const actor = last?.target ?? this.front() ?? this.lastOut()
           if (actor === null || !this.entries.has(actor)) continue
-          // The chest lands as its target's fade ends; a lone drop's falls from now.
-          const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : now
+          // The chest lands as its target's fade ends; a lone drop's falls when it arrived.
+          const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : arrivedAt
           this.motions.push({
             kind: 'chest',
             actor,
@@ -735,6 +741,19 @@ export class StageTimeline {
   /** Every action still held, in start order. */
   actions(): readonly Action[] {
     return this.actions_.map(({ actor, start, until }) => ({ actor, start, until }))
+  }
+
+  /**
+   * The departed enemy in the lowest slot, still on the stage for its fade or its chest: where a
+   * lone drop falls between a kill and the next enemy's walk-on.
+   */
+  private lastOut(): string | null {
+    let best: Known | null = null
+    for (const id of this.departed) {
+      const known = this.entries.get(id)
+      if (known && (best === null || known.slot < best.slot)) best = known
+    }
+    return best?.id ?? null
   }
 
   /** The live enemy in the lowest slot. */
