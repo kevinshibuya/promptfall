@@ -185,17 +185,17 @@ than 6 rows are free, and hides while Claude asks you a question.
 ### Stage
 
 The band's Party tab draws the battle as pixel art: enemies on the left, the party on the right,
-lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a pop when
+lunges, white flashes and damage numbers on each hit, a dissolve when an enemy dies and a chest when
 it drops loot. Behind them hangs the zone's backdrop, one painting per zone, bottom-anchored and
 centred (ADR 0009); the compact stage, and a zone without a painting, stand on a one-row ground
 strip in the zone's colour.
 
 Every window of the band draws the staged state (`hooks/stage/staged.ts`): the fight as the stage
 has played it, the game's state less the hits, heals and deaths still to land. A hero stands until
-the blow that kills him lands, a killed monster keeps its row until its dissolve has played, the
-enemy window's title and the backdrop stay on the wave and zone being watched, and the world boss
-bar drops as your party's hits land. Toasts read the game's state, so a wipe toast can come up to
-one cadence before the last hero falls on the stage.
+the blow that kills him lands, a killed monster keeps its row until its dissolve and any chest have
+played, the enemy window's title and the backdrop stay on the wave and zone being watched, and the
+world boss bar drops as your party's hits land. Toasts read the game's state, so a wipe toast can
+come up to one cadence before the last hero falls on the stage.
 
 - **Choreography.** One action, from its start, in ms. Every attacker holds its wind-up frame in
   place for 140 (`WINDUP_HOLD_MS`), then moves in its shape; at impact the target shows its hit

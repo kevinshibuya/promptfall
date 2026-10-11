@@ -41,13 +41,15 @@ import { stagedState } from './staged'
 import { renderSvg, stageSvg, svgOrFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
   DESKTOP_COLUMN_PX_CEILING,
   DISSOLVE_MS,
-  DROP_MS,
   FLASH_MS,
   FULL_MIN_COLUMNS,
   HIRES_SCALE,
   LUNGE_MS,
+  REVEAL_RISE_MS,
   SPAWN_MS,
   STAGE_MAX_COLUMNS,
   STAGE_ROWS,
@@ -62,6 +64,7 @@ export const SCENARIOS = [
   'compact',
   'dissolve',
   'drop',
+  'chest',
   'windup',
   'strike',
   'follow',
@@ -228,9 +231,13 @@ export function stage(name: Scenario): Staged {
         FULL,
       )
     }
+    // The kill's chest lands as its fade ends. At NOW, for `chest`, it sits closed halfway
+    // through its sit; for `drop`, it has opened and the sword is halfway up its rise.
+    case 'chest':
     case 'drop': {
-      // The drop pops when the kill's fade ends; at NOW it is half done.
-      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + DROP_MS / 2)
+      const since =
+        name === 'chest' ? CHEST_SIT_MS / 2 : CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS / 2
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + since)
       return killed(
         t1,
         [

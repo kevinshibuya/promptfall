@@ -99,8 +99,9 @@ function drawBackdrop(frame: Frame, art: SpriteArt): void {
 
 /**
  * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
- * on the bottom two rows, three at scale 1.5), the actors in slot order, the drops, the effect
- * sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
+ * on the bottom two rows, three at scale 1.5), the actors in slot order, the chests, the items
+ * rising from them, the effect sprites, then (when `numbers`) the damage numbers. Raster draws
+ * numbers as text cells instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
   const { width, height } = frameSize(model)
@@ -115,6 +116,7 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   for (const a of model.actors) {
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
   }
+  for (const c of model.chests) blit(frame, c.art, c.art.palette, c.x, c.y, false, c.alpha)
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)
   for (const e of model.effects) blit(frame, e.art, e.art.palette, e.x, e.y, e.flipX, 1)
   const block = glyphBlock(model.scale)

@@ -9,15 +9,7 @@ import { stage } from './scenarios'
 import { stagedState } from './staged'
 import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
-import {
-  DROP_MS,
-  HIRES_SCALE,
-  IDLE_BOB_PX,
-  LUNGE_MS,
-  RARITY_RGB,
-  WINDUP_HOLD_MS,
-  WINDUP_MS,
-} from './tuning'
+import { HIRES_SCALE, IDLE_BOB_PX, LUNGE_MS, RARITY_RGB, WINDUP_HOLD_MS, WINDUP_MS } from './tuning'
 
 const NOW = 1_000_000
 const BOX = { columns: 120, rows: 8 }
@@ -105,29 +97,6 @@ test('a motion already over yields nothing', () => {
   expect(s).not.toContain('<animate')
 })
 
-test('a drop yields an animated use', () => {
-  const s = svg(
-    [
-      hit,
-      {
-        k: 'drop',
-        item: {
-          id: 'i',
-          base: 'iron_sword',
-          rarity: 'rare',
-          affixes: [],
-          equippedBy: null,
-          tradeableAt: null,
-        },
-      },
-    ],
-    NOW + DROP_MS / 2,
-  )
-  expect(s).toMatch(
-    /<use href="#a\d+" transform="translate\(\d+ \d+\)" opacity="0"><animate attributeName="opacity" values="1;1;0"/,
-  )
-})
-
 test('without smil no animation element appears', () => {
   expect(svg([act, hit], NOW + 100, { smil: false, motion: 'full' })).not.toContain('<animate')
 })
@@ -149,22 +118,46 @@ const DROP: Effect = {
   },
 }
 
-test('a drop still running after its enemy dissolved stays in a redraw', () => {
+/** e1 killed at NOW with DROP (rare) on a 17-row stage: its chest falls from NOW + 400, lands at NOW + 700. */
+function chestSvg(at: number, smil: boolean): { doc: string; chests: number } {
   const t = new StageTimeline()
   t.observe(wave(), NOW)
   t.onEffects([hit, DROP], NOW)
   const gone = wave()
   gone.enemies = gone.enemies.filter((e) => e.id !== 'e1')
   t.observe(gone, NOW + 10)
-  // Past the dissolve, inside the drop.
-  const at = NOW + 750
-  const model = stageAt(stagedState(gone, WORLD_DEFAULT, t, at), t, at, BOX, {
+  const model = stageAt(stagedState(gone, WORLD_DEFAULT, t, at), t, at, TALL, {
     compact: false,
-    motion: 'full',
+    motion: 'still',
   })
-  expect(model.drops).toHaveLength(1)
-  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
-  expect(s).toMatch(/values="1;1;0"/)
+  const doc = renderSvg(model, t.active(at), { smil, motion: 'still', now: at, width: 960 })
+  return { doc, chests: model.chests.length }
+}
+const TALL = { columns: 120, rows: 17 }
+
+test('the SMIL Svg drops the chest with a translate and raises its item with its own animate', () => {
+  const closed = artPaths(spriteFor('chest', 'closed').full, null)
+  // Before the chest starts: e1 stood at x 4 on a 34 px stage; the chest falls 8 px to y 18 from
+  // 0.4 s over 0.3 s; the item rises 10 px from y 15 from 1.5 s, the end of the open phase. Both
+  // fade over the last 0.2 s of the rare item's 2.8 s.
+  const before = chestSvg(NOW, true).doc
+  expect(before).toContain(closed)
+  expect(before).toMatch(
+    /<use href="#a\d+" transform="translate\(4 18\)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.929;1" begin="0.4s" dur="2.8s"\/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 -8;0 0" [^>]*begin="0.4s" dur="0.3s"\/><\/use>/,
+  )
+  expect(before).toMatch(
+    /<use href="#a\d+" transform="translate\(4 15\)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.882;1" begin="1.5s" dur="1.7s"\/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -10" begin="1.5s" dur="0.3s" fill="freeze"\/><\/use>/,
+  )
+  // A redraw mid-hold, the enemy long faded, resumes the same chest.
+  const held = chestSvg(NOW + 2000, true)
+  expect(held.chests).toBe(1)
+  expect(held.doc).toContain('begin="-1.6s" dur="2.8s"')
+  expect(held.doc).toContain('values="0 0;0 -10" begin="-0.5s"')
+  // Without SMIL, the model as of now: the chest on the ground, the item risen.
+  const flat = chestSvg(NOW + 2000, false).doc
+  expect(flat).toMatch(/<use href="#a\d+" transform="translate\(4 18\)"\/>/)
+  expect(flat).toMatch(/<use href="#a\d+" transform="translate\(4 5\)"\/>/)
+  expect(flat).not.toContain('<animate')
 })
 
 test('a hero flashing at a redraw keeps its rarity colour under the flash', () => {

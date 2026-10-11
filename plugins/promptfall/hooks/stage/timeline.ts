@@ -1,13 +1,15 @@
 import type { EnemyView, GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
-import { ACTION_STEPS, type Effect, STEP_MS, TICK_MS } from '../vendor/sim.js'
+import { ACTION_STEPS, type Effect, type Rarity, STEP_MS, TICK_MS } from '../vendor/sim.js'
 import {
   BACKLOG_ROUNDS,
   BOLT_MS,
   BOSS_MIN_ROWS,
   BURST_MS,
+  CHEST_FALL_MS,
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
   DISSOLVE_MS,
-  DROP_MS,
   FLASH_MS,
   FOLLOW_MS,
   IDLE_FRAME_MS,
@@ -16,6 +18,9 @@ import {
   NUMBER_RGB_ENEMY,
   NUMBER_RGB_HEAL,
   NUMBER_RGB_HERO,
+  REVEAL_FADE_MS,
+  REVEAL_HOLD_MS,
+  REVEAL_RISE_MS,
   SLIDE_MS,
   SPAWN_MS,
   STAGE_MIN_ROWS,
@@ -50,7 +55,58 @@ export type Motion =
   | { kind: 'number'; actor: string; text: string; rgb: number; from: number; until: number }
   | { kind: 'dissolve'; actor: string; from: number; until: number }
   | { kind: 'spawn'; actor: string; from: number; until: number }
-  | { kind: 'drop'; actor: string; item: string; from: number; until: number }
+  | {
+      kind: 'chest'
+      actor: string
+      /** The dropped item's id, its rarity and its sprite's id. */
+      itemId: string
+      rarity: Rarity
+      spriteId: string
+      from: number
+      until: number
+    }
+
+export type ChestMotion = Extract<Motion, { kind: 'chest' }>
+/** A chest's phases, in order: each a fixed span from its start, the hold's by rarity. */
+export type ChestPhase = 'fall' | 'sit' | 'open' | 'rise' | 'hold' | 'fade'
+
+/** Each phase's span in a chest of `rarity`, in order. */
+function chestSpans(rarity: Rarity): [ChestPhase, number][] {
+  return [
+    ['fall', CHEST_FALL_MS],
+    ['sit', CHEST_SIT_MS],
+    ['open', CHEST_OPEN_MS],
+    ['rise', REVEAL_RISE_MS],
+    ['hold', REVEAL_HOLD_MS[rarity]],
+    ['fade', REVEAL_FADE_MS],
+  ]
+}
+
+/** A chest's whole span, from the start of its fall to the end of its fade. */
+export function chestMs(rarity: Rarity): number {
+  return chestSpans(rarity).reduce((total, [, ms]) => total + ms, 0)
+}
+
+/** Ms from a chest's start to its reveal's show time: the item fully risen. */
+export const CHEST_SHOW_MS = CHEST_FALL_MS + CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS
+
+/**
+ * The chest's phase at `now`, with its start and the progress through it (0 to 1); before the
+ * chest starts, its fall at 0; after it ends, its fade at 1.
+ */
+export function chestPhaseAt(
+  m: ChestMotion,
+  now: number,
+): { phase: ChestPhase; from: number; p: number } {
+  let from = m.from
+  for (const [phase, ms] of chestSpans(m.rarity)) {
+    if (now < from + ms || phase === 'fade') {
+      return { phase, from, p: Math.max(0, Math.min(1, (now - from) / ms)) }
+    }
+    from += ms
+  }
+  return { phase: 'fade', from, p: 1 }
+}
 
 /** An enemy the stage has seen, live or departed, with its stable slot. */
 export type Known = { id: string; spriteId: string; kind: string; slot: number; name: string }
@@ -157,7 +213,7 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
-  /** No newcomer steps on stage before any of these: each kill's fade and drop, then a pause. */
+  /** No newcomer steps on stage before any of these: each kill's fade and chest, then a pause. */
   private gaps = new Map<string, number>()
   /** Each enemy's place in the line, left to right in slot order, and the slide that took it there. */
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
@@ -196,16 +252,16 @@ export class StageTimeline {
       const from = this.lastShownEnd(id, now)
       this.motions.push({ kind: 'dissolve', actor: id, from, until: from + DISSOLVE_MS })
     }
-    // A kill plays out before the next enemy enters: its fade, its drop, then a pause.
+    // A kill plays out before the next enemy enters: its fade, its chest, then a pause.
     for (const [id, until] of this.gaps) if (until <= now) this.gaps.delete(id)
     for (const id of this.departed) {
       const end = this.motions
-        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
+        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest'))
         .reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
-      // Once its fade and drop are over and pruned, the pause they set stands.
+      // Once its fade and chest are over and pruned, the pause they set stands.
       if (Number.isFinite(end)) this.gaps.set(id, end + WAVE_GAP_MS)
     }
-    // A departed enemy keeps its entry and slot until its dissolve and any drop end.
+    // A departed enemy keeps its entry and slot until its dissolve and any chest end.
     for (const id of this.departed) {
       if (this.holds(id, now)) continue
       this.departed.delete(id)
@@ -220,7 +276,7 @@ export class StageTimeline {
         if (this.departed.delete(enemy.id)) {
           this.gaps.delete(enemy.id)
           this.motions = this.motions.filter(
-            (m) => !(m.actor === enemy.id && (m.kind === 'dissolve' || m.kind === 'drop')),
+            (m) => !(m.actor === enemy.id && (m.kind === 'dissolve' || m.kind === 'chest')),
           )
         }
         continue
@@ -271,13 +327,13 @@ export class StageTimeline {
 
   /**
    * When the stage has let the tick go: the action under way over, and every row the tick took
-   * off the field faded and dropped.
+   * off the field faded and its chest played.
    */
   private settleAt(now: number): number {
     let at = Math.max(now, this.actionEnd)
     for (const m of this.motions) {
       if (!this.departed.has(m.actor)) continue
-      if (m.kind === 'dissolve' || m.kind === 'drop') at = Math.max(at, m.until)
+      if (m.kind === 'dissolve' || m.kind === 'chest') at = Math.max(at, m.until)
     }
     return at
   }
@@ -351,8 +407,8 @@ export class StageTimeline {
   /**
    * Drops every queued action (one not started by `now`) and what it would show; the action under
    * way plays out, and the next one may start where the first queued one would have. A departed
-   * enemy whose killing blow was dropped fades from its last hit still shown, or now, and its drop
-   * pops after that fade; the next observe times the pause from there.
+   * enemy whose killing blow was dropped fades from its last hit still shown, or now, and its chest
+   * lands as that fade ends; the next observe times the pause from there.
    */
   private dropQueued(now: number): void {
     const queued = this.actions_.filter((a) => a.start > now)
@@ -371,8 +427,9 @@ export class StageTimeline {
       const faded = from + DISSOLVE_MS
       this.motions = this.motions.map((m) => {
         if (m === dissolve) return { ...m, from, until: faded }
-        if (m.actor === id && m.kind === 'drop' && m.from > faded) {
-          return { ...m, from: faded, until: faded + DROP_MS }
+        if (m.actor === id && m.kind === 'chest' && m.from > faded - CHEST_FALL_MS) {
+          const from = faded - CHEST_FALL_MS
+          return { ...m, from, until: from + chestMs(m.rarity) }
         }
         return m
       })
@@ -406,7 +463,7 @@ export class StageTimeline {
 
   /**
    * The lowest slot no entry holds; when all three are held, the slot of the departed entry that
-   * ends first among those whose hit has played out (flash, numbers and drop over). Null when every
+   * ends first among those whose hit has played out (flash, numbers and chest over). Null when every
    * departed holder still has a hit to show: an action can land after the next tick has already
    * brought a newcomer, and evicting would drop that hit, so the newcomer waits a frame or more.
    */
@@ -420,11 +477,11 @@ export class StageTimeline {
         (m) =>
           m.actor === id &&
           m.until > now &&
-          (m.kind === 'flash' || m.kind === 'number' || m.kind === 'drop'),
+          (m.kind === 'flash' || m.kind === 'number' || m.kind === 'chest'),
       )
       if (showing) continue
       const end = this.motions
-        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'drop'))
+        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest'))
         .reduce((e, m) => Math.max(e, m.until), 0)
       const known = this.entries.get(id)
       if (known && end < evictEnd) {
@@ -439,10 +496,10 @@ export class StageTimeline {
     return evict.slot
   }
 
-  /** A departed enemy is held by its dissolve and any drop, not by a number still rising. */
+  /** A departed enemy is held by its dissolve and any chest, not by a number still rising. */
   private holds(id: string, now: number): boolean {
     return this.motions.some(
-      (m) => m.actor === id && m.until > now && (m.kind === 'dissolve' || m.kind === 'drop'),
+      (m) => m.actor === id && m.until > now && (m.kind === 'dissolve' || m.kind === 'chest'),
     )
   }
 
@@ -600,14 +657,16 @@ export class StageTimeline {
         } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
           const actor = last?.target ?? this.front()
           if (actor === null || !this.entries.has(actor)) continue
-          // The drop pops once its target's fade is over.
-          const from = last ? last.flashEnd + DISSOLVE_MS : now
+          // The chest lands as its target's fade ends; a lone drop's falls from now.
+          const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : now
           this.motions.push({
-            kind: 'drop',
+            kind: 'chest',
             actor,
-            item: spriteFor('item', effect.item.base).id,
+            itemId: effect.item.id,
+            rarity: effect.item.rarity,
+            spriteId: spriteFor('item', effect.item.base).id,
             from,
-            until: from + DROP_MS,
+            until: from + chestMs(effect.item.rarity),
           })
         }
       }
@@ -652,6 +711,20 @@ export class StageTimeline {
       current = a
     }
     return current && now < current.until ? current.actor : null
+  }
+
+  /**
+   * The show time of `itemId`'s reveal: the end of its item's rise. Null for an item no chest on
+   * the timeline holds.
+   */
+  showAt(itemId: string): number | null {
+    const chest = this.motions.find((m) => m.kind === 'chest' && m.itemId === itemId)
+    return chest ? chest.from + CHEST_SHOW_MS : null
+  }
+
+  /** How many chests have a show time still to come after `now`. */
+  pendingReveals(now: number): number {
+    return this.motions.filter((m) => m.kind === 'chest' && m.from + CHEST_SHOW_MS > now).length
   }
 
   /** Wall-clock starts of this actor's actions still held. */

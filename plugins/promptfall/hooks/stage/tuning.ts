@@ -1,4 +1,5 @@
 // Every tuning number of the stage, and nowhere else. Tests import them rather than repeat them.
+import type { Rarity } from '../vendor/sim.js'
 
 // Heights in rows, and the widths that pick the layout (spec §2, ADR 0003, ADR 0010).
 /** The stage's rows in every fight: the boss height, so a boss lands at its full size (ADR 0010). */
@@ -60,9 +61,27 @@ export const DISSOLVE_MS = 420
 export const SPAWN_MS = 360
 /** An enemy's slide into the gap a departed one left. */
 export const SLIDE_MS = 240
-export const DROP_MS = 600
-/** After a kill's fade and drop, the pause before the next enemy steps on stage. */
+/**
+ * The chest a drop leaves, in phases from its start: it falls, landing as the enemy's fade ends,
+ * sits closed, opens, then the item rises out of it, holds by rarity and fades with the chest.
+ */
+export const CHEST_FALL_MS = 300
+export const CHEST_SIT_MS = 300
+export const CHEST_OPEN_MS = 500
+/** The item's rise out of the open chest: its end is the reveal's show time. */
+export const REVEAL_RISE_MS = 300
+/** The risen item's hold, longer the rarer the item. */
+export const REVEAL_HOLD_MS: Readonly<Record<Rarity, number>> = {
+  common: 800,
+  uncommon: 1000,
+  rare: 1200,
+  epic: 1600,
+  legendary: 2000,
+}
+export const REVEAL_FADE_MS = 200
+/** After a kill's fade and any chest, the pause before the next enemy steps on stage. */
 export const WAVE_GAP_MS = 800
+/** How far the item rises from the chest's top. */
 export const DROP_RISE_PX = 10
 export const IDLE_FRAME_MS = 500
 export const EVENT_FRAME_MS = 83
