@@ -216,7 +216,7 @@ declare class Ledger implements ServerClient {
     private config;
     private marketContext;
     private worldContext;
-    /** A null token always mints, so only a known token can be refused. */
+    /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */
     bootstrap(input: {
         clientVersion: string;
         deviceToken: null;
@@ -225,7 +225,7 @@ declare class Ledger implements ServerClient {
         clientVersion: string;
         deviceToken: string | null;
     }): Promise<Bootstrap | BootstrapRefused>;
-    /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+    /** Whether `deviceToken` names an account: a read that writes nothing. */
     knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
     account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;

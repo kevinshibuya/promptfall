@@ -67,7 +67,7 @@ export const BootstrapSchema: z.ZodType<Bootstrap> = z.object({
 })
 
 export const BootstrapRefusedSchema: z.ZodType<BootstrapRefused> = z.object({
-  refusal: z.enum(['rate_limited', 'banned']),
+  refusal: z.enum(['rate_limited', 'banned', 'unknown']),
   message: z.string().min(1).max(200),
 })
 
