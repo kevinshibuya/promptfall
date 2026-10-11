@@ -54,4 +54,6 @@ the listing. All five are built.
 - [ ] Flip a flag and back over the admin route from the laptop (`deploy/README.md`, Flags), so
       the token on the laptop is known to work before it is needed.
 - [ ] Check the last nightly copy is in R2 and less than a day old.
+- [ ] Pace the listing's invitations: GitHub allows 50 device-code submissions an hour per OAuth
+      app, so more than 50 links in one hour will fail.
 - [ ] Post the listing: the install commands on TikTok and in a pinned Discussion.

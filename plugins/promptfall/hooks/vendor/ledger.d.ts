@@ -276,6 +276,8 @@ declare class Ledger implements ServerClient {
     private settleBoss;
     private settleAccount;
     private sweep;
+    /** Drops the link rows past their lifetime and clears each account's pointer to one. */
+    private sweepLinks;
 }
 
 export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, SETTABLE_FLAGS, type SandboxOutcome, type SettableFlag, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

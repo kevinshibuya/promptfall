@@ -126,8 +126,10 @@ link completing on the first poll after the player authorises, and the GitHub lo
 account's name. The server keeps the login and never the access token. A decline, an expired code
 or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
 without a client id refuses the start the same way. `--link fake`, the default, approves on the
-first poll as `--player-name`. The public server runs GitHub's flow. An unlinked account or a
-closed market is said in the message window, with a hotkey to the Account tab.
+first poll as `--player-name`. The public server runs GitHub's flow. The server's sweep drops a
+link left open past 15 minutes, GitHub's device-code lifetime (scaled by the speed); a poll on it
+then answers pending until the client gives up. An unlinked account or a closed market is said in
+the message window, with a hotkey to the Account tab.
 
 ## World
 

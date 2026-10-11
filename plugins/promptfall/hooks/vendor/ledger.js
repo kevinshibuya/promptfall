@@ -22,6 +22,7 @@ var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
 var RETURNS_KEY = "pf:returns";
+var LINKS_KEY = "pf:links";
 var FLAGS_KEY = "pf:flags";
 function everyKind(value) {
   const out = {};
@@ -162,6 +163,23 @@ var Books = class {
         RETURNS_KEY,
         queue.filter((q) => q !== id)
       );
+  }
+  async openLinks() {
+    const raw = await this.kv.get(LINKS_KEY);
+    return Array.isArray(raw) ? raw : [];
+  }
+  /** Writes a link row and its entry in `pf:links`. */
+  async putLink(code, link) {
+    await this.kv.set(linkKey(code), link);
+    const open2 = (await this.openLinks()).filter((e) => e.code !== code);
+    await this.kv.set(LINKS_KEY, [...open2, { code, createdAt: link.createdAt }]);
+  }
+  /** Deletes a link row and its entry in `pf:links`, if it has one. */
+  async dropLink(code) {
+    await this.kv.delete(linkKey(code));
+    const open2 = await this.openLinks();
+    const kept = open2.filter((e) => e.code !== code);
+    if (kept.length !== open2.length) await this.kv.set(LINKS_KEY, kept);
   }
   /**
    * Delivers waiting returns where a slot is free, oldest first. An entry
@@ -1000,6 +1018,7 @@ function settable(raw) {
 var PLAYER_NAME_MAX = 64;
 var LINK_URL = "https://github.com/login/device";
 var LINK_INTERVAL_MS = 5e3;
+var LINK_TTL_MS = 15 * 6e4;
 function approveAs(login) {
   return {
     start: async (code) => ({
@@ -1211,7 +1230,7 @@ var Ledger = class {
       await closeAllOf(await this.marketContext(), id);
       await dropFromBoards(this.kv, id);
       if (this.presence.delete(id)) this.memo.presenceChanged();
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
+      if (record.linkCode) await this.books.dropLink(record.linkCode);
       await this.books.remove(record, auth.deviceToken);
       return { deleted: true };
     });
@@ -1332,9 +1351,12 @@ var Ledger = class {
     return this.run(async () => {
       const record = await this.books.authenticate(auth);
       if (!record || record.account.accountId !== accountId) return unauthorized;
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode));
-      const link = { accountId, createdAt: await this.options.now(), deviceCode };
-      await this.kv.set(linkKey(start.code), link);
+      if (record.linkCode) await this.books.dropLink(record.linkCode);
+      await this.books.putLink(start.code, {
+        accountId,
+        createdAt: await this.options.now(),
+        deviceCode
+      });
       record.linkCode = start.code;
       await this.books.save(record);
       return start;
@@ -1362,7 +1384,7 @@ var Ledger = class {
       if (!link || link.accountId !== record.account.accountId) {
         return record.account.linked ? { status: "linked", account: record.account } : pending;
       }
-      await this.kv.delete(linkKey(code));
+      await this.books.dropLink(code);
       if (record.linkCode === code) delete record.linkCode;
       if (answer.status === "ended") {
         await this.books.save(record);
@@ -1584,6 +1606,20 @@ var Ledger = class {
       const record = await this.books.load(accountId);
       if (!record) continue;
       await this.books.deliverReturns(record);
+      await this.books.save(record);
+    }
+    await this.sweepLinks();
+  }
+  /** Drops the link rows past their lifetime and clears each account's pointer to one. */
+  async sweepLinks() {
+    const cutoff = await this.options.now() - LINK_TTL_MS * (this.options.speed ?? 1);
+    for (const { code, createdAt } of await this.books.openLinks()) {
+      if (createdAt > cutoff) continue;
+      const link = await this.kv.get(linkKey(code));
+      await this.books.dropLink(code);
+      const record = link ? await this.books.load(link.accountId) : null;
+      if (record?.linkCode !== code) continue;
+      delete record.linkCode;
       await this.books.save(record);
     }
   }
