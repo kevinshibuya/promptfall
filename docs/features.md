@@ -123,7 +123,8 @@ code the server gives in the detail window, the URL to enter it at under the pic
 at the interval the server gives. A server started with `--link github` runs GitHub's own device
 flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
 link completing on the first poll after the player authorises, and the GitHub login as the
-account's name. The server keeps the login and never the access token. A decline, an expired code
+account's name. When GitHub asks the server to slow down, the server answers the player's polls
+"pending" without asking GitHub until the slower pace allows the next call. The server keeps the login and never the access token. A decline, an expired code
 or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
 without a client id refuses the start the same way. `--link fake`, the default, approves on the
 first poll as `--player-name`. The public server runs GitHub's flow. An unlinked account or a
