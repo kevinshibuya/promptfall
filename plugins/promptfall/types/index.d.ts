@@ -38,7 +38,13 @@ export type EnemyView = {
   maxHp: number
   kind: string
 }
-export type LootView = { text: string; rarity: string }
+/**
+ * What wrote a Loot row: a kill's drop or its auto-vendoring, which wait for the chest's reveal,
+ * or anything else (a trade, a recruit, a boss's reward), which never waits.
+ */
+export type LootKind = 'drop' | 'vendored' | 'market'
+/** A Loot row. `itemId` is the dropped item's id, the key to its chest; null for a row of no item. */
+export type LootView = { text: string; rarity: string; kind: LootKind; itemId: string | null }
 export type ItemView = {
   id: string
   /** The item base's content id: the sprite key. */

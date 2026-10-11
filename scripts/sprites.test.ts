@@ -6,6 +6,7 @@ import {
   type BuildInput,
   buildBackdrops,
   buildSprites,
+  CHEST_IDS,
   downsample,
   EFFECT_IDS,
   emitModule,
@@ -512,6 +513,21 @@ describe('sprites build', () => {
       const ids = await expectedIds()
       for (const id of EFFECT_IDS) expect(ids).toContain(id)
     })
+
+    it('expects the three chest sprites', async () => {
+      expect(CHEST_IDS).toEqual(['chest:closed', 'chest:opening', 'chest:open'])
+      const ids = await expectedIds()
+      for (const id of CHEST_IDS) expect(ids).toContain(id)
+    })
+
+    it('builds a chest of kind chest, with no frames', () => {
+      const r = build([{ id: 'chest:closed', file: 'nes-4.png', style: 'nes' }])
+      expect(r.errors).toEqual([])
+      expect(r.sprites[0]).toMatchObject({ kind: 'chest', frames: null })
+      expect(emitModule(r)).toMatch(
+        /'chest:closed': \{ id: 'chest:closed', kind: 'chest'[^\n]*frames: null/,
+      )
+    })
   })
 
   it('gives every nes enemy of the real manifest a wind-up and a strike', () => {
@@ -533,6 +549,22 @@ describe('sprites build', () => {
     expect(bosses.filter((s) => !s.frames?.windup || !s.frames.strike).map((s) => s.id)).toEqual([])
     const heroes = manifest.sprites.filter((s) => s.id.startsWith('hero:'))
     expect(heroes.filter((s) => !s.frames?.windup).map((s) => s.id)).toEqual([])
+  })
+
+  it('gives the real manifest the three chests, each with 1x and 1.5x art and no frames', () => {
+    const manifest = JSON.parse(
+      readFileSync(join(import.meta.dirname, '../art/manifest.json'), 'utf8'),
+    ) as Manifest
+    const chests = manifest.sprites.filter((s) => s.id.startsWith('chest:'))
+    expect(chests.map((s) => s.id)).toEqual([...CHEST_IDS])
+    for (const chest of chests) {
+      expect(chest).toMatchObject({
+        style: 'nes',
+        file: expect.any(String),
+        fileHires: expect.any(String),
+      })
+      expect(chest.frames).toBeUndefined()
+    }
   })
 
   it('gives every file entry of the real manifest but the fallback a fileHires', () => {

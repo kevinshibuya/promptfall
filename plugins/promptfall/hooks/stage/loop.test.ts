@@ -490,6 +490,27 @@ test('a bare band site redraws only when its strip changes, whatever the motion 
   expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
 })
 
+test("a Loot band site redraws at a reveal's show time, not at the next rest frame", async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  const t0 = await clock.now()
+  // A lone drop: its chest falls on the front enemy now; its Loot row waits for the reveal.
+  const robe = { id: 'i1', base: 'silk_robe', rarity: 'rare', affixes: [], equippedBy: null }
+  h.timeline.onEffects([{ k: 'drop', item: { ...robe, tradeableAt: null } as never }], t0)
+  const show = h.timeline.showAt('i1') ?? 0
+  const v = wave()
+  v.loot = [{ text: '[ Silk Robe (rare)', rarity: 'rare', kind: 'drop', itemId: 'i1' }]
+  h.state.view = v
+  const site = worldSite('raster')
+  h.loop.mount({ ...site, strip: { ...site.strip, tab: 'loot' } })
+  await clock.advance(show - t0 + IDLE_FRAME_MS)
+  const shown = h.blits.findIndex((b) => cellText(b).some((row) => row.includes('Silk Robe')))
+  expect(shown).toBeGreaterThan(0)
+  expect(h.times[shown]).toBeGreaterThanOrEqual(show)
+  expect(h.times[shown]).toBeLessThanOrEqual(show + EVENT_FRAME_MS)
+})
+
 /** A PNG source's width and height, from its IHDR. */
 function pngSize(source: { png: string }): [number, number] {
   const bytes = decode(source.png)

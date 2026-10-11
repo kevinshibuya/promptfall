@@ -63,6 +63,25 @@ function blit(
   }
 }
 
+/** A disc: the pixels whose centres lie within `r` of (cx, cy), dithered at `alpha` as `blit` is. */
+function disc(frame: Frame, cx: number, cy: number, r: number, rgb: number, alpha: number): void {
+  if (alpha <= 0 || r <= 0) return
+  const level = alpha * 16
+  const y0 = Math.max(0, Math.floor(cy - r))
+  const y1 = Math.min(frame.height - 1, Math.ceil(cy + r))
+  const x0 = Math.max(0, Math.floor(cx - r))
+  const x1 = Math.min(frame.width - 1, Math.ceil(cx + r))
+  for (let y = y0; y <= y1; y++) {
+    for (let x = x0; x <= x1; x++) {
+      const dx = x + 0.5 - cx
+      const dy = y + 0.5 - cy
+      if (dx * dx + dy * dy > r * r) continue
+      if (level <= (BAYER[y % 4]?.[x % 4] ?? 0)) continue
+      put(frame, x, y, rgb)
+    }
+  }
+}
+
 /**
  * Where a backdrop's top-left lands in a `width × height` frame: bottom-anchored, centred. A frame
  * narrower or shorter than the painting crops it (the sides, then the sky); a wider one (the Image
@@ -99,8 +118,9 @@ function drawBackdrop(frame: Frame, art: SpriteArt): void {
 
 /**
  * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
- * on the bottom two rows, three at scale 1.5), the actors in slot order, the drops, the effect
- * sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells instead.
+ * on the bottom two rows, three at scale 1.5), the actors in slot order, the glows, the chests,
+ * the items rising from them, the effect sprites, then (when `numbers`) the damage numbers. Raster
+ * draws numbers as text cells instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
   const { width, height } = frameSize(model)
@@ -115,6 +135,8 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   for (const a of model.actors) {
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
   }
+  for (const g of model.glows) disc(frame, g.x, g.y, g.r, g.rgb, g.alpha)
+  for (const c of model.chests) blit(frame, c.art, c.art.palette, c.x, c.y, false, c.alpha)
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)
   for (const e of model.effects) blit(frame, e.art, e.art.palette, e.x, e.y, e.flipX, 1)
   const block = glyphBlock(model.scale)

@@ -55,7 +55,7 @@ test('an unknown key answers the fallback', () => {
   expect(worldBossKey('The Context Leviathan')).toBe('the_context_leviathan')
 })
 
-test('one sprite per content id, plus the effects and the fallback', () => {
+test('one sprite per content id, plus the effects, the chests and the fallback', () => {
   expect(SPRITE_COUNT).toBe(
     4 +
       4 +
@@ -64,8 +64,15 @@ test('one sprite per content id, plus the effects and the fallback', () => {
       Object.keys(content.itemBases).length +
       // EFFECT_IDS in scripts/sprites.ts: the fireball, the light burst and the arrow
       3 +
+      // CHEST_IDS in scripts/sprites.ts: closed, opening and open
+      3 +
       1,
   )
+  expect(spriteFor('chest', 'open')).toMatchObject({
+    id: 'chest:open',
+    kind: 'chest',
+    frames: null,
+  })
 })
 
 test('every sprite is real art: no placeholders left', () => {

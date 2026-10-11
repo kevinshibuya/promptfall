@@ -369,6 +369,8 @@ export class StageLoop {
       if (busy) this.io.invalidate()
       return busy ? SVG_FALLBACK_FRAME_MS : IDLE_FRAME_MS
     }
+    // A Loot row waits for its reveal: on Loot too, the frames keep the event beat until it shows.
+    const revealing = this.timeline.pendingReveals(now) > 0
 
     const scene = extras
       ? stripScene({
@@ -453,7 +455,7 @@ export class StageLoop {
       }
     }
 
-    if (busy) {
+    if (busy || revealing) {
       // Overrun: the next frame runs at once and the beat starts over from it, never a burst.
       const next = slot + EVENT_FRAME_MS
       const end = await this.io.now()

@@ -1150,6 +1150,24 @@
       "style": "nes"
     },
     {
+      "id": "chest:closed",
+      "file": "sprites/chest/closed.png",
+      "fileHires": "sprites-hires/chest/closed.png",
+      "style": "nes"
+    },
+    {
+      "id": "chest:opening",
+      "file": "sprites/chest/opening.png",
+      "fileHires": "sprites-hires/chest/opening.png",
+      "style": "nes"
+    },
+    {
+      "id": "chest:open",
+      "file": "sprites/chest/open.png",
+      "fileHires": "sprites-hires/chest/open.png",
+      "style": "nes"
+    },
+    {
       "id": "fallback",
       "file": "fallback.png",
       "style": "nes"

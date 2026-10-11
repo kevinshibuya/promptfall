@@ -28,6 +28,7 @@
     "backdrop": "tsx scripts/backdrop.ts",
     "test:scripts": "vitest run scripts",
     "stage:goldens": "tsx scripts/stage-goldens.ts",
+    "smoke:desktop": "tsx scripts/smoke-desktop.ts",
     "refsheet": "tsx scripts/ref-sheet.ts"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "@types/pngjs": "^6.0.5",
     "fflate": "0.8.2",
     "opentype.js": "^2.0.0",
+    "playwright": "^1.64.0",
     "pngjs": "^7.0.0",
     "tsup": "8.5.1",
     "tsx": "^4.23.15",

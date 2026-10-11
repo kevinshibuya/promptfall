@@ -96,6 +96,52 @@ test('the wave and zone hold while a departed enemy of them is held; newcomers w
   })
 })
 
+test("a zone boss's chest plays whole: the zone and wave hold through its reveal", () => {
+  const t = new StageTimeline()
+  t.observe(boss(), NOW - 1)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e9', amount: 500 },
+      {
+        k: 'drop',
+        item: {
+          id: 'i1',
+          base: 'iron_sword',
+          rarity: 'legendary',
+          affixes: [],
+          equippedBy: null,
+          tradeableAt: null,
+        },
+      },
+    ],
+    NOW,
+    2000,
+  )
+  // The zone boss fell: the sim moved on to zone 2, wave 1, and brought the next wave.
+  const next: GameView = { ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+  t.observe(next, NOW)
+  const at = (now: number) => {
+    const s = stagedState(next, WORLD_DEFAULT, t, now)
+    return { zone: s.zone, wave: s.wave, enemies: s.enemies.map((e) => e.name) }
+  }
+  const shown = t.showAt('i1') ?? 0
+  const ended = endOf(t, 'e9', 'chest')
+  const held = { zone: 1, wave: 11, enemies: ['Bandit Captain'] }
+  // Redraws through the reveal neither cut the chest nor let the next zone's wave on.
+  for (const now of [shown, ended - 1]) {
+    t.observe(next, now)
+    expect(at(now)).toEqual(held)
+    expect(endOf(t, 'e9', 'chest', now)).toBe(ended)
+  }
+  t.observe(next, ended + WAVE_GAP_MS)
+  expect(at(ended + WAVE_GAP_MS)).toEqual({
+    zone: 2,
+    wave: 1,
+    enemies: ['Goblin Scout', 'Field Rat', 'Road Slime'],
+  })
+})
+
 /** A poll of The Promptwyrm at `hp`, this party's committed tally `committed` at the time. */
 const polled = (hp: number, committed: number): WorldState => ({
   ...WORLD_DEFAULT,
@@ -258,7 +304,7 @@ test('a wipe: each hero stands until his blow lands, lies fallen while the field
   ])
 })
 
-test('a wave clear: the hero killed in the clearing tick is down from his blow until the killer has faded and dropped, then up at 15%', () => {
+test('a wave clear: the hero killed in the clearing tick is down from his blow until the killer has faded and its chest played, then up at 15%', () => {
   const lone: GameView = { ...wave(), enemies: wave().enemies.slice(0, 1) }
   const t = new StageTimeline()
   t.observe(withHero(lone, 'h3', 5), NOW - 1)
@@ -286,7 +332,7 @@ test('a wave clear: the hero killed in the clearing tick is down from his blow u
   // The wave is clear: the fallen hero is revived at 15% (7 of 50).
   const view: GameView = withHero({ ...lone, enemies: [] }, 'h3', 7)
   t.observe(view, NOW)
-  const dropped = endOf(t, 'e1', 'drop')
+  const dropped = endOf(t, 'e1', 'chest')
   const h3 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).heroes[2]
   const e1 = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).enemies[0]?.hp
   expect(h3(felled - 1)).toMatchObject({ hp: 5, alive: true })
@@ -321,4 +367,96 @@ test('a state change with nothing in flight lands at once', () => {
   const view = wave()
   t.observe(view, NOW)
   expect(stagedState(view, WORLD_DEFAULT, t, NOW).heroes[0]).toMatchObject({ hp: 50, alive: true })
+})
+
+test('a drop row waits for its reveal; a market row never does', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  const item = (id: string, base: string) =>
+    ({ id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null }) as never
+  // A drop and a vendored drop: their chests fall on the front enemy now and show together.
+  t.onEffects(
+    [
+      { k: 'drop', item: item('i1', 'silk_robe') },
+      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3 },
+    ],
+    NOW,
+  )
+  const show = t.showAt('i1') ?? 0
+  // The old sword's chest is long gone: no chest on the timeline holds it.
+  const old = { text: 'old sword', rarity: 'common', kind: 'drop', itemId: 'i0' } as const
+  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const staff = { text: 'staff sold', rarity: 'rare', kind: 'vendored', itemId: 'i2' } as const
+  const bought = { text: 'bought ring', rarity: 'rare', kind: 'market', itemId: null } as const
+  const view: GameView = { ...wave(), loot: [old, robe, staff, bought], lastDrop: bought }
+  const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).loot.map((l) => l.text)
+  expect(rows(show - 1)).toEqual(['old sword', 'bought ring'])
+  expect(rows(show)).toEqual(['old sword', 'robe', 'staff sold', 'bought ring'])
+  // The band's last drop is the staged rows' newest.
+  const drops: GameView = { ...wave(), loot: [old, robe, staff], lastDrop: staff }
+  const last = (now: number) => stagedState(drops, WORLD_DEFAULT, t, now).lastDrop?.text
+  expect(last(show - 1)).toBe('old sword')
+  expect(last(show)).toBe('staff sold')
+})
+
+const lootItem = (id: string) =>
+  ({
+    id,
+    base: 'silk_robe',
+    rarity: 'rare',
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }) as never
+
+test('a row waits for its own reveal: a contract sale beside a boss drop shows at once', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  t.onEffects([{ k: 'drop', item: lootItem('i1') }], NOW)
+  const show = t.showAt('i1') ?? 0
+  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const contract = {
+    text: 'Hero contract sold for 90g',
+    rarity: 'rare',
+    kind: 'market',
+    itemId: 'hero9',
+  } as const
+  const view: GameView = { ...wave(), loot: [robe, contract], lastDrop: contract }
+  const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
+  expect(staged(show - 1).loot.map((l) => l.text)).toEqual(['Hero contract sold for 90g'])
+  expect(staged(show - 1).lastDrop?.text).toBe('Hero contract sold for 90g')
+  expect(staged(show).loot.map((l) => l.text)).toEqual(['robe', 'Hero contract sold for 90g'])
+})
+
+test("a lone drop that reveals before a queued kill's chest shows first", () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  // A backlog of enemy actions, then the kill: its chest waits behind them.
+  t.onEffects(
+    [
+      { k: 'act', actor: 'e2', action: 'attack', at: 0 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'e2', action: 'attack', at: 500 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'e2', action: 'attack', at: 1000 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'h1', action: 'attack', at: 1500 },
+      { k: 'hit', by: 'h1', target: 'e1', amount: 60 },
+      { k: 'drop', item: lootItem('i1') },
+    ],
+    NOW,
+  )
+  // A sandbox item: a lone drop, its chest on the front enemy at once.
+  t.onEffects([{ k: 'drop', item: lootItem('i2') }], NOW + 10)
+  const show1 = t.showAt('i1') ?? 0
+  const show2 = t.showAt('i2') ?? 0
+  expect(show2).toBeLessThan(show1)
+  const first = { text: 'first', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const second = { text: 'second', rarity: 'rare', kind: 'drop', itemId: 'i2' } as const
+  const view: GameView = { ...wave(), loot: [first, second], lastDrop: second }
+  const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
+  expect(staged(show2 - 1).loot).toEqual([])
+  expect(staged(show2).loot.map((l) => l.text)).toEqual(['second'])
+  expect(staged(show2).lastDrop?.text).toBe('second')
+  expect(staged(show1).loot.map((l) => l.text)).toEqual(['first', 'second'])
 })
