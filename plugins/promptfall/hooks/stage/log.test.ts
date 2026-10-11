@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
+import type { Toast } from '../toasts'
 import type { Effect, Item } from '../vendor/sim.js'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS } from '../windows/tuning'
 import { wave } from './fixtures'
@@ -383,6 +384,105 @@ test('a hit line after a pending drop line is neither delayed nor dropped', () =
   const line = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Bo hits Rat for 4.')
   expect(line).toBeDefined()
   expect(line?.at).toBe(starts[1])
+})
+
+/** A drop toast as toastsFor gives it, waiting for its item. */
+const dropToast = (itemId: string, text = 'Rare drop: Silk Robe'): Toast => ({
+  row: 'rare_drop',
+  text,
+  timeoutMs: 4000,
+  cue: 'drop',
+  wait: { item: itemId },
+})
+
+/** A kill that drops a robe, i1, applied to a log and a timeline as register applies it. */
+function killDropping(): { log: MessageLog; t: StageTimeline } {
+  const v = terse()
+  const by = v.heroes[0]?.id ?? ''
+  const target = v.enemies[0]?.id ?? ''
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  const { log, t } = run(
+    [act(by, 0), hit(by, target, 30), { k: 'drop', item: item('silk_robe', 'rare', 'i1') }],
+    { before: v, after },
+  )
+  return { log, t }
+}
+
+test('a held toast is released at its show time, once, and no read of the log releases it', () => {
+  const { log, t } = killDropping()
+  const show = t.showAt('i1') ?? 0
+  expect(show).toBeGreaterThan(NOW + 1000)
+  const toast = dropToast('i1')
+  expect(log.hold([toast], t, NOW)).toEqual([])
+  expect(log.nextRelease(NOW)).toBe(show)
+  expect(log.isBusy(show - 1, 'still')).toBe(true)
+  expect(log.release(show - 1)).toEqual([])
+  // The reads that only look, even past the show time: the desktop's horizon among them.
+  log.shown(show + 10, 'full')
+  log.typing(show + 10, 'full')
+  log.upcoming(show - 1, 10_000)
+  log.isBusy(show + 10, 'full')
+  expect(log.release(show)).toEqual([toast])
+  expect(log.release(show + 1)).toEqual([])
+  expect(log.nextRelease(show)).toBeNull()
+})
+
+test('a toast with no wait, a wait with no show time, or a show time past is answered at once', () => {
+  const { log, t } = killDropping()
+  const show = t.showAt('i1') ?? 0
+  const plain: Toast = { row: 'level_up', text: 'Al reached level 2', timeoutMs: 4000, cue: null }
+  const zone: Toast = {
+    row: 'zone_arrival',
+    text: 'The party reached zone 2',
+    timeoutMs: 4000,
+    cue: null,
+    wait: { zone: 1 },
+  }
+  const unknown = dropToast('i-none', 'Rare drop: Oak Staff')
+  const held = dropToast('i1')
+  // In order, the held one left out.
+  expect(log.hold([plain, held, zone, unknown], t, NOW)).toEqual([plain, zone, unknown])
+  expect(log.hold([dropToast('i1', 'Again')], t, show)).toEqual([dropToast('i1', 'Again')])
+  expect(log.release(show)).toEqual([held])
+})
+
+test('everything held is due at an infinite now, in show order', () => {
+  const { log, t } = killDropping()
+  const first = dropToast('i1')
+  log.hold([first], t, NOW)
+  expect(log.release(Number.POSITIVE_INFINITY)).toEqual([first])
+  expect(log.nextRelease(NOW)).toBeNull()
+})
+
+test('a held toast follows its chest when the backlog re-times it', () => {
+  const v = terse()
+  const [h1] = v.heroes.map((h) => h.id)
+  const [e1, e2] = v.enemies.map((e) => e.id)
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  const queue = Array.from({ length: 6 }, () => [act(e2 ?? '', 0), hit(e2 ?? '', h1 ?? '', 1)])
+  const first: Effect[] = [
+    ...queue.flat(),
+    act(h1 ?? '', 0),
+    hit(h1 ?? '', e1 ?? '', 30),
+    { k: 'drop', item: item('silk_robe') },
+  ]
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  log.onEffects(first, t.onEffects(first, NOW, 2000), after, NOW, 2000, t)
+  t.observe(after, NOW + 1)
+  const toast = dropToast('i1')
+  expect(log.hold([toast], t, NOW)).toEqual([])
+  const planned = t.showAt('i1') ?? 0
+  const cut = NOW + 2500
+  const next = Array.from({ length: 10 }, () => act(e2 ?? '', 0))
+  log.onEffects(next, t.onEffects(next, cut, 2000), after, cut, 2000, t)
+  const moved = t.showAt('i1') ?? 0
+  expect(moved).toBeLessThan(planned)
+  expect(log.nextRelease(cut)).toBe(moved)
+  expect(log.release(moved - 1)).toEqual([])
+  expect(log.release(moved)).toEqual([toast])
 })
 
 test('a held drop line follows its chest when the backlog re-times it', () => {

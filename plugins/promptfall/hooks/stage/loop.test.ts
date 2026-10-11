@@ -131,6 +131,8 @@ function harness(clock: Clock, blitMs = 0): Harness {
       return v
     },
     settings: async () => state.settings,
+    release: () => undefined,
+    nextRelease: () => null,
     strip: async () => state.strip,
   }
   const timeline = new StageTimeline()
@@ -398,6 +400,8 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
       return new Promise<GameView>((resolve) => clock.after(150, () => resolve(wave())))
     },
     settings: async () => SETTINGS_DEFAULT,
+    release: () => undefined,
+    nextRelease: () => null,
     strip: async () => null,
   }
   const timeline = new StageTimeline()

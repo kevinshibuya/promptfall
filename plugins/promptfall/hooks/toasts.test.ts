@@ -71,7 +71,13 @@ const SINGLE: [string, Effect, Toast][] = [
   [
     'a legendary drop',
     { k: 'drop', item: oakStaff('legendary') },
-    { row: 'legendary_drop', text: 'Legendary drop: Oak Staff', timeoutMs: LONG, cue: 'legendary' },
+    {
+      row: 'legendary_drop',
+      text: 'Legendary drop: Oak Staff',
+      timeoutMs: LONG,
+      cue: 'legendary',
+      wait: { item: 'i1' },
+    },
   ],
   [
     'a recruit',
@@ -131,12 +137,24 @@ const SINGLE: [string, Effect, Toast][] = [
   [
     'a rare drop',
     { k: 'drop', item: oakStaff('rare') },
-    { row: 'rare_drop', text: 'Rare drop: Oak Staff', timeoutMs: SHORT, cue: 'drop' },
+    {
+      row: 'rare_drop',
+      text: 'Rare drop: Oak Staff',
+      timeoutMs: SHORT,
+      cue: 'drop',
+      wait: { item: 'i1' },
+    },
   ],
   [
     'an epic drop',
     { k: 'drop', item: oakStaff('epic') },
-    { row: 'rare_drop', text: 'Epic drop: Oak Staff', timeoutMs: SHORT, cue: 'drop' },
+    {
+      row: 'rare_drop',
+      text: 'Epic drop: Oak Staff',
+      timeoutMs: SHORT,
+      cue: 'drop',
+      wait: { item: 'i1' },
+    },
   ],
   ...(['rare', 'epic', 'legendary'] as const).map((rarity): [string, Effect, Toast] => [
     `${rarity} item vendored`,
@@ -146,6 +164,7 @@ const SINGLE: [string, Effect, Toast][] = [
       text: 'Inventory full: Oak Staff vendored for 40 gold',
       timeoutMs: SHORT,
       cue: null,
+      wait: { item: 'i1' },
     },
   ]),
   [
@@ -241,88 +260,132 @@ function partyView(): { view: GameView; ids: [string, string, string] } {
   return { view, ids: [a, b, c] }
 }
 
-function drop(base: string, rarity: Rarity): Effect {
-  return { k: 'drop', item: { ...oakStaff(rarity), base } }
+function drop(base: string, rarity: Rarity, id = 'i1'): Effect {
+  return { k: 'drop', item: { ...oakStaff(rarity), base, id } }
 }
 
 const texts = (effects: Effect[], view: GameView | null = null) =>
   toastsFor(effects, view, BOSSES).map((t) => t.text)
 
-test('rare drops fold into a count and their names', () => {
+test('each rare drop is its own toast, at its own reveal', () => {
   const effects = [
-    drop('oak_staff', 'rare'),
-    drop('willow_staff', 'rare'),
-    drop('rune_staff', 'rare'),
+    drop('oak_staff', 'rare', 'i1'),
+    drop('willow_staff', 'rare', 'i2'),
+    drop('rune_staff', 'rare', 'i3'),
   ]
-  expect(toastsFor(effects, null, BOSSES)).toEqual([
-    {
+  expect(toastsFor(effects, null, BOSSES)).toEqual(
+    [
+      ['Oak Staff', 'i1'],
+      ['Willow Staff', 'i2'],
+      ['Rune Staff', 'i3'],
+    ].map(([name, item]) => ({
       row: 'rare_drop',
-      text: '3 rare drops: Oak Staff, Willow Staff, Rune Staff',
+      text: `Rare drop: ${name}`,
       timeoutMs: SHORT,
       cue: 'drop',
-    },
-  ])
+      wait: { item },
+    })),
+  )
 })
 
-test('epic drops fold the same way', () => {
+test('each epic drop is its own toast too', () => {
   const effects = [drop('oak_staff', 'epic'), drop('willow_staff', 'epic')]
-  expect(texts(effects)).toEqual(['2 epic drops: Oak Staff, Willow Staff'])
+  expect(texts(effects)).toEqual(['Epic drop: Oak Staff', 'Epic drop: Willow Staff'])
 })
 
-test('past three names the fold counts the rest, with no comma before the "and"', () => {
+test('five rare drops are five toasts, no count and no "and 2 more"', () => {
   const bases = ['oak_staff', 'willow_staff', 'rune_staff', 'ember_rod', 'storm_rod']
   expect(texts(bases.map((b) => drop(b, 'rare')))).toEqual([
-    '5 rare drops: Oak Staff, Willow Staff, Rune Staff and 2 more',
+    'Rare drop: Oak Staff',
+    'Rare drop: Willow Staff',
+    'Rare drop: Rune Staff',
+    'Rare drop: Ember Rod',
+    'Rare drop: Storm Rod',
   ])
 })
 
-test('rare and epic drops in one burst fold separately, epic first', () => {
+test('rare and epic drops in one burst are one toast each, epics first', () => {
   const effects = [
     drop('oak_staff', 'rare'),
     drop('willow_staff', 'epic'),
     drop('rune_staff', 'rare'),
     drop('ember_rod', 'epic'),
   ]
-  expect(toastsFor(effects, null, BOSSES)).toEqual([
-    {
-      row: 'rare_drop',
-      text: '2 epic drops: Willow Staff, Ember Rod',
-      timeoutMs: SHORT,
-      cue: 'drop',
-    },
-    {
-      row: 'rare_drop',
-      text: '2 rare drops: Oak Staff, Rune Staff',
-      timeoutMs: SHORT,
-      cue: 'drop',
-    },
+  expect(texts(effects)).toEqual([
+    'Epic drop: Willow Staff',
+    'Epic drop: Ember Rod',
+    'Rare drop: Oak Staff',
+    'Rare drop: Rune Staff',
   ])
 })
 
-test('one epic and two rare drops: the epic in its single form, then the rare fold', () => {
+test('one epic and two rare drops: three single forms, the epic first', () => {
   const effects = [
     drop('oak_staff', 'rare'),
     drop('willow_staff', 'epic'),
     drop('rune_staff', 'rare'),
   ]
-  expect(texts(effects)).toEqual(['Epic drop: Willow Staff', '2 rare drops: Oak Staff, Rune Staff'])
+  expect(texts(effects)).toEqual([
+    'Epic drop: Willow Staff',
+    'Rare drop: Oak Staff',
+    'Rare drop: Rune Staff',
+  ])
 })
 
-test('Rare or better items vendored fold into a count and the gold', () => {
+test('each vendored item is its own toast, at its own reveal', () => {
   const effects: Effect[] = [
-    { k: 'drop_vendored', item: oakStaff('rare'), gold: 40 },
-    { k: 'drop_vendored', item: oakStaff('epic'), gold: 30 },
-    { k: 'drop_vendored', item: oakStaff('common'), gold: 5 },
-    { k: 'drop_vendored', item: oakStaff('legendary'), gold: 25 },
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i1' }, gold: 40 },
+    { k: 'drop_vendored', item: { ...oakStaff('epic'), id: 'i2' }, gold: 30 },
+    { k: 'drop_vendored', item: { ...oakStaff('common'), id: 'i3' }, gold: 5 },
+    { k: 'drop_vendored', item: { ...oakStaff('legendary'), id: 'i4' }, gold: 25 },
   ]
-  expect(toastsFor(effects, null, BOSSES)).toEqual([
-    {
+  expect(toastsFor(effects, null, BOSSES)).toEqual(
+    [
+      [40, 'i1'],
+      [30, 'i2'],
+      [25, 'i4'],
+    ].map(([gold, item]) => ({
       row: 'vendored',
-      text: 'Inventory full: 3 items vendored for 95 gold',
+      text: `Inventory full: Oak Staff vendored for ${gold} gold`,
       timeoutMs: SHORT,
       cue: null,
-    },
+      wait: { item },
+    })),
+  )
+})
+
+test('drop and vendored toasts wait for their item; every other toast carries no wait', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    drop('rune_staff', 'legendary', 'i-l'),
+    { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'wipe', retreatedTo: 2 },
+    { k: 'zone_cleared', zone: 3, advancedTo: 4 },
+    drop('ember_rod', 'epic', 'i-e'),
+    drop('oak_staff', 'rare', 'i-r'),
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i-v' }, gold: 40 },
+    { k: 'level_up', heroId: ids[0], level: 6 },
+    trade('sold', 'item', 'oak_staff', 120),
+    trade('bought', 'item', 'oak_staff', 120),
+    trade('returned', 'item', 'oak_staff', 0),
+  ]
+  expect(toastsFor(effects, view, BOSSES).map((t) => [t.row, t.wait ?? null])).toEqual([
+    ['legendary_drop', { item: 'i-l' }],
+    ['recruit', null],
+    ['reward', null],
+    ['wipe', null],
+    ['zone_arrival', null],
+    ['rare_drop', { item: 'i-e' }],
+    ['rare_drop', { item: 'i-r' }],
+    ['vendored', { item: 'i-v' }],
+    ['level_up', null],
+    ['sold', null],
+    ['bought', null],
+    ['returned', null],
   ])
+  expect(worldToast('appeared', 'The Promptwyrm').wait).toBeUndefined()
+  expect(revokedToast(['Oak Staff'])?.wait).toBeUndefined()
 })
 
 test('sales fold into a count and the gold', () => {

@@ -350,13 +350,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       )
     }
 
-    // The loop: the terminals' band picture mounts it above; the desktop runs on SMIL.
-    if (!terminal && !SVG_SMIL) {
+    // The loop: the terminals' band picture mounts it above. On the desktop SMIL plays the motion,
+    // so while its stage is drawn the loop mounts there only to wake for held toasts.
+    if (!terminal && (!SVG_SMIL || stage !== null)) {
       loop?.mount({
         requestId: e.requestId,
         key: 'stage',
         layout,
-        renderer: 'svg',
+        renderer: SVG_SMIL ? 'smil' : 'svg',
         props: e.props,
         surface: e.surface,
         strip: { kind, columns: stripColumns, tab, extra },

@@ -70,8 +70,9 @@ and the item rises out of it on a glow in its rarity colour, wider the rarer the
 holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
 item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
 the same chest, and a sandbox item is the drop of the front monster, struck down for it. The combat log's drop
-line and the Loot tab's row wait for the reveal: they appear once the item has risen, not at the
-kill, while sales and purchases show at once. The Loot tab shows the last two rows, drops and sales
+line, the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits
+for the reveal: they land together once the item has risen, not at the kill, while sales and
+purchases show at once. The Loot tab shows the last two rows, drops and sales
 alike, coloured by rarity.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
@@ -316,14 +317,16 @@ for lack of room. Everyday toasts last four seconds and the weighty ones (a lege
 recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary drop, a recruit, a reward, a wipe or a zone arrival keeps its own. Toasts follow the
-game, not the stage, so a wipe toast can show up to one cadence before the last hero falls on the
-stage. A world boss already up when the session first polls toasts its arrival with no cue.
+legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival keeps
+its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
+toast lands at its reveal, as the item rises out of the chest, or at once when no band is drawn.
+A wipe toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
 **Cues.** Four toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up and a
-world boss appearing. A burst plays each of its cues once, after its toasts. Only the primary
+world boss appearing. A burst plays each of its cues once, after its toasts; a drop's cue plays
+with its toast, at the reveal. Only the primary
 session plays them, and hiding the band does not silence them.
 
 ## Sound
