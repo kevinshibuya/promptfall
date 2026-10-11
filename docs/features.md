@@ -147,7 +147,9 @@ damage this week, your own rows in gold.
 
 **Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
-none ever holds a row on either leaderboard. The public server runs six during the soft wave and
+none ever holds a row on either leaderboard. A bot saved under an older name or sim version is
+minted again on the server's start, and its old account is deleted first, so the replaced bot
+leaves both boards with it. The public server runs six during the soft wave and
 none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
