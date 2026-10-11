@@ -189,6 +189,31 @@ test('the SMIL Svg drops the chest with a translate, shows its three arts in tur
   expect(flat).not.toContain('<animate')
 })
 
+test("a chest with no actor draws on the front slot's ground, under SMIL and without it", () => {
+  // A sandbox item dropped at NOW onto a drawn, empty 17-row stage: no row to fall from, so its
+  // chest falls onto slot 0's ground, where a kill's there lands (x 4, y 18; the test above).
+  const t = new StageTimeline()
+  const view = { ...wave(), enemies: [] }
+  t.observe(view, NOW)
+  t.onEffects([DROP], NOW)
+  const doc = (at: number, smil: boolean) => {
+    const model = stageAt(stagedState(view, WORLD_DEFAULT, t, at), t, at, TALL, {
+      compact: false,
+      motion: 'still',
+    })
+    return renderSvg(model, t.active(at), { smil, motion: 'still', now: at, width: 960 })
+  }
+  const before = doc(NOW, true)
+  expect(before).toContain('<g transform="translate(4 18)" opacity="0">')
+  expect(before).toMatch(/values="0 -8;0 0" [^>]*begin="0s" dur="0.3s"\/>/)
+  expect(before).toMatch(/<use href="#a\d+" transform="translate\(4 15\)" opacity="0">/)
+  expect(before.match(/<circle/g)).toHaveLength(1)
+  const flat = doc(NOW + 1600, false)
+  const open = spriteFor('chest', 'open').full
+  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(4 18)"/>`)
+  expect(flat).toMatch(/<use href="#a\d+" transform="translate\(4 5\)"\/>/)
+})
+
 test('the glow is one circle in the rarity colour, behind the chest, its alpha ramping in over the rise', () => {
   // The rare item risen at (4, 5), 16 px: the glow on its centre (12, 13), radius 10. Its rise
   // runs 1.5 s to 1.8 s and its fade from 3 s to 3.2 s: of its 1.7 s, 0.176 and 0.882.
