@@ -1,7 +1,7 @@
 import { SPAWN_GAUGE_MAX } from './battle'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
-import { rollDrops } from './loot'
+import { rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
 import type {
   Effect,
@@ -10,6 +10,7 @@ import type {
   EnemyKind,
   GameState,
   Hero,
+  Item,
   Slot,
   Stat,
   Stats,
@@ -224,8 +225,11 @@ export function changeZone(s: GameState, zone: number): void {
   if (zone > s.highestZone) s.highestZone = zone
 }
 
-/** Removes a dead enemy and applies everything its death causes. */
-export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): void {
+/**
+ * Removes a dead enemy and applies everything its death causes. A `drop` given is what the kill
+ * drops in place of its roll.
+ */
+export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], drop?: Item): void {
   const encounter = s.encounter
   if (!encounter) return
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id)
@@ -239,7 +243,8 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[]): vo
   }
   s.stats.kills += 1
   if (enemy.kind !== 'wave') s.stats.bosses += 1
-  if (def) {
+  if (drop) takeDrop(s, drop, effects)
+  else if (def) {
     const r = rollDrops(s, def)
     Object.assign(s, r.state)
     effects.push(...r.effects)
