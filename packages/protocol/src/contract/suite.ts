@@ -49,6 +49,9 @@ export type ContractHost = {
   credit(accountId: string, gold: number, reason: string): Promise<void>
   settle(accountId: string): Promise<void>
   sweep(): Promise<void>
+  /** The ban rules skip a host without bans. */
+  ban?(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
+  unban?(login: string): Promise<{ login: string; lifted: string[] } | null>
 }
 
 export type ContractMake = (
@@ -204,6 +207,26 @@ async function booted(
   const boot = await client.bootstrap(input)
   if ('refusal' in boot) throw new Error(`bootstrap refused: ${boot.refusal}`)
   return boot
+}
+
+/** A fresh account's link through to the approver's answer: its boot, auth and the poll. */
+async function linkFresh(client: ServerClient) {
+  const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
+  const auth: Auth = { deviceToken: boot.deviceToken }
+  const start = await client.linkStart(auth)
+  if ('reason' in start || 'refusal' in start) throw new Error('expected a start')
+  return { boot, auth, polled: await client.linkPoll(auth, start.code) }
+}
+
+/** `linkFresh` that must link: the account and the login it linked. */
+async function linkedFresh(client: ServerClient) {
+  const fresh = await linkFresh(client)
+  const login =
+    'status' in fresh.polled &&
+    fresh.polled.status === 'linked' &&
+    fresh.polled.account.linked?.login
+  if (!login) throw new Error('expected linked')
+  return { ...fresh, login }
 }
 
 async function infoOf(client: ServerClient, auth: Auth) {
@@ -1442,6 +1465,77 @@ export function runServerContract(name: string, make: ContractMake): void {
       // Presence lives in the host's memory: the new host counts only who polled it.
       expect(after.online).toBe(1)
       expect((await snapshot(first.client, otherAuth)).online).toBe(2)
+    })
+
+    it('rule 41: a banned account may delete itself; its other calls stay refused', async (ctx) => {
+      const { client, host, boot, mirror } = await setup()
+      if (!host?.ban) return ctx.skip()
+      await host.ban(boot.account.accountId, 'cheating')
+      const banned = { reason: 'banned', message: 'Promptfall: this account is banned: cheating' }
+      expect(await client.account(mirror.auth())).toEqual(banned)
+      expect(await client.world(mirror.auth(), 0)).toEqual(banned)
+      expect(await client.deleteAccount(mirror.auth())).toEqual({ deleted: true })
+      expect(await client.account(mirror.auth())).toEqual({ reason: 'unauthorized' })
+      expect(
+        await client.bootstrap({ clientVersion: '0.1.0', deviceToken: boot.deviceToken }),
+      ).toMatchObject({ refusal: 'unknown' })
+    })
+
+    it('rule 42: a ban follows the linked login in any case; an unlinked ban is by id', async (ctx) => {
+      const { client, host } = await setup()
+      if (!host?.ban) return ctx.skip()
+      const first = await linkedFresh(client)
+      // Another account carrying the login in another case: banning it bans the login.
+      const other = await host.mint({
+        state: createInitialState(41),
+        name: first.login.toUpperCase(),
+        linked: true,
+      })
+      await host.ban(other.accountId, 'cheating')
+      const refused = await linkFresh(client)
+      expect(refused.polled).toEqual({
+        status: 'ended',
+        reason: 'denied',
+        message: 'Promptfall: this GitHub account is banned: cheating',
+      })
+      // Refused, not banned: the fresh account plays on, unlinked.
+      expect((await infoOf(client, refused.auth)).account.linked).toBeNull()
+      // An account already linked to the login is not banned by the login.
+      expect((await infoOf(client, first.auth)).account.linked?.login).toBe(first.login)
+      const unlinked = await host.mint({
+        state: createInitialState(42),
+        name: 'Uno',
+        linked: false,
+      })
+      await host.ban(unlinked.accountId, 'spam')
+      expect(await client.account({ deviceToken: unlinked.deviceToken })).toEqual({
+        reason: 'banned',
+        message: 'Promptfall: this account is banned: spam',
+      })
+    })
+
+    it('rule 43: unban lifts the login and the ban of each account still there', async (ctx) => {
+      const { client, host } = await setup()
+      if (!host?.ban || !host.unban) return ctx.skip()
+      const gone = await linkedFresh(client)
+      expect(await host.unban(gone.login)).toBeNull()
+      const kept = await host.mint({
+        state: createInitialState(43),
+        name: gone.login,
+        linked: true,
+      })
+      await host.ban(gone.boot.account.accountId, 'cheating')
+      await host.ban(kept.accountId, 'alt account')
+      expect(await client.deleteAccount(gone.auth)).toEqual({ deleted: true })
+      expect(await host.unban(gone.login.toUpperCase())).toEqual({
+        login: gone.login.toLowerCase(),
+        lifted: [kept.accountId],
+      })
+      expect((await infoOf(client, { deviceToken: kept.deviceToken })).account.accountId).toBe(
+        kept.accountId,
+      )
+      expect((await linkFresh(client)).polled).toMatchObject({ status: 'linked' })
+      expect(await host.unban(gone.login)).toBeNull()
     })
   })
 }
