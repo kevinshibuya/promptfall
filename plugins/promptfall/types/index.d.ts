@@ -43,7 +43,8 @@ export type EnemyView = {
  * or anything else (a trade, a recruit, a boss's reward), which never waits.
  */
 export type LootKind = 'drop' | 'vendored' | 'market'
-export type LootView = { text: string; rarity: string; kind: LootKind }
+/** A Loot row. `itemId` is the dropped item's id, the key to its chest; null for a row of no item. */
+export type LootView = { text: string; rarity: string; kind: LootKind; itemId: string | null }
 export type ItemView = {
   id: string
   /** The item base's content id: the sprite key. */

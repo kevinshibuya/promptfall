@@ -108,17 +108,23 @@ function lootLine(entry: LootEntry): LootView {
       text: `${glyph} ${name} joined (${entry.rarity})`,
       rarity: entry.rarity,
       kind: 'market',
+      itemId: null,
     }
   }
   if (entry.k === 'reward') {
     const name = content.itemBases[entry.base]?.name ?? entry.base
-    return { text: `boss reward ${name} (+${entry.gold}g)`, rarity: entry.rarity, kind: 'market' }
+    return {
+      text: `boss reward ${name} (+${entry.gold}g)`,
+      rarity: entry.rarity,
+      kind: 'market',
+      itemId: null,
+    }
   }
   if (entry.k === 'trade') {
     const name = tradeName(entry.kind, entry.base)
     const text =
       entry.what === 'returned' ? `${name} returned` : `${entry.what} ${name} for ${entry.gold}g`
-    return { text, rarity: entry.rarity, kind: 'market' }
+    return { text, rarity: entry.rarity, kind: 'market', itemId: null }
   }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
@@ -126,13 +132,16 @@ function lootLine(entry: LootEntry): LootView {
     return {
       text: `${name} sold for ${entry.vendoredFor}g`,
       rarity: entry.rarity,
-      kind: 'vendored',
+      // A hero contract a full roster sells never had a chest: nothing waits for it.
+      kind: entry.base === 'contract' ? 'market' : 'vendored',
+      itemId: entry.itemId,
     }
   }
   return {
     text: `${base?.glyph ?? '?'} ${name} (${entry.rarity})`,
     rarity: entry.rarity,
     kind: 'drop',
+    itemId: entry.itemId,
   }
 }
 

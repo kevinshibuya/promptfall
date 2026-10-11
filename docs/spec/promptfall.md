@@ -609,8 +609,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
 - Stage motion (phase 4, spec #72): idle bob, the step, attack lunge (heroes
   switch to a drawn attack or cast pose), hit flash, death dissolve, spawn
   fade-in, floating damage numbers, and the chest. Every attacker, hero or
-  monster of any size, steps a fixed distance toward its target in its wind-up
-  hold and back in its action's tail, so the step costs no time; the lunge
+  monster of any size, steps a fixed distance forward (a hero toward the
+  enemies, a monster toward the party) in its wind-up hold and back in its action's tail, so the step costs no time; the lunge
   thrusts from the stepped position. A kill that drops an item leaves a chest:
   it falls out of the fading enemy, sits, opens, and the item rises on a glow
   in its rarity colour (the reveal), held longer the rarer the item, then

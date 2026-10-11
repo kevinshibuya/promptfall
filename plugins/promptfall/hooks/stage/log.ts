@@ -1,7 +1,8 @@
 // The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
 // queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
-// drop's line waits for its reveal: held aside until its item has risen, then queued.
+// drop's line waits for its reveal: held aside until its item has risen, then takes its place in
+// the queue at that time.
 import type { GameView, Settings } from '../../types'
 import { heroNameById } from '../toasts'
 import { content, type Effect, type Rarity } from '../vendor/sim.js'
@@ -69,10 +70,11 @@ export class MessageLog {
     timeline: StageTimeline,
   ): void {
     this.timeline = timeline
-    // Held lines due by now arrived before this batch: they queue ahead of it.
+    // Held lines due by now arrived before this batch: each takes its place at its show time.
     const due = this.due(now)
     this.held = this.held.filter((h) => !due.includes(h))
-    for (const h of due) this.schedule(this.lines, h.line, h.showAt, h.cadenceMs)
+    let from = 0
+    for (const h of due) from = this.insert(this.lines, h.line, h.showAt, h.cadenceMs, from) + 1
     // HP as the log last saw it, before this batch's view: a kill is a hit that empties it.
     const hpBefore = new Map([...this.known].map(([id, k]) => [id, k.hp]))
     for (const k of timeline.known())
@@ -207,6 +209,33 @@ export class MessageLog {
     })
   }
 
+  /**
+   * Queues `l` at `start` among `lines`, no earlier than index `from`: ahead of the first line
+   * queued for later, which moves back with every line after it, each by the queue's rule from the
+   * time it had. Lines queued by `start` never move. Answers the index `l` took, so held lines due
+   * together keep their show order.
+   */
+  private insert(
+    lines: LogLine[],
+    l: Said,
+    start: number,
+    cadenceMs: number,
+    from: number,
+  ): number {
+    const k = lines.findIndex((x, i) => i >= from && x.at > start)
+    const tail = k < 0 ? [] : lines.splice(k)
+    this.schedule(lines, l, start, cadenceMs)
+    const at = lines.length - 1
+    for (const x of tail)
+      this.schedule(
+        lines,
+        { text: x.text, key: x.key, ...(x.rgb !== undefined ? { rgb: x.rgb } : {}) },
+        x.at,
+        cadenceMs,
+      )
+    return at
+  }
+
   /** Held lines whose show time has passed by `now`, in show order, each read afresh. */
   private due(now: number): Held[] {
     for (const h of this.held) h.showAt = this.timeline?.showAt(h.itemId) ?? h.showAt
@@ -214,15 +243,16 @@ export class MessageLog {
   }
 
   /**
-   * The lines as they stand at `now`: the queued ones, then each held line due by `now` queued
-   * as if it had just arrived. Reading never commits a held line, so a read ahead of time (the
-   * desktop's SMIL) leaves the next batch its place.
+   * The lines as they stand at `now`: the queued ones, with each held line due by `now` in its
+   * place at its show time, as if it had just arrived. Reading never commits a held line, so a
+   * read ahead of time (the desktop's SMIL) leaves the next batch its place.
    */
   private linesAt(now: number): LogLine[] {
     const due = this.due(now)
     if (due.length === 0) return this.lines
     const lines = [...this.lines]
-    for (const h of due) this.schedule(lines, h.line, h.showAt, h.cadenceMs)
+    let from = 0
+    for (const h of due) from = this.insert(lines, h.line, h.showAt, h.cadenceMs, from) + 1
     return lines
   }
 

@@ -383,10 +383,11 @@ test('a drop row waits for its reveal; a market row never does', () => {
     NOW,
   )
   const show = t.showAt('i1') ?? 0
-  const old = { text: 'old sword', rarity: 'common', kind: 'drop' } as const
-  const robe = { text: 'robe', rarity: 'rare', kind: 'drop' } as const
-  const staff = { text: 'staff sold', rarity: 'rare', kind: 'vendored' } as const
-  const bought = { text: 'bought ring', rarity: 'rare', kind: 'market' } as const
+  // The old sword's chest is long gone: no chest on the timeline holds it.
+  const old = { text: 'old sword', rarity: 'common', kind: 'drop', itemId: 'i0' } as const
+  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const staff = { text: 'staff sold', rarity: 'rare', kind: 'vendored', itemId: 'i2' } as const
+  const bought = { text: 'bought ring', rarity: 'rare', kind: 'market', itemId: null } as const
   const view: GameView = { ...wave(), loot: [old, robe, staff, bought], lastDrop: bought }
   const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).loot.map((l) => l.text)
   expect(rows(show - 1)).toEqual(['old sword', 'bought ring'])
@@ -396,4 +397,66 @@ test('a drop row waits for its reveal; a market row never does', () => {
   const last = (now: number) => stagedState(drops, WORLD_DEFAULT, t, now).lastDrop?.text
   expect(last(show - 1)).toBe('old sword')
   expect(last(show)).toBe('staff sold')
+})
+
+const lootItem = (id: string) =>
+  ({
+    id,
+    base: 'silk_robe',
+    rarity: 'rare',
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }) as never
+
+test('a row waits for its own reveal: a contract sale beside a boss drop shows at once', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  t.onEffects([{ k: 'drop', item: lootItem('i1') }], NOW)
+  const show = t.showAt('i1') ?? 0
+  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const contract = {
+    text: 'Hero contract sold for 90g',
+    rarity: 'rare',
+    kind: 'market',
+    itemId: 'hero9',
+  } as const
+  const view: GameView = { ...wave(), loot: [robe, contract], lastDrop: contract }
+  const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
+  expect(staged(show - 1).loot.map((l) => l.text)).toEqual(['Hero contract sold for 90g'])
+  expect(staged(show - 1).lastDrop?.text).toBe('Hero contract sold for 90g')
+  expect(staged(show).loot.map((l) => l.text)).toEqual(['robe', 'Hero contract sold for 90g'])
+})
+
+test("a lone drop that reveals before a queued kill's chest shows first", () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  // A backlog of enemy actions, then the kill: its chest waits behind them.
+  t.onEffects(
+    [
+      { k: 'act', actor: 'e2', action: 'attack', at: 0 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'e2', action: 'attack', at: 500 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'e2', action: 'attack', at: 1000 },
+      { k: 'hit', by: 'e2', target: 'h1', amount: 1 },
+      { k: 'act', actor: 'h1', action: 'attack', at: 1500 },
+      { k: 'hit', by: 'h1', target: 'e1', amount: 60 },
+      { k: 'drop', item: lootItem('i1') },
+    ],
+    NOW,
+  )
+  // A sandbox item: a lone drop, its chest on the front enemy at once.
+  t.onEffects([{ k: 'drop', item: lootItem('i2') }], NOW + 10)
+  const show1 = t.showAt('i1') ?? 0
+  const show2 = t.showAt('i2') ?? 0
+  expect(show2).toBeLessThan(show1)
+  const first = { text: 'first', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const second = { text: 'second', rarity: 'rare', kind: 'drop', itemId: 'i2' } as const
+  const view: GameView = { ...wave(), loot: [first, second], lastDrop: second }
+  const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
+  expect(staged(show2 - 1).loot).toEqual([])
+  expect(staged(show2).loot.map((l) => l.text)).toEqual(['second'])
+  expect(staged(show2).lastDrop?.text).toBe('second')
+  expect(staged(show1).loot.map((l) => l.text)).toEqual(['first', 'second'])
 })

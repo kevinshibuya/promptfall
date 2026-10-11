@@ -71,8 +71,8 @@ holds there longer the rarer it is (under a second for a Common, two for a Legen
 item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
 the same chest, and a sandbox item plays its chest on the front monster. The combat log's drop
 line and the Loot tab's row wait for the reveal: they appear once the item has risen, not at the
-kill, while sales and purchases show at once. The Loot tab shows the last two drops, coloured by
-rarity.
+kill, while sales and purchases show at once. The Loot tab shows the last two rows, drops and sales
+alike, coloured by rarity.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its
@@ -235,8 +235,8 @@ on the shell. Only the one-row collapsed band stays plain text.
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a boss
 lands at its full size. Actors bob between two idle drawings and wind up and strike. Every attacker,
-hero or monster, the world boss included, steps toward its target as it winds up, the same few
-pixels for all, holds there through its blow and steps back as its action ends; the knight and the
+hero or monster, the world boss included, steps forward as it winds up, a hero toward the
+enemies and a monster toward the party, the same few pixels for all, holds there through its blow and steps back as its action ends; the knight and the
 enemies lunge from the stepped position. Fireballs, arrows and light bursts fly, hits flash white
 with a rising damage number, heals rise green, the dead dissolve and a drop leaves a chest. A hero
 stands and fights until the blow that kills him lands, then dims, and the party window's HP drops

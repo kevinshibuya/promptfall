@@ -12,17 +12,16 @@ function pendingBy(timeline: StageTimeline, now: number): Map<string, number> {
   return out
 }
 
-/** The Loot rows less the newest `held` drop and vendored rows: those still to be revealed. */
-function revealed(loot: readonly LootView[], held: number): LootView[] {
-  const out: LootView[] = []
-  let left = held
-  for (let i = loot.length - 1; i >= 0; i--) {
-    const row = loot[i]
-    if (!row) continue
-    if (left > 0 && row.kind !== 'market') left -= 1
-    else out.unshift(row)
-  }
-  return out
+/**
+ * The Loot rows less each drop and vendored row whose own item's reveal is still to come. A row
+ * whose item no chest holds shows at once, as every market row does.
+ */
+function revealed(loot: readonly LootView[], timeline: StageTimeline, now: number): LootView[] {
+  return loot.filter((row) => {
+    if (row.kind === 'market' || row.itemId === null) return true
+    const show = timeline.showAt(row.itemId)
+    return show === null || show <= now
+  })
 }
 
 /**
@@ -52,7 +51,8 @@ function worldBossRow(
  * The enemies are the timeline's line in arrival order, a departed one kept while it is held,
  * each with its HP staged the same way. The zone and wave hold the previous ones while a departed
  * enemy seen in them is held. The world boss is staged like any enemy, its bar from the poll.
- * The Loot rows leave out a drop until its chest's reveal shows it; the last drop is their newest.
+ * The Loot rows leave out a drop until its own chest's reveal shows it; the last drop is their
+ * newest.
  */
 export function stagedState(
   view: GameView,
@@ -83,8 +83,7 @@ export function stagedState(
   const encounter = before
     ? { zone: before.zone, zoneName: before.zoneName, wave: before.wave }
     : {}
-  const held = timeline.pendingReveals(now)
-  const loot = held > 0 ? revealed(view.loot, held) : null
+  const loot = timeline.pendingReveals(now) > 0 ? revealed(view.loot, timeline, now) : null
   const rows = loot ? { loot, lastDrop: loot.at(-1) ?? null } : {}
   return { ...view, ...encounter, heroes, enemies, ...rows }
 }
