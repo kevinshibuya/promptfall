@@ -7,7 +7,14 @@ export type SpriteArt = {
   pixels: string
 }
 
-export type SpriteKind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect'
+export type SpriteKind =
+  | 'hero'
+  | 'hero_attack'
+  | 'enemy'
+  | 'world_boss'
+  | 'item'
+  | 'effect'
+  | 'chest'
 
 /** One drawn 1.5x frame, on its idle 1.5x art's canvas. */
 export type SpriteFrame = { art: SpriteArt; raritySlot: number | null }
