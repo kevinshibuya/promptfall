@@ -365,6 +365,19 @@ test('a drop line prints when its item has risen from the chest, not at the kill
   expect(texts(show)).toContain('Rare drop: Silk Robe.')
 })
 
+test("a lone drop on the empty stage waits for its chest on the ground, as a kill's does", () => {
+  // A sandbox item between spawns: no row to fall from, the chest falls on the front slot's ground.
+  const v = { ...terse(), enemies: [] }
+  const { log, t } = run([{ k: 'drop', item: item('silk_robe', 'rare', 'i1') }], {
+    before: v,
+  })
+  const show = t.showAt('i1') ?? 0
+  expect(show).toBe(NOW + 1400)
+  const texts = (now: number) => log.shown(now, 'still').map((l) => l.text)
+  expect(texts(show - 1)).toEqual([])
+  expect(texts(show)).toEqual(['Rare drop: Silk Robe.'])
+})
+
 test('a hit line after a pending drop line is neither delayed nor dropped', () => {
   const v = terse()
   const [h1, h2] = v.heroes.map((h) => h.id)

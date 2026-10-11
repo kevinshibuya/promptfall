@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { ACTION_STEPS, type Effect, type Rarity, STEP_MS } from '../vendor/sim.js'
-import { boss, wave, worldBoss } from './fixtures'
+import { boss, empty, wave, worldBoss } from './fixtures'
 import { ACTION_MS, chestPhaseAt, type Motion, StageTimeline } from './timeline'
 import {
   BOLT_MS,
@@ -410,6 +410,53 @@ test('a lone drop with no live enemy falls on the one still leaving', () => {
   t.onEffects([{ k: 'drop', item: item('iron_sword', 'common', 'i2') }], NOW + 20)
   expect(of(t.active(NOW + 20), 'chest')).toMatchObject([{ actor: 'e1', itemId: 'i2' }])
   expect(t.showAt('i2')).toBe(NOW + 20 + 1400)
+})
+
+test("a lone drop with no enemy on the line leaves a chest on the front slot's ground", () => {
+  // A sandbox item sent between spawns: the band has drawn the stage, and its line is empty.
+  const t = observed(empty())
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common') }], NOW, 5000, NOW + 3000)
+  expect(of(t.active(NOW + 3000), 'chest')).toEqual([
+    {
+      kind: 'chest',
+      actor: null,
+      slot: 0,
+      itemId: 'i1',
+      rarity: 'common',
+      spriteId: 'item:iron_sword',
+      from: NOW + 3000,
+      until: NOW + 3000 + 2400,
+    },
+  ])
+  expect(t.showAt('i1')).toBe(NOW + 3000 + 1400)
+  // A timeline the band has never drawn makes none: no drop waits for a stage nobody has seen.
+  const unseen = new StageTimeline()
+  unseen.onEffects([{ k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(unseen.active(NOW), 'chest')).toEqual([])
+  expect(unseen.showAt('i1')).toBeNull()
+})
+
+test('a chest on the empty ground holds the front slot: the next enemy enters after it fades and the pause', () => {
+  const t = observed(empty())
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  const gone = NOW + 2400
+  // The wave comes in while the chest plays: nobody steps on until it has faded and paused.
+  t.observe(wave(), NOW + 500)
+  expect(t.known()).toEqual([])
+  expect(t.isBusy(gone + WAVE_GAP_MS - 1)).toBe(true)
+  t.observe(wave(), gone + WAVE_GAP_MS - 1)
+  expect(t.known()).toEqual([])
+  t.observe(wave(), gone + WAVE_GAP_MS)
+  expect(t.known().map((k) => [k.id, k.slot])).toEqual([
+    ['e1', 0],
+    ['e2', 1],
+    ['e3', 2],
+  ])
+  expect(of(t.active(gone + WAVE_GAP_MS), 'spawn').map((m) => m.from)).toEqual([
+    gone + WAVE_GAP_MS,
+    gone + WAVE_GAP_MS,
+    gone + WAVE_GAP_MS,
+  ])
 })
 
 test('a hit naming an unknown actor is dropped', () => {

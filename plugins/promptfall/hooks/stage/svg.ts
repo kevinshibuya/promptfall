@@ -13,6 +13,7 @@ import {
   chestPlace,
   effectAt,
   glowOf,
+  groundStand,
   type Pose,
   type StageActor,
   type StageModel,
@@ -510,29 +511,18 @@ export function renderSvg(
     let firstNumber = -1
     const effects: string[] = []
     for (const m of live) {
-      const at = base.get(m.actor)
-      if (!at) continue
-      if (m.kind === 'number') {
-        if (firstNumber < 0) firstNumber = body.length
-        const w = textWidth(m.text, block)
-        const x = clamp(
-          Math.round(at.x + (at.actor.poses.idle.art.width - w) / 2),
-          0,
-          Math.max(0, W - w),
-        )
-        const glyphH = GLYPH_HEIGHT * block
-        const top = clamp(at.y + px(2), 0, H - glyphH)
-        const rise = clamp(at.y + px(2) - px(NUMBER_RISE_PX), 0, H - glyphH) - top
-        const anim = `<animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/>`
-        body.push(text(m.text, x, top, m.rgb, block, anim, ' opacity="0"'))
-      } else if (m.kind === 'chest') {
+      if (m.kind === 'chest') {
         const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
         const closed = variant(CHESTS.closed, compact, scale)
         const item = variant(sprite, compact, scale)
-        const idle = at.actor.poses.idle.art
-        // Where the actor stood: on the ground, whatever its bob.
-        const stood = { x: at.x, y: H - idle.height, width: idle.width, height: idle.height }
+        // Where the actor stood, on the ground whatever its bob; with no actor, its slot's ground.
+        const at = m.actor === null ? undefined : base.get(m.actor)
+        const idle = at?.actor.poses.idle.art
+        let stood = m.actor === null ? groundStand(m.slot, closed, H, compact, scale) : null
+        if (at && idle)
+          stood = { x: at.x, y: H - idle.height, width: idle.width, height: idle.height }
+        if (stood === null) continue
         const place = chestPlace(stood, closed, item, { width: W, height: H }, scale)
         /** Visible from `from` to the chest's end, fading over its last REVEAL_FADE_MS. */
         const shown = (from: number) => {
@@ -570,6 +560,23 @@ export function renderSvg(
         body.push(
           `<use href="#${define(item, null)}" transform="translate(${place.itemX} ${place.itemY})" opacity="0">${shown(rise)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${place.risenY - place.itemY}" begin="${seconds(rise - opts.now)}" dur="${seconds(REVEAL_RISE_MS)}" fill="freeze"/></use>`,
         )
+        continue
+      }
+      const at = base.get(m.actor)
+      if (!at) continue
+      if (m.kind === 'number') {
+        if (firstNumber < 0) firstNumber = body.length
+        const w = textWidth(m.text, block)
+        const x = clamp(
+          Math.round(at.x + (at.actor.poses.idle.art.width - w) / 2),
+          0,
+          Math.max(0, W - w),
+        )
+        const glyphH = GLYPH_HEIGHT * block
+        const top = clamp(at.y + px(2), 0, H - glyphH)
+        const rise = clamp(at.y + px(2) - px(NUMBER_RISE_PX), 0, H - glyphH) - top
+        const anim = `<animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/><animateTransform attributeName="transform" type="translate" values="0 0;0 ${rise}" begin="${begin(m)}" dur="${dur(m)}"/>`
+        body.push(text(m.text, x, top, m.rgb, block, anim, ' opacity="0"'))
       } else if (m.kind === 'effect') {
         const to = base.get(m.target)
         const sprite = SPRITES[`effect:${m.effect}`]

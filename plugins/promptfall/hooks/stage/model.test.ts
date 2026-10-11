@@ -548,6 +548,62 @@ test("a chest falls from above the dead enemy's centre to its ground, sits close
   })
 })
 
+/**
+ * A sandbox sword (common) dropped at NOW onto a drawn, empty stage: its chest falls from NOW,
+ * lands at NOW + 300, opens over NOW + 600 to 1100 and its item rises until NOW + 1400.
+ */
+function groundChestAt(now: number, box: { columns: number; rows: number }, opts: Opts) {
+  const t = new StageTimeline()
+  const view: GameView = { ...wave(), enemies: [] }
+  t.observe(view, NOW)
+  const sword = {
+    id: 'i1',
+    base: 'iron_sword',
+    rarity: 'common' as const,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
+  t.onEffects([{ k: 'drop', item: sword }], NOW)
+  const m = stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts)
+  const place = (x: { x: number; y: number; alpha: number } | undefined) => x && [x.x, x.y, x.alpha]
+  return {
+    chest: m.chests[0] && { phase: m.chests[0].phase, at: place(m.chests[0]) },
+    item: place(m.drops[0]),
+    actors: m.actors.filter((a) => !a.key.startsWith('h')).length,
+  }
+}
+
+test("a chest with no actor falls onto the front slot's ground, where a kill's in that slot lands", () => {
+  const FULL = { columns: 116, rows: 17 }
+  // 1x: a kill's chest in slot 0 is at x 4 and lands at y 18 (the test above). This one falls
+  // half its own height onto the same ground, sits, opens, and its item rises to the same place.
+  const lo = (now: number) => groundChestAt(now, FULL, STILL)
+  expect(lo(NOW).chest).toEqual({ phase: 'fall', at: [4, 10, 1] })
+  expect(lo(NOW).actors).toBe(0)
+  for (const [now, phase] of [
+    [NOW + 300, 'sit'],
+    [NOW + 600, 'open'],
+    [NOW + 1250, 'rise'],
+    [NOW + 1600, 'hold'],
+  ] as const) {
+    expect(lo(now).chest).toEqual({ phase, at: [4, 18, 1] })
+  }
+  expect(lo(NOW + 1100).item).toEqual([4, 15, 1])
+  expect(lo(NOW + 1600).item).toEqual([4, 5, 1])
+  expect(lo(NOW + 2300)).toMatchObject({ chest: { phase: 'fade', at: [4, 18, 0.5] } })
+  expect(lo(NOW + 2400).chest).toBeUndefined()
+  // 1.5x: a kill's chest in slot 0 is at x 6 on the ground at 27, its item risen to 7.
+  const hi = (now: number) => groundChestAt(now, FULL, { ...STILL, scale: HIRES_SCALE })
+  expect(hi(NOW + 600).chest).toEqual({ phase: 'open', at: [6, 27, 1] })
+  expect(hi(NOW + 1600).item).toEqual([6, 7, 1])
+  // The compact stage: the 8 px chest at the left edge, as a kill's there.
+  expect(groundChestAt(NOW + 1600, BOX_COMPACT, { ...STILL, compact: true })).toMatchObject({
+    chest: { phase: 'hold', at: [0, 0, 1] },
+    item: [0, 0, 1],
+  })
+})
+
 test('the reveal shows the chest closed, opening then open, with the open art under the rising item', () => {
   const FULL = { columns: 116, rows: 17 }
   const [closed, opening, open] = (['closed', 'opening', 'open'] as const).map((id) =>
