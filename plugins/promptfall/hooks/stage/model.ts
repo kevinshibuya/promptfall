@@ -390,24 +390,18 @@ export function stageAt(
   const effects: StageEffect[] = []
   const block = glyphBlock(scale)
   for (const m of started) {
-    const actor = at.get(m.actor)
-    if (!actor) continue
-    // Numbers measure from the idle art, whatever the pose; a chest from where the actor stands.
-    const anchor = actor.poses.idle.art
-    if (m.kind === 'number') {
-      const w = textWidth(m.text, block)
-      const x = clamp(Math.round(actor.x + (anchor.width - w) / 2), 0, Math.max(0, width - w))
-      const rise = progress(m, now) * px(NUMBER_RISE_PX)
-      const y = clamp(Math.round(actor.y + px(2) - rise), 0, height - GLYPH_HEIGHT * block)
-      numbers.push({ text: m.text, x, y, rgb: m.rgb })
-    } else if (m.kind === 'chest') {
-      const stood = stands.get(m.actor)
+    if (m.kind === 'chest') {
+      // A chest from where its actor stands; one with no actor from its slot's ground.
+      const closed = variant(CHESTS.closed, opts.compact, scale)
+      const stood =
+        m.actor === null
+          ? groundStand(m.slot, closed, height, opts.compact, scale)
+          : stands.get(m.actor)
       if (!stood) continue
       const { phase, p } = chestPhaseAt(m, now)
       const sprite = chestSprite(phase, p)
       const art = variant(sprite, opts.compact, scale)
       const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact, scale)
-      const closed = variant(CHESTS.closed, opts.compact, scale)
       const place = chestPlace(stood, closed, item, { width, height }, scale)
       const alpha = phase === 'fade' ? 1 - p : 1
       // The fall eases in, as a thing dropped does.
@@ -424,6 +418,18 @@ export function stageAt(
         y: Math.round(place.itemY + (place.risenY - place.itemY) * rise),
         alpha,
       })
+      continue
+    }
+    const actor = at.get(m.actor)
+    if (!actor) continue
+    // Numbers measure from the idle art, whatever the pose.
+    const anchor = actor.poses.idle.art
+    if (m.kind === 'number') {
+      const w = textWidth(m.text, block)
+      const x = clamp(Math.round(actor.x + (anchor.width - w) / 2), 0, Math.max(0, width - w))
+      const rise = progress(m, now) * px(NUMBER_RISE_PX)
+      const y = clamp(Math.round(actor.y + px(2) - rise), 0, height - GLYPH_HEIGHT * block)
+      numbers.push({ text: m.text, x, y, rgb: m.rgb })
     } else if (m.kind === 'effect') {
       const at = grounded.get(m.actor)
       const to = grounded.get(m.target)
@@ -476,6 +482,31 @@ export function glowOf(
     r: Math.round((GLOW_RADIUS_PX[m.rarity] * item.width) / SPRITE_PX),
     rgb: RARITY_RGB[m.rarity] ?? 0,
     alpha: GLOW_ALPHA * level,
+  }
+}
+
+/**
+ * The box a chest with no actor falls into, in place of an actor's art box: the closed chest
+ * (`chest`) centred on `slot`'s place, on the ground of a frame `height` tall, where a wave enemy
+ * standing in that slot would leave it.
+ */
+export function groundStand(
+  slot: number,
+  chest: SpriteArt,
+  height: number,
+  compact: boolean,
+  scale: number,
+): Place {
+  const px = (v: number) => Math.round(v * scale)
+  const pitch = compact ? COMPACT_PITCH : px(ACTOR_PITCH)
+  const edge = compact ? 0 : px(ACTOR_EDGE)
+  // An actor fills its pitch less the gap between neighbours, and the compact stage has none.
+  const cx = edge + slot * pitch + (compact ? COMPACT_PITCH : px(SPRITE_PX)) / 2
+  return {
+    x: Math.round(cx - chest.width / 2),
+    y: height - chest.height,
+    width: chest.width,
+    height: chest.height,
   }
 }
 

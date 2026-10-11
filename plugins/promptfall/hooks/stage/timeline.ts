@@ -55,16 +55,18 @@ export type Motion =
   | { kind: 'number'; actor: string; text: string; rgb: number; from: number; until: number }
   | { kind: 'dissolve'; actor: string; from: number; until: number }
   | { kind: 'spawn'; actor: string; from: number; until: number }
-  | {
-      kind: 'chest'
-      actor: string
-      /** The dropped item's id, its rarity and its sprite's id. */
-      itemId: string
-      rarity: Rarity
-      spriteId: string
-      from: number
-      until: number
-    }
+  | ({ kind: 'chest'; actor: string } & ChestFields)
+  /** A drop with no row to fall from: its chest on the ground of the slot it holds (`slot`). */
+  | ({ kind: 'chest'; actor: null; slot: number } & ChestFields)
+
+type ChestFields = {
+  /** The dropped item's id, its rarity and its sprite's id. */
+  itemId: string
+  rarity: Rarity
+  spriteId: string
+  from: number
+  until: number
+}
 
 export type ChestMotion = Extract<Motion, { kind: 'chest' }>
 /** A chest's phases, in order: each a fixed span from its start, the hold's by rarity. */
@@ -213,7 +215,10 @@ export class StageTimeline {
   private observed = false
   /** When the last action on the timeline ends: a later one never starts before it. */
   private actionEnd = Number.NEGATIVE_INFINITY
-  /** No newcomer steps on stage before any of these: each kill's fade and chest, then a pause. */
+  /**
+   * No newcomer steps on stage before any of these: each kill's fade and chest, then a pause; a
+   * chest on the empty ground, keyed `ground:<item id>`, its end and then a pause.
+   */
   private gaps = new Map<string, number>()
   /** Each enemy's place in the line, left to right in slot order, and the slide that took it there. */
   private places = new Map<string, { from: number; to: number; start: number; until: number }>()
@@ -332,7 +337,7 @@ export class StageTimeline {
   private settleAt(now: number): number {
     let at = Math.max(now, this.actionEnd)
     for (const m of this.motions) {
-      if (!this.departed.has(m.actor)) continue
+      if (m.actor === null || !this.departed.has(m.actor)) continue
       if (m.kind === 'dissolve' || m.kind === 'chest') at = Math.max(at, m.until)
     }
     return at
@@ -462,13 +467,17 @@ export class StageTimeline {
   }
 
   /**
-   * The lowest slot no entry holds; when all three are held, the slot of the departed entry that
+   * The lowest slot no entry and no chest on the empty ground holds; when all three are held, the slot of the departed entry that
    * ends first among those whose hit has played out (flash, numbers and chest over). Null when every
    * departed holder still has a hit to show: an action can land after the next tick has already
    * brought a newcomer, and evicting would drop that hit, so the newcomer waits a frame or more.
    */
   private freeSlot(now: number): number | null {
     const held = new Set([...this.entries.values()].map((k) => k.slot))
+    // A chest on the empty ground holds its slot until it fades.
+    for (const m of this.motions) {
+      if (m.kind === 'chest' && m.actor === null && m.until > now) held.add(m.slot)
+    }
     for (let slot = 0; slot < SLOTS; slot++) if (!held.has(slot)) return slot
     let evict: Known | null = null
     let evictEnd = Number.POSITIVE_INFINITY
@@ -662,18 +671,25 @@ export class StageTimeline {
           shown = true
         } else if (effect.k === 'drop' || effect.k === 'drop_vendored') {
           const actor = last?.target ?? this.front() ?? this.lastOut()
-          if (actor === null || !this.entries.has(actor)) continue
-          // The chest lands as its target's fade ends; a lone drop's falls when it arrived.
-          const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : arrivedAt
-          this.motions.push({
+          const chest = {
             kind: 'chest',
-            actor,
             itemId: effect.item.id,
             rarity: effect.item.rarity,
             spriteId: spriteFor('item', effect.item.base).id,
-            from,
-            until: from + chestMs(effect.item.rarity),
-          })
+          } as const
+          if (actor === null) {
+            // No row to fall from: on a stage the band has drawn, the chest falls when it arrived
+            // onto the front slot's ground and holds the slot, a pause after it, as a kill's does.
+            if (!this.observed) continue
+            const until = arrivedAt + chestMs(effect.item.rarity)
+            this.motions.push({ ...chest, actor: null, slot: 0, from: arrivedAt, until })
+            this.gaps.set(`ground:${effect.item.id}`, until + WAVE_GAP_MS)
+            continue
+          }
+          if (!this.entries.has(actor)) continue
+          // The chest lands as its target's fade ends; a lone drop's falls when it arrived.
+          const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : arrivedAt
+          this.motions.push({ ...chest, actor, from, until: from + chestMs(effect.item.rarity) })
         }
       }
       if (shown) this.actionEnd = start + ACTION_MS

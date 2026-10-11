@@ -359,7 +359,9 @@ live or when none is. The sandbox keeps the world boss's own schedule, so one ca
 itself. `item <base> [rarity]`: the front hero
 strikes the front monster down and the item, common unless a rarity is given, is that kill's drop,
 with the kill's XP and gold, and a zone boss's kill clears its zone. With no monster on the field,
-between spawns or against a world boss, the item drops alone. With the inventory full it is
+between spawns or against a world boss, the item drops alone: against a world boss its chest
+falls on the boss, and between spawns a chest on the empty ground still plays on the front slot,
+the next monster stepping on after it. With the inventory full it is
 vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
 refuses with a full roster. `wipe` makes the party fall now. `boss`, `zone` and `wipe` refuse while
