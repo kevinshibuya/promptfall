@@ -124,8 +124,9 @@ export function accountPane(input: PaneInput): PaneBuild {
   if (!view.account.linked && !view.account.sandbox && !dialog.link && !input.readOnly)
     rows.push(setting(inner, 'link', [{ text: 'Link GitHub' }], '', { t: 'link' }))
   rows.push(setting(inner, 'reset', [{ text: RESET }], '', RESET_ACTION))
-  // The server's delete needs the lease; the sandbox save holds no account on a server.
-  const deleting = !view.account.sandbox && !input.readOnly
+  // The server's delete needs the lease; the sandbox save holds no account on a server. A ban
+  // pauses play, but lets the delete through.
+  const deleting = !view.account.sandbox && (!input.readOnly || input.banned === true)
   if (deleting) rows.push(setting(inner, 'delete', [{ text: DELETE }], '', DELETE_ACTION))
 
   const ids = rows.flatMap((r) => (r.key ? [r.key.slice(4)] : []))
@@ -161,13 +162,19 @@ export function accountPane(input: PaneInput): PaneBuild {
 
 export type NoViewInput = FrameInput & { server: string; hasGame: boolean; hasInput: boolean }
 
-/** The pane before a game view exists: one line, and on Account the server, the client and Reset. */
+/**
+ * The pane before a game view exists: one line, and on Account the server, the client and Reset,
+ * and Delete when a ban refused the start.
+ */
 export function noViewPane(input: NoViewInput): PaneBuild {
   const label = TAB_LABELS.find((t) => t.tab === input.tab)?.label ?? input.tab
   const resetting = input.tab === 'account' && input.hasGame
+  const deleting = resetting && input.banned === true
   const rows: ListRow[] = resetting
     ? [{ key: 'row:reset', spans: [{ text: RESET }], action: RESET_ACTION, alt: RESET }]
     : [{ spans: [{ text: NOT_STARTED }], alt: NOT_STARTED }]
+  if (deleting)
+    rows.push({ key: 'row:delete', spans: [{ text: DELETE }], action: DELETE_ACTION, alt: DELETE })
   const spec: ListSpec = {
     title: [{ text: label }],
     altTitle: label,
@@ -189,6 +196,10 @@ export function noViewPane(input: NoViewInput): PaneBuild {
   if (resetting && menu?.kind === 'confirm' && menu.action === 'reset') {
     spec.yesNo = { at: menu.at, yes: { t: 'reset' } }
     spec.state = [RESET_QUESTION, '']
+  }
+  if (deleting && menu?.kind === 'confirm' && menu.action === 'delete') {
+    spec.yesNo = { at: menu.at, yes: { t: 'delete' } }
+    spec.state = [DELETE_QUESTION, DELETE_DETAIL]
   }
   return listPane(input, spec)
 }

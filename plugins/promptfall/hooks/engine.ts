@@ -98,6 +98,8 @@ export type GameHandle = {
   canApply: () => boolean
   /** This session holds the lease and its engine has paused: its refusals say paused. */
   isPaused: () => boolean
+  /** This session's engine paused for a ban: the delete is the one verb it still lets through. */
+  isBanned: () => boolean
   setOff: (off: boolean) => Promise<void>
   /** The player is using this session: take the lease if another session holds it. */
   claim: () => Promise<void>
@@ -217,6 +219,8 @@ export class GameEngine {
   private refusedGen = 0
   /** No bootstrap has succeeded since the account's delete: a refusal's pause names it. */
   private afterDelete: boolean
+  /** The token a ban paused this engine on: the delete, the one call a ban lets through, uses it. */
+  private bannedToken: string | null = null
 
   constructor(private readonly deps: EngineDeps) {
     this.afterDelete = deps.deleted ?? false
@@ -282,7 +286,10 @@ export class GameEngine {
         return
       }
       this.setPaused(this.afterDelete ? deletedRefusal(boot.message) : boot.message)
-      if (boot.refusal === 'banned') return
+      if (boot.refusal === 'banned') {
+        this.bannedToken = token
+        return
+      }
       const gen = ++this.refusedGen
       this.deps.after(REFUSED_RETRY_MS, () => {
         if (gen !== this.refusedGen || this.stopped) return
@@ -483,7 +490,7 @@ export class GameEngine {
         this.setPaused(MISMATCH_NOTICE)
         return
       case 'banned':
-        this.setPaused(ack.message)
+        this.pauseBanned(ack.message)
         return
     }
   }
@@ -602,7 +609,8 @@ export class GameEngine {
         throw new Error('unreachable')
       }
       if ('reason' in info) {
-        this.setPaused(info.reason === 'banned' ? info.message : MISMATCH_NOTICE)
+        if (info.reason === 'banned') this.pauseBanned(info.message)
+        else this.setPaused(MISMATCH_NOTICE)
         return
       }
       this.returns = info.returns
@@ -615,9 +623,27 @@ export class GameEngine {
 
   /** A call to the server under the lock, no flush first: the link flow and the market reads. */
   call<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<Exclude<T, Banned>> {
+    return this.callWith(() => this.token, fn)
+  }
+
+  /**
+   * The account's delete under the lock: the one call a ban lets through, so it reaches the server
+   * with the stored token although a refused bootstrap never started this engine.
+   */
+  deleteAccount(): Promise<Exclude<Awaited<ReturnType<ServerClient['deleteAccount']>>, Banned>> {
+    return this.callWith(
+      () => this.token ?? this.bannedToken,
+      (client, auth) => client.deleteAccount(auth),
+    )
+  }
+
+  private callWith<T>(
+    tokenOf: () => string | null,
+    fn: (client: ServerClient, auth: Auth) => Promise<T>,
+  ): Promise<Exclude<T, Banned>> {
     return this.lock(async () => {
       if (this.outage) throw new Error('unreachable')
-      const token = this.token
+      const token = tokenOf()
       if (!token) throw new Error('not_started')
       let r: T
       try {
@@ -636,7 +662,7 @@ export class GameEngine {
   unbanned<T>(answer: T): Exclude<T, Banned> {
     const a = answer as { reason?: unknown; message?: unknown }
     if (a.reason === 'banned' && typeof a.message === 'string') {
-      this.setPaused(a.message)
+      this.pauseBanned(a.message)
       throw new Error(a.message)
     }
     return answer as Exclude<T, Banned>
@@ -772,6 +798,17 @@ export class GameEngine {
 
   isPaused(): boolean {
     return this.paused !== null
+  }
+
+  /** Paused by a ban: the delete is the one call it still lets through. */
+  isBanned(): boolean {
+    return this.paused !== null && this.bannedToken !== null
+  }
+
+  /** A ban on the running account pauses play for good with its message. */
+  private pauseBanned(message: string): void {
+    this.bannedToken = this.token
+    this.setPaused(message)
   }
 
   setPaused(reason: string | null): void {

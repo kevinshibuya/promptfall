@@ -598,6 +598,89 @@ test('a delete whose re-bootstrap is refused shows the refusal and says the dele
   await ui.unmount()
 })
 
+test('a banned player deletes from the Account tab and a fresh account starts', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  const net = remote(on)
+  const boot = await net.ledger.bootstrap({ clientVersion: CLIENT_VERSION, deviceToken: null })
+  const token = boot.deviceToken
+  await net.ledger.host.ban(boot.account.accountId, 'spam in chat')
+  const { data } = store(on, { 'promptfall:server': URL_A, [`promptfall:token:${URL_A}`]: token })
+  const last = states(on)
+  engineBottom(on)
+  // The bootstrap is refused: the engine never starts, and the ban's reason shows.
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('paused')
+  expect(last.get('notice')).toBe('Promptfall: this account is banned: spam in chat')
+  expect(last.get('view') ?? null).toBeNull()
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+
+  // The other tabs are refused as before; Account shows Delete under Reset.
+  await ui.press({ key: 'tab-market' })
+  expect(await paneText(ui)).toContain('Promptfall has not started in this session.')
+  await ui.press({ key: 'tab-account' })
+  expect(await ui.find({ key: 'row:reset' })).toBeTruthy()
+  expect(await ui.find({ key: 'row:delete' })).toBeTruthy()
+
+  // Unconfirmed: nothing on this machine is reset.
+  await ui.press({ key: 'row:delete' })
+  net.down = true
+  await ui.press({ key: 'yes' })
+  expect(await paneText(ui)).toContain(`Refused: ${NOT_DELETED}`)
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+  expect(last.get('notice')).toBe('Promptfall: this account is banned: spam in chat')
+  net.down = false
+
+  await ui.press({ key: 'row:delete' })
+  await ui.press({ key: 'yes' })
+  const deletes = net.requests.filter((r) => r.method === 'DELETE' && r.path === '/v1/account')
+  expect(deletes.map((r) => r.origin)).toEqual([URL_A])
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  const fresh = data.get(`promptfall:token:${URL_A}`)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe(token)
+  expect(await net.ledger.knowsToken(fresh as string)).toBe(true)
+  expect(last.get('mode')).toBe('primary')
+  expect((last.get('view') as GameView).account.server).toBe(URL_A)
+  expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
+})
+
+test('a player banned mid-session deletes from the read-only Account tab', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on, { 'promptfall:server': URL_A })
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const net = remote(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const token = data.get(`promptfall:token:${URL_A}`) as string
+  const info = await net.ledger.account({ deviceToken: token })
+  if (!('account' in info)) throw new Error(info.reason)
+  await net.ledger.host.ban(info.account.accountId, 'spam in chat')
+  await $.turn.start({ text: 'go', turnId: 't1' })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  await time.advance(16_000)
+  expect(last.get('mode')).toBe('paused')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  expect(await ui.find({ key: 'row:link' })).toBeFalsy()
+  await ui.press({ key: 'row:delete' })
+  net.down = true
+  await ui.press({ key: 'yes' })
+  expect(await paneText(ui)).toContain(`Refused: ${NOT_DELETED}`)
+  expect(data.get(`promptfall:token:${URL_A}`)).toBe(token)
+  net.down = false
+  await ui.press({ key: 'row:delete' })
+  await ui.press({ key: 'yes' })
+  expect(await net.ledger.knowsToken(token)).toBe(false)
+  const fresh = data.get(`promptfall:token:${URL_A}`)
+  expect(typeof fresh).toBe('string')
+  expect(fresh).not.toBe(token)
+  expect(last.get('mode')).toBe('primary')
+  expect(last.get('notice')).toBe(DELETED_NOTICE)
+  await ui.unmount()
+})
+
 test('/promptfall server local during an outage drops the unsent events and says how many', async ($, on) => {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)

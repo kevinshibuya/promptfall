@@ -190,9 +190,11 @@ no token, so it counts against the mint cap: when the server refuses it, play pa
 window says the delete happened and why nothing plays, in one line,
 `Promptfall: your account was deleted.` followed by the server's message, which stays through the
 pause's later retries. When the server does not confirm, nothing on the machine changes and the
-pane says the account was not deleted. The row is not on the sandbox save, nor in a session that is
-not playing. The server lets a banned account delete itself, though a banned session does not offer
-the row yet. The in-process server deletes the same way.
+pane says the account was not deleted; in a banned session that line shows under the ban's. The
+row is not on the sandbox save, nor in a session that is not playing, except one a ban paused, as
+a banned account may delete itself: its Account tab shows the row, under Reset when the ban
+refused the session's start, and the delete reaches the server with the stored token, the one call
+of that session that does. The in-process server deletes the same way.
 
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in

@@ -178,6 +178,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       dialog,
       mode,
       readOnly,
+      banned: running?.isBanned() ?? false,
       notice,
       columns: Math.min(PANE_MAX_COLUMNS, e.props.bodyColumns),
       rows,
