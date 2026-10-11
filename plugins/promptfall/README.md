@@ -363,6 +363,12 @@ claude plugin test plugins/promptfall
 pnpm typecheck:plugin
 ```
 
+A change to a rendered surface also runs the desktop smoke. `pnpm smoke:desktop` loads each stage
+golden scenario's desktop Svg, SMIL on, in headless Chromium and fails on the first one whose root
+does not render, that logs a console or page error, or that reaches the Svg cap. It first checks
+that broken documents fail. It needs Playwright's Chromium once: `pnpm exec playwright install
+chromium`. CI runs it after the tests.
+
 `tsc -p plugins/promptfall` needs the engine's declarations, which an interactive
 `claude --plugin-dir plugins/promptfall` lays under `.claude-plugin/types/` on first load. They
 are generated per Claude Code version and stay uncommitted. In a worktree that has none,
