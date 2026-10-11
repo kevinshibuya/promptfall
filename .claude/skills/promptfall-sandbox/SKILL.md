@@ -16,7 +16,7 @@ The sandbox is a separate save on the in-process fake where `/promptfall sandbox
 
 ## The verbs
 
-`/promptfall sandbox` alone lists them. Every verb but `reset` claims the primary first. A grant syncs before and after the host call, so by the time the reply returns the view, the log and the toasts already have it. A drop's log line, Loot row, toast and cue are held lines: with a band drawn they land at the chest's reveal, after the reply.
+`/promptfall sandbox` alone lists them. Every verb but `reset` claims the primary first. A grant syncs before and after the host call, so by the time the reply returns the view, the log and the toasts already have it. A drop's log line, Loot row, toast and cue are held lines: with a band drawn they land at the chest's reveal, after the reply. A zone boss struck down by `item` holds its zone line and arrival toast too: they land when the backdrop changes, after the drop's.
 
 | Verb | Arguments | What lands | Reply |
 | --- | --- | --- | --- |

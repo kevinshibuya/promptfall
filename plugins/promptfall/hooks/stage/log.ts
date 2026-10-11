@@ -1,9 +1,10 @@
 // The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
 // queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
-// drop's line waits for its reveal: held aside until its item has risen, then takes its place in
-// the queue at that time. The log is also the holder for held toasts: a toast with a wait is kept
-// here until its show time and handed out once, by `release`.
+// drop's line waits for its reveal, and a zone arrival's for the backdrop change: held aside until
+// its show time, then takes its place in the queue at that time. The log is also the holder for
+// held toasts: a toast with a wait is kept here until its show time and handed out once, by
+// `release`.
 import type { GameView, Settings } from '../../types'
 import { heroNameById, type Toast, type ToastWait } from '../toasts'
 import { content, type Effect, type Rarity } from '../vendor/sim.js'
@@ -33,7 +34,7 @@ type Said = { text: string; key: boolean; rgb?: number }
  */
 type Waiting = { wait: ToastWait; showAt: number }
 
-/** A drop or vendored line waiting for its item's reveal. */
+/** A drop or vendored line waiting for its item's reveal, or an arrival's for its zone's. */
 type Held = Waiting & { line: Said; cadenceMs: number }
 
 /** A toast waiting for its show time, raised when `release` hands it out. */
@@ -135,8 +136,9 @@ export class MessageLog {
       for (const e of g.effects) {
         const line = this.consequence(e, view, name)
         if (!line) continue
-        // A drop's line waits for its chest's reveal; one with no chest prints with its action.
-        const wait = e.k === 'drop' || e.k === 'drop_vendored' ? { item: e.item.id } : null
+        // A drop's line waits for its chest's reveal, an arrival's for the backdrop change; one
+        // the timeline has no show time for prints with its action.
+        const wait = this.waitOf(e)
         const showAt = wait === null ? null : this.showOf(wait)
         if (wait === null || showAt === null) out.push(line)
         else this.held.push({ line, wait, showAt, cadenceMs })
@@ -244,9 +246,17 @@ export class MessageLog {
     return at
   }
 
+  /** What `e`'s line waits for: a drop's item, an advance's zone cleared; a farming clear none. */
+  private waitOf(e: Effect): ToastWait | null {
+    if (e.k === 'drop' || e.k === 'drop_vendored') return { item: e.item.id }
+    return e.k === 'zone_cleared' && e.advancedTo > e.zone ? { zone: e.zone } : null
+  }
+
   /** The show time the timeline answers for `wait`; null when it has none. */
   private showOf(wait: ToastWait): number | null {
-    return 'item' in wait ? (this.timeline?.showAt(wait.item) ?? null) : null
+    const t = this.timeline
+    if (t === null) return null
+    return 'item' in wait ? t.showAt(wait.item) : t.zoneShowAt(wait.zone)
   }
 
   /** Each entry's show time read afresh; one the timeline no longer answers keeps its last. */
@@ -343,7 +353,7 @@ export class MessageLog {
     return { ...line, revealed: Math.floor((now - line.at) / line.charMs) }
   }
 
-  /** A line is waiting, a line or a toast is held for its reveal, or a line is still typing. */
+  /** A line is waiting, a line or a toast is held for its show time, or a line is still typing. */
   isBusy(now: number, motion: Settings['motion']): boolean {
     const lines = this.linesAt(now)
     if (this.held.some((h) => h.showAt > now)) return true

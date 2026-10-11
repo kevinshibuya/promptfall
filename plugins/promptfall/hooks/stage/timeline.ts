@@ -744,6 +744,27 @@ export class StageTimeline {
     return chest ? chest.from + CHEST_SHOW_MS : null
   }
 
+  /**
+   * The show time of the arrival past `zone`: the moment the row of the zone boss seen in it
+   * leaves, as the staged state's zone flips. Departed, that is the end of its dissolve and any
+   * chest. Still live (the kill's effects are in and no draw has departed it), it is predicted from
+   * the kill: the end of the blow shown on it plus the dissolve, or its chest's end, whichever is
+   * later. Null with no such row on the timeline.
+   */
+  zoneShowAt(zone: number): number | null {
+    const id = [...this.entries.values()].find(
+      (k) => k.kind === 'zone_boss' && this.seen.get(k.id)?.zone === zone,
+    )?.id
+    if (id === undefined) return null
+    const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
+    let end = dissolve
+      ? dissolve.until
+      : this.lastShownEnd(id, Number.NEGATIVE_INFINITY) + DISSOLVE_MS
+    for (const m of this.motions)
+      if (m.actor === id && m.kind === 'chest') end = Math.max(end, m.until)
+    return Number.isFinite(end) ? end : null
+  }
+
   /** How many chests have a show time still to come after `now`. */
   pendingReveals(now: number): number {
     return this.motions.filter((m) => m.kind === 'chest' && m.from + CHEST_SHOW_MS > now).length

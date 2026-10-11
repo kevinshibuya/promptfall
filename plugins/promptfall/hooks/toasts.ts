@@ -189,6 +189,9 @@ const TABLE = {
       const name = content.zones[effect.advancedTo - 1]?.name
       return `The party reached zone ${effect.advancedTo}${name ? `, ${name}` : ''}`
     },
+    // An arrival lands when the backdrop changes: the cleared zone's boss row has left.
+    wait: ({ effect }: EffectInput) =>
+      effect.k === 'zone_cleared' ? { zone: effect.zone } : undefined,
   },
   rare_drop: {
     purpose: 'rare good news',
@@ -294,8 +297,9 @@ export function heroNameById(view: GameView | null, heroId: string): string | nu
 /**
  * The toasts a burst raises, in the table's order. Effects group by row: a row that folds
  * gives one toast per group (a group of one in its single form), a row that never folds one
- * toast per effect. A drop's or a vendoring's toast carries its item's wait, which the caller
- * holds to its show time; this stays a function of the effects alone, with no clock.
+ * toast per effect. A drop's or a vendoring's toast carries its item's wait and a zone arrival
+ * its zone's, which the caller holds to its show time; this stays a function of the effects
+ * alone, with no clock.
  */
 export function toastsFor(effects: Effect[], view: GameView | null, names: ToastNames): Toast[] {
   const byRow = new Map<EffectRow, EffectInput[]>()

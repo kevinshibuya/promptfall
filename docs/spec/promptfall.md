@@ -619,7 +619,16 @@ flags. No second server program, no Postgres, no Redis, no worker.
   moment the stage plays it, not before; an event the stage never plays, or
   plays while no band is drawn, has no show time and its words land with the
   state (GLOSSARY). A drop's show time is its reveal, the item fully risen:
-  the drop's log line, its Loot row, its toast and its cue all land then.
+  the drop's log line, its Loot row, its toast and its cue all land then. A
+  zone arrival's show time is the backdrop change, when the zone boss's row
+  has left (its dissolve and any chest over, the moment the staged state's zone
+  flips): the arrival's log line and its toast land then. The timeline answers
+  it as the kill's effects arrive, before any draw has departed the boss, as a
+  prediction (the end of the blow shown on the boss plus the dissolve, or its
+  chest's end, whichever is later), and refines it as the draws schedule and
+  re-time those motions. The boss's drop reveals before its row leaves, so its
+  words land first and the zone's after. The farming line ("Zone N cleared.")
+  is not held.
   While a stage is drawn the log holds the held toasts and drains them on the
   stage loop's clock: on a frame loop at the first frame at or after the show
   time, on the desktop's SMIL site at a wake armed for it, and on every
@@ -639,8 +648,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
   as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or
-  sales. A drop's line is held until its reveal's show time, then queues as if
-  it had just arrived, so it never delays the lines after it. The desktop
+  sales. A drop's line is held until its reveal's show time, and a zone
+  arrival's until the backdrop change; each then queues as if it had just
+  arrived, so it never delays the lines after it. The desktop
   redraws once a tick with the tick's motion as SMIL, the action gauges and
   the HP bars both keyed from the tick's landings, so a bar drops at its hit's
   impact without a redraw. A monster that enters mid-tick plays its first
@@ -757,7 +767,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | wipe | wants a decision | long | `The party fell, retreating to zone 2` | never folds | none |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
-| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills` | never folds | none |
+| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills`, at the backdrop change | never folds | none |
 | rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
 | vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
 | level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
@@ -773,11 +783,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   toasts the world boss appeared row's text and tier with no cue: the boss is
   news, not a fight starting.
 
-  The toasts read the state, not the staged state, except the drop and
-  vendored rows, which are held lines: each lands at its reveal's show time,
-  with its log line and its Loot row, and its cue plays then. A drop whose item
-  has no chest on the stage, or that arrives while no stage is drawn, toasts
-  with its burst. The wipe toast may lead the last hero's fall on the stage by
+  The toasts read the state, not the staged state, except the drop, vendored
+  and zone arrival rows, which are held lines. A drop or vendored toast lands
+  at its reveal's show time, with its log line and its Loot row, and its cue
+  plays then; a zone arrival lands at the backdrop change, when the zone boss's
+  row has left, with its log line, after the boss's drop. A drop whose item has
+  no chest on the stage, a zone arrival with no zone boss row on the stage, or
+  either while no stage is drawn, toasts with its burst. The wipe toast may lead the last hero's fall on the stage by
   at most one cadence: the tick that wipes the party toasts as it lands, while
   the stage plays that tick's blows over the cadence that follows.
 
@@ -824,7 +836,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   Folding. Within a burst, effects are grouped by row. A row that folds yields
   one toast carrying the count and, where the row has one, the sum; a row that
   never folds yields one toast per effect. A toast with a show time never
-  folds: each lands at its own reveal. A folded name list shows up to three
+  folds: each lands at its own show time. A folded name list shows up to three
   names, then "and N more". A folded level-up joins its heroes with "and" only
   when every hero reached the same level; otherwise it has one clause per hero,
   in effect order.
