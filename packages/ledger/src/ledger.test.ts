@@ -222,6 +222,103 @@ describe('Ledger bans', () => {
     expect(await ledger.knowsToken(m.deviceToken)).toBe(true)
   })
 
+  /** A fresh account's link through to the approver's answer: the poll and the account after it. */
+  async function freshLink(ledger: Ledger) {
+    const boot = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    const auth = { deviceToken: boot.deviceToken }
+    const start = await ledger.linkStart(auth)
+    if (!('code' in start)) throw new Error('expected a link start')
+    const polled = await ledger.linkPoll(auth, start.code)
+    return { polled, after: await ledger.account(auth) }
+  }
+
+  it('a ban records the linked login and link approval refuses it', async () => {
+    const approved = { login: 'GRIM' }
+    const { ledger, kv } = makeLedger({
+      linkApprover: {
+        ...approveAs(null),
+        poll: async () => ({ status: 'approved', login: approved.login }),
+      },
+    })
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    await ledger.host.ban(m.accountId, 'cheating')
+    expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toEqual({
+      reason: 'cheating',
+      at: 1_700_000_000_000,
+      accountIds: [m.accountId],
+    })
+
+    // Any case of the login: the link ends denied with the ban's message, nothing more.
+    for (const login of ['GRIM', 'grim', 'gRiM']) {
+      approved.login = login
+      const { polled, after } = await freshLink(ledger)
+      expect(polled).toEqual({
+        status: 'ended',
+        reason: 'denied',
+        message: 'Promptfall: this GitHub account is banned: cheating',
+      })
+      expect(after).toMatchObject({ account: { linked: null, displayName: null } })
+    }
+
+    // A login never banned links as today.
+    approved.login = 'octocat'
+    const { polled } = await freshLink(ledger)
+    expect(polled).toMatchObject({
+      status: 'linked',
+      account: { linked: { provider: 'github', login: 'octocat' } },
+    })
+  })
+
+  it('unban lifts a login ban with the account gone, and the ban of the account still there', async () => {
+    for (const order of [
+      [0, 1],
+      [1, 0],
+    ]) {
+      const { ledger, kv } = makeLedger({ linkApprover: approveAs('grim') })
+      expect(await ledger.host.unban('grim')).toBeNull()
+      // Linking never made a login unique: two accounts carry it.
+      const pair = [
+        await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true }),
+        await ledger.host.mint({ state: createInitialState(6), name: 'grim', linked: true }),
+      ]
+      const [gone, kept] = order.map((i) => pair[i])
+      if (!gone || !kept) throw new Error('two accounts')
+      await ledger.host.ban(gone.accountId, 'cheating')
+      await ledger.host.ban(kept.accountId, 'alt account')
+      expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toEqual({
+        reason: 'cheating',
+        at: 1_700_000_000_000,
+        accountIds: [gone.accountId, kept.accountId],
+      })
+      expect(await ledger.deleteAccount({ deviceToken: gone.deviceToken })).toEqual({
+        deleted: true,
+      })
+
+      expect(await ledger.host.unban('GriM')).toEqual({
+        login: 'grim',
+        lifted: [kept.accountId],
+      })
+
+      expect(await (kv as MemoryKeyValue).get('pf:ban:grim')).toBeUndefined()
+      expect(await ledger.account({ deviceToken: kept.deviceToken })).toMatchObject({
+        account: { accountId: kept.accountId },
+      })
+      expect((await record(kv as MemoryKeyValue, kept.accountId)).banned).toBeUndefined()
+      expect((await freshLink(ledger)).polled).toMatchObject({ status: 'linked' })
+      expect(await ledger.host.unban('grim')).toBeNull()
+    }
+  })
+
+  it('a ban on an account that never linked records no login', async () => {
+    const { ledger, kv } = makeLedger()
+    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: false })
+    await ledger.host.ban(m.accountId, 'cheating')
+    expect((kv as MemoryKeyValue).keys().filter((k) => k.startsWith('pf:ban:'))).toEqual([])
+    expect(await ledger.account({ deviceToken: m.deviceToken })).toMatchObject({
+      reason: 'banned',
+    })
+  })
+
   it('a ban names an account the ledger holds; another account plays on', async () => {
     const { ledger } = makeLedger()
     expect(await ledger.host.ban('nobody', 'x')).toBeNull()
@@ -314,15 +411,38 @@ describe('Ledger account delete', () => {
     expect(await record(store, other.accountId)).toEqual(before)
   })
 
-  it('a banned account cannot delete itself', async () => {
+  it('a banned account may delete itself and leave', async () => {
     const { ledger, kv } = makeLedger()
-    const m = await ledger.host.mint({ state: createInitialState(5), name: 'Grim', linked: true })
+    const store = kv as MemoryKeyValue
+    const m = await ledger.host.mint({
+      state: { ...createInitialState(5), gold: 1000, inventory: [rareItem('b-1')] },
+      name: 'Grim',
+      linked: true,
+    })
+    const auth = { deviceToken: m.deviceToken }
+    expect((await ledger.list(auth, { kind: 'item', id: 'b-1', price: 100 })).ok).toBe(true)
     await ledger.host.ban(m.accountId, 'cheating')
-    expect(await ledger.deleteAccount({ deviceToken: m.deviceToken })).toEqual({
+    expect(await ledger.account(auth)).toEqual({
       reason: 'banned',
       message: 'Promptfall: this account is banned: cheating',
     })
-    expect(await record(kv as MemoryKeyValue, m.accountId)).toBeTruthy()
+
+    expect(await ledger.deleteAccount(auth)).toEqual({ deleted: true })
+
+    expect(await ledger.account(auth)).toEqual({ reason: 'unauthorized' })
+    expect(await ledger.knowsToken(m.deviceToken)).toBe(false)
+    expect(await store.get(`pf:acct:${m.accountId}:record`)).toBeUndefined()
+    expect(await store.get(`pf:token:${m.deviceToken}`)).toBeUndefined()
+    const other = await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })
+    expect(
+      await ledger.browse(
+        { deviceToken: other.deviceToken },
+        { kind: 'item', sort: 'price', page: 0 },
+      ),
+    ).toMatchObject({ total: 0 })
+    expect(await ledger.leaderboards({ deviceToken: other.deviceToken })).toMatchObject({
+      highestZone: [],
+    })
   })
 })
 
