@@ -5,7 +5,7 @@ import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from
 import { SANDBOX_PINS_SERVER } from './sandbox'
 import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
-import { StageTimeline } from './stage/timeline'
+import { CHEST_SHOW_MS, StageTimeline } from './stage/timeline'
 import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
@@ -1566,12 +1566,12 @@ test('a legendary drop toasts for 8 s and plays the legendary cue once', async (
 const STAGED = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'raster' } }
 
 /** `sounding` with the band's blits taken and every toast and cue stamped with its time. */
-function staging(on: On, seed: Record<string, unknown>) {
+function staging(on: On, seed: Record<string, unknown>, env: Record<string, string> = {}) {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, seed)
   const last = states(on)
   const raised: (Raised & { at: number })[] = []
-  engineBottom(on, [], {}, (toast) => raised.push({ ...toast, at: time.now() }))
+  engineBottom(on, [], env, (toast) => raised.push({ ...toast, at: time.now() }))
   const plays: { asset: string; at: number }[] = []
   on('audio.play', (_$, e) => {
     plays.push({ asset: e.clip.asset ?? '', at: time.now() })
@@ -1760,6 +1760,143 @@ test('a drop toast on the desktop lands at its reveal with no frame loop', async
   expect(raised).toHaveLength(1)
   // SMIL plays the motion: the loop drew and blitted nothing.
   expect(blits).toEqual([])
+  await ui.unmount()
+})
+
+/**
+ * A state whose next tick kills zone 1's boss at 1 HP and advances the party to zone 2, the boss
+ * dropping an item a toast names.
+ */
+function bossDropping(): GameState {
+  for (let seed = 1; seed < 20_000; seed++) {
+    const s0 = createInitialState(seed)
+    const s: GameState = {
+      ...s0,
+      wave: 11,
+      encounter: {
+        enemies: [{ id: 'e-boss', def: 'bandit_captain', kind: 'zone_boss', hp: 1, maxHp: 630 }],
+        queue: [],
+        waveSize: 0,
+        spawnedInWave: 0,
+      },
+      battle: { gauges: s0.party.map((id) => ({ id, g: GAUGE_FULL })), queue: [], busy: 0 },
+    }
+    const effects = step(s, { t: 'tick' }).effects
+    const drop = effects.find((e) => e.k === 'drop')
+    if (
+      drop?.k === 'drop' &&
+      ['rare', 'epic', 'legendary'].includes(drop.item.rarity) &&
+      effects.some((e) => e.k === 'zone_cleared' && e.advancedTo === 2)
+    ) {
+      return s
+    }
+  }
+  throw new Error('no zone boss kill with a drop a toast names')
+}
+
+/**
+ * The boss's drop reveal and the zone arrival's show time for the next tick of `state`, from a
+ * timeline driven the way the registration drives the session's.
+ */
+function backdropOf(state: GameState, drawnAt: number, tickAt: number) {
+  const timeline = new StageTimeline()
+  timeline.observe(viewOf(state), drawnAt)
+  const { state: next, effects } = step(state, { t: 'tick' })
+  timeline.admit(viewOf(next), tickAt)
+  timeline.onEffects(effects, tickAt, 5_000, tickAt)
+  const drop = effects.find((e) => e.k === 'drop')
+  const reveal = drop?.k === 'drop' ? timeline.showAt(drop.item.id) : null
+  const backdrop = timeline.zoneShowAt(state.zone)
+  if (reveal === null || backdrop === null) throw new Error('the kill has no reveal or no backdrop')
+  return { reveal, backdrop }
+}
+
+const ARRIVAL = 'The party reached zone 2, Whisperwood'
+const isDropToast = (t: Raised) => /^(Rare|Epic|Legendary) drop: /.test(t.text)
+
+test("the zone arrival toast lands when the backdrop changes, after the boss's drop toast", async ($, on) => {
+  const state = bossDropping()
+  const { time, raised, plays, blits } = staging(on, { ...record(state), ...STAGED })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  const { reveal, backdrop } = backdropOf(state, time.now(), time.now() + 5_000)
+  await time.advance(5_000)
+  const kill = time.now()
+  const arrivals = () => raised.filter((t) => t.text === ARRIVAL)
+  // At the kill the stage still shows zone 1: no arrival, no drop.
+  expect(arrivals()).toEqual([])
+  expect(raised.filter(isDropToast)).toEqual([])
+  expect(reveal).toBeLessThan(backdrop)
+  await time.advance(backdrop - time.now() + 3 * EVENT_FRAME_MS)
+  const frame = firstFrameFrom(blits, backdrop)
+  const before = blits.filter((b) => b < backdrop).at(-1) ?? 0
+  expect(before).toBeGreaterThan(kill)
+  expect(arrivals()).toHaveLength(1)
+  const at = arrivals()[0]?.at ?? 0
+  // The last frame before the boss's row leaves raised none; the first frame at or after it did.
+  expect(at).toBeGreaterThan(before)
+  expect(at).toBeGreaterThanOrEqual(backdrop)
+  expect(at).toBeLessThanOrEqual(frame)
+  // Frames keep a fixed beat, and one with nothing new to show blits nothing: the drain is at most
+  // a beat late.
+  expect(at - backdrop).toBeLessThan(EVENT_FRAME_MS)
+  expect(arrivals()[0]?.timeoutMs).toBe(4000)
+  // The boss's drop toast landed first, at its own reveal.
+  const drops = raised.filter(isDropToast)
+  expect(drops).toHaveLength(1)
+  expect(drops[0]?.at ?? 0).toBeGreaterThanOrEqual(reveal)
+  expect(drops[0]?.at ?? 0).toBeLessThan(at)
+  expect(raised.indexOf(drops[0] as (typeof raised)[number])).toBeLessThan(
+    raised.indexOf(arrivals()[0] as (typeof raised)[number]),
+  )
+  // The arrival has no cue.
+  expect(plays.filter((p) => p.at === at)).toEqual([])
+  await ui.unmount()
+})
+
+test('the zone arrival toast on the desktop lands at the wake for its show time', async ($, on) => {
+  const state = bossDropping()
+  const { time, raised, plays } = staging(on, { ...record(state), ...STAGED })
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PARTY_BAND })
+  const { reveal, backdrop } = backdropOf(state, time.now(), time.now() + 5_000)
+  await time.advance(5_000)
+  await time.advance(backdrop - time.now() - 1)
+  expect(raised.filter((t) => t.text === ARRIVAL)).toEqual([])
+  expect(raised.filter(isDropToast).map((t) => t.at)).toEqual([reveal])
+  await time.advance(1)
+  expect(raised.filter((t) => t.text === ARRIVAL).map((t) => t.at)).toEqual([backdrop])
+  expect(plays.filter((p) => p.at === backdrop)).toEqual([])
+  await ui.unmount()
+})
+
+test("an empty-stage drop's toast lands at its reveal", async ($, on) => {
+  const { time, raised, plays, blits } = staging(on, STAGED, { PROMPTFALL_SANDBOX: '1' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
+  // A fresh sandbox before its first tick: no enemy on the stage, so the chest falls on the ground.
+  const sent = time.now()
+  const reply = await $.command.run({
+    ...RUN,
+    command: 'promptfall',
+    args: 'sandbox item silk_robe legendary',
+  })
+  // The reply comes back at once; the words wait for the reveal.
+  expect(reply.text).toBe('Sandbox: Silk Robe (legendary) dropped')
+  const show = sent + CHEST_SHOW_MS
+  const drops = () => raised.filter((t) => t.text === 'Legendary drop: Silk Robe')
+  expect(drops()).toEqual([])
+  expect(plays).toEqual([])
+  await time.advance(show - time.now() + 3 * EVENT_FRAME_MS)
+  const frame = firstFrameFrom(blits, show)
+  const before = blits.filter((b) => b < show).at(-1) ?? 0
+  expect(drops()).toHaveLength(1)
+  const at = drops()[0]?.at ?? 0
+  expect(at).toBeGreaterThan(before)
+  expect(at).toBeGreaterThanOrEqual(show)
+  expect(at).toBeLessThanOrEqual(frame)
+  expect(plays).toEqual([{ asset: 'cues/legendary.wav', at }])
   await ui.unmount()
 })
 

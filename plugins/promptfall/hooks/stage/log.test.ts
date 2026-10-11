@@ -3,7 +3,7 @@ import type { GameView } from '../../types'
 import type { Toast } from '../toasts'
 import type { Effect, Item } from '../vendor/sim.js'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS } from '../windows/tuning'
-import { wave } from './fixtures'
+import { boss, wave } from './fixtures'
 import { MessageLog } from './log'
 import { StageTimeline } from './timeline'
 import { RARITY_RGB } from './tuning'
@@ -397,6 +397,69 @@ test('a hit line after a pending drop line is neither delayed nor dropped', () =
   const line = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Bo hits Rat for 4.')
   expect(line).toBeDefined()
   expect(line?.at).toBe(starts[1])
+})
+
+/** The zone boss of zone 1 fell: the sim moved on to zone 2, wave 1, and brought the next wave. */
+const nextZone = (): GameView => ({ ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 })
+
+/**
+ * Aldric kills the zone boss for a legendary robe, i1, and the burst clears zone 1 into
+ * `advancedTo`. The log reads the batch as register hands it over: before any draw departs the boss.
+ */
+function killBoss(advancedTo: number): { log: MessageLog; t: StageTimeline; next: GameView } {
+  const v = boss()
+  const next = advancedTo > 1 ? nextZone() : { ...wave(), wave: 1 }
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  const effects: Effect[] = [
+    act('h1', 0),
+    hit('h1', 'e9', 500),
+    { k: 'drop', item: item('silk_robe', 'legendary', 'i1') },
+    { k: 'zone_cleared', zone: 1, advancedTo },
+  ]
+  const starts = t.onEffects(effects, NOW, 2000)
+  log.onEffects(effects, starts, next, NOW, 2000, t)
+  return { log, t, next }
+}
+
+test("the zone line is held to the zone's show time and takes its place at release", () => {
+  const { log, t, next } = killBoss(2)
+  const zoneLine = 'The party reached zone 2, Whisperwood.'
+  const show = t.zoneShowAt(1) ?? 0
+  // The boss's drop reveals before its row leaves: its line lands first.
+  expect(t.showAt('i1') ?? show).toBeLessThan(show)
+  // A later tick's hit, in the new zone, once the drop's line has typed and while the zone line
+  // is held.
+  const tick = NOW + 3000
+  expect(tick).toBeLessThan(show)
+  const hitting: Effect[] = [act('h2', 0), hit('h2', 'e1', 4)]
+  const [start = 0] = t.onEffects(hitting, tick, 2000)
+  log.onEffects(hitting, [start], next, tick, 2000, t)
+  // A draw departs the boss and schedules its dissolve and chest: the show time stands.
+  t.observe(next, tick + 1)
+  expect(t.zoneShowAt(1)).toBe(show)
+  const texts = (now: number) => log.shown(now, 'still').map((l) => l.text)
+  const before = texts(show - 1)
+  expect(before).toContain('Legendary drop: Silk Robe.')
+  expect(before).not.toContain(zoneLine)
+  // The hit line after it is neither delayed nor dropped.
+  const hitLine = log.upcoming(tick - 1, 1e9).find((l) => l.text.endsWith('for 4.'))
+  expect(hitLine?.at).toBe(start)
+  expect(log.upcoming(show - 1, 10_000)[0]).toMatchObject({ text: zoneLine, key: true, at: show })
+  expect(log.isBusy(show - 1, 'still')).toBe(true)
+  expect(texts(show).at(-1)).toBe(zoneLine)
+  // Released, it stays in its place once the boss's row has gone.
+  t.observe(next, show)
+  expect(texts(show + 1).at(-1)).toBe(zoneLine)
+})
+
+test('the farming line is not held: it prints with its action', () => {
+  const { log, t } = killBoss(1)
+  const farming = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Zone 1 cleared.')
+  expect(farming).toBeDefined()
+  expect(farming?.at ?? Number.POSITIVE_INFINITY).toBeLessThan(t.showAt('i1') ?? 0)
 })
 
 /** A drop toast as toastsFor gives it, waiting for its item. */

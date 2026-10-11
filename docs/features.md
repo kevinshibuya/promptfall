@@ -41,7 +41,9 @@ the hero who is acting; enemies' gauges never show.
 
 **Zone bosses.** After the tenth wave the zone's boss takes the stage, standing at its full size
 over the small party. Beating it moves the party on to the next of twelve zones, from Greenmeadow
-Road to The Unwritten Reach, with a toast naming the zone ahead. The enemy window shows a boss with its HP
+Road to The Unwritten Reach. The zone's words arrive with the new backdrop: once the boss's chest
+has played and its row has left, the backdrop changes, and only then does the combat log say "The
+party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
 percentage.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
@@ -319,7 +321,8 @@ land in the same burst, such as a boss kill levelling the party or a day of sale
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
 legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival keeps
 its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
-toast lands at its reveal, as the item rises out of the chest, or at once when no band is drawn.
+toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
+backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.

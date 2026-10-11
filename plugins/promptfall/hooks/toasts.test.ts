@@ -132,6 +132,7 @@ const SINGLE: [string, Effect, Toast][] = [
       text: 'The party reached zone 4, Old Barrow Hills',
       timeoutMs: SHORT,
       cue: null,
+      wait: { zone: 3 },
     },
   ],
   [
@@ -354,7 +355,7 @@ test('each vendored item is its own toast, at its own reveal', () => {
   )
 })
 
-test('drop and vendored toasts wait for their item; every other toast carries no wait', () => {
+test('drop and vendored toasts wait for their item, a zone arrival for its zone; every other toast carries no wait', () => {
   const { view, ids } = partyView()
   const effects: Effect[] = [
     drop('rune_staff', 'legendary', 'i-l'),
@@ -375,7 +376,7 @@ test('drop and vendored toasts wait for their item; every other toast carries no
     ['recruit', null],
     ['reward', null],
     ['wipe', null],
-    ['zone_arrival', null],
+    ['zone_arrival', { zone: 3 }],
     ['rare_drop', { item: 'i-e' }],
     ['rare_drop', { item: 'i-r' }],
     ['vendored', { item: 'i-v' }],

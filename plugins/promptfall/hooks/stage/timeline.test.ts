@@ -1,6 +1,9 @@
 import { expect, test } from 'claude-code/testing'
+import type { GameView } from '../../types'
+import { WORLD_DEFAULT } from '../state'
 import { ACTION_STEPS, type Effect, type Rarity, STEP_MS } from '../vendor/sim.js'
 import { boss, empty, wave, worldBoss } from './fixtures'
+import { stagedState } from './staged'
 import { ACTION_MS, chestPhaseAt, type Motion, StageTimeline } from './timeline'
 import {
   BOLT_MS,
@@ -891,4 +894,84 @@ test('showAt answers the end of the rise and pendingReveals counts the chests st
   // Once a chest is over, the timeline no longer holds its item.
   t.onEffects([], NOW + 3600)
   expect(t.showAt('i2')).toBeNull()
+})
+
+/** The zone boss of zone 1 fell: the sim moved on to zone 2, wave 1, and brought the next wave. */
+const nextZone = (): GameView => ({ ...wave(), zone: 2, zoneName: 'Whisperwood', wave: 1 })
+const bossKill = (drop?: Effect): Effect[] => [
+  act('h1', 0),
+  hit('h1', 'e9', 500),
+  ...(drop ? [drop] : []),
+]
+const endOf = (t: StageTimeline, kind: 'dissolve' | 'chest') =>
+  t.active(NOW).find((m) => m.kind === kind && m.actor === 'e9')?.until ?? Number.NaN
+
+test("a zone arrival's show time is the moment the zone boss's row leaves", () => {
+  const t = observed(boss())
+  t.onEffects(bossKill({ k: 'drop', item: item('iron_sword', 'legendary') }), NOW, 2000)
+  // Before any draw the boss is a live row with no dissolve: the show time is predicted, from the
+  // chest, whose end is later than the blow's end plus the dissolve.
+  const chestEnd = endOf(t, 'chest')
+  expect(endOf(t, 'dissolve')).toBeNaN()
+  expect(chestEnd).toBeGreaterThan(NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS)
+  expect(t.zoneShowAt(1)).toBe(chestEnd)
+  // The draw schedules the dissolve; the answer is the actual end of the row's motions.
+  const next = nextZone()
+  t.observe(next, NOW + 1)
+  expect(endOf(t, 'dissolve')).toBe(NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS)
+  expect(t.zoneShowAt(1)).toBe(chestEnd)
+  // The staged state's zone flips at exactly that instant.
+  const zoneAt = (now: number) => {
+    t.observe(next, now)
+    return stagedState(next, WORLD_DEFAULT, t, now).zone
+  }
+  expect(zoneAt(chestEnd - 1)).toBe(1)
+  expect(zoneAt(chestEnd)).toBe(2)
+  // No other zone answers, and the row gone, neither does this one.
+  expect(t.zoneShowAt(2)).toBeNull()
+  expect(t.zoneShowAt(1)).toBeNull()
+})
+
+test("a zone boss kill with no drop still answers the zone's show time from its blow", () => {
+  const t = observed(boss())
+  t.onEffects(bossKill(), NOW, 2000)
+  const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
+  expect(t.zoneShowAt(1)).toBe(faded)
+  const next = nextZone()
+  t.observe(next, NOW + 1)
+  expect(endOf(t, 'dissolve')).toBe(faded)
+  expect(t.zoneShowAt(1)).toBe(faded)
+  t.observe(next, faded - 1)
+  expect(stagedState(next, WORLD_DEFAULT, t, faded - 1).zone).toBe(1)
+  t.observe(next, faded)
+  expect(stagedState(next, WORLD_DEFAULT, t, faded).zone).toBe(2)
+})
+
+test("a zone arrival's show time moves with the boss's chest when the backlog re-times it", () => {
+  const t = observed(boss())
+  const heal: Effect[] = [act('h3', 0, 'heal'), { k: 'heal', by: 'h3', target: 'h1', amount: 5 }]
+  // Six heals queue ahead of the blow that kills the boss and drops a sword, three seconds out.
+  const queue = Array.from({ length: 6 }, () => heal).flat()
+  t.onEffects([...queue, ...bossKill({ k: 'drop', item: item('iron_sword', 'common') })], NOW, 2000)
+  t.observe(nextZone(), NOW + 1)
+  const before = t.zoneShowAt(1) ?? 0
+  expect(before).toBe(endOf(t, 'chest'))
+  // The next round pushes the stage two rounds behind: the queue, the killing blow with it, goes.
+  const cut = NOW + 2000
+  t.onEffects(Array.from({ length: 10 }, () => heal).flat(), cut, 2000)
+  const retimed = cut + DISSOLVE_MS - 300 + 2400
+  expect(endOf(t, 'chest')).toBe(retimed)
+  expect(t.zoneShowAt(1)).toBe(retimed)
+  expect(retimed).toBeLessThan(before)
+})
+
+test('with no boss row on the timeline a zone arrival has no show time', () => {
+  // A delivery with no stage: the timeline was never observed, so it holds no row.
+  const unseen = new StageTimeline()
+  unseen.onEffects(bossKill({ k: 'drop', item: item('iron_sword', 'legendary') }), NOW, 2000)
+  expect(unseen.zoneShowAt(1)).toBeNull()
+  // A stage with no zone boss on it.
+  const t = observed()
+  t.onEffects([act('h1', 0), hit('h1', 'e1', 500)], NOW, 2000)
+  expect(t.zoneShowAt(1)).toBeNull()
 })
