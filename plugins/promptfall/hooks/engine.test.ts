@@ -167,6 +167,8 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
   const patches: Patch[] = []
   const effects: string[] = []
   const calls: { count: number; view: boolean }[] = []
+  /** The arrival time each batch holding a drop came with. */
+  const drops: (number | undefined)[] = []
   const toasts: { text: string; timeoutMs: number | undefined }[] = []
   const engine = new GameEngine({
     client,
@@ -176,9 +178,10 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
     publish: async (patch) => {
       patches.push(patch)
     },
-    onEffects: (list, _at, view) => {
+    onEffects: (list, _at, view, arrived) => {
       for (const e of list) effects.push(e.k)
       calls.push({ count: list.length, view: view !== null })
+      if (list.some((e) => e.k === 'drop')) drops.push(arrived)
     },
     toast: (text, timeoutMs) => {
       toasts.push({ text, timeoutMs })
@@ -206,6 +209,7 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
     patches,
     effects,
     calls,
+    drops,
     toasts,
     timers,
     fire,
@@ -830,6 +834,22 @@ test('a stopped engine records nothing as shown', async () => {
 
 // ---------------------------------------------------------------------------
 // The revoked toast: a hash-mismatch ack names what it took, from the state held before adopting it
+
+test('a delivered drop carries the time it arrived, not the last tick', async () => {
+  const s = setup(new MemoryKeyValue(), { 'sandbox.enabled': true })
+  await s.engine.start()
+  s.engine.apply({ t: 'tick' }, s.at())
+  await s.engine.flush()
+  s.advance(3000)
+  const accountId = s.engine.accountId() ?? ''
+  await s.ledger.host.sandbox(accountId, {
+    t: 'sandbox_item',
+    base: 'iron_sword',
+    rarity: 'common',
+  })
+  await s.engine.sync()
+  expect(s.drops).toEqual([s.at()])
+})
 
 /** An engine on a sandbox ledger that holds an Oak Staff, a Rune Staff and an Iron Sword, granted and synced. */
 async function holding() {

@@ -66,9 +66,15 @@ export type EngineDeps = {
   /**
    * Every applied event, effects or none, and every restep that publishes or brings effects.
    * `at`: the applied event's time, absent for a delivery; `view`: the view just published for it,
-   * so a listener needs no read of the async atom (null when the state has no view).
+   * so a listener needs no read of the async atom (null when the state has no view); `arrived`: a
+   * delivery's wall time, when it reached the engine.
    */
-  onEffects: (effects: Effect[], at: number | undefined, view: GameView | null) => void
+  onEffects: (
+    effects: Effect[],
+    at: number | undefined,
+    view: GameView | null,
+    arrived?: number,
+  ) => void
   /** Shows a toast; `timeoutMs` left out is the host's default. Optional: tests leave it out. */
   toast?: (text: string, timeoutMs?: number) => void
   /** Runs `fn` once after `ms`: notices that clear themselves and outage retries. */
@@ -294,7 +300,12 @@ export class GameEngine {
       void this.publish({ mode: 'primary', notice: null })
     }
     const shown = await this.deps.kv.get(this.shownKey)
-    this.receive(boot.delivery, false, shownThrough(shown, boot.account.accountId))
+    this.receive(
+      boot.delivery,
+      false,
+      shownThrough(shown, boot.account.accountId),
+      await this.deps.now(),
+    )
     await this.publish({ view: this.view() })
     // Only the minted account's first view says firstRun; every later view says no.
     this.firstRun = false
@@ -376,7 +387,7 @@ export class GameEngine {
         this.pending = []
         this.seq = ack.seq
         this.sent = null
-        this.receive(ack.delivery)
+        this.receive(ack.delivery, true, 0, await this.deps.now())
         // The first success after an outage sends what buffered during it now, not at the next
         // scheduled flush.
         if (recovering && this.buffer.length > 0) await this.doFlush()
@@ -384,7 +395,7 @@ export class GameEngine {
       }
       if (ack.reason === 'cursor_behind') {
         const before = this.cursor
-        this.receive(ack.delivery)
+        this.receive(ack.delivery, true, 0, await this.deps.now())
         stuck = this.cursor === before ? stuck + 1 : 0
         if (stuck >= STUCK_BEHIND) {
           await this.doResync()
@@ -477,9 +488,10 @@ export class GameEngine {
   /**
    * Applies the delivered events not seen yet, then re-steps what is in flight
    * and buffered on top. Called only under the lock. The effects of events at or
-   * before `shownThrough` are not handed on: a primary already toasted them.
+   * before `shownThrough` are not handed on: a primary already toasted them. `arrived` is the wall
+   * time the delivery came in.
    */
-  private receive(delivery: Delivery, publish = true, shownThrough = 0): void {
+  private receive(delivery: Delivery, publish = true, shownThrough = 0, arrived?: number): void {
     const fresh = delivery.events.filter((e) => e.n > this.cursor).sort((a, b) => a.n - b.n)
     const last = fresh.at(-1)?.n ?? 0
     this.cursor = Math.max(this.cursor, delivery.cursor, last)
@@ -511,7 +523,7 @@ export class GameEngine {
     if (!publish && effects.length === 0) return
     const view = this.view()
     if (publish) void this.publish({ view })
-    this.deps.onEffects(effects, undefined, view)
+    this.deps.onEffects(effects, undefined, view, arrived)
   }
 
   /** Records that this account's events have been handed on through the cursor. */
@@ -542,7 +554,7 @@ export class GameEngine {
       } catch {
         throw new Error('unreachable')
       }
-      if (r.ok) this.receive(r.delivery)
+      if (r.ok) this.receive(r.delivery, true, 0, await this.deps.now())
       return this.unbanned(r)
     })
   }
@@ -567,7 +579,7 @@ export class GameEngine {
       this.returns = info.returns
       this.accountRecord = info.account
       await this.rememberConfig(info.config)
-      this.receive(info.delivery, false)
+      this.receive(info.delivery, false, 0, await this.deps.now())
       await this.publish({ view: this.view() })
     })
   }
