@@ -131,7 +131,7 @@ function harness(clock: Clock, blitMs = 0): Harness {
       return v
     },
     settings: async () => state.settings,
-    release: () => undefined,
+    release: () => false,
     nextRelease: () => null,
     strip: async () => state.strip,
   }
@@ -400,7 +400,7 @@ test('a new site mounted while a slow frame is in flight still gets its frames',
       return new Promise<GameView>((resolve) => clock.after(150, () => resolve(wave())))
     },
     settings: async () => SETTINGS_DEFAULT,
-    release: () => undefined,
+    release: () => false,
     nextRelease: () => null,
     strip: async () => null,
   }
@@ -630,4 +630,77 @@ test('a Raster band under a short band blits the stage rows shown, the line arou
   expect(last).toMatchObject({ key: 'band-120x16', columns: 120, rows: 16 })
   const text = cellText(last)
   expect([text[0]?.[0], text[11]?.[0], text[15]?.[0]]).toEqual(['╭', '├', '╰'])
+})
+
+/**
+ * A SMIL loop over a holder in memory: toasts wait for the times in `shows`, `release` takes those
+ * due as the log does, `view` takes `readMs`, and `onNext` runs inside each `nextRelease`.
+ */
+function smilHarness(clock: ReturnType<typeof fakeClock>, readMs = 0) {
+  const h = {
+    shows: [] as number[],
+    released: [] as number[],
+    invalidations: 0,
+    onNext: null as (() => void) | null,
+    loop: null as unknown as StageLoop,
+  }
+  const io: LoopIo = {
+    now: clock.now,
+    after: clock.after,
+    blit: async () => ({}),
+    invalidate: () => {
+      h.invalidations += 1
+    },
+    view: () =>
+      readMs === 0
+        ? Promise.resolve(wave())
+        : new Promise<GameView>((resolve) => clock.after(readMs, () => resolve(wave()))),
+    settings: async () => SETTINGS_DEFAULT,
+    release: (now) => {
+      const due = h.shows.filter((s) => s <= now)
+      h.shows = h.shows.filter((s) => s > now)
+      for (const _ of due) h.released.push(now)
+      return due.length > 0
+    },
+    nextRelease: (now) => {
+      const next = h.shows.filter((s) => s > now)
+      h.onNext?.()
+      return next.length === 0 ? null : Math.min(...next)
+    },
+    strip: async () => null,
+  }
+  const timeline = new StageTimeline()
+  timeline.observe(wave(), 1_000_000)
+  h.loop = new StageLoop(io, timeline)
+  return h
+}
+
+test('on SMIL a held toast lands at its show time however slow the reads, and the band redraws', async () => {
+  const clock = fakeClock(1_000_000)
+  const h = smilHarness(clock, 200)
+  const show = 1_001_500
+  h.shows.push(show)
+  h.loop.mount(site('smil', wave(), PROPS, 'desktop'))
+  await clock.advance(show - 1 - (await clock.now()))
+  expect(h.released).toEqual([])
+  expect(h.invalidations).toBe(0)
+  await clock.advance(1)
+  expect(h.released).toEqual([show])
+  // The backdrop is drawn, not played: the release redraws so it changes with the words.
+  expect(h.invalidations).toBe(1)
+})
+
+test('on SMIL a batch held while a frame found nothing to release still gets its wake', async () => {
+  const clock = fakeClock(1_000_000)
+  const h = smilHarness(clock)
+  const show = 1_001_000
+  // The batch lands after the frame's read found the holder empty, while the frame runs.
+  h.onNext = () => {
+    h.onNext = null
+    h.shows.push(show)
+    h.loop.wake()
+  }
+  h.loop.mount(site('smil', wave(), PROPS, 'desktop'))
+  await clock.advance(show - (await clock.now()))
+  expect(h.released).toEqual([show])
 })

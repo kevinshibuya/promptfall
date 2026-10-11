@@ -530,6 +530,20 @@ test('everything held is due at an infinite now, in show order', () => {
   expect(log.nextRelease(NOW)).toBeNull()
 })
 
+test('a held toast whose chest a resync took away is due at once, not at the lost reveal', () => {
+  const { log, t } = killDropping()
+  const show = t.showAt('i1') ?? 0
+  const toast = dropToast('i1')
+  expect(log.hold([toast], t, NOW)).toEqual([])
+  // The resync's view has the enemy back: its dissolve and its chest go.
+  const back = NOW + 100
+  expect(back).toBeLessThan(show)
+  t.observe(terse(), back)
+  expect(t.showAt('i1')).toBeNull()
+  expect(log.nextRelease(back)).toBeNull()
+  expect(log.release(back)).toEqual([toast])
+})
+
 test('a held toast follows its chest when the backlog re-times it', () => {
   const v = terse()
   const [h1] = v.heroes.map((h) => h.id)
