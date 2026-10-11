@@ -15,8 +15,8 @@ const hit = (by: string, target: string, amount: number): Effect => ({
   target,
   amount,
 })
-const item = (base: string, rarity = 'rare'): Item =>
-  ({ id: 'i1', base, rarity, affixes: [], equippedBy: null, tradeableAt: null }) as unknown as Item
+const item = (base: string, rarity = 'rare', id = 'i1'): Item =>
+  ({ id, base, rarity, affixes: [], equippedBy: null, tradeableAt: null }) as unknown as Item
 
 /** Applies one batch the way register does and answers the log's texts. */
 function run(
@@ -39,7 +39,12 @@ function run(
   const starts = t.onEffects(effects, now, opts.cadence ?? 2000)
   t.observe(after, now)
   log.onEffects(effects, starts, after, now, opts.cadence ?? 2000, t)
-  return { log, texts: log.shown(Number.POSITIVE_INFINITY, 'still').map((l) => l.text) }
+  return {
+    log,
+    t,
+    starts,
+    texts: log.shown(Number.POSITIVE_INFINITY, 'still').map((l) => l.text),
+  }
 }
 
 const names = (v: GameView) => ({ hero: v.heroes[0]?.shortName, enemy: v.enemies[0]?.name })
@@ -105,13 +110,11 @@ test('each row of the wording table prints as written', () => {
     ],
     { before: v },
   )
+  // The drops wait for their chests' reveal: their lines queue after the rest of the batch.
   expect(texts).toEqual([
     `${hero} hits ${enemy} for 12.`,
     `${enemy} hits ${hero} for 5.`,
     `${v.heroes[2]?.shortName} heals ${hero} for 14.`,
-    'Drop: Oak Staff.',
-    'Rare drop: Oak Staff.',
-    'Inventory full: Oak Staff vendored for 12G.',
     'Aldric reached level 5.',
     'Aldric falls!',
     'Goblin Scout appears!',
@@ -121,6 +124,9 @@ test('each row of the wording table prints as written', () => {
     'Oak Staff sold for 120G.',
     'Your share of the boss: 120G and Oak Staff.',
     'Your share of the boss: 120G.',
+    'Drop: Oak Staff.',
+    'Rare drop: Oak Staff.',
+    'Inventory full: Oak Staff vendored for 12G.',
   ])
 })
 
@@ -318,4 +324,95 @@ test('an enemy no view ever held is a Foe, and its kill still prints', () => {
 test('a purchase or a return prints nothing; a sale prints', () => {
   const { texts } = run([traded('bought'), traded('returned'), traded('sold')])
   expect(texts).toEqual(['Oak Staff sold for 120G.'])
+})
+
+/** The wave with names short enough that no line's typing pushes the next back. */
+function terse(): GameView {
+  const base = wave()
+  return {
+    ...base,
+    heroes: base.heroes.map((h, i) => ({ ...h, shortName: ['Al', 'Bo', 'Cy'][i] ?? 'X' })),
+    enemies: base.enemies.map((e) => ({ ...e, name: 'Rat' })),
+  }
+}
+
+test('a drop line prints when its item has risen from the chest, not at the kill', () => {
+  const v = terse()
+  const by = v.heroes[0]?.id ?? ''
+  const target = v.enemies[0]?.id ?? ''
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  const { log, t } = run(
+    [
+      act(by, 0),
+      hit(by, target, 30),
+      { k: 'drop', item: item('silk_robe', 'rare', 'i1') },
+      { k: 'drop_vendored', item: item('oak_staff', 'common', 'i2'), gold: 12 },
+    ],
+    { before: v, after },
+  )
+  const show = t.showAt('i1') ?? 0
+  expect(show).toBeGreaterThan(NOW + 1000)
+  const texts = (now: number) => log.shown(now, 'still').map((l) => l.text)
+  // The kill line prints after the killing action, as ever; the drop waits for its reveal.
+  expect(texts(show - 1)).toEqual(['Al hits Rat for 30.', 'Rat is defeated!'])
+  const lines = log.upcoming(show - 1, 10_000)
+  expect(lines[0]).toMatchObject({ text: 'Rare drop: Silk Robe.', key: true, at: show })
+  expect(lines[1]?.text).toBe('Inventory full: Oak Staff vendored for 12G.')
+  expect(lines[1]?.key).toBe(true)
+  expect(log.isBusy(show - 1, 'still')).toBe(true)
+  expect(texts(show)).toContain('Rare drop: Silk Robe.')
+})
+
+test('a hit line after a pending drop line is neither delayed nor dropped', () => {
+  const v = terse()
+  const [h1, h2] = v.heroes.map((h) => h.id)
+  const [e1, e2] = v.enemies.map((e) => e.id)
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  // The second action starts once the kill's lines have typed: only a drop line could be ahead.
+  const { log, starts } = run(
+    [
+      act(h1 ?? '', 0),
+      hit(h1 ?? '', e1 ?? '', 30),
+      { k: 'drop', item: item('silk_robe') },
+      act(h2 ?? '', 800),
+      hit(h2 ?? '', e2 ?? '', 4),
+    ],
+    { before: v, after },
+  )
+  const line = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Bo hits Rat for 4.')
+  expect(line).toBeDefined()
+  expect(line?.at).toBe(starts[1])
+})
+
+test('a held drop line follows its chest when the backlog re-times it', () => {
+  const v = terse()
+  const [h1] = v.heroes.map((h) => h.id)
+  const [e1, e2] = v.enemies.map((e) => e.id)
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  // Six attacks queue ahead of the blow that kills e1 and drops a robe.
+  const queue = Array.from({ length: 6 }, () => [act(e2 ?? '', 0), hit(e2 ?? '', h1 ?? '', 1)])
+  const first: Effect[] = [
+    ...queue.flat(),
+    act(h1 ?? '', 0),
+    hit(h1 ?? '', e1 ?? '', 30),
+    { k: 'drop', item: item('silk_robe') },
+  ]
+  const after = { ...v, enemies: v.enemies.slice(1) }
+  log.onEffects(first, t.onEffects(first, NOW, 2000), after, NOW, 2000, t)
+  t.observe(after, NOW + 1)
+  const planned = t.showAt('i1') ?? 0
+  // The next round's actions put the stage two rounds behind: the killing blow goes with the
+  // queue and the chest lands sooner. They hit nothing, so they print nothing.
+  const cut = NOW + 2500
+  const next = Array.from({ length: 10 }, () => act(e2 ?? '', 0))
+  log.onEffects(next, t.onEffects(next, cut, 2000), after, cut, 2000, t)
+  const moved = t.showAt('i1') ?? 0
+  expect(moved).toBeLessThan(planned)
+  const drop = (now: number) =>
+    log.shown(now, 'still').some((l) => l.text === 'Rare drop: Silk Robe.')
+  expect(drop(moved - 1)).toBe(false)
+  expect(drop(moved)).toBe(true)
 })

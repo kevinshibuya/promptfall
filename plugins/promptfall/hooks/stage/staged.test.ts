@@ -368,3 +368,32 @@ test('a state change with nothing in flight lands at once', () => {
   t.observe(view, NOW)
   expect(stagedState(view, WORLD_DEFAULT, t, NOW).heroes[0]).toMatchObject({ hp: 50, alive: true })
 })
+
+test('a drop row waits for its reveal; a market row never does', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 1)
+  const item = (id: string, base: string) =>
+    ({ id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null }) as never
+  // A drop and a vendored drop: their chests fall on the front enemy now and show together.
+  t.onEffects(
+    [
+      { k: 'drop', item: item('i1', 'silk_robe') },
+      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3 },
+    ],
+    NOW,
+  )
+  const show = t.showAt('i1') ?? 0
+  const old = { text: 'old sword', rarity: 'common', kind: 'drop' } as const
+  const robe = { text: 'robe', rarity: 'rare', kind: 'drop' } as const
+  const staff = { text: 'staff sold', rarity: 'rare', kind: 'vendored' } as const
+  const bought = { text: 'bought ring', rarity: 'rare', kind: 'market' } as const
+  const view: GameView = { ...wave(), loot: [old, robe, staff, bought], lastDrop: bought }
+  const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).loot.map((l) => l.text)
+  expect(rows(show - 1)).toEqual(['old sword', 'bought ring'])
+  expect(rows(show)).toEqual(['old sword', 'robe', 'staff sold', 'bought ring'])
+  // The band's last drop is the staged rows' newest.
+  const drops: GameView = { ...wave(), loot: [old, robe, staff], lastDrop: staff }
+  const last = (now: number) => stagedState(drops, WORLD_DEFAULT, t, now).lastDrop?.text
+  expect(last(show - 1)).toBe('old sword')
+  expect(last(show)).toBe('staff sold')
+})
