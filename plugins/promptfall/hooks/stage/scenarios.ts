@@ -38,7 +38,7 @@ import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
 import { encodeRaster, rasterPairs } from './raster'
 import { stagedState } from './staged'
-import { renderSvg, stageSvg, svgWithFallback } from './svg'
+import { renderSvg, stageSvg, svgOrFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
   DESKTOP_COLUMN_PX_CEILING,
@@ -226,28 +226,61 @@ export function stage(name: Scenario): Staged {
   }
 }
 
-export function goldenOf(s: Staged): Golden {
-  const cells = encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers)
-  const image = encodeImage(composeFrame(s.model, { numbers: true }), 1)
-  const svg = svgOf(s)
-  const hires = encodeImage(composeFrame(s.hires, { numbers: true }), 1)
+/**
+ * A staged scenario's encodings, each rendered once: what its golden hashes, and the goldens test's
+ * budget and fall-back checks, read.
+ */
+export type Renders = {
+  /** The desktop's Svg, SMIL on and off: the hires one, or the scale-1 one over the cap. */
+  svg: string
+  svgFlat: string
+  /** The scale-1 model's Svg (the desktop's fall-back past the cap), SMIL on and off. */
+  svgLo: string
+  svgLoFlat: string
+  /** The scale-1 model's Raster cells and Image frame. */
+  cells: string
+  image: Frame
+  /** The hires model's Svg, SMIL on and off, and its Image frame. */
+  svgHi: string
+  svgHiFlat: string
+  hires: Frame
+  /** The hires model's Raster cells where it stays at scale 1 (compact); past it, it draws on Image only. */
+  hiresCells: string | null
+}
+
+export function renders(s: Staged): Renders {
+  const at = (smil: boolean) => ({ smil, now: s.now, width: 960, motion: 'full' as const })
+  const svgLo = renderSvg(s.model, s.motions, at(true))
+  const svgLoFlat = renderSvg(s.model, s.motions, at(false))
+  const svgHi = renderSvg(s.hires, s.motions, at(true))
+  const svgHiFlat = renderSvg(s.hires, s.motions, at(false))
   return {
-    rasterHash: fnv1a64(cells),
-    imageHash: fnv1a64(image.rgba),
-    svgHash: fnv1a64(svg),
-    svgChars: svg.length,
-    rasterPairs: rasterPairs(cells),
-    imageHashHires: fnv1a64(hires.rgba),
-    svgHashLo: fnv1a64(
-      renderSvg(s.model, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' }),
-    ),
+    svg: svgOrFallback(svgHi, () => svgLo),
+    svgFlat: svgOrFallback(svgHiFlat, () => svgLoFlat),
+    svgLo,
+    svgLoFlat,
+    cells: encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers),
+    image: composeFrame(s.model, { numbers: true }),
+    svgHi,
+    svgHiFlat,
+    hires: composeFrame(s.hires, { numbers: true }),
+    hiresCells:
+      s.hires.scale === 1
+        ? encodeRaster(composeFrame(s.hires, { numbers: false }), s.hires.numbers)
+        : null,
   }
 }
 
-/** The desktop's Svg of the scenario: 1.5x, or 1x over the cap. */
-export function svgOf(s: Staged): string {
-  const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
-  return svgWithFallback(s.hires, s.model, s.motions, opts)
+export function goldenOf(r: Renders): Golden {
+  return {
+    rasterHash: fnv1a64(r.cells),
+    imageHash: fnv1a64(encodeImage(r.image, 1).rgba),
+    svgHash: fnv1a64(r.svg),
+    svgChars: r.svg.length,
+    rasterPairs: rasterPairs(r.cells),
+    imageHashHires: fnv1a64(encodeImage(r.hires, 1).rgba),
+    svgHashLo: fnv1a64(r.svgLo),
+  }
 }
 
 // The window strip's scenarios (UI PR 1, Task 8): the same fixtures, the band's strip under them.

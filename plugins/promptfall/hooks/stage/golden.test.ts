@@ -9,7 +9,7 @@ import { inventoryPane } from '../ui/pane/inventory'
 import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS, STRIP_SVG_MAX_CHARS } from '../windows/tuning'
-import { composeFrame } from './compose'
+import { composeFrame, type Frame } from './compose'
 import { fullerFrame } from './fixtures'
 import { BAND_GOLDENS, GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes, pngImage } from './image'
@@ -20,11 +20,14 @@ import {
   BAND_SCENARIOS,
   band,
   bandGoldenOf,
+  type Golden,
   goldenOf,
   PANE_SCENARIOS,
   pane,
   paneGoldenOf,
+  renders,
   SCENARIOS,
+  type Scenario,
   STRIP_SCENARIOS,
   stage,
   strip,
@@ -43,33 +46,80 @@ import {
   ZONE_GROUND,
 } from './tuning'
 
-function withinBudgets(model: StageModel, motions: readonly Motion[], now: number): void {
-  if (model.scale !== 1) {
-    // The hires model draws on Image only (and on Svg from H5).
-    const frame = composeFrame(model, { numbers: true })
-    expect(imageBytes(frame, IMAGE_SCALE / model.scale)).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
-    return
-  }
-  const svg = renderSvg(model, motions, { smil: true, now, width: 960, motion: 'full' })
-  expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
-  const flat = renderSvg(model, motions, { smil: false, now, width: 960, motion: 'full' })
-  expect(flat.length).toBeLessThan(SVG_MAX_CHARS)
-  const cells = encodeRaster(composeFrame(model, { numbers: false }), model.numbers)
-  expect(rasterPairs(cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
-  expect(imageBytes(composeFrame(model, { numbers: true }), IMAGE_SCALE)).toBeLessThanOrEqual(
+/** A model past scale 1 draws on Image only (and on Svg from H5): its frame's bytes at its share of IMAGE_SCALE. */
+function imageWithinBudget(frame: Frame, scale: number, check = 'image bytes'): void {
+  expect(imageBytes(frame, IMAGE_SCALE / scale), check).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
+}
+
+/** A scale-1 model's renders: its Svg with SMIL on and off, its Raster's pairs, its Image's bytes. */
+function scaleOneWithinBudgets(
+  r: { svg: string; flat: string; cells: string; image: Frame },
+  of = 'scale 1',
+): void {
+  expect(r.svg.length, `${of}: Svg characters, SMIL on`).toBeLessThan(SVG_MAX_CHARS)
+  expect(r.flat.length, `${of}: Svg characters, SMIL off`).toBeLessThan(SVG_MAX_CHARS)
+  expect(rasterPairs(r.cells), `${of}: Raster pairs`).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
+  expect(imageBytes(r.image, IMAGE_SCALE), `${of}: Image bytes`).toBeLessThanOrEqual(
     IMAGE_MAX_BYTES,
   )
 }
 
+function withinBudgets(model: StageModel, motions: readonly Motion[], now: number): void {
+  if (model.scale !== 1) {
+    imageWithinBudget(composeFrame(model, { numbers: true }), model.scale)
+    return
+  }
+  scaleOneWithinBudgets({
+    svg: renderSvg(model, motions, { smil: true, now, width: 960, motion: 'full' }),
+    flat: renderSvg(model, motions, { smil: false, now, width: 960, motion: 'full' }),
+    cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers),
+    image: composeFrame(model, { numbers: true }),
+  })
+}
+
+/** `make(key)` once per key, shared by every test that reads it. */
+function once<K, V>(make: (key: K) => V): (key: K) => V {
+  const made = new Map<K, V>()
+  return (key) => {
+    let value = made.get(key)
+    if (value === undefined) {
+      value = make(key)
+      made.set(key, value)
+    }
+    return value
+  }
+}
+
+/** Each stage scenario staged and its encodings rendered once: the golden, the budgets and the fallback read these. */
+const staged = once((name: Scenario) => {
+  const s = stage(name)
+  return { ...s, renders: renders(s) }
+})
+
 for (const name of SCENARIOS) {
   test(`the ${name} scenario matches its goldens on every renderer and stays in budget`, () => {
-    const s = stage(name)
-    expect(goldenOf(s)).toEqual(GOLDENS[name])
-    withinBudgets(s.model, s.motions, s.now)
-    withinBudgets(s.hires, s.motions, s.now)
-    for (const smil of [true, false]) {
-      const opts = { smil, now: s.now, width: 960, motion: 'full' as const }
-      expect(svgWithFallback(s.hires, s.model, s.motions, opts).length).toBeLessThan(SVG_MAX_CHARS)
+    const s = staged(name)
+    const r = s.renders
+    const golden = goldenOf(r)
+    const want = GOLDENS[name]
+    for (const encoding of Object.keys({ ...want, ...golden }) as (keyof Golden)[]) {
+      expect(golden[encoding], `${name}: ${encoding}`).toBe(want[encoding])
+    }
+    const lo = { svg: r.svgLo, flat: r.svgLoFlat, cells: r.cells, image: r.image }
+    scaleOneWithinBudgets(lo, `${name} at scale 1`)
+    if (r.hiresCells === null) {
+      imageWithinBudget(r.hires, s.hires.scale, `${name} hires: Image bytes`)
+    } else {
+      const hi = { svg: r.svgHi, flat: r.svgHiFlat, cells: r.hiresCells, image: r.hires }
+      scaleOneWithinBudgets(hi, `${name} hires at scale 1`)
+    }
+    // The desktop's Svg through the production fall-back: the hires one, or the scale-1 one over
+    // the cap.
+    for (const [smil, svg] of [
+      ['on', r.svg],
+      ['off', r.svgFlat],
+    ] as const) {
+      expect(svg.length, `${name}: the desktop's Svg, SMIL ${smil}`).toBeLessThan(SVG_MAX_CHARS)
     }
   })
 }
@@ -153,11 +203,11 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
 })
 
 test('at scale 1.5 the rest frame and the boss frame are both 180 × 51 (ADR 0010)', () => {
-  const rest = composeFrame(stage('rest').hires, { numbers: true })
+  const rest = staged('rest').renders.hires
   expect([rest.width, rest.height]).toEqual([180, 51])
-  const boss = composeFrame(stage('boss').hires, { numbers: true })
+  const boss = staged('boss').renders.hires
   expect([boss.width, boss.height]).toEqual([180, 51])
-  expect(stage('compact').hires.scale).toBe(1)
+  expect(staged('compact').hires.scale).toBe(1)
 })
 
 test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes stays in the Image budget', () => {
@@ -238,17 +288,20 @@ for (const name of PANE_SCENARIOS) {
   })
 }
 
+/** Each band scenario built once, shared by its three tests. */
+const built = once(band)
+
 for (const name of BAND_SCENARIOS) {
   test(`band golden: ${name}`, () => {
-    expect(bandGoldenOf(band(name))).toEqual(BAND_GOLDENS[name])
+    expect(bandGoldenOf(built(name))).toEqual(BAND_GOLDENS[name])
   })
   test(`band ${name}: the Raster's cells are the band's box and fit the colour pair budget`, () => {
-    const input = band(name)
+    const input = built(name)
     expect(decode(input.cells).length).toBe(input.box.columns * input.box.rows * 12)
     expect(rasterPairs(input.cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
   })
   test(`band ${name}: the desktop's stage and strip Svgs are each the band's width and under their caps`, () => {
-    const { svg, box } = band(name)
+    const { svg, box } = built(name)
     const width = `width="${box.columns * DESKTOP_COLUMN_PX_CEILING}"`
     expect(svg.strip).toMatch(new RegExp(`^<svg [^>]*${width}`))
     expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
@@ -275,7 +328,7 @@ for (const name of BAND_SCENARIOS) {
 test('the band at 255 × 22 on the 8 by 16 grid is 2040 pixels wide and its PNG fits the host', () => {
   // The rest band's strip, and a stage frame of noise: no run for deflate to find but the 16/3
   // upscale's own.
-  const { strip } = band('band-rest')
+  const { strip } = built('band-rest')
   const rgba = new Uint8ClampedArray(240 * 51 * 4)
   let seed = 1
   for (let i = 0; i < rgba.length; i++) {
@@ -437,8 +490,7 @@ test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a
 })
 
 test('the bandit captain 60 ms into its lunge, on its drawn frames: a 1.5x SMIL Svg of 53,127 characters over the zone 1 backdrop, under the cap', () => {
-  const s = stage('boss-strike')
-  const svg = renderSvg(s.hires, s.motions, { smil: true, now: s.now, width: 960, motion: 'full' })
+  const svg = staged('boss-strike').renders.svgHi
   expect(svg.length).toBe(53_127)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
 })

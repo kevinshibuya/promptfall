@@ -565,8 +565,12 @@ export function svgWithFallback(
   motions: readonly Motion[],
   opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; fit?: number },
 ): string {
-  const svg = renderSvg(hi, motions, opts)
-  return svg.length < SVG_MAX_CHARS ? svg : renderSvg(lo, motions, opts)
+  return svgOrFallback(renderSvg(hi, motions, opts), () => renderSvg(lo, motions, opts))
+}
+
+/** The 1.5x Svg while it is under the cap, else the 1x one, `lo` rendered only then. */
+export function svgOrFallback(hi: string, lo: () => string): string {
+  return hi.length < SVG_MAX_CHARS ? hi : lo()
 }
 
 /**

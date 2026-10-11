@@ -1,5 +1,5 @@
 import type { On, RenderElement, UiBlitArgs } from 'claude-code'
-import { expect, mock } from 'claude-code/testing'
+import { describe, expect, mock } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
@@ -198,56 +198,48 @@ async function height(ui: Finder) {
 
 const RASTER = { renderer: 'raster' } as const
 
-test('the band draws the strip under the stage, and passes during a survey', async ($, on) => {
-  const { data, states } = harness(on)
-  settings(data, RASTER)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const view = states.get('view') as GameView
-  expect(view.heroes).toHaveLength(3)
-  for (const surface of SURFACES) {
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
-    const text = await stripText(ui)
-    for (const hero of view.heroes) expect(text).toContain(hero.shortName)
-    expect(text).toContain('Zone 1')
+// Read-only groups. A test's cost is its engine boot, one per test, and what it registers before
+// the boot (the harness, store seeds, env, clock) is fixed for the boot. Tests with the same setup
+// that, once the session starts, only read (mount a band and read its strip text, blits, raster
+// cells, pixels, which window is where) share one test: one boot, the checks in sequence, each
+// `expect` named so a red group says which check failed. A test that dispatches an event, presses
+// a key, advances the clock or writes state after the start keeps a test of its own, and so does
+// one whose status is unclear. The kit has no `beforeAll`: the mounts live in the test body.
+describe('the raster band, read only', () => {
+  test('the strip under the stage, its survey pass, the zero-width hotkeys', async ($, on) => {
+    const { data, states } = harness(on)
+    settings(data, RASTER)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+
+    // The band draws the strip under the stage, and passes during a survey.
+    const view = states.get('view') as GameView
+    expect(view.heroes, 'strip: three heroes').toHaveLength(3)
+    for (const surface of SURFACES) {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
+      const text = await stripText(ui)
+      for (const hero of view.heroes) {
+        expect(text, `strip on ${surface}: ${hero.shortName}`).toContain(hero.shortName)
+      }
+      expect(text, `strip on ${surface}: the zone`).toContain('Zone 1')
+      await ui.unmount()
+
+      const survey = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20, true) })
+      expect(await survey.find({ key: 'band' }), `survey on ${surface}: no band`).toBeUndefined()
+      expect(
+        await survey.find({ key: 'engine-band' }),
+        `survey on ${surface}: the engine's band`,
+      ).toBeDefined()
+      await survey.unmount()
+    }
+
+    // On terminals the hotkeys sit in a zero-width Box: no row, no column.
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    const box = await ui.find({ key: 'hotkeys' })
+    expect(box?.props.width, 'terminal hotkeys: zero width').toBe(0)
+    expect(box?.props.overflow, 'terminal hotkeys: overflow hidden').toBe('hidden')
+    expect(await ui.find({ key: 'row-hotkeys' }), 'terminal hotkeys: no row').toBeUndefined()
     await ui.unmount()
-
-    const survey = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20, true) })
-    expect(await survey.find({ key: 'band' })).toBeUndefined()
-    expect(await survey.find({ key: 'engine-band' })).toBeDefined()
-    await survey.unmount()
-  }
-})
-
-test('narrow terminals get one row', async ($, on) => {
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(80) })
-  expect(await rows(ui)).toHaveLength(1)
-  // A notice (here the first-run welcome) shows on the one line too.
-  expect(await ui.find({ text: /Welcome to Promptfall/ })).toBeDefined()
-  await ui.unmount()
-})
-
-test('a narrow desktop draws the full stage and the strip, laid out in 116 columns and scaled', async ($, on) => {
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
-  const { stage, strip } = await svgs(ui)
-  expect(stage?.type).toBe('Svg')
-  expect(strip?.type).toBe('Svg')
-  expect(String(strip?.props.source)).toContain(
-    `viewBox="0 0 ${116 * CELL_W} ${STRIP_ROWS * CELL_H}"`,
-  )
-  expect(String(strip?.props.source)).toContain(`width="${95 * DESKTOP_COLUMN_PX_CEILING}"`)
-  // Rung (a′) on the desktop (spike sheet): the hotkeys sit in a hidden absolute Box, no row.
-  expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
-  const keys = await ui.find({ key: 'hotkeys' })
-  expect([keys?.props.width, keys?.props.position]).toEqual([0, 'absolute'])
-  await ui.unmount()
-  // VS Code is untested: it keeps rung (c), a row of its own under the strip.
-  const vscode = await $.ui.mount({ plugin: 'promptfall', surface: 'vscode', ...band(95, 20) })
-  expect(await vscode.find({ key: 'row-hotkeys' })).toBeDefined()
-  await vscode.unmount()
+  })
 })
 
 test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so', async ($, on) => {
@@ -305,18 +297,6 @@ test('the sandbox purse says Sandbox where the tactics sit; farming puts Farm on
   expect(await purse(false, false, 'terminal')).toContain('Push on')
   expect(await purse(false, true, 'terminal')).toContain('Farm here')
   expect(await purse(false, true, 'terminal')).not.toContain('Sandbox')
-})
-
-test('on terminals the hotkeys sit in a zero-width Box: no row, no column', async ($, on) => {
-  const { data } = harness(on)
-  settings(data, RASTER)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  const box = await ui.find({ key: 'hotkeys' })
-  expect(box?.props.width).toBe(0)
-  expect(box?.props.overflow).toBe('hidden')
-  expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
-  await ui.unmount()
 })
 
 test('a secondary session shows one row saying so', async ($, on) => {
@@ -506,30 +486,6 @@ function bossWorld(
     committedDealt,
   }
 }
-
-test('the world boss reads the snapshot, less what this party dealt since', async ($, on) => {
-  const { states } = harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const plain = states.get('view') as GameView
-  const view = (dealt: number): GameView => ({
-    ...plain,
-    boss: { bossId: 'wb1', name: BOSS.name, glyph: '☠', dealt },
-  })
-  const now = 1_000_000
-  // The view's tally equals the committed one: the server's HP as it is.
-  const even = bossWorld(BOSS, { bossId: 'wb1', dealt: 0 })
-  expect(worldRows(view(0), even, now)[1]?.text).toBe(
-    'World boss The Promptwyrm █████░░░ 62% · 11m left · you 0',
-  )
-  // 300 dealt locally past the committed 200: 5,900 shown.
-  const ahead = bossWorld(BOSS, { bossId: 'wb1', dealt: 200 })
-  expect(shownBoss(view(500), ahead)?.shownHp).toBe(5_900)
-  // A secondary has no committed reading: nothing is subtracted.
-  expect(shownBoss(view(500), bossWorld(BOSS, null))?.shownHp).toBe(6_200)
-  // Down: the World row says so.
-  const down = bossWorld({ ...BOSS, hp: 0 }, null)
-  expect(worldRows(view(500), down, now)[1]?.text).toBe('The Promptwyrm is down · you 500')
-})
 
 /** A remote ledger at http://test whose clock the test moves; `boss` overrides the snapshot's. */
 function bossNet(on: On) {
@@ -759,22 +715,6 @@ test(
   },
 )
 
-test('while the renderer is unknown the stage and strip rows are empty and the strip row probes', async ($, on) => {
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  expect(await ui.find({ key: 'stage' })).toBeUndefined()
-  const row = await ui.find({ key: 'row-strip' })
-  expect(
-    row?.children.some((c) => (c as { props?: { key?: string } }).props?.key === 'probe'),
-  ).toBe(true)
-  const probe = await ui.find({ key: 'probe' })
-  expect([probe?.type, probe?.props.columns, probe?.props.rows]).toEqual(['Image', 1, 1])
-  // 20 rows: the stage's 15 empty rows above the strip's 5, as the layout will draw them.
-  expect(await height(ui)).toBe(20)
-  await ui.unmount()
-})
-
 test('lays out with the remembered renderer while the probe is pending', async ($, on) => {
   const { data, clock } = harness(on)
   settings(data, { probed: 'image' })
@@ -815,82 +755,32 @@ test('the probe arms on the World tab too: Loot and World need the renderer', as
   await ui.unmount()
 })
 
-test('the desktop draws the stage Svg and the strip Svg, each with its alt', async ($, on) => {
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
-  const { stage, strip } = await svgs(ui)
-  // An image: SMIL runs in it and a new source swaps in without the frame's blank reload.
-  expect(stage?.props.isInteractive).toBe(SVG_INTERACTIVE)
-  expect(SVG_INTERACTIVE).toBe(false)
-  expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
-  expect(String(strip?.props.alt)).toContain('Party:')
-  await ui.unmount()
-})
-
-test('the Svg band draws the shell behind the stage and the strip, and the line around both', async ($, on) => {
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
-  const { stage, strip } = await svgs(ui)
-  const s = String(stage?.props.source)
-  const t = String(strip?.props.source)
-  // Both on the windows' grid at the band's 120 columns, 8 by 16 a cell, drawn at its width.
-  expect(s).toMatch(/^<svg [^>]*viewBox="0 0 960 272" width="1920" height="544"/)
-  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
-  // The shell first, under everything; the 1.5x stage scaled onto the grid over it.
-  expect(s).toContain(
-    '</defs><rect width="960" height="272" fill="#303028"/><g transform="translate(0 0) scale(5.3333)">',
-  )
-  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
-  // The stage Svg ends on the line's top and sides, the shell outside them over its outermost
-  // pixels; the strip Svg on its sides and bottom, over the outer windows' own lines. Stacked,
-  // the sides meet: 2 pixels wide, 2 in from each edge, the corners cut.
-  expect(s).toMatch(
-    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V272H0ZM3 2H957V3H958V272H2V3H3Z"\/><path fill="#f0f0e8" d="M3 2H957V3H958V272H956V4H4V272H2V3H3Z"\/><\/svg>$/,
-  )
-  expect(t).toMatch(
-    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM2 0H958V69H957V70H3V69H2Z"\/><path fill="#f0f0e8" d="M2 0H4V68H956V0H958V69H957V70H3V69H2Z"\/><\/svg>$/,
-  )
-  // The SMIL stays in each: the actors' idle clock runs inside the scaled stage.
-  expect(s).toMatch(/scale\(5\.3333\)">.*repeatCount="indefinite".*<\/g><path fill="#303028"/)
-  expect(s.length).toBeLessThan(SVG_MAX_CHARS)
-  expect(t.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
-  await ui.unmount()
-})
-
-for (const [columns, art] of [
-  [95, 116],
-  [60, 116],
-  [130, 130],
-] as const) {
-  test(`the desktop at ${columns} columns draws the full stage ${art} columns wide at 1.5 pixels a column`, async ($, on) => {
-    harness(on)
+describe('a zone boss on the desktop, read only', () => {
+  // The rule is at the first group.
+  test('the 17-row stage at 30 rows, a positive size at 3', async ($, on) => {
+    const { shown } = harness(on)
+    shown.view = boss()
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(columns, 20) })
-    const { stage } = await svgs(ui)
-    const source = String(stage?.props.source)
-    // On the windows' grid, 8 pixels a column; the 1.5x art scaled on at 16/3 an art pixel.
-    expect(source).toContain(`viewBox="0 0 ${art * CELL_W} 272"`)
-    expect(source).toContain('<g transform="translate(0 0) scale(5.3333)">')
-    expect(String(stage?.props.alt)).toMatch(/^Zone 1/)
-    // No width prop: the markup is wider than the band and the desktop scales it down to fit.
-    expect(stage?.props.width).toBeUndefined()
-    expect(source).toContain(`width="${columns * DESKTOP_COLUMN_PX_CEILING}"`)
-    await ui.unmount()
-  })
-}
 
-test('the desktop draws the 17-row stage for a zone boss, never the compact one (ADR 0004)', async ($, on) => {
-  const { shown } = harness(on)
-  shown.view = boss()
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 30) })
-  const { stage, strip } = await svgs(ui)
-  expect(String(stage?.props.source)).toContain('viewBox="0 0 928 272"')
-  expect(await ui.find({ key: 'compact-stage' })).toBeUndefined()
-  expect(String(strip?.props.alt)).toContain('Boss')
-  await ui.unmount()
+    // The desktop draws the 17-row stage for a zone boss, never the compact one (ADR 0004).
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 30) })
+    const { stage, strip } = await svgs(ui)
+    expect(String(stage?.props.source), 'boss at 30 rows: the 17-row stage').toContain(
+      'viewBox="0 0 928 272"',
+    )
+    expect(await ui.find({ key: 'compact-stage' }), 'boss at 30 rows: not compact').toBeUndefined()
+    expect(String(strip?.props.alt), 'boss at 30 rows: the strip says Boss').toContain('Boss')
+    await ui.unmount()
+
+    // On a desktop band of three rows the boss stage keeps a positive size.
+    const three = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 3) })
+    const small = (await svgs(three)).stage
+    expect(small, 'boss at 3 rows: a stage').toBeDefined()
+    for (const v of [small?.props.width, small?.props.height]) {
+      if (v !== undefined) expect(Number(v), 'boss at 3 rows: a positive size').toBeGreaterThan(0)
+    }
+    await three.unmount()
+  })
 })
 
 test('Loot and World are the strip alone on the shell: 5 rows, no stage; the loop blits the band there', async ($, on) => {
@@ -998,15 +888,6 @@ test('a survey hides the stage and nothing blits', async ($, on) => {
   await ui.unmount()
 })
 
-test('on the desktop the stage sits in a column, so its frame takes the band width', async ($, on) => {
-  // In a row Box the desktop draws an interactive Svg's frame at the default 300 × 150 points.
-  harness(on)
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
-  expect((await ui.find({ key: 'row-stage' }))?.props.flexDirection).toBe('column')
-  await ui.unmount()
-})
-
 test('on a short desktop band the whole stage scales down to the rows the strip leaves, centred on the shell; a tall one shows it whole', async ($, on) => {
   const { shown } = harness(on)
   shown.view = wave()
@@ -1032,19 +913,6 @@ test('on a short desktop band the whole stage scales down to the rows the strip 
   await tall.unmount()
 })
 
-test('on a desktop band of three rows the boss stage keeps a positive size', async ($, on) => {
-  const { shown } = harness(on)
-  shown.view = boss()
-  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 3) })
-  const { stage } = await svgs(ui)
-  expect(stage).toBeDefined()
-  for (const v of [stage?.props.width, stage?.props.height]) {
-    if (v !== undefined) expect(Number(v)).toBeGreaterThan(0)
-  }
-  await ui.unmount()
-})
-
 test('forcing a renderer before the probe answers keeps the probe going for this session', async ($, on) => {
   const { data } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1053,4 +921,197 @@ test('forcing a renderer before the probe answers keeps the probe going for this
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
   expect(await ui.find({ key: 'probe' })).toBeDefined()
   await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// The first session, read only
+
+describe('the first session, its renderer unknown, read only', () => {
+  // The rule is at the first group. No settings and no shown view: the first-run welcome is up
+  // and the renderer unprobed, and as no check here moves the clock, both stay so throughout.
+  test('narrow layouts, the world boss rows, the pending probe, the desktop Svgs', async ($, on) => {
+    const { states } = harness(on)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+
+    // Narrow terminals get one row.
+    {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(80) })
+      expect(await rows(ui), 'narrow terminal: one row').toHaveLength(1)
+      // A notice (here the first-run welcome) shows on the one line too.
+      expect(
+        await ui.find({ text: /Welcome to Promptfall/ }),
+        'narrow terminal: the welcome on its row',
+      ).toBeDefined()
+      await ui.unmount()
+    }
+
+    // A narrow desktop draws the full stage and the strip, laid out in 116 columns and scaled.
+    {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 20) })
+      const { stage, strip } = await svgs(ui)
+      expect(stage?.type, 'narrow desktop: the stage Svg').toBe('Svg')
+      expect(strip?.type, 'narrow desktop: the strip Svg').toBe('Svg')
+      expect(String(strip?.props.source), 'narrow desktop: the strip in 116 columns').toContain(
+        `viewBox="0 0 ${116 * CELL_W} ${STRIP_ROWS * CELL_H}"`,
+      )
+      expect(String(strip?.props.source), 'narrow desktop: the strip scaled to 95').toContain(
+        `width="${95 * DESKTOP_COLUMN_PX_CEILING}"`,
+      )
+      // Rung (a′) on the desktop (spike sheet): the hotkeys sit in a hidden absolute Box, no row.
+      expect(await ui.find({ key: 'row-hotkeys' }), 'narrow desktop: no hotkey row').toBeUndefined()
+      const keys = await ui.find({ key: 'hotkeys' })
+      expect(
+        [keys?.props.width, keys?.props.position],
+        'narrow desktop: the hotkeys absolute, zero wide',
+      ).toEqual([0, 'absolute'])
+      await ui.unmount()
+      // VS Code is untested: it keeps rung (c), a row of its own under the strip.
+      const vscode = await $.ui.mount({ plugin: 'promptfall', surface: 'vscode', ...band(95, 20) })
+      expect(await vscode.find({ key: 'row-hotkeys' }), 'vscode: a hotkey row').toBeDefined()
+      await vscode.unmount()
+    }
+
+    // The world boss reads the snapshot, less what this party dealt since.
+    {
+      const plain = states.get('view') as GameView
+      const view = (dealt: number): GameView => ({
+        ...plain,
+        boss: { bossId: 'wb1', name: BOSS.name, glyph: '☠', dealt },
+      })
+      const now = 1_000_000
+      // The view's tally equals the committed one: the server's HP as it is.
+      const even = bossWorld(BOSS, { bossId: 'wb1', dealt: 0 })
+      expect(worldRows(view(0), even, now)[1]?.text, 'world boss: the HP as served').toBe(
+        'World boss The Promptwyrm █████░░░ 62% · 11m left · you 0',
+      )
+      // 300 dealt locally past the committed 200: 5,900 shown.
+      const ahead = bossWorld(BOSS, { bossId: 'wb1', dealt: 200 })
+      expect(shownBoss(view(500), ahead)?.shownHp, 'world boss: less what was dealt since').toBe(
+        5_900,
+      )
+      // A secondary has no committed reading: nothing is subtracted.
+      expect(
+        shownBoss(view(500), bossWorld(BOSS, null))?.shownHp,
+        'world boss: a secondary subtracts nothing',
+      ).toBe(6_200)
+      // Down: the World row says so.
+      const down = bossWorld({ ...BOSS, hp: 0 }, null)
+      expect(worldRows(view(500), down, now)[1]?.text, 'world boss: down').toBe(
+        'The Promptwyrm is down · you 500',
+      )
+    }
+
+    // While the renderer is unknown the stage and strip rows are empty and the strip row probes.
+    {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+      expect(await ui.find({ key: 'stage' }), 'unknown renderer: no stage').toBeUndefined()
+      const row = await ui.find({ key: 'row-strip' })
+      expect(
+        row?.children.some((c) => (c as { props?: { key?: string } }).props?.key === 'probe'),
+        'unknown renderer: the probe in the strip row',
+      ).toBe(true)
+      const probe = await ui.find({ key: 'probe' })
+      expect(
+        [probe?.type, probe?.props.columns, probe?.props.rows],
+        'unknown renderer: the probe a 1 × 1 Image',
+      ).toEqual(['Image', 1, 1])
+      // 20 rows: the stage's 15 empty rows above the strip's 5, as the layout will draw them.
+      expect(await height(ui), 'unknown renderer: the band at 20 rows').toBe(20)
+      await ui.unmount()
+    }
+
+    // The desktop draws the stage Svg and the strip Svg, each with its alt.
+    {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+      const { stage, strip } = await svgs(ui)
+      // An image: SMIL runs in it and a new source swaps in without the frame's blank reload.
+      expect(stage?.props.isInteractive, 'desktop Svgs: the stage as tuned').toBe(SVG_INTERACTIVE)
+      expect(SVG_INTERACTIVE, 'desktop Svgs: the stage an image').toBe(false)
+      expect(String(stage?.props.alt), 'desktop Svgs: the stage alt').toMatch(/^Zone 1/)
+      expect(String(strip?.props.alt), 'desktop Svgs: the strip alt').toContain('Party:')
+      await ui.unmount()
+    }
+
+    // The Svg band draws the shell behind the stage and the strip, and the line around both.
+    {
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+      const { stage, strip } = await svgs(ui)
+      const s = String(stage?.props.source)
+      const t = String(strip?.props.source)
+      // Both on the windows' grid at the band's 120 columns, 8 by 16 a cell, drawn at its width.
+      expect(s, 'Svg shell: the stage grid').toMatch(
+        /^<svg [^>]*viewBox="0 0 960 272" width="1920" height="544"/,
+      )
+      expect(t, 'Svg shell: the strip grid').toMatch(
+        /^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/,
+      )
+      // The shell first, under everything; the 1.5x stage scaled onto the grid over it.
+      expect(s, 'Svg shell: under the stage').toContain(
+        '</defs><rect width="960" height="272" fill="#303028"/><g transform="translate(0 0) scale(5.3333)">',
+      )
+      expect(t, 'Svg shell: under the strip').toContain(
+        '</defs><rect width="960" height="80" fill="#303028"/>',
+      )
+      // The stage Svg ends on the line's top and sides, the shell outside them over its outermost
+      // pixels; the strip Svg on its sides and bottom, over the outer windows' own lines. Stacked,
+      // the sides meet: 2 pixels wide, 2 in from each edge, the corners cut.
+      expect(s, 'Svg shell: the line over the stage').toMatch(
+        /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V272H0ZM3 2H957V3H958V272H2V3H3Z"\/><path fill="#f0f0e8" d="M3 2H957V3H958V272H956V4H4V272H2V3H3Z"\/><\/svg>$/,
+      )
+      expect(t, 'Svg shell: the line under the strip').toMatch(
+        /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM2 0H958V69H957V70H3V69H2Z"\/><path fill="#f0f0e8" d="M2 0H4V68H956V0H958V69H957V70H3V69H2Z"\/><\/svg>$/,
+      )
+      // The SMIL stays in each: the actors' idle clock runs inside the scaled stage.
+      expect(s, 'Svg shell: the SMIL in the scaled stage').toMatch(
+        /scale\(5\.3333\)">.*repeatCount="indefinite".*<\/g><path fill="#303028"/,
+      )
+      expect(s.length, 'Svg shell: the stage under its cap').toBeLessThan(SVG_MAX_CHARS)
+      expect(t.length, 'Svg shell: the strip within its cap').toBeLessThanOrEqual(
+        STRIP_SVG_MAX_CHARS,
+      )
+      await ui.unmount()
+    }
+
+    // The desktop at 95, 60 and 130 columns draws the full stage 116, 116 and 130 columns wide at
+    // 1.5 pixels a column.
+    for (const [columns, art] of [
+      [95, 116],
+      [60, 116],
+      [130, 130],
+    ] as const) {
+      const ui = await $.ui.mount({
+        plugin: 'promptfall',
+        surface: 'desktop',
+        ...band(columns, 20),
+      })
+      const { stage } = await svgs(ui)
+      const source = String(stage?.props.source)
+      const at = `desktop at ${columns}`
+      // On the windows' grid, 8 pixels a column; the 1.5x art scaled on at 16/3 an art pixel.
+      expect(source, `${at}: the stage ${art} columns`).toContain(
+        `viewBox="0 0 ${art * CELL_W} 272"`,
+      )
+      expect(source, `${at}: the art at 1.5x`).toContain(
+        '<g transform="translate(0 0) scale(5.3333)">',
+      )
+      expect(String(stage?.props.alt), `${at}: the stage alt`).toMatch(/^Zone 1/)
+      // No width prop: the markup is wider than the band and the desktop scales it down to fit.
+      expect(stage?.props.width, `${at}: no width prop`).toBeUndefined()
+      expect(source, `${at}: the markup's width`).toContain(
+        `width="${columns * DESKTOP_COLUMN_PX_CEILING}"`,
+      )
+      await ui.unmount()
+    }
+
+    // On the desktop the stage sits in a column, so its frame takes the band width.
+    {
+      // In a row Box the desktop draws an interactive Svg's frame at the default 300 × 150 points.
+      const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(95, 12) })
+      expect(
+        (await ui.find({ key: 'row-stage' }))?.props.flexDirection,
+        'desktop stage row: a column',
+      ).toBe('column')
+      await ui.unmount()
+    }
+  })
 })
