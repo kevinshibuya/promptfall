@@ -209,6 +209,19 @@ test('messageLines: too small, read-only secondary, a refusal', () => {
   expect(textOf(refused[1])).toBe('second')
 })
 
+test('messageLines: a refusal in a read-only pane shows under the reason', () => {
+  const dialog = { ...paneInput().dialog, paneNotice: 'the server did not delete the account' }
+  const notice = 'Promptfall: this account is banned: spam in chat'
+  const lines = messageLines(paneInput({ readOnly: true, mode: 'paused', notice, dialog }), null, [
+    'first',
+    'second',
+  ])
+  expect(lines[0]).toEqual([{ text: notice, rgb: WARN_RGB }])
+  expect(lines[1]).toEqual([
+    { text: 'Refused: the server did not delete the account', rgb: DOWN_RGB },
+  ])
+})
+
 test("messageLines: the tab's error in red, under the read-only rule", () => {
   const state: [string, string] = ['first', 'second']
   const error = messageLines(paneInput(), 'Not enough gold', state)

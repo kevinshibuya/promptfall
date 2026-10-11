@@ -144,12 +144,21 @@ type LedgerHost = {
      */
     setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>;
     /**
-     * Bans an account: from the next call on, every authenticated call it makes is refused with
-     * `reason`. Answers the ban as stored, or null when no account has the id.
+     * Bans an account: from the next call on, every authenticated call it makes but a delete is
+     * refused with `reason`. A linked account's login is banned too, so no account links it.
+     * Answers the ban as stored, or null when no account has the id.
      */
     ban(accountId: string, reason: string): Promise<{
         reason: string;
         at: number;
+    } | null>;
+    /**
+     * Lifts a login's ban, and the ban of each account it names that is still there. Answers the
+     * login lowercased and the accounts lifted, or null for a login never banned.
+     */
+    unban(login: string): Promise<{
+        login: string;
+        lifted: string[];
     } | null>;
 };
 /**
@@ -213,10 +222,11 @@ declare class Ledger implements ServerClient {
     private flags;
     private setFlags;
     private ban;
+    private unban;
     private config;
     private marketContext;
     private worldContext;
-    /** A null token always mints, so only a known token can be refused. */
+    /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */
     bootstrap(input: {
         clientVersion: string;
         deviceToken: null;
@@ -225,14 +235,15 @@ declare class Ledger implements ServerClient {
         clientVersion: string;
         deviceToken: string | null;
     }): Promise<Bootstrap | BootstrapRefused>;
-    /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+    /** Whether `deviceToken` names an account: a read that writes nothing. */
     knowsToken(deviceToken: string): Promise<boolean>;
     private bootFor;
     account(auth: Auth): Promise<AccountInfo | Unauthorized | Banned>;
     /**
      * Deletes the caller's account. Its open listings and orders close with nothing returned or
      * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-     * else is settled: a counterparty, the boss record and the chat history are untouched.
+     * else is settled: a counterparty, the boss record and the chat history are untouched. The
+     * one call a ban lets through: a banned player may leave. A login ban stays behind.
      */
     deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;
@@ -276,6 +287,8 @@ declare class Ledger implements ServerClient {
     private settleBoss;
     private settleAccount;
     private sweep;
+    /** Drops the link rows past their lifetime and clears each account's pointer to one. */
+    private sweepLinks;
 }
 
 export { type AccountRecord, BLOCKED_WORDS, COOLDOWN_MS, EXPIRY_MS, LINK_INTERVAL_MS, LINK_URL, LOG_CAP, Ledger, type LedgerFlag, type LedgerHost, type LedgerOptions, type LinkApprover, type LogEntry, MAX_PRICE, MIN_PRICE, PLAYER_NAME_MAX, type PendingReturn, type ReadOptions, SETTABLE_FLAGS, type SandboxOutcome, type SettableFlag, WORLD_BOSSES, approveAs, isBlocked, listingFee, nextLedgerId, saleFee, saleNet, transfer, validPrice };

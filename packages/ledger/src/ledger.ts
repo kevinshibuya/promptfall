@@ -52,7 +52,10 @@ import {
   FLAGS_KEY,
   isCurrent,
   KINDS,
+  type Link,
+  type LoginBan,
   linkKey,
+  loginBanKey,
   newRecord,
   publicName,
   settle,
@@ -147,10 +150,16 @@ export type LedgerHost = {
    */
   setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>
   /**
-   * Bans an account: from the next call on, every authenticated call it makes is refused with
-   * `reason`. Answers the ban as stored, or null when no account has the id.
+   * Bans an account: from the next call on, every authenticated call it makes but a delete is
+   * refused with `reason`. A linked account's login is banned too, so no account links it.
+   * Answers the ban as stored, or null when no account has the id.
    */
   ban(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
+  /**
+   * Lifts a login's ban, and the ban of each account it names that is still there. Answers the
+   * login lowercased and the accounts lifted, or null for a login never banned.
+   */
+  unban(login: string): Promise<{ login: string; lifted: string[] } | null>
 }
 
 /**
@@ -165,6 +174,8 @@ export const PLAYER_NAME_MAX = 64
 
 export const LINK_URL = 'https://github.com/login/device'
 export const LINK_INTERVAL_MS = 5000
+/** GitHub's device code lives 15 minutes; the sweep drops a link row after that, × the speed. */
+export const LINK_TTL_MS = 15 * 60_000
 
 /**
  * The two calls of a link. Both run outside the ledger's mutex, so a slow answer stalls only
@@ -195,10 +206,12 @@ export function approveAs(login: string | null): LinkApprover {
   }
 }
 
-/** Keyed by the code the player sees. Records from before the device code fall back to the key. */
-type Link = { accountId: string; createdAt: number; deviceCode?: string }
-
 const unauthorized: Unauthorized = { reason: 'unauthorized' }
+/** A bootstrap with a token the books do not know: only a null token mints. */
+const unknownToken: BootstrapRefused = {
+  refusal: 'unknown',
+  message: 'The server does not know this account.',
+}
 const pending: LinkPoll = { status: 'pending' }
 const refusedUnauthorized: MarketResult = { ok: false, reason: 'unauthorized' }
 const chatUnauthorized: ChatResult = { ok: false, reason: 'unauthorized' }
@@ -254,6 +267,7 @@ export class Ledger implements ServerClient {
       settleBoss: () => this.run(() => this.settleBoss()),
       setFlags: (flags) => this.run(() => this.setFlags(flags)),
       ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
+      unban: (login) => this.run(() => this.unban(login)),
     }
   }
 
@@ -304,7 +318,30 @@ export class Ledger implements ServerClient {
     if (!record) return null
     record.banned = { reason, at: await this.options.now() }
     await this.books.save(record)
+    // The login too, so a fresh account cannot link it; a second ban only adds its account.
+    const login = record.account.linked?.login
+    if (login) {
+      const prior = await this.books.loginBan(login)
+      const ban: LoginBan = prior ?? { ...record.banned, accountIds: [] }
+      if (!ban.accountIds.includes(accountId)) ban.accountIds = [...ban.accountIds, accountId]
+      await this.kv.set(loginBanKey(login), ban)
+    }
     return record.banned
+  }
+
+  private async unban(login: string): Promise<{ login: string; lifted: string[] } | null> {
+    const ban = await this.books.loginBan(login)
+    if (!ban) return null
+    await this.kv.delete(loginBanKey(login))
+    const lifted: string[] = []
+    for (const accountId of ban.accountIds) {
+      const record = await this.books.load(accountId)
+      if (!record?.banned) continue
+      delete record.banned
+      await this.books.save(record)
+      lifted.push(accountId)
+    }
+    return { login: login.toLowerCase(), lifted }
   }
 
   private async config(): Promise<ServerConfig> {
@@ -339,7 +376,7 @@ export class Ledger implements ServerClient {
   // ---------------------------------------------------------------------------
   // Accounts
 
-  /** A null token always mints, so only a known token can be refused. */
+  /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */
   bootstrap(input: { clientVersion: string; deviceToken: null }): Promise<Bootstrap>
   bootstrap(input: {
     clientVersion: string
@@ -350,12 +387,14 @@ export class Ledger implements ServerClient {
     deviceToken: string | null
   }): Promise<Bootstrap | BootstrapRefused> {
     return this.run(async (): Promise<Bootstrap | BootstrapRefused> => {
-      if (input.deviceToken) {
+      // Only a null token mints: any string, the empty one too, is a token the books must know.
+      if (input.deviceToken !== null) {
         // A known token writes nothing: a secondary session bootstraps every few seconds.
         const record = await this.books.authenticate({ deviceToken: input.deviceToken })
         const banned = record && bannedOf(record)
         if (banned) return { refusal: 'banned', message: banned.message }
         if (record) return this.bootFor(input.deviceToken, record)
+        return unknownToken
       }
       const now = await this.options.now()
       const seed = this.options.seedSource() >>> 0
@@ -372,7 +411,7 @@ export class Ledger implements ServerClient {
     })
   }
 
-  /** Whether `deviceToken` names an account: a read, so the HTTP layer can let it past the mint cap. */
+  /** Whether `deviceToken` names an account: a read that writes nothing. */
   knowsToken(deviceToken: string): Promise<boolean> {
     return this.run(async () => (await this.books.authenticate({ deviceToken })) !== null)
   }
@@ -421,19 +460,18 @@ export class Ledger implements ServerClient {
   /**
    * Deletes the caller's account. Its open listings and orders close with nothing returned or
    * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   * else is settled: a counterparty, the boss record and the chat history are untouched. The
+   * one call a ban lets through: a banned player may leave. A login ban stays behind.
    */
   deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
-      const banned = bannedOf(record)
-      if (banned) return banned
       const id = record.account.accountId
       await market.closeAllOf(await this.marketContext(), id)
       await world.dropFromBoards(this.kv, id)
       if (this.presence.delete(id)) this.memo.presenceChanged()
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
+      if (record.linkCode) await this.books.dropLink(record.linkCode)
       await this.books.remove(record, auth.deviceToken)
       return { deleted: true } as const
     })
@@ -586,9 +624,12 @@ export class Ledger implements ServerClient {
       const record = await this.books.authenticate(auth)
       if (!record || record.account.accountId !== accountId) return unauthorized
       // One open link per account: a new start replaces the last one's row.
-      if (record.linkCode) await this.kv.delete(linkKey(record.linkCode))
-      const link: Link = { accountId, createdAt: await this.options.now(), deviceCode }
-      await this.kv.set(linkKey(start.code), link)
+      if (record.linkCode) await this.books.dropLink(record.linkCode)
+      await this.books.putLink(start.code, {
+        accountId,
+        createdAt: await this.options.now(),
+        deviceCode,
+      })
       record.linkCode = start.code
       await this.books.save(record)
       return start
@@ -618,11 +659,21 @@ export class Ledger implements ServerClient {
       if (!link || link.accountId !== record.account.accountId) {
         return record.account.linked ? { status: 'linked', account: record.account } : pending
       }
-      await this.kv.delete(linkKey(code))
+      await this.books.dropLink(code)
       if (record.linkCode === code) delete record.linkCode
       if (answer.status === 'ended') {
         await this.books.save(record)
         return answer
+      }
+      // A banned login ends the link denied; the account is not banned by that.
+      const loginBan = await this.books.loginBan(answer.login)
+      if (loginBan) {
+        await this.books.save(record)
+        return {
+          status: 'ended',
+          reason: 'denied',
+          message: `Promptfall: this GitHub account is banned: ${loginBan.reason}`.slice(0, 200),
+        }
       }
       record.account = {
         ...record.account,
@@ -906,6 +957,21 @@ export class Ledger implements ServerClient {
       const record = await this.books.load(accountId)
       if (!record) continue
       await this.books.deliverReturns(record)
+      await this.books.save(record)
+    }
+    await this.sweepLinks()
+  }
+
+  /** Drops the link rows past their lifetime and clears each account's pointer to one. */
+  private async sweepLinks(): Promise<void> {
+    const cutoff = (await this.options.now()) - LINK_TTL_MS * (this.options.speed ?? 1)
+    for (const { code, createdAt } of await this.books.openLinks()) {
+      if (createdAt > cutoff) continue
+      const link = (await this.kv.get(linkKey(code))) as Link | undefined
+      await this.books.dropLink(code)
+      const record = link ? await this.books.load(link.accountId) : null
+      if (record?.linkCode !== code) continue
+      delete record.linkCode
       await this.books.save(record)
     }
   }

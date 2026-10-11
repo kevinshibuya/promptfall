@@ -377,10 +377,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   random device token each. Linking runs GitHub's device flow and unlocks
   trading and chat; the server keeps the GitHub login and drops the access
   token. Bootstrap answers the bootstrap or `{refusal, message}` with `refusal`
-  `rate_limited` or `banned`. The HTTP layer caps minting (a bootstrap with a
-  null or unknown token) at five an hour per client address, the last hop of
-  `x-forwarded-for` behind Caddy; a known token always passes and the ledger
-  stays address-blind.
+  `rate_limited`, `banned` or `unknown`. Only a bootstrap with a null token
+  mints; one with a token the ledger does not know is refused as `unknown` and
+  mints nothing. The HTTP layer caps minting (a bootstrap with a null token) at
+  five an hour per client address, the last hop of `x-forwarded-for` behind
+  Caddy; any other token passes the cap and the ledger stays address-blind.
 - Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`,
   `presence.enabled`, `leaderboards.enabled`, `maintenance`. The start flags
   come from `--flag`; a flag set over the admin route is stored under
@@ -388,18 +389,28 @@ flags. No second server program, no Postgres, no Redis, no worker.
   call. The version floor is not a flag: the bootstrap's config carries the
   protocol's `MIN_CLIENT_VERSION`, the launch version 0.3.0, and a batch from
   an older plugin answers `version_gate`.
-- Admin: with `PROMPTFALL_ADMIN_TOKEN` in the environment, two routes take it
-  as a bearer. `POST /v1/admin/flags` sets flags (`sandbox.enabled` is
+- Admin: with `PROMPTFALL_ADMIN_TOKEN` in the environment, three routes take
+  it as a bearer. `POST /v1/admin/flags` sets flags (`sandbox.enabled` is
   refused); `POST /v1/admin/ban` stores a record-only `banned: {reason, at}`,
-  after which every authenticated call of that account answers `banned` with
-  the reason, and the plugin pauses with it. Each admin call writes one log
-  line with its time, target and outcome, never the token. Without the token
-  the host has no admin routes. No mute, no item revoke, no unban, no audit
-  table, no admin CLI.
+  after which every authenticated call of that account but its delete answers
+  `banned` with the reason, and the plugin pauses with it. A ban on a linked
+  account also records its GitHub login, lowercased, under `pf:ban:<login>`
+  with the first ban's reason and every banned account that carried the login
+  (linking never made a login unique). Link approval refuses a recorded login:
+  the poll that would attach it ends `denied` with the ban's message, and the
+  account stays unlinked and unbanned. An account that never linked is banned
+  by id alone. `POST /v1/admin/unban` with `{login}`, in any case, removes the
+  login's record and lifts the ban of each account it names that still
+  exists; it answers `{login, lifted}`, or 404 for a login never recorded.
+  There is no unban by account id. Each admin call writes one log line with
+  its time, target and outcome, never the token. Without the token the host
+  has no admin routes. No mute, no item revoke, no audit table, no admin CLI.
 - Account delete: `DELETE /v1/account` closes the caller's listings and buy
   orders with nothing returned or refunded, takes it off both boards and
   presence, and deletes its record and token. Nothing else is settled: a
-  counterparty, the boss record and the chat history are untouched.
+  counterparty, the boss record and the chat history are untouched. Delete is
+  the one authenticated call a ban lets through, so a banned player may
+  leave; the login's ban stays behind it.
 - Logs: one access line per request on stdout (method, path, status,
   milliseconds; no header, address, token or body), the admin lines and the
   backup lines. `docker compose logs` is the log.

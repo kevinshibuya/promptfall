@@ -1,6 +1,13 @@
 import type { AccountRecord, Ledger } from '@promptfall/ledger'
-import { BOSS_BASE_HP, HttpClient, type Listing, MemoryKeyValue } from '@promptfall/protocol'
-import { RARITIES, type Rarity } from '@promptfall/sim'
+import {
+  BOSS_BASE_HP,
+  type BoardRow,
+  HttpClient,
+  type Listing,
+  MemoryKeyValue,
+  weekStartOf,
+} from '@promptfall/protocol'
+import { RARITIES, type Rarity, SIM_VERSION } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { BOT_NAMES, BOT_TICK_MS, botName } from './bot-config'
 import { rollBotState } from './bot-seed'
@@ -11,14 +18,63 @@ import { booted } from './test-support'
 
 const rarePlus = (r: Rarity) => RARITIES.indexOf(r) >= RARITIES.indexOf('rare')
 const COUNT = 12
+const START = 1_700_000_000_000
+const BOARDS = 'pf:boards'
+
+/** The boards as the ledger stores them: rows a read may hide are still here. */
+type StoredBoards = {
+  zone: BoardRow[]
+  week: { start: number; damage: Record<string, { name: string; value: number }> }
+}
+
+type Saved = { accountId: string; deviceToken: string }
+
+/**
+ * Points bot 0 at an unmarked account its start will replace, stale by name or by sim version,
+ * and gives it and a player a row each on both boards. Answers both ids and the old token.
+ */
+async function seedReplaced(
+  ledger: Ledger,
+  kv: MemoryKeyValue,
+  stale: 'name' | 'version',
+): Promise<{ old: Saved; player: string }> {
+  const state = rollBotState(1, 0)
+  const old = await ledger.host.mint(
+    stale === 'name'
+      ? { state, name: 'Ashgrove', linked: true }
+      : {
+          state: { ...state, v: (SIM_VERSION - 1) as typeof SIM_VERSION },
+          name: botName(0),
+          linked: true,
+        },
+  )
+  await kv.set('pf:bot:0', old)
+  const player = (await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })).account
+    .accountId
+  const boards: StoredBoards = {
+    zone: [
+      { accountId: old.accountId, name: 'Ashgrove', value: 9 },
+      { accountId: player, name: 'player', value: 3 },
+    ],
+    week: {
+      start: weekStartOf(START),
+      damage: {
+        [old.accountId]: { name: 'Ashgrove', value: 900 },
+        [player]: { name: 'player', value: 300 },
+      },
+    },
+  }
+  await kv.set(BOARDS, boards)
+  return { old, player }
+}
 
 /** A fake listening on port 0 with a manual clock, and bots that act only when the test ticks them. */
 async function run(
   seed: number,
   ticks: number,
-  start = 1_700_000_000_000,
-  /** Runs before the bots start, over the same store and ledger. */
-  prepare?: (ledger: Ledger, kv: MemoryKeyValue) => Promise<void>,
+  start = START,
+  /** Runs before the bots start, over the same store, ledger and client. */
+  prepare?: (ledger: Ledger, kv: MemoryKeyValue, client: HttpClient) => Promise<void>,
 ) {
   const kv = new MemoryKeyValue()
   let t = start
@@ -35,7 +91,7 @@ async function run(
   })
   const listening = await server.listen(0)
   const client = new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch })
-  await prepare?.(server.ledger, kv)
+  await prepare?.(server.ledger, kv, client)
   const calls: string[] = []
   const host = {
     mint: server.ledger.host.mint,
@@ -79,12 +135,17 @@ async function run(
     let orders = 0
     const records: AccountRecord[] = []
     for (let i = 0; i < COUNT; i++) {
-      const saved = (await kv.get(`pf:bot:${i}`)) as { accountId: string; deviceToken: string }
+      const saved = (await kv.get(`pf:bot:${i}`)) as
+        | { accountId: string; deviceToken: string }
+        | undefined
+      // A failed start leaves the bots after it unminted.
+      if (!saved) continue
       const mine = await client.myOrders({ deviceToken: saved.deviceToken })
       if (!('reason' in mine)) orders += mine.orders.length
       records.push((await kv.get(`pf:acct:${saved.accountId}:record`)) as AccountRecord)
     }
-    return { all, world, boards, orders, records, lines, calls }
+    const stored = (await kv.get(BOARDS)) as StoredBoards
+    return { all, world, boards, stored, orders, records, lines, calls, kv }
   } finally {
     await listening.close()
   }
@@ -190,6 +251,84 @@ describe('bots over HTTP', () => {
     })
     expect(records[0]?.account.accountId).not.toBe(unmarked)
     expect(records[0]).toMatchObject({ bot: true, account: { displayName: '[bot] Ashgrove' } })
+  }, 120_000)
+
+  for (const stale of ['name', 'version'] as const) {
+    it(`a replaced bot's account is deleted, and neither board keeps it (${stale})`, async () => {
+      const seeded: Partial<Awaited<ReturnType<typeof seedReplaced>>> = {}
+      const { boards, stored, records, kv } = await run(1, COUNT, undefined, async (ledger, kv) => {
+        Object.assign(seeded, await seedReplaced(ledger, kv, stale))
+        // Both boards hold it before the start, so its absence after is the delete's.
+        const before = (await kv.get(BOARDS)) as StoredBoards
+        expect(before.zone.map((r) => r.accountId)).toContain(seeded.old?.accountId)
+        expect(Object.keys(before.week.damage)).toContain(seeded.old?.accountId)
+      })
+      const { old, player } = seeded
+      if (!old || !player) throw new Error('not seeded')
+      const fresh = records[0]
+      expect(fresh?.account.accountId).not.toBe(old.accountId)
+      expect(fresh).toMatchObject({ bot: true, account: { displayName: botName(0) } })
+      // The old account's record and token are gone.
+      expect(await kv.get(`pf:acct:${old.accountId}:record`)).toBeUndefined()
+      expect(await kv.get(`pf:token:${old.deviceToken}`)).toBeUndefined()
+      // Neither board keeps it, stored or served; the player's rows stand; the replacement holds none.
+      const ids = (rows: { accountId: string }[]) => rows.map((r) => r.accountId)
+      expect(ids(stored.zone)).toEqual([player])
+      expect(Object.keys(stored.week.damage)).toEqual([player])
+      expect(ids(boards.highestZone)).toEqual([player])
+      expect(ids(boards.damage)).toEqual([player])
+    }, 120_000)
+  }
+
+  it('a delete answered unauthorized is logged once and the bot is minted anyway', async () => {
+    const seeded: { old?: Saved } = {}
+    const { records, lines } = await run(1, COUNT, undefined, async (ledger, kv, client) => {
+      seeded.old = (await seedReplaced(ledger, kv, 'name')).old
+      client.deleteAccount = async () => ({ reason: 'unauthorized' })
+    })
+    expect(records[0]?.account.accountId).not.toBe(seeded.old?.accountId)
+    expect(records[0]).toMatchObject({ bot: true, account: { displayName: botName(0) } })
+    expect(lines.filter((l) => / delete /.test(l))).toEqual([
+      `bot ${botName(0)} delete unauthorized`,
+    ])
+  }, 120_000)
+
+  const failures = {
+    throws: {
+      answer: async (): Promise<never> => {
+        throw new Error('connection reset')
+      },
+      line: 'bots failed to start: Error: connection reset',
+    },
+    'is refused': {
+      answer: async () => ({ reason: 'banned' as const, message: 'banned' }),
+      line: `bots failed to start: Error: bot ${botName(0)}: delete refused, banned`,
+    },
+  }
+  for (const [how, { answer, line }] of Object.entries(failures)) {
+    it(`a delete that ${how} stops the start and leaves the pointer as it was`, async () => {
+      const seeded: { old?: Saved } = {}
+      const { records, lines, kv } = await run(1, COUNT, undefined, async (ledger, kv, client) => {
+        seeded.old = (await seedReplaced(ledger, kv, 'name')).old
+        client.deleteAccount = answer
+      })
+      expect(await kv.get('pf:bot:0')).toEqual(seeded.old)
+      expect(records.map((r) => r.account.accountId)).toEqual([seeded.old?.accountId])
+      expect(lines).toContain(line)
+    }, 120_000)
+  }
+
+  it('a saved token the store no longer knows is minted again without a delete', async () => {
+    const deletes: string[] = []
+    const { records } = await run(1, COUNT, undefined, async (_ledger, kv, client) => {
+      await kv.set('pf:bot:0', { accountId: 'gone', deviceToken: 'tok-gone' })
+      client.deleteAccount = async (auth) => {
+        deletes.push(auth.deviceToken)
+        return { reason: 'unauthorized' }
+      }
+    })
+    expect(deletes).toEqual([])
+    expect(records[0]).toMatchObject({ bot: true, account: { displayName: botName(0) } })
   }, 120_000)
 
   it('two runs with the same seed list the same ids at the same prices', async () => {

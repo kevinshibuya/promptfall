@@ -39,9 +39,21 @@ import {
 import type { Batch } from './schemas'
 import { type Boards, type ChatResult, ChatResultSchema, type WorldSnapshot } from './world'
 
+/**
+ * The part of an abort signal a fetch reads, typed by its shape: the vendor build compiles with
+ * no platform library, and the global signal satisfies it.
+ */
+export type AbortSignalLike = { readonly aborted: boolean }
+
 export type FetchLike = (
   url: string,
-  init: { method: string; headers: Record<string, string>; body?: string },
+  init: {
+    method: string
+    headers: Record<string, string>
+    body?: string
+    /** Aborting it cancels the request. */
+    signal?: AbortSignalLike
+  },
 ) => Promise<{ status: number; ok: boolean; text: string }>
 
 type Method = 'GET' | 'POST' | 'DELETE'

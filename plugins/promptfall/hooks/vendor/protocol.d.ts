@@ -325,10 +325,11 @@ type Bootstrap = {
 };
 /**
  * A bootstrap the host will not answer: `rate_limited` when this address minted too many accounts
- * this hour, `banned` when the account is. The message is the player's to read.
+ * this hour, `banned` when the account is, `unknown` when the token names no account (only a null
+ * token mints). The message is the player's to read.
  */
 type BootstrapRefused = {
-    refusal: 'rate_limited' | 'banned';
+    refusal: 'rate_limited' | 'banned' | 'unknown';
     message: string;
 };
 /** The account delete's answer: the account, its token and its rows are gone. */
@@ -405,10 +406,19 @@ declare const BUDGETS: Record<BudgetKind, {
     capacity: number;
 }>;
 
+/**
+ * The part of an abort signal a fetch reads, typed by its shape: the vendor build compiles with
+ * no platform library, and the global signal satisfies it.
+ */
+type AbortSignalLike = {
+    readonly aborted: boolean;
+};
 type FetchLike = (url: string, init: {
     method: string;
     headers: Record<string, string>;
     body?: string;
+    /** Aborting it cancels the request. */
+    signal?: AbortSignalLike;
 }) => Promise<{
     status: number;
     ok: boolean;
@@ -615,4 +625,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };
+export { type AbortSignalLike, type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };

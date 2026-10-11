@@ -126,11 +126,14 @@ code the server gives in the detail window, the URL to enter it at under the pic
 at the interval the server gives. A server started with `--link github` runs GitHub's own device
 flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
 link completing on the first poll after the player authorises, and the GitHub login as the
-account's name. The server keeps the login and never the access token. A decline, an expired code
+account's name. When GitHub asks the server to slow down, the server answers the player's polls
+"pending" without asking GitHub until the slower pace allows the next call. The server keeps the login and never the access token. A decline, an expired code
 or GitHub not answering ends the link unlinked, with the reason in a toast; a `github` server
 without a client id refuses the start the same way. `--link fake`, the default, approves on the
-first poll as `--player-name`. The public server runs GitHub's flow. An unlinked account or a
-closed market is said in the message window, with a hotkey to the Account tab.
+first poll as `--player-name`. The public server runs GitHub's flow. The server's sweep drops a
+link left open past 15 minutes, GitHub's device-code lifetime (scaled by the speed); a poll on it
+then answers pending until the client gives up. An unlinked account or a closed market is said in
+the message window, with a hotkey to the Account tab.
 
 ## World
 
@@ -149,7 +152,9 @@ damage this week, your own rows in gold.
 
 **Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
-none ever holds a row on either leaderboard. The public server runs six during the soft wave and
+none ever holds a row on either leaderboard. A bot saved under an older name or sim version is
+minted again on the server's start, and its old account is deleted first, so the replaced bot
+leaves both boards with it. The public server runs six during the soft wave and
 none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
@@ -159,14 +164,23 @@ call, and stay switched after a restart, over the `--flag` values it starts with
 is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
 never the token. A server without the token has no admin routes. A server makes at most five new
 accounts an hour for one client address (the one Caddy forwards); a known token always gets in.
+Only a launch with no token makes an account: a token the server does not know is refused as
+`unknown` and makes nothing, so a second session or a stale client never mints an orphan. The
+playing session clears that token, unless another session has stored a new one meanwhile, and
+launches again with none, which mints; a session that is not playing waits for the token the
+playing one stores. A delete's reset and a wiped dev store heal this way.
 
 **Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
 stores the ban on the account's record, never on the account the wire carries, and logs one line
-with the account id. From the next call on, every call of that account (the bootstrap, batches,
-the market, the world poll, chat, the boards, the link) answers `banned` with
+with the account id. From the next call on, every call of that account but its delete (the
+bootstrap, batches, the market, the world poll, chat, the boards, the link) answers `banned` with
 `Promptfall: this account is banned: <reason>`. The plugin pauses play and shows that line in the
 message window, as it shows the update notice; it does not ask again until the next session, which
-shows it again. There is no unban.
+shows it again. The ban reaches the account's GitHub login too: a fresh account that links the
+same login, in any case, has the link end denied with `Promptfall: this GitHub account is banned:
+<reason>` and stays unlinked, though it is not banned for trying. An account that never linked is
+banned by its id alone. `POST /v1/admin/unban` with `{"login"}` lifts the login's ban and the ban
+of every account still there that carried it, whether or not the banned account was deleted.
 
 **Deleting an account.** Delete my account on this server, on the Account tab, asks Yes or No, then
 calls `DELETE /v1/account` with the machine's token. The server closes the account's open listings
@@ -174,10 +188,16 @@ and buy orders without returning the goods or refunding the escrow, which leave 
 takes its rows off both leaderboards and out of the online count, and deletes its record, its
 token and any GitHub link it had open; nothing of any other player's changes. From then on that token is unknown to the server.
 On the server's confirmation the plugin resets this machine's data, as the reset does, starts a
-fresh account on the same server, and says so in the message window. When the server does not
-confirm, nothing on the machine changes and the pane says the account was not deleted. The row is
-not on the sandbox save, nor in a session that is not playing; a banned account cannot delete
-itself. The in-process server deletes the same way.
+fresh account on the same server, and says so in the message window once it plays. That launch has
+no token, so it counts against the mint cap: when the server refuses it, play pauses and the message
+window says the delete happened and why nothing plays, in one line,
+`Promptfall: your account was deleted.` followed by the server's message, which stays through the
+pause's later retries. When the server does not confirm, nothing on the machine changes and the
+pane says the account was not deleted; in a banned session that line shows under the ban's. The
+row is not on the sandbox save, nor in a session that is not playing, except one a ban paused, as
+a banned account may delete itself: its Account tab shows the row, under Reset when the ban
+refused the session's start, and the delete reaches the server with the stored token, the one call
+of that session that does. The in-process server deletes the same way.
 
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in

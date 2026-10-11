@@ -81,6 +81,8 @@ export type EngineDeps = {
   after: (ms: number, fn: () => void) => void
   /** In [0, 1): the jitter of outage retries. */
   random: () => number
+  /** This engine starts after the account's delete: a refused bootstrap's pause says so. */
+  deleted?: boolean
 }
 
 /** What the command and the dialog hold of a running game. */
@@ -96,6 +98,8 @@ export type GameHandle = {
   canApply: () => boolean
   /** This session holds the lease and its engine has paused: its refusals say paused. */
   isPaused: () => boolean
+  /** This session's engine paused for a ban: the delete is the one verb it still lets through. */
+  isBanned: () => boolean
   setOff: (off: boolean) => Promise<void>
   /** The player is using this session: take the lease if another session holds it. */
   claim: () => Promise<void>
@@ -154,6 +158,10 @@ export const RETRYING_NOTICE = 'Promptfall: server unreachable, retrying'
 export const UNREACHABLE_NOTICE = 'Promptfall: server unreachable'
 export const DELETED_NOTICE =
   'Promptfall: your account on this server is deleted. A fresh one plays here now.'
+/** A refused bootstrap after the delete: the refusal, and that the delete happened. */
+export function deletedRefusal(message: string): string {
+  return `Promptfall: your account was deleted. ${message}`
+}
 /** The pane's refusal when the server did not confirm a delete: nothing was reset. */
 export const NOT_DELETED = 'the server did not delete the account'
 /** A paused primary's refusal, on every surface: the band's notice says why. */
@@ -209,8 +217,14 @@ export class GameEngine {
   private noticeGen = 0
   private outageGen = 0
   private refusedGen = 0
+  /** No bootstrap has succeeded since the account's delete: a refusal's pause names it. */
+  private afterDelete: boolean
+  /** The token a ban paused this engine on: the delete, the one call a ban lets through, uses it. */
+  private bannedToken: string | null = null
 
-  constructor(private readonly deps: EngineDeps) {}
+  constructor(private readonly deps: EngineDeps) {
+    this.afterDelete = deps.deleted ?? false
+  }
 
   private get tokenKey(): string {
     return this.deps.tokenKey ?? 'deviceToken'
@@ -240,7 +254,9 @@ export class GameEngine {
   /**
    * Bootstraps and takes the committed state; a thrown bootstrap enters the outage and retries,
    * and a refused one pauses with the host's message: a rate limit asks again after
-   * REFUSED_RETRY_MS, a ban never does.
+   * REFUSED_RETRY_MS, a ban never does. A token the server does not know is cleared, if the store
+   * still holds it, and the start runs again: with no token it mints.
+   * After a delete, the pause says the delete happened.
    * The bootstrap's delivery hands on only the events past the cursor a primary of this account
    * has shown: what one already toasted does not toast again, and what nobody saw still does.
    */
@@ -250,6 +266,8 @@ export class GameEngine {
 
   private async doStart(): Promise<void> {
     const stored = await this.deps.kv.get(this.tokenKey)
+    // Stopped (a reset, a switch, a demotion) while the token was read: a null token would mint.
+    if (this.stopped) return
     const token = typeof stored === 'string' ? stored : null
     let boot: Awaited<ReturnType<ServerClient['bootstrap']>>
     try {
@@ -263,8 +281,17 @@ export class GameEngine {
     if (this.stopped) return
     if ('refusal' in boot) {
       this.clearOutage()
-      this.setPaused(boot.message)
-      if (boot.refusal === 'banned') return
+      if (boot.refusal === 'unknown' && token !== null) {
+        await this.forget(token)
+        if (this.stopped) return
+        await this.doStart()
+        return
+      }
+      this.setPaused(this.afterDelete ? deletedRefusal(boot.message) : boot.message)
+      if (boot.refusal === 'banned') {
+        this.bannedToken = token
+        return
+      }
       const gen = ++this.refusedGen
       this.deps.after(REFUSED_RETRY_MS, () => {
         if (gen !== this.refusedGen || this.stopped) return
@@ -272,6 +299,7 @@ export class GameEngine {
       })
       return
     }
+    this.afterDelete = false
     this.firstRun = boot.deviceToken !== token
     this.token = boot.deviceToken
     if (boot.deviceToken !== token) await this.deps.kv.set(this.tokenKey, boot.deviceToken)
@@ -309,6 +337,16 @@ export class GameEngine {
     await this.publish({ view: this.view() })
     // Only the minted account's first view says firstRun; every later view says no.
     this.firstRun = false
+  }
+
+  /**
+   * Clears the stored token if it is still `token`. Another session may have healed it while the
+   * refused call was in flight: then the store holds its token, and that one is kept.
+   */
+  private async forget(token: string): Promise<void> {
+    const stored = await this.deps.kv.get(this.tokenKey)
+    if (this.stopped || stored !== token) return
+    await this.deps.kv.delete(this.tokenKey)
   }
 
   /** The server wins: a read-only bootstrap with the stored token, the buffer dropped. */
@@ -454,7 +492,7 @@ export class GameEngine {
         this.setPaused(MISMATCH_NOTICE)
         return
       case 'banned':
-        this.setPaused(ack.message)
+        this.pauseBanned(ack.message)
         return
     }
   }
@@ -573,7 +611,8 @@ export class GameEngine {
         throw new Error('unreachable')
       }
       if ('reason' in info) {
-        this.setPaused(info.reason === 'banned' ? info.message : MISMATCH_NOTICE)
+        if (info.reason === 'banned') this.pauseBanned(info.message)
+        else this.setPaused(MISMATCH_NOTICE)
         return
       }
       this.returns = info.returns
@@ -586,9 +625,27 @@ export class GameEngine {
 
   /** A call to the server under the lock, no flush first: the link flow and the market reads. */
   call<T>(fn: (client: ServerClient, auth: Auth) => Promise<T>): Promise<Exclude<T, Banned>> {
+    return this.callWith(() => this.token, fn)
+  }
+
+  /**
+   * The account's delete under the lock: the one call a ban lets through, so it reaches the server
+   * with the stored token although a refused bootstrap never started this engine.
+   */
+  deleteAccount(): Promise<Exclude<Awaited<ReturnType<ServerClient['deleteAccount']>>, Banned>> {
+    return this.callWith(
+      () => this.token ?? this.bannedToken,
+      (client, auth) => client.deleteAccount(auth),
+    )
+  }
+
+  private callWith<T>(
+    tokenOf: () => string | null,
+    fn: (client: ServerClient, auth: Auth) => Promise<T>,
+  ): Promise<Exclude<T, Banned>> {
     return this.lock(async () => {
       if (this.outage) throw new Error('unreachable')
-      const token = this.token
+      const token = tokenOf()
       if (!token) throw new Error('not_started')
       let r: T
       try {
@@ -607,7 +664,7 @@ export class GameEngine {
   unbanned<T>(answer: T): Exclude<T, Banned> {
     const a = answer as { reason?: unknown; message?: unknown }
     if (a.reason === 'banned' && typeof a.message === 'string') {
-      this.setPaused(a.message)
+      this.pauseBanned(a.message)
       throw new Error(a.message)
     }
     return answer as Exclude<T, Banned>
@@ -743,6 +800,18 @@ export class GameEngine {
 
   isPaused(): boolean {
     return this.paused !== null
+  }
+
+  /** Paused by a ban: the delete is the one call it still lets through. */
+  isBanned(): boolean {
+    return this.paused !== null && this.bannedToken !== null
+  }
+
+  /** A ban on the running account pauses play for good with its message. */
+  private pauseBanned(message: string): void {
+    // A session refused at bootstrap runs no token: it keeps the credential that refusal left it.
+    this.bannedToken = this.token ?? this.bannedToken
+    this.setPaused(message)
   }
 
   setPaused(reason: string | null): void {
