@@ -257,6 +257,7 @@ export function fullerFrame(
       backdrop: null,
       actors,
       numbers: [],
+      glows: [{ x: k(68), y: k(18), r: k(12), rgb: 0xf0c040, alpha: 0.5 }],
       chests: [
         {
           spriteId: 'adversarial:chest',

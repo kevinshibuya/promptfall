@@ -66,8 +66,9 @@ that fall behind are dropped; kills, drops, level-ups, deaths and sales always g
 Rare, Epic, Legendary) and one rolled affix for each rarity step above Common, and rarer items
 carry higher base stats. Deeper zones and bosses roll rarer drops. A kill that drops an item
 leaves a chest where the enemy stood: it falls out of the enemy as it fades, sits closed, opens,
-and the item rises out of it and holds, longer the rarer the item (under a second for a Common,
-two for a Legendary), then fades; the next enemy steps on after it. An auto-vendored drop plays
+and the item rises out of it on a glow in its rarity colour, wider the rarer the item. The item
+holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
+item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
 the same chest, and a sandbox item plays its chest on the front monster. The Loot tab shows the
 last two drops, coloured by rarity.
 

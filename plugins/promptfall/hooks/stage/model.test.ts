@@ -3,7 +3,7 @@ import type { GameView, WorldState } from '../../types'
 import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { backdropFor, spriteFor } from '../sprites/index'
 import { WORLD_DEFAULT } from '../state'
-import type { Effect } from '../vendor/sim.js'
+import type { Effect, Rarity } from '../vendor/sim.js'
 import { composeFrame } from './compose'
 import { boss, wave, worldBoss } from './fixtures'
 import { lungeOffset, type StageActor, stageAt } from './model'
@@ -474,14 +474,22 @@ test('the step is the same distance for a world boss and a goblin', () => {
   expect(compact(slimeHits) - compact([])).toBe(STEP_PX)
 })
 
-/** e1 killed at NOW with a common sword: its chest falls from NOW + 400 and lands at NOW + 700. */
-function chestAt(now: number, box: { columns: number; rows: number }, opts: Opts) {
+/**
+ * e1 killed at NOW with a sword (common unless said): its chest falls from NOW + 400, lands at
+ * NOW + 700, opens over NOW + 1000 to 1500 and its item rises until NOW + 1800.
+ */
+function chestAt(
+  now: number,
+  box: { columns: number; rows: number },
+  opts: Opts,
+  rarity: Rarity = 'common',
+) {
   const t = new StageTimeline()
   t.observe(wave(), NOW)
   const sword = {
     id: 'i1',
     base: 'iron_sword',
-    rarity: 'common' as const,
+    rarity,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,
@@ -495,6 +503,7 @@ function chestAt(now: number, box: { columns: number; rows: number }, opts: Opts
     chest: m.chests[0] && { phase: m.chests[0].phase, at: place(m.chests[0]) },
     item: place(m.drops[0]),
     chestArt: m.chests[0]?.art,
+    glow: m.glows[0],
   }
 }
 
@@ -515,8 +524,8 @@ test("a chest falls from above the dead enemy's centre to its ground, sits close
     [NOW + 2000, 'hold'],
   ] as const) {
     expect(lo(now).chest).toEqual({ phase, at: [4, 18, 1] })
-    expect(lo(now).chestArt).toBe(closed.full)
   }
+  expect(lo(NOW + 700).chestArt).toBe(closed.full)
   expect(lo(NOW + 1200).item).toBeUndefined()
   expect(lo(NOW + 1500).item).toEqual([4, 15, 1])
   expect(lo(NOW + 1650).item).toEqual([4, 10, 1])
@@ -529,14 +538,73 @@ test("a chest falls from above the dead enemy's centre to its ground, sits close
   const hi = (now: number) => chestAt(now, FULL, { ...STILL, scale: HIRES_SCALE })
   expect(hi(NOW + 400).chest).toEqual({ phase: 'fall', at: [6, 15, 1] })
   expect(hi(NOW + 1200).chest).toEqual({ phase: 'open', at: [6, 27, 1] })
-  expect(hi(NOW + 1200).chestArt).toBe(closed.hires)
   expect(hi(NOW + 1500).item).toEqual([6, 22, 1])
   expect(hi(NOW + 2000).item).toEqual([6, 7, 1])
   // The compact stage: the 8 px chest on its ground, the item kept inside the frame.
   const compact = chestAt(NOW + 2000, BOX_COMPACT, { ...STILL, compact: true })
-  expect(compact).toEqual({
+  expect(compact).toMatchObject({
     chest: { phase: 'hold', at: [0, 0, 1] },
     item: [0, 0, 1],
-    chestArt: closed.compact,
   })
+})
+
+test('the reveal shows the chest closed, opening then open, with the open art under the rising item', () => {
+  const FULL = { columns: 116, rows: 17 }
+  const [closed, opening, open] = (['closed', 'opening', 'open'] as const).map((id) =>
+    spriteFor('chest', id),
+  )
+  // The open phase runs NOW + 1000 to 1500: the opening art its first half, the open art after.
+  const shown: [number, typeof closed][] = [
+    [NOW + 400, closed],
+    [NOW + 999, closed],
+    [NOW + 1000, opening],
+    [NOW + 1249, opening],
+    [NOW + 1250, open],
+    [NOW + 1650, open],
+    [NOW + 2000, open],
+    [NOW + 2700, open],
+  ]
+  for (const [now, sprite] of shown) {
+    for (const [opts, art] of [
+      [STILL, sprite?.full],
+      [{ ...STILL, scale: HIRES_SCALE }, sprite?.hires],
+    ] as const) {
+      const at = chestAt(now, FULL, opts)
+      expect(at.chestArt, `${now - NOW} ms at ${opts.scale ?? 1}x`).toBe(art)
+    }
+    expect(chestAt(now, BOX_COMPACT, { ...STILL, compact: true }).chestArt).toBe(sprite?.compact)
+  }
+  // The open art is under the item while it rises and holds.
+  const rising = chestAt(NOW + 1650, FULL, STILL)
+  expect(rising.item).toEqual([4, 10, 1])
+  expect(rising.chestArt).toBe(open?.full)
+})
+
+test("the glow sits on the risen item's centre in its rarity colour, ramps in over the rise, holds and fades with the item; a legendary's is wider", () => {
+  const FULL = { columns: 116, rows: 17 }
+  const glow = (now: number, opts: Opts, rarity: Rarity = 'common', box = FULL) => {
+    const g = chestAt(now, box, opts, rarity).glow
+    return g && [g.x, g.y, g.r, g.alpha]
+  }
+  const grey = RARITY_RGB.common
+  // 1x: the item risen at (4, 5), 16 px: its centre (12, 13). The rise runs NOW + 1500 to 1800.
+  expect(glow(NOW + 1499, STILL)).toBeUndefined()
+  expect(glow(NOW + 1500, STILL)).toEqual([12, 13, 8, 0])
+  expect(glow(NOW + 1650, STILL)).toEqual([12, 13, 8, 0.25])
+  expect(glow(NOW + 2000, STILL)).toEqual([12, 13, 8, 0.5])
+  expect(chestAt(NOW + 2000, FULL, STILL).glow?.rgb).toBe(grey)
+  // A common's fade runs NOW + 2600 to 2800, with the item's.
+  expect(glow(NOW + 2700, STILL)).toEqual([12, 13, 8, 0.25])
+  expect(glow(NOW + 2800, STILL)).toBeUndefined()
+  // A legendary's glow is wider and gold, and holds until NOW + 3800.
+  expect(glow(NOW + 3700, STILL, 'legendary')).toEqual([12, 13, 12, 0.5])
+  expect(chestAt(NOW + 3700, FULL, STILL, 'legendary').glow?.rgb).toBe(RARITY_RGB.legendary)
+  // 1.5x: the item risen at (6, 7), 24 px.
+  const hi: Opts = { ...STILL, scale: HIRES_SCALE }
+  expect(glow(NOW + 2000, hi)).toEqual([18, 19, 12, 0.5])
+  expect(glow(NOW + 2000, hi, 'legendary')).toEqual([18, 19, 18, 0.5])
+  // The compact stage: the 8 px item at (0, 0).
+  const compact = { ...STILL, compact: true }
+  expect(glow(NOW + 2000, compact, 'common', BOX_COMPACT)).toEqual([4, 4, 4, 0.5])
+  expect(glow(NOW + 2000, compact, 'legendary', BOX_COMPACT)).toEqual([4, 4, 6, 0.5])
 })

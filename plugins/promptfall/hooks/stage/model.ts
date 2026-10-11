@@ -7,6 +7,7 @@ import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
 import {
   bobbingAt,
+  type ChestMotion,
   type ChestPhase,
   chestPhaseAt,
   enemySpriteId,
@@ -20,6 +21,8 @@ import {
   COMPACT_PITCH,
   DROP_RISE_PX,
   FLASH_RGB,
+  GLOW_ALPHA,
+  GLOW_RADIUS_PX,
   IDLE_BOB_PX,
   LUNGE_PX,
   NUMBER_RISE_PX,
@@ -97,6 +100,8 @@ export type StageChest = {
   alpha: number
   phase: ChestPhase
 }
+/** The light behind a rising item: a disc in its rarity colour, centre and radius in stage pixels. */
+export type StageGlow = { x: number; y: number; r: number; rgb: number; alpha: number }
 export type StageModel = {
   box: Box
   /** The ground strip's colour: drawn alone when the zone has no backdrop. */
@@ -108,7 +113,9 @@ export type StageModel = {
   backdrop: SpriteArt | null
   actors: StageActor[]
   numbers: StageNumber[]
-  /** Drawn after the actors, under their items. */
+  /** Drawn after the actors, under the chests. */
+  glows: StageGlow[]
+  /** Drawn after the glows, under their items. */
   chests: StageChest[]
   drops: StageDrop[]
   /** Drawn after the drops, before the numbers. */
@@ -119,8 +126,17 @@ export type StageModel = {
 }
 
 const FALLBACK = spriteFor('item', '')
-/** The chest's art: closed, whatever its phase. */
-export const CHEST = spriteFor('chest', 'closed')
+/** The chest's three drawings, all one size, so each places as the closed one does. */
+export const CHESTS = {
+  closed: spriteFor('chest', 'closed'),
+  opening: spriteFor('chest', 'opening'),
+  open: spriteFor('chest', 'open'),
+} as const
+/** The chest's sprite in `phase` at `p`: closed to the open phase, opening its first half, open after. */
+function chestSprite(phase: ChestPhase, p: number): Sprite {
+  if (phase === 'fall' || phase === 'sit') return CHESTS.closed
+  return phase === 'open' && p < 0.5 ? CHESTS.opening : CHESTS.open
+}
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 const progress = (m: Motion, now: number) => clamp((now - m.from) / (m.until - m.from), 0, 1)
 
@@ -368,6 +384,7 @@ export function stageAt(
 
   const at = new Map(actors.map((a) => [a.key, a]))
   const numbers: StageNumber[] = []
+  const glows: StageGlow[] = []
   const chests: StageChest[] = []
   const drops: StageDrop[] = []
   const effects: StageEffect[] = []
@@ -386,17 +403,20 @@ export function stageAt(
     } else if (m.kind === 'chest') {
       const stood = stands.get(m.actor)
       if (!stood) continue
-      const art = variant(CHEST, opts.compact, scale)
-      const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact, scale)
-      const place = chestPlace(stood, art, item, { width, height }, scale)
       const { phase, p } = chestPhaseAt(m, now)
+      const sprite = chestSprite(phase, p)
+      const art = variant(sprite, opts.compact, scale)
+      const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact, scale)
+      const closed = variant(CHESTS.closed, opts.compact, scale)
+      const place = chestPlace(stood, closed, item, { width, height }, scale)
       const alpha = phase === 'fade' ? 1 - p : 1
       // The fall eases in, as a thing dropped does.
       const y =
         phase === 'fall' ? place.fromY + (place.groundY - place.fromY) * p * p : place.groundY
-      chests.push({ spriteId: CHEST.id, art, x: place.x, y: Math.round(y), alpha, phase })
+      chests.push({ spriteId: sprite.id, art, x: place.x, y: Math.round(y), alpha, phase })
       if (phase === 'fall' || phase === 'sit' || phase === 'open') continue
       const rise = phase === 'rise' ? p : 1
+      glows.push(glowOf(m, item, place, rise * alpha))
       drops.push({
         spriteId: m.spriteId,
         art: item,
@@ -429,6 +449,7 @@ export function stageAt(
     backdrop: opts.compact ? null : backdropFor(view.zone, scale),
     actors,
     numbers,
+    glows,
     chests,
     drops,
     effects,
@@ -440,10 +461,29 @@ export function stageAt(
 type Place = { x: number; y: number; width: number; height: number }
 
 /**
+ * The glow behind a chest's item: on the risen item's centre, its radius by rarity scaled with the
+ * item's art, at GLOW_ALPHA times `level` (the rise's progress, then the fade's).
+ */
+export function glowOf(
+  m: ChestMotion,
+  item: SpriteArt,
+  place: { itemX: number; risenY: number },
+  level: number,
+): StageGlow {
+  return {
+    x: place.itemX + item.width / 2,
+    y: place.risenY + item.height / 2,
+    r: Math.round((GLOW_RADIUS_PX[m.rarity] * item.width) / SPRITE_PX),
+    rgb: RARITY_RGB[m.rarity] ?? 0,
+    alpha: GLOW_ALPHA * level,
+  }
+}
+
+/**
  * Where a chest goes for the actor that stood at `stood`, in stage pixels: centred under the
  * actor, its bottom starting at the actor's centre (`fromY`) and falling to the ground
  * (`groundY`); its item centred on the chest's top (`itemY`), risen DROP_RISE_PX (`risenY`),
- * kept inside the frame.
+ * kept inside the frame. `chest` is the closed art: the item rises from the box, not the open lid.
  */
 export function chestPlace(
   stood: Place,

@@ -65,6 +65,8 @@ export const SCENARIOS = [
   'dissolve',
   'drop',
   'chest',
+  'reveal',
+  'reveal-legendary',
   'windup',
   'strike',
   'follow',
@@ -105,6 +107,8 @@ const item = {
   equippedBy: null,
   tradeableAt: null,
 }
+/** How far into its hold a `reveal` scenario's item is. */
+const REVEAL_HELD_MS = 400
 const withoutFront = (): GameView => {
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
@@ -232,18 +236,29 @@ export function stage(name: Scenario): Staged {
       )
     }
     // The kill's chest lands as its fade ends. At NOW, for `chest`, it sits closed halfway
-    // through its sit; for `drop`, it has opened and the sword is halfway up its rise.
+    // through its sit; for `drop`, it has opened and the sword is halfway up its rise; for
+    // `reveal` (a common sword) and `reveal-legendary`, the sword has risen on its glow and holds,
+    // REVEAL_HELD_MS into its hold.
     case 'chest':
-    case 'drop': {
+    case 'drop':
+    case 'reveal':
+    case 'reveal-legendary': {
+      const opened = CHEST_SIT_MS + CHEST_OPEN_MS
       const since =
-        name === 'chest' ? CHEST_SIT_MS / 2 : CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS / 2
+        name === 'chest'
+          ? CHEST_SIT_MS / 2
+          : name === 'drop'
+            ? opened + REVEAL_RISE_MS / 2
+            : opened + REVEAL_RISE_MS + REVEAL_HELD_MS
+      const rarity =
+        name === 'reveal' ? 'common' : name === 'reveal-legendary' ? 'legendary' : item.rarity
       const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + since)
       return killed(
         t1,
         [
           { k: 'act', actor: 'h1', action: 'attack', at: 0 },
           { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
-          { k: 'drop', item },
+          { k: 'drop', item: { ...item, rarity } },
           { k: 'act', actor: 'e2', action: 'attack', at: 500 },
           { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
         ],

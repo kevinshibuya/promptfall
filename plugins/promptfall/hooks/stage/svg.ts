@@ -9,9 +9,10 @@ import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
 import {
   actionOffset,
-  CHEST,
+  CHESTS,
   chestPlace,
   effectAt,
+  glowOf,
   type Pose,
   type StageActor,
   type StageModel,
@@ -24,7 +25,10 @@ import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './tim
 import {
   BLINK_MS,
   CHEST_FALL_MS,
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
   COMPACT_STAGE_ROWS,
+  GLOW_ALPHA,
   HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
@@ -480,7 +484,14 @@ export function renderSvg(
     body.push(`<g transform="translate(${x} ${y})"${op}>${anim.join('')}${use}${flashes}</g>`)
   }
 
+  /** A glow's circle in its rarity fill; `extra` its opacity or its animation. */
+  const circle = (g: { x: number; y: number; r: number; rgb: number }, extra: string) =>
+    `<circle cx="${g.x}" cy="${g.y}" r="${g.r}" fill="${hex(g.rgb)}"${extra}`
+
   if (!opts.smil) {
+    for (const g of model.glows) {
+      if (g.alpha > 0) body.push(`${circle(g, ` opacity="${Number(g.alpha.toFixed(2))}"`)}/>`)
+    }
     for (const c of model.chests) {
       const op = c.alpha < 1 ? ` opacity="${Number(c.alpha.toFixed(2))}"` : ''
       body.push(`<use href="#${define(c.art, null)}" transform="translate(${c.x} ${c.y})"${op}/>`)
@@ -517,22 +528,45 @@ export function renderSvg(
       } else if (m.kind === 'chest') {
         const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
-        const chest = variant(CHEST, compact, scale)
+        const closed = variant(CHESTS.closed, compact, scale)
         const item = variant(sprite, compact, scale)
         const idle = at.actor.poses.idle.art
         // Where the actor stood: on the ground, whatever its bob.
         const stood = { x: at.x, y: H - idle.height, width: idle.width, height: idle.height }
-        const place = chestPlace(stood, chest, item, { width: W, height: H }, scale)
+        const place = chestPlace(stood, closed, item, { width: W, height: H }, scale)
         /** Visible from `from` to the chest's end, fading over its last REVEAL_FADE_MS. */
         const shown = (from: number) => {
           const fade = Number((1 - REVEAL_FADE_MS / (m.until - from)).toFixed(3))
           return `<animate attributeName="opacity" values="1;1;0" keyTimes="0;${fade};1" begin="${seconds(from - opts.now)}" dur="${seconds(m.until - from)}"/>`
         }
-        // The fall eases in (a quadratic), as the pixel surfaces draw it.
-        body.push(
-          `<use href="#${define(chest, null)}" transform="translate(${place.x} ${place.groundY})" opacity="0">${shown(m.from)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 ${place.fromY - place.groundY};0 0" calcMode="spline" keyTimes="0;1" keySplines="0.333 0 0.667 0.333" begin="${begin(m)}" dur="${seconds(CHEST_FALL_MS)}"/></use>`,
-        )
         const rise = m.from + CHEST_SHOW_MS - REVEAL_RISE_MS
+        // The glow, behind the chest: its alpha ramps in over the rise, holds and fades.
+        const ramp = Number((REVEAL_RISE_MS / (m.until - rise)).toFixed(3))
+        const fade = Number((1 - REVEAL_FADE_MS / (m.until - rise)).toFixed(3))
+        body.push(
+          `${circle(glowOf(m, item, place, 1), ' opacity="0"')}><animate attributeName="opacity" values="0;${GLOW_ALPHA};${GLOW_ALPHA};0" keyTimes="0;${ramp};${fade};1" begin="${seconds(rise - opts.now)}" dur="${seconds(m.until - rise)}"/></circle>`,
+        )
+        // The three arts in turn, as the pose frames are: closed to the open phase, opening its
+        // first half, open after; only those still to show. All one size, so one place.
+        const opens = m.from + CHEST_FALL_MS + CHEST_SIT_MS
+        const arts = [
+          { sprite: CHESTS.closed, from: m.from, until: opens },
+          { sprite: CHESTS.opening, from: opens, until: opens + CHEST_OPEN_MS / 2 },
+          { sprite: CHESTS.open, from: opens + CHEST_OPEN_MS / 2, until: m.until },
+        ].filter((a) => a.until > opts.now)
+        const uses = arts.map((a) => {
+          const href = `#${define(variant(a.sprite, compact, scale), null)}`
+          if (arts.length === 1 && a.from <= opts.now) return `<use href="${href}"/>`
+          return `<use href="${href}" visibility="hidden"><set attributeName="visibility" to="visible" begin="${seconds(a.from - opts.now)}" dur="${seconds(a.until - a.from)}"/></use>`
+        })
+        // The fall eases in (a quadratic), as the pixel surfaces draw it.
+        const fall =
+          m.from + CHEST_FALL_MS > opts.now
+            ? `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 ${place.fromY - place.groundY};0 0" calcMode="spline" keyTimes="0;1" keySplines="0.333 0 0.667 0.333" begin="${begin(m)}" dur="${seconds(CHEST_FALL_MS)}"/>`
+            : ''
+        body.push(
+          `<g transform="translate(${place.x} ${place.groundY})" opacity="0">${shown(m.from)}${fall}${uses.join('')}</g>`,
+        )
         body.push(
           `<use href="#${define(item, null)}" transform="translate(${place.itemX} ${place.itemY})" opacity="0">${shown(rise)}<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 ${place.risenY - place.itemY}" begin="${seconds(rise - opts.now)}" dur="${seconds(REVEAL_RISE_MS)}" fill="freeze"/></use>`,
         )
