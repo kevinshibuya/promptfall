@@ -147,6 +147,17 @@ export function startBots(options: BotOptions): Bots {
     return saved
   }
 
+  /**
+   * Deletes the account a bot's mint replaces. `unauthorized` means it is already gone; any other
+   * answer leaves it standing, so the start stops before the pointer moves.
+   */
+  async function replace(name: string, saved: Saved): Promise<void> {
+    const r = await client.deleteAccount({ deviceToken: saved.deviceToken })
+    if ('deleted' in r) return
+    if (r.reason === 'unauthorized') return log(`bot ${name} delete unauthorized`)
+    throw new Error(`bot ${name}: delete refused, ${r.reason}`)
+  }
+
   const boot = (saved: Saved) =>
     client.bootstrap({ clientVersion: '0.1.0', deviceToken: saved.deviceToken })
 
@@ -164,6 +175,10 @@ export function startBots(options: BotOptions): Bots {
         b.account.accountId !== saved.accountId ||
         b.account.displayName !== name
       ) {
+        // A known account is replaced: deleted first, so it leaves both boards. An unknown token
+        // has nothing to delete.
+        const known = !('refusal' in b) && b.account.accountId === saved.accountId
+        if (known) await replace(name, saved)
         saved = await mint(i, name)
         b = await boot(saved)
         if ('refusal' in b) throw new Error(`bot ${name}: bootstrap refused, ${b.refusal}`)
