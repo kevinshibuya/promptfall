@@ -3,7 +3,17 @@ import { content } from './content'
 import { clone, draft, reject } from './draft'
 import { generateHero, pushLog, recruitHero } from './heroes'
 import { rollItemOf, takeDrop } from './loot'
-import { changeZone, checkWipe, draw, findHero, grantXp, newId, partyHeroes } from './progression'
+import {
+  changeZone,
+  checkWipe,
+  draw,
+  findHero,
+  grantXp,
+  livingParty,
+  newId,
+  onEnemyKilled,
+  partyHeroes,
+} from './progression'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -223,7 +233,19 @@ export function sandboxItem(state: GameState, event: Of<'sandbox_item'>): StepRe
   }
   if (noSuchRarity(event.rarity)) return unapplicable(state, event, 'unknown_rarity')
   return draft(state, (s, effects) => {
-    takeDrop(s, rollItemOf(s, event.base, event.rarity), effects)
+    const item = rollItemOf(s, event.base, event.rarity)
+    // The front hero strikes the front enemy down, and the item is that kill's drop. With no
+    // enemy to kill, between spawns or against a world boss, the item drops alone.
+    const hero = livingParty(s)[0]
+    const enemy = s.encounter?.enemies.find((e) => e.kind !== 'world_boss')
+    if (!hero || !enemy) {
+      takeDrop(s, item, effects)
+      return
+    }
+    effects.push({ k: 'act', actor: hero.id, action: 'attack', at: 0 })
+    effects.push({ k: 'hit', by: hero.id, target: enemy.id, amount: enemy.hp })
+    enemy.hp = 0
+    onEnemyKilled(s, enemy, effects, item)
   })
 }
 
