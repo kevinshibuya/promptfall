@@ -213,10 +213,20 @@ come up to one cadence before the last hero falls on the stage.
   | `lunge_follow` | knight | as `lunge`, then the follow-through frame in place 380–500, stepping back from 420 |
   | `bolt` | black mage (fireball), archer (arrow) | wind-up in place 0–260, strike 260–460 while the effect flies from the attacker's front edge to the target's centre; impact 460, as the attacker steps back |
   | `burst` | white mage, attack and heal | wind-up 0–260, strike 260–460 while the light burst sits on the target; impact 360 |
+  | `chest` | a kill that drops an item, from the chest's start | falls 0–300 from the enemy's centre to its ground, landing as the dissolve ends; sits closed 300–600; opens 600–1,100, the opening art to 850 and the open art after |
+  | `reveal` | the dropped item, from the chest's start | rises 10 px out of the open chest 1,100–1,400 on a glow in its rarity colour, risen at 1,400 (the show time, `showAt`); holds 800 for a Common, 1,000 Uncommon, 1,200 Rare, 1,600 Epic, 2,000 Legendary (`REVEAL_HOLD_MS`); fades with the chest over 200 |
 
   `ACTION_MS` is 500, the hold and the knight's shape; the step plays inside it and costs no
   time. An `attack_all` plays one effect per target. A hit that comes without an action (a
   resync, a delivery) lands at 120, shows the hit frame and takes no step.
+
+  The chest shows its three arts (`chest:closed`, `chest:opening`, `chest:open`) by phase on
+  every surface. The glow is a disc in the item's `RARITY_RGB` behind the chest and the risen
+  item, on the item's centre: its alpha ramps to 0.5 (`GLOW_ALPHA`) over the rise, holds, and
+  fades with the item; its radius is 8 px for a Common to 12 for a Legendary at 1×
+  (`GLOW_RADIUS_PX`), scaled with the item's art. The pixel surfaces dither it as they dither a
+  fade; the SMIL `Svg` draws it as one circle with its opacity animated, and the chest's arts as
+  defs shown in turn. The next enemy steps on 800 after the fade (`WAVE_GAP_MS`).
 - **Poses.** At 1.5× each actor has six drawings: idle A (its 1.5× art), idle B, the wind-up,
   the strike and the follow-through (drawn frames, from the manifest; a hero's strike is its
   `hero_attack` art), and the hit. At rest it alternates idle A and idle B on the bob's clock

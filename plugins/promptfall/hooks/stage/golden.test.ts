@@ -203,6 +203,7 @@ test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbe
       ),
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
+    glows: [{ x: 28, y: 14, r: 12, rgb: 0xf0c040, alpha: 0.5 }],
     chests: [{ spriteId: 'chest:closed', art: chest.full, x: 20, y: 18, alpha: 1, phase: 'hold' }],
     drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
     effects: [],
@@ -232,6 +233,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
       ...heroes.map((art, i) => actor(`h${i + 1}`, `hero:${i}`, art, 210 - i * 27, 27, true)),
     ],
     numbers: [0, 1, 2].map((i) => ({ text: '999', x: 15 + i * 30, y: 3, rgb: 0xffffff })),
+    glows: [{ x: 42, y: 21, r: 18, rgb: 0xf0c040, alpha: 0.5 }],
     chests: [
       {
         spriteId: 'chest:closed',
@@ -284,6 +286,7 @@ test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a ch
       ),
     ],
     numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
+    glows: [{ x: 28, y: 14, r: 12, rgb: 0xf0c040, alpha: 0.5 }],
     chests: [
       {
         spriteId: 'adversarial:chest',
@@ -459,6 +462,7 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
       ),
     ],
     numbers: [{ text: '-999', x: k(10), y: k(2), rgb: 0xff5050 }],
+    glows: [{ x: k(28), y: k(14), r: k(12), rgb: 0xf0c040, alpha: 0.5 }],
     chests: [
       {
         spriteId: 'adversarial:chest',
@@ -510,23 +514,23 @@ test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
   }
 })
 
-test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg with its chest, 114,469 characters", () => {
+test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg with its chest, 117,722 characters", () => {
   const hi = fullerFrame(1.5, false, NOW)
   const lo = fullerFrame(1, false, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
-  expect(svg.length).toBe(114_469)
+  expect(svg.length).toBe(117_722)
 })
 
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 217,832 characters at 1.5x with its chest, so the 1x Svg (52,340)', () => {
+test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 221,085 characters at 1.5x with its chest, so the 1x Svg (54,288)', () => {
   const hi = fullerFrame(1.5, true, NOW)
   const lo = fullerFrame(1, true, NOW)
   const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(217_832)
+  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(221_085)
   const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
   expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(52_340)
+  expect(svg.length).toBe(54_288)
 })
 
 test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 53,279 characters over the zone 1 backdrop, under the cap', () => {

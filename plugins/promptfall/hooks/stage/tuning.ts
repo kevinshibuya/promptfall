@@ -83,6 +83,18 @@ export const REVEAL_FADE_MS = 200
 export const WAVE_GAP_MS = 800
 /** How far the item rises from the chest's top. */
 export const DROP_RISE_PX = 10
+/**
+ * The glow behind a revealed item: its radius by rarity for a 1x item (16 px), scaled with the
+ * item's art, and its alpha once the item has risen.
+ */
+export const GLOW_RADIUS_PX: Readonly<Record<Rarity, number>> = {
+  common: 8,
+  uncommon: 9,
+  rare: 10,
+  epic: 11,
+  legendary: 12,
+}
+export const GLOW_ALPHA = 0.5
 export const IDLE_FRAME_MS = 500
 export const EVENT_FRAME_MS = 83
 export const IDLE_BOB_PX = 1
