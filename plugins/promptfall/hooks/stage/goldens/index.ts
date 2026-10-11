@@ -19,6 +19,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
   chest: {rasterHash: "545d2218e2b373c6", imageHash: "42b00f4344d209ad", svgHash: "c095d70bb90f3495", svgChars: 39148, rasterPairs: 104, imageHashHires: "96add59352b79059", svgHashLo: "19fbe7c85b88568a"},
   reveal: {rasterHash: "45a468b6bb498263", imageHash: "3e2dd0daee112b30", svgHash: "f27744f118f08017", svgChars: 36093, rasterPairs: 122, imageHashHires: "25cfb4761f9b9b99", svgHashLo: "5fca582391ac869a"},
   'reveal-legendary': {rasterHash: "41cb5880bb08db9c", imageHash: "81faeb50e8d9e796", svgHash: "367a34ec9b29beee", svgChars: 36090, rasterPairs: 127, imageHashHires: "de0383c52e7d3c38", svgHashLo: "8bebefa96d2ec2a8"},
+  'lone-chest': {rasterHash: "27cd7fca9dfa98b6", imageHash: "9848cab76efc890a", svgHash: "377b9fd43a02d322", svgChars: 32612, rasterPairs: 109, imageHashHires: "0aad9029f22cca32", svgHashLo: "7ac570ecdb8f82b0"},
   windup: {rasterHash: "0a8e4d313f7f946f", imageHash: "f3b575c10c0cc57c", svgHash: "417a3ea720c9eba3", svgChars: 43982, rasterPairs: 110, imageHashHires: "cfde9fd7c809644f", svgHashLo: "68f91cecac042254"},
   strike: {rasterHash: "5aa762776effd546", imageHash: "7b7e399c0c23eb26", svgHash: "43cc5822ee1bfe54", svgChars: 41251, rasterPairs: 109, imageHashHires: "c42d29f990da4f14", svgHashLo: "20d334f6d2223c77"},
   follow: {rasterHash: "41db33462def1c89", imageHash: "9c284acb09fc3509", svgHash: "0aee0f7554522471", svgChars: 37627, rasterPairs: 110, imageHashHires: "894745a14cb898f9", svgHashLo: "afaba73d097934de"},
