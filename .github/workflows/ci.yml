@@ -17,6 +17,24 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      # Claude Code writes the engine's declarations under the plugin when an interactive
+      # session loads it. No login is needed once onboarding and the folder's trust are marked
+      # done; `script` gives it the terminal it wants.
+      - name: Engine declarations for the plugin
+        run: |
+          npm i -g @anthropic-ai/claude-code
+          printf '{"hasCompletedOnboarding":true,"projects":{"%s":{"hasTrustDialogAccepted":true}}}' "$PWD" > ~/.claude.json
+          types=plugins/promptfall/.claude-plugin/types
+          TERM=xterm-256color script -qec "stty cols 140 rows 50; claude --plugin-dir plugins/promptfall" /dev/null > /dev/null &
+          for _ in $(seq 60); do
+            [ -f $types/tsconfig.json ] && [ -f $types/claude-code/index.d.ts ] && [ -f $types/claude-code-tools/index.d.ts ] && [ -f $types/claude-code-mcp/index.d.ts ] && break
+            sleep 1
+          done
+          sleep 1
+          pkill -f 'claude --plugin-dir' || true
+          ls -R $types
+      - name: Typecheck the plugin
+        run: pnpm typecheck:plugin
       - run: pnpm test
       - run: pnpm exec playwright install --with-deps --only-shell chromium
       - run: pnpm smoke:desktop
@@ -26,3 +44,15 @@ jobs:
       - run: pnpm content:check
       - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env.example config -q
       - run: deploy/smoke.sh
+
+  # The plugin's suite runs in Claude Code itself, which needs no login for `plugin test`.
+  plugin-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i -g @anthropic-ai/claude-code
+      - run: claude plugin test plugins/promptfall
