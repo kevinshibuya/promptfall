@@ -144,12 +144,21 @@ type LedgerHost = {
      */
     setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>;
     /**
-     * Bans an account: from the next call on, every authenticated call it makes is refused with
-     * `reason`. Answers the ban as stored, or null when no account has the id.
+     * Bans an account: from the next call on, every authenticated call it makes but a delete is
+     * refused with `reason`. A linked account's login is banned too, so no account links it.
+     * Answers the ban as stored, or null when no account has the id.
      */
     ban(accountId: string, reason: string): Promise<{
         reason: string;
         at: number;
+    } | null>;
+    /**
+     * Lifts a login's ban, and the ban of each account it names that is still there. Answers the
+     * login lowercased and the accounts lifted, or null for a login never banned.
+     */
+    unban(login: string): Promise<{
+        login: string;
+        lifted: string[];
     } | null>;
 };
 /**
@@ -213,6 +222,7 @@ declare class Ledger implements ServerClient {
     private flags;
     private setFlags;
     private ban;
+    private unban;
     private config;
     private marketContext;
     private worldContext;
@@ -232,7 +242,8 @@ declare class Ledger implements ServerClient {
     /**
      * Deletes the caller's account. Its open listings and orders close with nothing returned or
      * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-     * else is settled: a counterparty, the boss record and the chat history are untouched.
+     * else is settled: a counterparty, the boss record and the chat history are untouched. The
+     * one call a ban lets through: a banned player may leave. A login ban stays behind.
      */
     deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned>;
     submit(input: Parameters<ServerClient['submit']>[0], auth: Auth): Promise<BatchAck>;

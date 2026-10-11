@@ -109,12 +109,29 @@ curl -sS -X POST https://promptfall.kevinshibuya.com/v1/admin/ban \
 It answers `{"accountId", "banned": {"reason", "at"}}`, or 404 for an id no account has. The reason
 is one line of at most 120 characters, and the player reads it: from the next call on, every call
 of that account answers `banned` with `Promptfall: this account is banned: <reason>`, and the
-plugin pauses with that line. Banning again replaces the reason. There is no unban route. Each call
-logs `admin <time> ban <id> ok` (or `unknown`, `unauthorized`, `refused`), never the reason or the
-token.
+plugin pauses with that line, though the account may still delete itself. Banning again replaces
+the reason. Each call logs `admin <time> ban <id> ok` (or `unknown`, `unauthorized`, `refused`),
+never the reason or the token.
 
-A ban is on the account id: a player who resets mints a fresh account and may link the same
-GitHub login again.
+A ban on a linked account also bans its GitHub login, lowercased: a player who resets and links
+the same login on a fresh account has the link end denied with the ban's reason. An account that
+never linked is banned by its id alone. Two accounts may carry one login; the login's record names
+every banned one.
+
+The unban takes the login, in any case, never an account id:
+
+```sh
+curl -sS -X POST https://promptfall.kevinshibuya.com/v1/admin/unban \
+  -H "authorization: Bearer $PROMPTFALL_ADMIN_TOKEN" \
+  -H 'content-type: application/json' \
+  -d '{"login": "<github login>"}'
+```
+
+It removes the login's record and lifts the ban of each account the record names that still
+exists, and answers `{"login", "lifted": [<account ids>]}`, or 404 for a login never banned. Each
+call logs `admin <time> unban <login> ok` (or `unknown`, `unauthorized`, `refused`), the login
+lowercased. The record outlives a banned account's delete, so the login is unbanned after the
+account is gone.
 
 ## Backups
 

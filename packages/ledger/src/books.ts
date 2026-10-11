@@ -24,6 +24,11 @@ export type PendingReturn = { listingId: string; goods: Goods }
 export type Link = { accountId: string; createdAt: number; deviceCode?: string }
 /** One open link in `pf:links`, so the sweep finds a stale row without scanning accounts. */
 export type OpenLink = { code: string; createdAt: number }
+/**
+ * A banned GitHub login: the first ban's reason and time, and every banned account that carried
+ * the login. A link is never unique to one account, so two may share it.
+ */
+export type LoginBan = { reason: string; at: number; accountIds: string[] }
 
 /** Everything the ledger knows about one account, written in one `set`. */
 export type AccountRecord = {
@@ -62,6 +67,8 @@ export const KINDS = Object.keys(BUDGETS) as BudgetKind[]
 export const recordKey = (accountId: string) => `pf:acct:${accountId}:record`
 export const tokenKey = (token: string) => `pf:token:${token}`
 export const linkKey = (code: string) => `pf:link:${code}`
+/** GitHub logins are case-insensitive: the key holds the login lowercased. */
+export const loginBanKey = (login: string) => `pf:ban:${login.toLowerCase()}`
 export const RETURNS_KEY = 'pf:returns'
 /** The open link codes with their start times. Rows written before it existed are not in it. */
 export const LINKS_KEY = 'pf:links'
@@ -225,6 +232,11 @@ export class Books {
   async authenticate(auth: Auth): Promise<AccountRecord | null> {
     const accountId = await this.accountFor(auth.deviceToken)
     return accountId ? this.load(accountId) : null
+  }
+
+  async loginBan(login: string): Promise<LoginBan | null> {
+    const raw = await this.kv.get(loginBanKey(login))
+    return raw ? (raw as LoginBan) : null
   }
 
   async returnsQueue(): Promise<string[]> {

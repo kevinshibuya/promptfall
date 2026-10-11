@@ -169,11 +169,15 @@ playing one stores. A delete's reset and a wiped dev store heal this way.
 
 **Bans.** The same token bans an account: `POST /v1/admin/ban` with `{"accountId", "reason"}`
 stores the ban on the account's record, never on the account the wire carries, and logs one line
-with the account id. From the next call on, every call of that account (the bootstrap, batches,
-the market, the world poll, chat, the boards, the link) answers `banned` with
+with the account id. From the next call on, every call of that account but its delete (the
+bootstrap, batches, the market, the world poll, chat, the boards, the link) answers `banned` with
 `Promptfall: this account is banned: <reason>`. The plugin pauses play and shows that line in the
 message window, as it shows the update notice; it does not ask again until the next session, which
-shows it again. There is no unban.
+shows it again. The ban reaches the account's GitHub login too: a fresh account that links the
+same login, in any case, has the link end denied with `Promptfall: this GitHub account is banned:
+<reason>` and stays unlinked, though it is not banned for trying. An account that never linked is
+banned by its id alone. `POST /v1/admin/unban` with `{"login"}` lifts the login's ban and the ban
+of every account still there that carried it, whether or not the banned account was deleted.
 
 **Deleting an account.** Delete my account on this server, on the Account tab, asks Yes or No, then
 calls `DELETE /v1/account` with the machine's token. The server closes the account's open listings
@@ -187,7 +191,8 @@ window says the delete happened and why nothing plays, in one line,
 `Promptfall: your account was deleted.` followed by the server's message, which stays through the
 pause's later retries. When the server does not confirm, nothing on the machine changes and the
 pane says the account was not deleted. The row is not on the sandbox save, nor in a session that is
-not playing; a banned account cannot delete itself. The in-process server deletes the same way.
+not playing. The server lets a banned account delete itself, though a banned session does not offer
+the row yet. The in-process server deletes the same way.
 
 **World boss.** A shared enemy with one global HP spawns every three hours and lives twenty
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in

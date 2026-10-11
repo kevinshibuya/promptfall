@@ -53,7 +53,9 @@ import {
   isCurrent,
   KINDS,
   type Link,
+  type LoginBan,
   linkKey,
+  loginBanKey,
   newRecord,
   publicName,
   settle,
@@ -148,10 +150,16 @@ export type LedgerHost = {
    */
   setFlags(flags: Partial<Record<SettableFlag, boolean>>): Promise<Record<string, boolean>>
   /**
-   * Bans an account: from the next call on, every authenticated call it makes is refused with
-   * `reason`. Answers the ban as stored, or null when no account has the id.
+   * Bans an account: from the next call on, every authenticated call it makes but a delete is
+   * refused with `reason`. A linked account's login is banned too, so no account links it.
+   * Answers the ban as stored, or null when no account has the id.
    */
   ban(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
+  /**
+   * Lifts a login's ban, and the ban of each account it names that is still there. Answers the
+   * login lowercased and the accounts lifted, or null for a login never banned.
+   */
+  unban(login: string): Promise<{ login: string; lifted: string[] } | null>
 }
 
 /**
@@ -259,6 +267,7 @@ export class Ledger implements ServerClient {
       settleBoss: () => this.run(() => this.settleBoss()),
       setFlags: (flags) => this.run(() => this.setFlags(flags)),
       ban: (accountId, reason) => this.run(() => this.ban(accountId, reason)),
+      unban: (login) => this.run(() => this.unban(login)),
     }
   }
 
@@ -309,7 +318,30 @@ export class Ledger implements ServerClient {
     if (!record) return null
     record.banned = { reason, at: await this.options.now() }
     await this.books.save(record)
+    // The login too, so a fresh account cannot link it; a second ban only adds its account.
+    const login = record.account.linked?.login
+    if (login) {
+      const prior = await this.books.loginBan(login)
+      const ban: LoginBan = prior ?? { ...record.banned, accountIds: [] }
+      if (!ban.accountIds.includes(accountId)) ban.accountIds = [...ban.accountIds, accountId]
+      await this.kv.set(loginBanKey(login), ban)
+    }
     return record.banned
+  }
+
+  private async unban(login: string): Promise<{ login: string; lifted: string[] } | null> {
+    const ban = await this.books.loginBan(login)
+    if (!ban) return null
+    await this.kv.delete(loginBanKey(login))
+    const lifted: string[] = []
+    for (const accountId of ban.accountIds) {
+      const record = await this.books.load(accountId)
+      if (!record?.banned) continue
+      delete record.banned
+      await this.books.save(record)
+      lifted.push(accountId)
+    }
+    return { login: login.toLowerCase(), lifted }
   }
 
   private async config(): Promise<ServerConfig> {
@@ -427,14 +459,13 @@ export class Ledger implements ServerClient {
   /**
    * Deletes the caller's account. Its open listings and orders close with nothing returned or
    * refunded, its rows leave both boards and presence, and its record and token go. Nothing
-   * else is settled: a counterparty, the boss record and the chat history are untouched.
+   * else is settled: a counterparty, the boss record and the chat history are untouched. The
+   * one call a ban lets through: a banned player may leave. A login ban stays behind.
    */
   deleteAccount(auth: Auth): Promise<AccountDeleted | Unauthorized | Banned> {
     return this.run(async () => {
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
-      const banned = bannedOf(record)
-      if (banned) return banned
       const id = record.account.accountId
       await market.closeAllOf(await this.marketContext(), id)
       await world.dropFromBoards(this.kv, id)
@@ -632,6 +663,16 @@ export class Ledger implements ServerClient {
       if (answer.status === 'ended') {
         await this.books.save(record)
         return answer
+      }
+      // A banned login ends the link denied; the account is not banned by that.
+      const loginBan = await this.books.loginBan(answer.login)
+      if (loginBan) {
+        await this.books.save(record)
+        return {
+          status: 'ended',
+          reason: 'denied',
+          message: `Promptfall: this GitHub account is banned: ${loginBan.reason}`.slice(0, 200),
+        }
       }
       record.account = {
         ...record.account,
