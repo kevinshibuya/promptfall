@@ -1,13 +1,27 @@
 // The staged state (GLOSSARY): the fight as the stage has played it so far, the sim's state less
-// every hit, heal and death the stage has not landed yet. The one place that asks the timeline
-// about landings; the stage and the band's windows read what it builds.
-import type { EnemyView, GameView, WorldState } from '../../types'
+// every hit, heal and death the stage has not landed yet and every drop it has not revealed. The
+// one place that asks the timeline about landings; the stage and the band's windows read what it
+// builds.
+import type { EnemyView, GameView, LootView, WorldState } from '../../types'
 import type { StageTimeline } from './timeline'
 
 /** The HP change still to land on each actor after `now`. */
 function pendingBy(timeline: StageTimeline, now: number): Map<string, number> {
   const out = new Map<string, number>()
   for (const l of timeline.pending(now)) out.set(l.actor, (out.get(l.actor) ?? 0) + l.delta)
+  return out
+}
+
+/** The Loot rows less the newest `held` drop and vendored rows: those still to be revealed. */
+function revealed(loot: readonly LootView[], held: number): LootView[] {
+  const out: LootView[] = []
+  let left = held
+  for (let i = loot.length - 1; i >= 0; i--) {
+    const row = loot[i]
+    if (!row) continue
+    if (left > 0 && row.kind !== 'market') left -= 1
+    else out.unshift(row)
+  }
   return out
 }
 
@@ -38,6 +52,7 @@ function worldBossRow(
  * The enemies are the timeline's line in arrival order, a departed one kept while it is held,
  * each with its HP staged the same way. The zone and wave hold the previous ones while a departed
  * enemy seen in them is held. The world boss is staged like any enemy, its bar from the poll.
+ * The Loot rows leave out a drop until its chest's reveal shows it; the last drop is their newest.
  */
 export function stagedState(
   view: GameView,
@@ -68,7 +83,10 @@ export function stagedState(
   const encounter = before
     ? { zone: before.zone, zoneName: before.zoneName, wave: before.wave }
     : {}
-  return { ...view, ...encounter, heroes, enemies }
+  const held = timeline.pendingReveals(now)
+  const loot = held > 0 ? revealed(view.loot, held) : null
+  const rows = loot ? { loot, lastDrop: loot.at(-1) ?? null } : {}
+  return { ...view, ...encounter, heroes, enemies, ...rows }
 }
 
 /**

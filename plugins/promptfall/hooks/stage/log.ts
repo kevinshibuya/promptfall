@@ -1,6 +1,7 @@
 // The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
-// queue behind each other, and hit lines are dropped only when the queue falls a tick behind.
+// queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
+// drop's line waits for its reveal: held aside until its item has risen, then queued.
 import type { GameView, Settings } from '../../types'
 import { heroNameById } from '../toasts'
 import { content, type Effect, type Rarity } from '../vendor/sim.js'
@@ -21,6 +22,14 @@ export type LogLine = {
 }
 
 type Known = { name: string; kind: string; hp?: number }
+
+type Said = { text: string; key: boolean; rgb?: number }
+
+/**
+ * A drop or vendored line waiting for its item's reveal. `showAt` is the show time the timeline
+ * last answered: a chest it no longer holds leaves its line due then.
+ */
+type Held = { line: Said; itemId: string; showAt: number; cadenceMs: number }
 
 /** Enemies the log remembers past their view, so a kill can name them; older ones are dropped. */
 const KNOWN_KEEP = 200
@@ -45,7 +54,10 @@ function dropWord(rarity: Rarity): string {
 
 export class MessageLog {
   private lines: LogLine[] = []
+  private held: Held[] = []
   private known = new Map<string, Known>()
+  /** The stage's timeline, asked for each held line's show time whenever the log is read. */
+  private timeline: StageTimeline | null = null
 
   /** Every applied batch, after timeline.onEffects; `starts` is its answer. */
   onEffects(
@@ -56,6 +68,11 @@ export class MessageLog {
     cadenceMs: number,
     timeline: StageTimeline,
   ): void {
+    this.timeline = timeline
+    // Held lines due by now arrived before this batch: they queue ahead of it.
+    const due = this.due(now)
+    this.held = this.held.filter((h) => !due.includes(h))
+    for (const h of due) this.schedule(this.lines, h.line, h.showAt, h.cadenceMs)
     // HP as the log last saw it, before this batch's view: a kill is a hit that empties it.
     const hpBefore = new Map([...this.known].map(([id, k]) => [id, k.hp]))
     for (const k of timeline.known())
@@ -77,7 +94,7 @@ export class MessageLog {
 
     for (const [i, g] of all.entries()) {
       const start = starts[i] ?? now
-      const out: { text: string; key: boolean; rgb?: number }[] = []
+      const out: Said[] = []
       const hits = g.effects.filter((e): e is Extract<Effect, { k: 'hit' }> => e.k === 'hit')
       if (hits.length >= 2 && hits.every((h) => h.by === hits[0]?.by)) {
         out.push({
@@ -107,18 +124,19 @@ export class MessageLog {
       }
       for (const e of g.effects) {
         const line = this.consequence(e, view, name)
-        if (line) out.push(line)
+        if (!line) continue
+        // A drop's line waits for its chest's reveal; one with no chest prints with its action.
+        const itemId = e.k === 'drop' || e.k === 'drop_vendored' ? e.item.id : null
+        const showAt = itemId === null ? null : timeline.showAt(itemId)
+        if (itemId === null || showAt === null) out.push(line)
+        else this.held.push({ line, itemId, showAt, cadenceMs })
       }
-      for (const l of out) this.schedule(l, start, cadenceMs)
+      for (const l of out) this.schedule(this.lines, l, start, cadenceMs)
     }
     if (this.lines.length > LOG_KEEP) this.lines = this.lines.slice(-LOG_KEEP)
   }
 
-  private consequence(
-    e: Effect,
-    view: GameView,
-    name: (id: string) => string,
-  ): { text: string; key: boolean; rgb?: number } | null {
+  private consequence(e: Effect, view: GameView, name: (id: string) => string): Said | null {
     switch (e.k) {
       case 'drop':
         return {
@@ -173,17 +191,14 @@ export class MessageLog {
     }
   }
 
-  private schedule(
-    l: { text: string; key: boolean; rgb?: number },
-    start: number,
-    cadenceMs: number,
-  ): void {
-    const prev = this.lines.at(-1)
+  /** Queues `l` at the end of `lines`, starting no earlier than `start`. */
+  private schedule(lines: LogLine[], l: Said, start: number, cadenceMs: number): void {
+    const prev = lines.at(-1)
     const at = prev ? Math.max(start, prev.at + LINE_MIN_MS, typed(prev)) : start
     // Grill 1.13's safety valve: a hit or heal line more than a tick behind its action is dropped.
     if (!l.key && at > start + cadenceMs) return
-    const waiting = this.lines.filter((x) => typed(x) > start).length
-    this.lines.push({
+    const waiting = lines.filter((x) => typed(x) > start).length
+    lines.push({
       text: l.text,
       ...(l.rgb !== undefined ? { rgb: l.rgb } : {}),
       key: l.key,
@@ -192,12 +207,31 @@ export class MessageLog {
     })
   }
 
+  /** Held lines whose show time has passed by `now`, in show order, each read afresh. */
+  private due(now: number): Held[] {
+    for (const h of this.held) h.showAt = this.timeline?.showAt(h.itemId) ?? h.showAt
+    return this.held.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
+  }
+
+  /**
+   * The lines as they stand at `now`: the queued ones, then each held line due by `now` queued
+   * as if it had just arrived. Reading never commits a held line, so a read ahead of time (the
+   * desktop's SMIL) leaves the next batch its place.
+   */
+  private linesAt(now: number): LogLine[] {
+    const due = this.due(now)
+    if (due.length === 0) return this.lines
+    const lines = [...this.lines]
+    for (const h of due) this.schedule(lines, h.line, h.showAt, h.cadenceMs)
+    return lines
+  }
+
   /** Lines shown by `now`, oldest first, each revealed to its typed length. */
   shown(
     now: number,
     motion: Settings['motion'],
   ): { text: string; rgb?: number; revealed: number }[] {
-    return this.lines
+    return this.linesAt(now)
       .filter((l) => l.at <= now)
       .map((l) => ({
         text: l.text,
@@ -221,18 +255,22 @@ export class MessageLog {
   /** The newest line shown by `now` while it is still typing, and how much of it shows. */
   typing(now: number, motion: Settings['motion']): (LogLine & { revealed: number }) | null {
     if (motion === 'still') return null
-    const line = this.lines.filter((l) => l.at <= now).at(-1)
+    const line = this.linesAt(now)
+      .filter((l) => l.at <= now)
+      .at(-1)
     if (!line || typed(line) <= now) return null
     return { ...line, revealed: Math.floor((now - line.at) / line.charMs) }
   }
 
-  /** A line is waiting, or still typing. */
+  /** A line is waiting, held for its reveal, or still typing. */
   isBusy(now: number, motion: Settings['motion']): boolean {
-    return this.lines.some((l) => l.at > now || (motion !== 'still' && typed(l) > now))
+    const lines = this.linesAt(now)
+    if (this.held.some((h) => h.showAt > now)) return true
+    return lines.some((l) => l.at > now || (motion !== 'still' && typed(l) > now))
   }
 
-  /** Lines starting in (now, now + horizonMs], for SMIL. */
+  /** Lines starting in (now, now + horizonMs], for SMIL; a held line at its show time as known now. */
   upcoming(now: number, horizonMs: number): readonly LogLine[] {
-    return this.lines.filter((l) => l.at > now && l.at <= now + horizonMs)
+    return this.linesAt(now + horizonMs).filter((l) => l.at > now && l.at <= now + horizonMs)
   }
 }

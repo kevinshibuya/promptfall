@@ -104,24 +104,36 @@ function lootLine(entry: LootEntry): LootView {
   if (entry.k === 'hero') {
     const glyph = content.heroTemplates[entry.template]?.glyph ?? '@'
     const name = content.heroTemplates[entry.template]?.name ?? entry.template
-    return { text: `${glyph} ${name} joined (${entry.rarity})`, rarity: entry.rarity }
+    return {
+      text: `${glyph} ${name} joined (${entry.rarity})`,
+      rarity: entry.rarity,
+      kind: 'market',
+    }
   }
   if (entry.k === 'reward') {
     const name = content.itemBases[entry.base]?.name ?? entry.base
-    return { text: `boss reward ${name} (+${entry.gold}g)`, rarity: entry.rarity }
+    return { text: `boss reward ${name} (+${entry.gold}g)`, rarity: entry.rarity, kind: 'market' }
   }
   if (entry.k === 'trade') {
     const name = tradeName(entry.kind, entry.base)
     const text =
       entry.what === 'returned' ? `${name} returned` : `${entry.what} ${name} for ${entry.gold}g`
-    return { text, rarity: entry.rarity }
+    return { text, rarity: entry.rarity, kind: 'market' }
   }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
   if (entry.vendoredFor !== null) {
-    return { text: `${name} sold for ${entry.vendoredFor}g`, rarity: entry.rarity }
+    return {
+      text: `${name} sold for ${entry.vendoredFor}g`,
+      rarity: entry.rarity,
+      kind: 'vendored',
+    }
   }
-  return { text: `${base?.glyph ?? '?'} ${name} (${entry.rarity})`, rarity: entry.rarity }
+  return {
+    text: `${base?.glyph ?? '?'} ${name} (${entry.rarity})`,
+    rarity: entry.rarity,
+    kind: 'drop',
+  }
 }
 
 function itemView(item: Item): ItemView {

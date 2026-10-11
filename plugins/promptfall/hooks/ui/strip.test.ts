@@ -155,7 +155,10 @@ test('desktop tracks: the line typing at render goes on from where it is; a noti
 
 test('a hero-joined loot line drops the glyph the font lacks', () => {
   const input = strip('strip-loot')
-  const view = { ...input.view, loot: [{ text: '♞ Aldric joined (rare)', rarity: 'rare' }] }
+  const view = {
+    ...input.view,
+    loot: [{ text: '♞ Aldric joined (rare)', rarity: 'rare', kind: 'market' as const }],
+  }
   const { scene } = stripScene({ ...input, view })
   const message = win(scene, 'message')
   expect(lineText(message.lines[1]).trim()).toBe('Aldric joined (rare)')
