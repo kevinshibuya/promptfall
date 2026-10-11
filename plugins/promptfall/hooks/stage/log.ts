@@ -259,14 +259,18 @@ export class MessageLog {
     return 'item' in wait ? t.showAt(wait.item) : t.zoneShowAt(wait.zone)
   }
 
-  /** Each entry's show time read afresh; one the timeline no longer answers keeps its last. */
-  private reread(entries: readonly Waiting[]): void {
-    for (const h of entries) h.showAt = this.showOf(h.wait) ?? h.showAt
+  /**
+   * Each entry's show time read afresh. One the timeline no longer answers keeps its last, but
+   * never later than `now`: a chest pruned after it played stays due, and one a resync took away
+   * (the enemy revived) is due at once rather than at a reveal that will not come.
+   */
+  private reread(entries: readonly Waiting[], now: number): void {
+    for (const h of entries) h.showAt = this.showOf(h.wait) ?? Math.min(h.showAt, now)
   }
 
   /** Held lines whose show time has passed by `now`, in show order, each read afresh. */
   private due(now: number): Held[] {
-    this.reread(this.held)
+    this.reread(this.held, now)
     return this.held.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
   }
 
@@ -290,7 +294,7 @@ export class MessageLog {
    * An infinite `now` releases everything held.
    */
   release(now: number): Toast[] {
-    this.reread(this.heldToasts)
+    this.reread(this.heldToasts, now)
     const due = this.heldToasts.filter((h) => h.showAt <= now).sort((a, b) => a.showAt - b.showAt)
     this.heldToasts = this.heldToasts.filter((h) => !due.includes(h))
     return due.map((h) => h.toast)
@@ -298,7 +302,7 @@ export class MessageLog {
 
   /** The earliest show time after `now` a held toast waits for, read afresh; null for none. */
   nextRelease(now: number): number | null {
-    this.reread(this.heldToasts)
+    this.reread(this.heldToasts, now)
     const next = this.heldToasts.filter((h) => h.showAt > now).map((h) => h.showAt)
     return next.length === 0 ? null : Math.min(...next)
   }
@@ -357,7 +361,7 @@ export class MessageLog {
   isBusy(now: number, motion: Settings['motion']): boolean {
     const lines = this.linesAt(now)
     if (this.held.some((h) => h.showAt > now)) return true
-    this.reread(this.heldToasts)
+    this.reread(this.heldToasts, now)
     if (this.heldToasts.some((h) => h.showAt > now)) return true
     return lines.some((l) => l.at > now || (motion !== 'still' && typed(l) > now))
   }

@@ -647,9 +647,12 @@ class GameSession implements GameHandle {
   /**
    * The drain: raises the held toasts due by `now`. With no stage drawn on any surface (band off,
    * collapsed, paused, secondary) everything held is due: nobody sees the picture it waits for.
+   * Answers whether any was due.
    */
-  private releaseHeld(now: number): void {
-    this.raise(this.stage.log.release(this.stageDrawn() ? now : Number.POSITIVE_INFINITY))
+  private releaseHeld(now: number): boolean {
+    const due = this.stage.log.release(this.stageDrawn() ? now : Number.POSITIVE_INFINITY)
+    this.raise(due)
+    return due.length > 0
   }
 
   /** Raises toasts on the primary, then each cue they earned, once. */

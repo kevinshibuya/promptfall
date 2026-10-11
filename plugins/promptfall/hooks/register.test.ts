@@ -1862,12 +1862,16 @@ test('the zone arrival toast on the desktop lands at the wake for its show time'
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PARTY_BAND })
   const { reveal, backdrop } = backdropOf(state, time.now(), time.now() + 5_000)
   await time.advance(5_000)
+  const pictured = async () => String((await ui.find({ type: 'Svg' }))?.props.alt ?? '')
   await time.advance(backdrop - time.now() - 1)
   expect(raised.filter((t) => t.text === ARRIVAL)).toEqual([])
   expect(raised.filter(isDropToast).map((t) => t.at)).toEqual([reveal])
+  expect(await pictured()).toMatch(/^Zone 1,/)
   await time.advance(1)
   expect(raised.filter((t) => t.text === ARRIVAL).map((t) => t.at)).toEqual([backdrop])
   expect(plays.filter((p) => p.at === backdrop)).toEqual([])
+  // The wake redraws: the backdrop changes with the toast, not at the next publish.
+  expect(await pictured()).toMatch(/^Zone 2,/)
   await ui.unmount()
 })
 

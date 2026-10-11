@@ -632,7 +632,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   While a stage is drawn the log holds the held toasts and drains them on the
   stage loop's clock: on a frame loop at the first frame at or after the show
   time, on the desktop's SMIL site at a wake armed for it, and on every
-  session tick, before the engine's accept check. With no stage drawn on any
+  session tick, before the engine's accept check. SMIL plays the actors and the
+  chest but not the backdrop, so a wake that releases a toast also redraws the
+  band, and the zone's words land with its backdrop. A held entry whose show
+  time the timeline stops answering (a resync revived the enemy, so the chest
+  is gone) is due at once. With no stage drawn on any
   surface (band off, collapsed, paused, secondary) everything held is due, so a
   toast held before the band went off is raised on the next tick. Driven by the sim's
   output-only effects: `act` starts an action at its battle-time offset, then
