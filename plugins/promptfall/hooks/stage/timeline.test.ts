@@ -16,6 +16,7 @@ import {
   SPAWN_MS,
   STAGE_MIN_ROWS,
   STAGE_ROWS,
+  STEP_OUT_MS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -552,6 +553,50 @@ test("a white mage's heal bursts on the healed ally, with no hit and no flash", 
 test('ACTION_MS is 500, the hold plus the knight; the wind-up past the hold is the lunge out', () => {
   expect(ACTION_MS).toBe(500)
   expect(WINDUP_MS).toBe(LUNGE_MS / 2)
+})
+
+test('every attacker steps out during its hold, stays stepped through the action and steps back before its end', () => {
+  const heal = (by: string, target: string): Effect => ({ k: 'heal', by, target, amount: 9 })
+  const cases: [string, ReturnType<typeof wave>, Effect[], 1 | -1, number][] = [
+    ['knight', wave(), [act('h1', 0), hit('h1', 'e1')], -1, 120],
+    ['goblin', wave(), [act('e1', 0), hit('e1', 'h2')], 1, 120],
+    ['black mage', wave(), [act('h2', 0), hit('h2', 'e1')], -1, 320],
+    ['white mage', wave(), [act('h3', 0, 'heal'), heal('h3', 'h1')], -1, 220],
+    ['world boss', worldBoss(), [act('e7', 0), hit('e7', 'h1')], 1, 120],
+  ]
+  for (const [, view, effects, dir, impact] of cases) {
+    const t = observed(view)
+    t.onEffects(effects, NOW)
+    const m = t.active(NOW)
+    const actor = effects[0]?.k === 'act' ? effects[0].actor : ''
+    const steps = of(m, 'step')
+    expect(steps).toEqual([{ kind: 'step', actor, from: NOW, until: NOW + ACTION_MS, dir }])
+    // Out with the wind-up frame showing, and stepped before the hold is over.
+    expect(of(m, 'windup').map((x) => x.from)).toEqual([NOW])
+    expect(STEP_OUT_MS).toBeLessThan(H)
+    // The lunge starts from the stepped position and is back before the step back begins.
+    const stepped = [NOW + STEP_OUT_MS, NOW + ACTION_MS - STEP_OUT_MS]
+    for (const l of of(m, 'lunge')) {
+      expect(l.from).toBeGreaterThanOrEqual(stepped[0] ?? 0)
+      expect(l.until).toBeLessThanOrEqual(stepped[1] ?? 0)
+    }
+    // The impact is where it was.
+    const landed = [...of(m, 'hit'), ...of(m, 'number')].map((x) => x.from - NOW)
+    expect(new Set(landed)).toEqual(new Set([H + impact]))
+    // A bolt or a burst is still flying or sitting as the attacker steps back.
+    for (const e of of(m, 'effect')) {
+      expect(e.from).toBeLessThan(NOW + ACTION_MS - STEP_OUT_MS)
+      expect(e.until).toBeGreaterThan(NOW + ACTION_MS - STEP_OUT_MS)
+    }
+    // The action is no longer than it was: the next one starts where it did.
+    expect(t.onEffects([act('h1', 0)], NOW)).toEqual([NOW + ACTION_MS])
+  }
+})
+
+test('a hit with no act takes no step', () => {
+  const t = observed()
+  t.onEffects([hit('e2', 'h2')], NOW)
+  expect(of(t.active(NOW), 'step')).toEqual([])
 })
 
 test('a hit with no act takes its hit frame at the lunge apex', () => {

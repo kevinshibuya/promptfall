@@ -20,11 +20,14 @@ import {
   LUNGE_MS,
   LUNGE_PX,
   RARITY_RGB,
+  STEP_OUT_MS,
+  STEP_PX,
   WINDUP_HOLD_MS,
 } from './tuning'
 
 const NOW = 1_000_000 // bobbing(NOW) is 0
 const BOX = { columns: 116, rows: 8 }
+const BOX_COMPACT = { columns: 52, rows: 4 }
 type Opts = { compact: boolean; motion: 'full' | 'still'; scale?: 1 | 1.5 }
 const STILL: Opts = { compact: false, motion: 'still' }
 const hit = (by: string, target: string): Effect => ({ k: 'hit', by, target, amount: 12 })
@@ -76,10 +79,12 @@ test('the rarity slot takes the hero rarity colour', () => {
   expect(mira.palette[slot]).toBe(RARITY_RGB.rare)
 })
 
-test('a flashing actor draws white; a lunging hero steps toward the enemies', () => {
+test('a flashing actor draws white; a lunging hero steps and lunges toward the enemies', () => {
   const effects: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
   const mid = at(wave(), effects, NOW + LUNGE_MS / 2)
-  expect(actor(mid.actors, 'h1').x).toBe(116 - ACTOR_EDGE - 16 - ACTOR_PITCH * 2 - LUNGE_PX)
+  expect(actor(mid.actors, 'h1').x).toBe(
+    116 - ACTOR_EDGE - 16 - ACTOR_PITCH * 2 - STEP_PX - LUNGE_PX,
+  )
   const e1 = actor(mid.actors, 'e1')
   expect(e1.flashing).toBe(true)
   expect(e1.palette.slice(1).every((c) => c === FLASH_RGB)).toBe(true)
@@ -200,7 +205,8 @@ test('at scale 1.5 the full stage carries the 1.5x art and every distance grows 
   for (const a of rest.actors) expect(a.y + a.art.height).toBe(24)
   const effects: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
   const mid = at(wave(), effects, NOW + LUNGE_MS / 2, BOX, opts)
-  expect(actor(mid.actors, 'h1').x).toBe(h1.x - 6)
+  // The step and the lunge, 4 px each at 1, are 6 each at 1.5.
+  expect(actor(mid.actors, 'h1').x).toBe(h1.x - 6 - 6)
   expect(actor(mid.actors, 'h1').art).toBe(spriteFor('hero_attack', 'knight').hires)
 })
 
@@ -231,7 +237,8 @@ test('at 1.5 the knight winds up, strikes in its attack art and follows through'
   expect(windup.pose).toBe('windup')
   expect(windup.art).toBe(knight.frames?.windup.art)
   expect(windup.x).toBe(
-    rest.x +
+    rest.x -
+      Math.round(STEP_PX * HIRES_SCALE) +
       lungeOffset(
         { kind: 'lunge', actor: 'h1', from: NOW, until: NOW + LUNGE_MS, dir: -1 },
         NOW + 60,
@@ -415,4 +422,54 @@ test('a world boss at an emptied bar stands whole until the server disengages it
   const fading = actor(stageAt(stagedState(gone, world, t, mid), t, mid, BOX, full).actors, 'e7')
   expect(fading.alpha).toBeGreaterThan(0)
   expect(fading.alpha).toBeLessThan(1)
+})
+
+test('the step is the same distance for a world boss and a goblin', () => {
+  const tall = { columns: 116, rows: 17 }
+  /** The actor's x at `now`, its action starting at NOW. */
+  const xAt = (view: GameView, effects: Effect[], key: string, now: number, opts: Opts) => {
+    const t = new StageTimeline()
+    t.observe(view, NOW)
+    t.onEffects(effects, NOW)
+    return actor(stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, tall, opts).actors, key)
+      .x
+  }
+  // In the hold, before the lunge: the step is out and nothing else moves the actor.
+  const held = NOW + STEP_OUT_MS
+  const apex = NOW + WINDUP_HOLD_MS + LUNGE_MS / 2
+  const cases: [GameView, string, string][] = [
+    [wave(), 'e1', 'h2'],
+    [worldBoss(), 'e7', 'h1'],
+  ]
+  for (const opts of [LO, HI, { ...HI, motion: 'still' as const }]) {
+    const scale = opts.scale ?? 1
+    const stepPx = Math.round(STEP_PX * scale)
+    for (const [view, enemy, target] of cases) {
+      const effects: Effect[] = [
+        { k: 'act', actor: enemy, action: 'attack', at: 0 },
+        hit(enemy, target),
+      ]
+      const rest = xAt(view, [], enemy, held, opts)
+      expect(xAt(view, effects, enemy, held, opts) - rest).toBe(stepPx)
+      // The lunge adds its own from the stepped position.
+      expect(xAt(view, effects, enemy, apex, opts) - rest).toBe(
+        stepPx + Math.round(LUNGE_PX * scale),
+      )
+      // Back where it stood once the action is over.
+      expect(xAt(view, effects, enemy, NOW + 1000, opts)).toBe(rest)
+    }
+  }
+  // A hero steps toward the enemies.
+  const knightRest = xAt(wave(), [], 'h1', held, LO)
+  expect(xAt(wave(), knightHits, 'h1', held, LO) - knightRest).toBe(-STEP_PX)
+  // The compact stage steps its one drawing the 1x distance.
+  const compact = (effects: Effect[]) => {
+    const t = new StageTimeline()
+    t.observe(wave(), NOW)
+    t.onEffects(effects, NOW)
+    const opts: Opts = { compact: true, motion: 'full', scale: HIRES_SCALE }
+    const m = stageAt(stagedState(wave(), WORLD_DEFAULT, t, held), t, held, BOX_COMPACT, opts)
+    return actor(m.actors, 'e1').x
+  }
+  expect(compact(slimeHits) - compact([])).toBe(STEP_PX)
 })

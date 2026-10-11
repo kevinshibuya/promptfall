@@ -197,19 +197,26 @@ enemy window's title and the backdrop stay on the wave and zone being watched, a
 bar drops as your party's hits land. Toasts read the game's state, so a wipe toast can come up to
 one cadence before the last hero falls on the stage.
 
-- **Choreography.** One action, from its start, in ms. Every actor winds up for 120 and strikes
-  from there; at impact the target shows its hit frame for 160 (`FLASH_MS`), and the number rises
-  from it.
+- **Choreography.** One action, from its start, in ms. Every attacker holds its wind-up frame in
+  place for 140 (`WINDUP_HOLD_MS`), then moves in its shape; at impact the target shows its hit
+  frame for 160 (`FLASH_MS`), and the number rises from it. Every attacker also takes the step:
+  4 px toward its target at 1× and 6 at 1.5× (`STEP_PX`, the same for a goblin and the world
+  boss), out over the first 80 of the hold (`STEP_OUT_MS`), held, and back over the last 80 of
+  the action. The lunge thrusts from the stepped position, and numbers and effects measure from
+  it. On the SMIL `Svg` the step is a translate on the actor's group; at 1× it moves the one
+  drawing. Motion still keeps it, as it keeps the lunge.
 
   | Shape | Who | Frames and motion |
   | --- | --- | --- |
-  | `lunge` | every enemy | the lunge out and back over 240: wind-up frame 0–120, strike frame 120–240; impact 120 |
-  | `lunge_follow` | knight | as `lunge`, then the follow-through frame in place 240–360 |
-  | `bolt` | black mage (fireball), archer (arrow) | wind-up in place 0–120, strike 120–320 while the effect flies from the attacker's front edge to the target's centre; impact 320 |
-  | `burst` | white mage, attack and heal | wind-up 0–120, strike 120–320 while the light burst sits on the target; impact 220 |
+  | `step` | every attacker | out 0–80 inside the hold, held through the shape, back 420–500 |
+  | `lunge` | every enemy | wind-up frame 0–260 (the lunge out from 140), strike frame 260–380 as it comes back; impact 260 |
+  | `lunge_follow` | knight | as `lunge`, then the follow-through frame in place 380–500, stepping back from 420 |
+  | `bolt` | black mage (fireball), archer (arrow) | wind-up in place 0–260, strike 260–460 while the effect flies from the attacker's front edge to the target's centre; impact 460, as the attacker steps back |
+  | `burst` | white mage, attack and heal | wind-up 0–260, strike 260–460 while the light burst sits on the target; impact 360 |
 
-  `ACTION_MS` is 360, the longest of these; an `attack_all` plays one effect per target. A hit
-  that comes without an action (a resync, a delivery) lands at 120 and shows the hit frame.
+  `ACTION_MS` is 500, the hold and the knight's shape; the step plays inside it and costs no
+  time. An `attack_all` plays one effect per target. A hit that comes without an action (a
+  resync, a delivery) lands at 120, shows the hit frame and takes no step.
 - **Poses.** At 1.5× each actor has six drawings: idle A (its 1.5× art), idle B, the wind-up,
   the strike and the follow-through (drawn frames, from the manifest; a hero's strike is its
   `hero_attack` art), and the hit. At rest it alternates idle A and idle B on the bob's clock

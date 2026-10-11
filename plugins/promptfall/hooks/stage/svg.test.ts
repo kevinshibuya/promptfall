@@ -83,6 +83,23 @@ test('smil animates a lunge already under way from a negative begin', () => {
   expect(s).toContain('filter="url(#flash)"')
 })
 
+test('smil plays the step as a translate on the stepper from its place, under Motion still too', () => {
+  const still: Opts = { smil: true, motion: 'still' }
+  const held = NOW + 110
+  const s = svg([act, hit], held, still)
+  expect(s.match(/<animateTransform[^>]*values="0 0;-4 0;-4 0;0 0"[^>]*>/g)).toEqual([
+    '<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-4 0;-4 0;0 0" keyTimes="0;0.16;0.84;1" begin="-0.11s" dur="0.5s"/>',
+  ])
+  // The groups stand where they stand at rest: the animation adds the step.
+  const places = (doc: string) =>
+    [...doc.matchAll(/<g transform="(translate\([^)]*\))"/g)].map((m) => m[1])
+  expect(places(s)).toEqual(places(svg([], held, still)))
+  // Without SMIL the knight is drawn stepped.
+  const flat = places(svg([act, hit], held, { smil: false, motion: 'still' }))
+  const rest = places(svg([], held, { smil: false, motion: 'still' }))
+  expect(flat.filter((p) => !rest.includes(p))).toHaveLength(1)
+})
+
 test('a motion already over yields nothing', () => {
   const s = svg([hit], NOW + LUNGE_MS + 2000, { smil: true, motion: 'still' })
   expect(s).not.toContain('<animate')

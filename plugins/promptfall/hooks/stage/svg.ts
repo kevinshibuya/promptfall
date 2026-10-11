@@ -8,12 +8,13 @@ import { backdropOrigin, frameSize } from './compose'
 import { GLYPH_HEIGHT, glyphBlock, TEXT_OUTLINE_RGB, textWidth } from './font'
 import type { Box } from './layout'
 import {
+  actionOffset,
   effectAt,
-  lungeOffset,
   type Pose,
   type StageActor,
   type StageModel,
   stageAt,
+  stepOffset,
   variant,
 } from './model'
 import { svgFrame } from './playfield'
@@ -27,6 +28,8 @@ import {
   IDLE_FRAME_MS,
   LUNGE_PX,
   NUMBER_RISE_PX,
+  STEP_OUT_MS,
+  STEP_PX,
   SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
 } from './tuning'
@@ -239,6 +242,19 @@ export function renderSvg(
   const begin = (m: Motion) => seconds(m.from - opts.now)
   const dur = (m: Motion) => seconds(m.until - m.from)
   const bobPx = px(IDLE_BOB_PX)
+  /** The step and the lunge as translates on the actor's group, summed with its place. */
+  const moveAnim = (m: Motion): string | null => {
+    if (m.kind === 'lunge') {
+      const dx = m.dir * px(LUNGE_PX)
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`
+    }
+    if (m.kind === 'step') {
+      const dx = m.dir * px(STEP_PX)
+      const out = Number((STEP_OUT_MS / (m.until - m.from)).toFixed(3))
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;${dx} 0;0 0" keyTimes="0;${out};${Number((1 - out).toFixed(3))};1" begin="${begin(m)}" dur="${dur(m)}"/>`
+    }
+    return null
+  }
   const bob = opts.motion === 'full' ? bobbingAt(opts.now) * bobPx : 0
   const ground = px(2)
 
@@ -312,11 +328,9 @@ export function renderSvg(
   const hiresActor = (actor: StageActor, mine: readonly Motion[], x: number): string => {
     const anim: string[] = []
     for (const m of mine) {
-      if (m.kind === 'lunge') {
-        const dx = m.dir * px(LUNGE_PX)
-        anim.push(
-          `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`,
-        )
+      const move = moveAnim(m)
+      if (move !== null) {
+        anim.push(move)
       } else if (m.kind === 'spawn') {
         anim.push(
           `<animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`,
@@ -417,8 +431,9 @@ export function renderSvg(
     }
 
     // Back out the offsets the model baked in at `now`; the animations reapply them.
-    const lunge = mine.find((m) => m.kind === 'lunge' && m.from <= opts.now)
-    const x = actor.x - lungeOffset(lunge, opts.now, scale)
+    const started = (kind: Motion['kind']) =>
+      mine.find((m) => m.kind === kind && m.from <= opts.now)
+    const x = actor.x - actionOffset(started('step'), started('lunge'), opts.now, scale)
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
@@ -430,11 +445,9 @@ export function renderSvg(
     base.set(actor.key, { x, y, actor })
     const anim: string[] = []
     for (const m of mine) {
-      if (m.kind === 'lunge') {
-        const dx = m.dir * px(LUNGE_PX)
-        anim.push(
-          `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`,
-        )
+      const move = moveAnim(m)
+      if (move !== null) {
+        anim.push(move)
       } else if (m.kind === 'spawn') {
         anim.push(
           `<animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`,
@@ -510,6 +523,9 @@ export function renderSvg(
         const sprite = SPRITES[`effect:${m.effect}`]
         if (!to || !sprite) continue
         const art = variant(sprite, compact, scale)
+        // The attacker throws from where it stands as it throws: stepped out.
+        const step = live.find((o) => o.actor === m.actor && o.kind === 'step')
+        const thrower = { ...at, x: at.x + stepOffset(step, m.from, scale) }
         const place = (a: typeof at) => ({
           x: a.x,
           y: a.y,
@@ -517,8 +533,8 @@ export function renderSvg(
           height: a.actor.poses.idle.art.height,
         })
         const flipX = at.actor.flipX
-        const end = effectAt(art, flipX, place(at), place(to), 1)
-        const start = m.shape === 'bolt' ? effectAt(art, flipX, place(at), place(to), 0) : end
+        const end = effectAt(art, flipX, place(thrower), place(to), 1)
+        const start = m.shape === 'bolt' ? effectAt(art, flipX, place(thrower), place(to), 0) : end
         if (!start || !end) continue
         const flip = flipX ? ` transform="translate(${art.width} 0) scale(-1 1)"` : ''
         const fly =

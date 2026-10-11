@@ -18,6 +18,8 @@ import {
   NUMBER_RISE_PX,
   RARITY_RGB,
   SPRITE_PX,
+  STEP_OUT_MS,
+  STEP_PX,
   ZONE_GROUND,
 } from './tuning'
 
@@ -55,7 +57,7 @@ export type StageActor = {
   /** The art's palette after the rarity swap, the fallen-hero dim and the flash. */
   palette: readonly number[]
   /**
-   * The idle art's top-left in stage pixels, after lunge and bob: the anchor numbers and drops
+   * The idle art's top-left in stage pixels, after step, lunge and bob: the anchor numbers and drops
    * measure from. A pose draws at `x + poses[pose].dx`.
    */
   x: number
@@ -106,6 +108,27 @@ export function lungeOffset(m: Motion | undefined, now: number, scale = 1): numb
   if (m?.kind !== 'lunge') return 0
   const p = progress(m, now)
   return m.dir * Math.round(Math.round(LUNGE_PX * scale) * (p < 0.5 ? p * 2 : (1 - p) * 2))
+}
+
+/**
+ * The step's offset: out over the first STEP_OUT_MS, held, back over the last STEP_OUT_MS. The
+ * same pixels for every actor at a scale, a world boss's as a goblin's.
+ */
+export function stepOffset(m: Motion | undefined, now: number, scale = 1): number {
+  if (m?.kind !== 'step') return 0
+  const out = clamp((now - m.from) / STEP_OUT_MS, 0, 1)
+  const back = clamp((m.until - now) / STEP_OUT_MS, 0, 1)
+  return m.dir * Math.round(Math.round(STEP_PX * scale) * Math.min(out, back))
+}
+
+/** An actor's offset from its place: the step, and the lunge from the stepped position. */
+export function actionOffset(
+  step: Motion | undefined,
+  lunge: Motion | undefined,
+  now: number,
+  scale = 1,
+): number {
+  return stepOffset(step, now, scale) + lungeOffset(lunge, now, scale)
 }
 
 function halve(rgb: number): number {
@@ -245,12 +268,13 @@ export function stageAt(
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
     const lunge = motionOf(known.id, 'lunge')
+    const step = motionOf(known.id, 'step')
     const flashing = isFlashing(known.id)
     const boss = known.kind !== 'wave'
     const poses = posesOf(sprite, null, opts.compact, scale, false, (p) => p)
     const pose = poseOf(known.id, false)
     const shown = poses[pose]
-    const x = baseX + lungeOffset(lunge, now, scale)
+    const x = baseX + actionOffset(step, lunge, now, scale)
     grounded.set(known.id, { x, y: height - art.height, width: art.width, height: art.height })
     ;(boss ? bosses : actors).push({
       key: known.id,
@@ -276,6 +300,7 @@ export function stageAt(
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
+    const step = fallen ? undefined : motionOf(hero.id, 'step')
     const sprite = spriteFor('hero', hero.cls)
     const attack = spriteFor('hero_attack', hero.cls)
     const art = variant(sprite, opts.compact, scale)
@@ -292,7 +317,11 @@ export function stageAt(
     const flashing = !fallen && isFlashing(hero.id)
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
     const x =
-      width - edge - art.width - (partySize - 1 - index) * pitch + lungeOffset(lunge, now, scale)
+      width -
+      edge -
+      art.width -
+      (partySize - 1 - index) * pitch +
+      actionOffset(step, lunge, now, scale)
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
     actors.push({
       key: hero.id,
@@ -345,9 +374,13 @@ export function stageAt(
         alpha: p < 2 / 3 ? 1 : (1 - p) * 3,
       })
     } else if (m.kind === 'effect') {
-      const from = grounded.get(m.actor)
+      const at = grounded.get(m.actor)
       const to = grounded.get(m.target)
-      if (!from || !to) continue
+      if (!at || !to) continue
+      // Thrown from where the attacker stood as it threw: stepped out, whatever its step does since.
+      const step = motionOf(m.actor, 'step')
+      const shift = stepOffset(step, m.from, scale) - stepOffset(step, now, scale)
+      const from = { ...at, x: at.x + shift }
       const sprite = SPRITES[`effect:${m.effect}`] ?? FALLBACK
       const art = variant(sprite, opts.compact, scale)
       const flipX = actor.flipX

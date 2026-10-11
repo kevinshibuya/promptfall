@@ -51,6 +51,7 @@ import {
   SPAWN_MS,
   STAGE_MAX_COLUMNS,
   STAGE_ROWS,
+  STEP_OUT_MS,
   WINDUP_HOLD_MS,
 } from './tuning'
 
@@ -68,6 +69,8 @@ export const SCENARIOS = [
   'burst',
   'enemy-strike',
   'boss-strike',
+  'step',
+  'step-boss',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -176,6 +179,23 @@ export function stage(name: Scenario): Staged {
       )
       t.observe(boss(), NOW)
       return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+    }
+    // The black mage 30 ms past its step out, still in its hold: stepped toward the enemies in
+    // its wind-up frame, its fireball not yet thrown.
+    case 'step':
+      return attacking('h2', STEP_OUT_MS + 30)
+    // The world boss at the same moment of its hold on the knight: the same step as any actor's.
+    case 'step-boss': {
+      t.observe(worldBoss(), NOW - STEP_OUT_MS - 30)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e7', action: 'attack', at: 0 },
+          { k: 'hit', by: 'e7', target: 'h1', amount: 31 },
+        ],
+        NOW - STEP_OUT_MS - 30,
+      )
+      t.observe(worldBoss(), NOW)
+      return staged(worldBoss(), t, { columns: 120, rows: t.rowsAt(worldBoss(), NOW) })
     }
     case 'rest': {
       t.observe(wave(), NOW)
