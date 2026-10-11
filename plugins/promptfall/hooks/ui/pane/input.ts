@@ -23,6 +23,8 @@ export type FrameInput = {
   dialog: DialogState
   mode: Mode
   readOnly: boolean
+  /** This session paused for a ban: Account still offers the delete, the one verb it lets through. */
+  banned?: boolean
   notice: string | null
   /** The picture's columns and rows (at most PANE_MAX_COLUMNS × PANE_ROWS). */
   columns: number
@@ -85,9 +87,12 @@ export function messageLines(
   if (paneLayout(input.columns, input.rows).kind === 'small')
     return [line('The pane needs more room.'), line('Widen it or give it more rows.')]
   if (input.readOnly) {
+    // A refusal still shows under the reason: a banned session's delete can be refused.
     return [
       line(readOnlyReason(input.mode, input.notice), WARN_RGB),
-      line(input.mode === 'secondary' ? 'p: play here.' : ''),
+      input.dialog.paneNotice
+        ? line(`Refused: ${input.dialog.paneNotice}`, DOWN_RGB)
+        : line(input.mode === 'secondary' ? 'p: play here.' : ''),
     ]
   }
   if (input.dialog.paneNotice)

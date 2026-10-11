@@ -338,6 +338,10 @@ class GameSession implements GameHandle {
     return this.role === 'primary' && this.engine.isPaused()
   }
 
+  isBanned(): boolean {
+    return this.role === 'primary' && this.engine.isBanned()
+  }
+
   isPrimary(): boolean {
     return this.role === 'primary'
   }
@@ -545,10 +549,11 @@ class GameSession implements GameHandle {
     let deleted = false
     try {
       await this.claim()
-      const answer = await this.engine.call((client, auth) => client.deleteAccount(auth))
+      // A ban lets the delete through, with the stored token even when it refused the start.
+      const answer = await this.engine.deleteAccount()
       deleted = !('reason' in answer)
     } catch {
-      // Unreachable, not started, or a ban, which has paused play with its own message.
+      // Unreachable, not started, or a ban from a server that refuses the delete too.
     }
     if (!deleted) {
       this.refuseInPane(NOT_DELETED)
