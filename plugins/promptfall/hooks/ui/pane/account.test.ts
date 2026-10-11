@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import type { DialogState } from '../../../types'
+import type { DialogState, PaneCursor } from '../../../types'
 import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
 import { tilePositions } from '../../windows/kit'
@@ -221,6 +221,20 @@ test('the no-view pane: one line on Market; on Account with a game, Reset, the s
   expect(linesOf(win(noViewPane(noView({ tab: 'account', hasGame: false })), 'list'))).toEqual([
     '  Promptfall has not started in this session.',
   ])
+})
+
+test("a ban's no-view pane follows the cursor to its Delete row, so the keys reach it", () => {
+  const base = paneInput().dialog
+  const at = (account: PaneCursor | null) =>
+    noViewPane(
+      noView({
+        tab: 'account',
+        banned: true,
+        dialog: { ...base, cursor: { ...base.cursor, account } },
+      }),
+    )
+  expect(at(null).focus).toBe('row:reset')
+  expect(at({ id: 'delete', index: 1 }).focus).toBe('row:delete')
 })
 
 const textTitle = (b: ReturnType<typeof accountPane>) =>

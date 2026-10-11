@@ -175,12 +175,14 @@ export function noViewPane(input: NoViewInput): PaneBuild {
     : [{ spans: [{ text: NOT_STARTED }], alt: NOT_STARTED }]
   if (deleting)
     rows.push({ key: 'row:delete', spans: [{ text: DELETE }], action: DELETE_ACTION, alt: DELETE })
+  // The cursor the keys move, as on the playing Account tab: a ban's Delete is the second row.
+  const ids = rows.flatMap((r) => (r.key ? [r.key.slice(4)] : []))
   const spec: ListSpec = {
     title: [{ text: label }],
     altTitle: label,
     rows,
     empty: NOT_STARTED,
-    cursor: 0,
+    cursor: cursorRow(input.dialog.cursor.account ?? null, ids),
     detail: resetting
       ? (w) => [text(serverLine(input.server), w), text(clientLine(), w)]
       : () => [],
