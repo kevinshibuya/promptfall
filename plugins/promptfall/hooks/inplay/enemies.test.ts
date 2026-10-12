@@ -182,7 +182,7 @@ test(
 )
 
 test(
-  'in play, a sandbox wipe: the enemy window keeps each monster its HP through its fade, then shows the retreat',
+  'in play, a sandbox wipe: the enemy window keeps each monster its HP through its fade, then shows the restart',
   { timeoutMs: 60_000 },
   async ($, on) => {
     const { run, view, clock } = await sandboxOn(on, $)
@@ -196,7 +196,7 @@ test(
     }
     const fought = view().enemies.map((e) => e.name)
     expect(fought.length).toBeGreaterThan(0)
-    expect(await run('wipe')).toMatch(/^Sandbox: the party fell, retreating to zone \d+$/)
+    expect(await run('wipe')).toMatch(/^Sandbox: the party fell, back to wave 1 of zone \d+$/)
     let held = 0
     let caughtUp = 0
     for (let step = 0; step < 600 && caughtUp === 0; step++) {
@@ -213,7 +213,7 @@ test(
       }
     }
     expect(held, 'the monsters kept their rows through their fade').toBeGreaterThan(0)
-    expect(caughtUp, 'the band moved on to the retreat').toBeGreaterThan(0)
+    expect(caughtUp, 'the band moved on to the restart').toBeGreaterThan(0)
     await ui.unmount()
   },
 )

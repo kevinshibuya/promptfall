@@ -99,6 +99,8 @@ export type GameView = {
   wave: number
   gold: number
   farm: boolean
+  /** The account's auto-vendor setting. */
+  autoVendor: boolean
   lastDrop: LootView | null
   loot: LootView[]
   highestZone: number

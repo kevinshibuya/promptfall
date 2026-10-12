@@ -51,25 +51,43 @@ var ARCHETYPES = {
   boss: { hpBp: 7e4, atkBp: 2e4, defBp: 12e3, spd: 5 },
   turn_boss: { hpBp: 3e4, atkBp: 12e3, defBp: 11e3, spd: 5 }
 };
-var ZONE1 = { hp: 90, atk: 7, def: 4, xp: 4, goldMin: 1, goldMax: 3 };
-var GROWTH_BP = { hp: 14500, atk: 15e3, def: 14500, xp: 14e3, gold: 14e3 };
-function grow(value, bp, steps) {
-  let v = value;
-  for (let i = 0; i < steps; i++) v = Math.floor(v * bp / 1e4);
-  return Math.max(1, v);
-}
-var ZONE_BP = [1e4, 1e4, 13e3, 12e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3];
-var BASELINES = Array.from(
-  { length: 12 },
-  (_, z) => [
-    Math.floor(grow(ZONE1.hp, GROWTH_BP.hp, z) * (ZONE_BP[z] ?? 1e4) / 1e4),
-    Math.floor(grow(ZONE1.atk, GROWTH_BP.atk, z) * (ZONE_BP[z] ?? 1e4) / 1e4),
-    grow(ZONE1.def, GROWTH_BP.def, z),
-    grow(ZONE1.xp, GROWTH_BP.xp, z),
-    grow(ZONE1.goldMin, GROWTH_BP.gold, z),
-    grow(ZONE1.goldMax, GROWTH_BP.gold, z)
+var ENEMY_TUNING = {
+  zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
+  growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
+  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
+  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 5850, 7650, 7140, 7875, 13956, 21945],
+  zoneXpBp: [13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 21125, 29835, 36855, 43875, 38830, 34360],
+  zoneBossHpBp: [
+    1e4,
+    12750,
+    15500,
+    18250,
+    21e3,
+    23750,
+    26500,
+    29250,
+    32e3,
+    34750,
+    37500,
+    4e4
   ]
-);
+};
+function grow(value, bp, steps) {
+  let v = value * 1e4;
+  for (let i = 0; i < steps; i++) v = Math.floor(v * bp / 1e4);
+  return Math.max(1, Math.floor(v / 1e4));
+}
+function baseline(t, z) {
+  const { zone1, growthBp } = t;
+  return {
+    hp: Math.floor(grow(zone1.hp, growthBp.hp, z) * (t.zoneHpBp[z] ?? 1e4) / 1e4),
+    atk: Math.floor(grow(zone1.atk, growthBp.atk, z) * (t.zoneAtkBp[z] ?? 1e4) / 1e4),
+    def: grow(zone1.def, growthBp.def, z),
+    xp: Math.floor(grow(zone1.xp, growthBp.xp, z) * (t.zoneXpBp[z] ?? 1e4) / 1e4),
+    goldMin: grow(zone1.goldMin, growthBp.gold, z),
+    goldMax: grow(zone1.goldMax, growthBp.gold, z)
+  };
+}
 var ROSTERS = [
   [
     ["road_slime", "Road Slime", "tank"],
@@ -184,39 +202,73 @@ function kindOf(archetype) {
 function scale(value, bp) {
   return Math.max(1, Math.floor(value * bp / 1e4));
 }
-function build() {
+function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
+  const a = ARCHETYPES[archetype];
+  const kind = kindOf(archetype);
+  const hp = scale(b.hp, a.hpBp);
+  const stats = {
+    hp: kind === "zone_boss" ? scale(hp, bossHpBp) : hp,
+    atk: scale(b.atk, a.atkBp),
+    def: scale(b.def, a.defBp),
+    spd: a.spd + Math.floor(spdZone / 3)
+  };
+  const bossMult = kind === "zone_boss" ? 8 : kind === "turn_boss" ? 4 : 1;
+  return {
+    id,
+    name,
+    glyph: GLYPHS[archetype],
+    zone,
+    kind,
+    archetype,
+    stats,
+    xp: b.xp * bossMult,
+    gold: [b.goldMin * bossMult, b.goldMax * bossMult],
+    dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : 1500,
+    contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
+  };
+}
+function buildEnemies(t) {
   const out = {};
   ROSTERS.forEach((roster, i) => {
-    const zone = i + 1;
-    const [hp, atk, def, xp, goldMin, goldMax] = BASELINES[i] ?? [1, 1, 1, 1, 1, 1];
-    for (const [id, name, archetype] of roster) {
-      const a = ARCHETYPES[archetype];
-      const kind = kindOf(archetype);
-      const stats = {
-        hp: scale(hp, a.hpBp),
-        atk: scale(atk, a.atkBp),
-        def: scale(def, a.defBp),
-        spd: a.spd + Math.floor(zone / 3)
-      };
-      const bossMult = kind === "zone_boss" ? 8 : kind === "turn_boss" ? 4 : 1;
-      out[id] = {
-        id,
-        name,
-        glyph: GLYPHS[archetype],
-        zone,
-        kind,
-        archetype,
-        stats,
-        xp: xp * bossMult,
-        gold: [goldMin * bossMult, goldMax * bossMult],
-        dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : 1500,
-        contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
-      };
-    }
+    const b = baseline(t, i);
+    const bossHpBp = t.zoneBossHpBp[i] ?? 1e4;
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp);
   });
   return out;
 }
-var enemies = build();
+var TIER_GROWTH_BP = [11325, 10400];
+function growThrough(value, bps) {
+  let v = value * 1e4;
+  for (const bp of bps) v = Math.floor(v * bp / 1e4);
+  return Math.max(1, Math.floor(v / 1e4));
+}
+function buildTierEnemies(t, growthBp, last) {
+  const top = ROSTERS.length;
+  const b12 = baseline(t, top - 1);
+  const bossHpBp = t.zoneBossHpBp[top - 1] ?? 1e4;
+  const out = {};
+  const steps = [];
+  for (let zone = top + 1; zone <= last; zone++) {
+    const tier = Math.floor((zone - 1) / top) + 1;
+    const bp = growthBp[tier - 2] ?? growthBp[growthBp.length - 1];
+    if (bp === void 0) throw new Error(`no tier growth for zone ${zone}`);
+    steps.push(bp);
+    const b = {
+      hp: growThrough(b12.hp, steps),
+      atk: growThrough(b12.atk, steps),
+      def: growThrough(b12.def, steps),
+      xp: growThrough(b12.xp, steps),
+      goldMin: growThrough(b12.goldMin, steps),
+      goldMax: growThrough(b12.goldMax, steps)
+    };
+    const at = {};
+    for (const roster of ROSTERS)
+      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp);
+    out[zone] = at;
+  }
+  return out;
+}
+var enemies = buildEnemies(ENEMY_TUNING);
 var zoneRosters = ROSTERS.map((r) => r.map(([id]) => id));
 
 // packages/sim/src/content/epithets.ts
@@ -473,6 +525,10 @@ var tavern = {
   odds: { common: 6e3, uncommon: 2800, rare: 950, epic: 200, legendary: 50 }
 };
 
+// packages/sim/src/content/tiers.ts
+var itemTierMultBp = [1e4, 2e4, 35e3, 6e4, 1e5, 16e4];
+var ZONES_PER_ITEM_TIER = 3;
+
 // packages/sim/src/content/traits.ts
 var traits = {
   stalwart: { id: "stalwart", name: "Stalwart", stat: "hp", rangeBp: [500, 1500] },
@@ -484,6 +540,63 @@ var traits = {
   fleet: { id: "fleet", name: "Fleet", stat: "spd", rangeBp: [1e3, 2500] },
   quickened: { id: "quickened", name: "Quickened", stat: "spd", rangeBp: [2e3, 4e3] }
 };
+
+// packages/sim/src/content/xp.ts
+var XP_TO_NEXT = [
+  60,
+  195,
+  388,
+  633,
+  926,
+  1262,
+  1640,
+  2058,
+  2514,
+  3007,
+  3536,
+  4100,
+  4697,
+  5328,
+  5991,
+  6686,
+  7412,
+  8168,
+  8954,
+  9770,
+  10615,
+  11489,
+  12390,
+  13320,
+  14277,
+  15262,
+  16273,
+  17311,
+  18375,
+  19465,
+  20581,
+  21722,
+  22889,
+  24080,
+  25297,
+  26538,
+  27803,
+  29093,
+  30406,
+  31743,
+  33104,
+  34489,
+  35896,
+  37327,
+  38780,
+  40257,
+  41756,
+  43277,
+  44821,
+  46387
+];
+function xpToNext(level) {
+  return XP_TO_NEXT[Math.min(Math.max(level, 1), XP_TO_NEXT.length) - 1] ?? 0;
+}
 
 // packages/sim/src/content/zones.ts
 var NAMES = [
@@ -532,6 +645,27 @@ var zones = NAMES.map((name, i) => {
   };
 });
 
+// packages/sim/src/content/zone.ts
+var LADDER_END = 36;
+function zoneAt(zone) {
+  if (!Number.isInteger(zone) || zone < 1) return void 0;
+  const base2 = (zone - 1) % zones.length + 1;
+  const def = zones[base2 - 1];
+  if (!def) return void 0;
+  return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
+}
+var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_GROWTH_BP, LADDER_END);
+function enemyAt(id, zone) {
+  const at = zoneAt(zone);
+  if (!at || zone > LADDER_END) return void 0;
+  return at.tier === 1 ? enemies[id] : tierEnemies[zone]?.[id];
+}
+function oddsAt(zone) {
+  const at = zoneAt(zone);
+  if (!at) return void 0;
+  return at.tier === 1 ? at.def : zones[zones.length - 1];
+}
+
 // packages/sim/src/content/index.ts
 var content = {
   zones,
@@ -545,7 +679,8 @@ var content = {
   tavern,
   expansions,
   tactics,
-  xpToNext: (level) => 110 * level * level
+  xpToNext,
+  itemTierMultBp
 };
 
 // packages/sim/src/golden.ts
@@ -554,6 +689,7 @@ var GOLDEN_REWARD = {
   id: "r0",
   base: "steel_longsword",
   rarity: "rare",
+  tier: 2,
   affixes: [],
   equippedBy: null,
   tradeableAt: null
@@ -608,7 +744,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "ea7e36dbcb84b67d";
+var GOLDEN_HASH = "42969ddaf82b0564";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -703,9 +839,12 @@ var SLOTS = ["weapon", "armour", "accessory"];
 function heroStats(state, hero) {
   const template = content.heroTemplates[hero.template];
   const stats = { hp: 1, atk: 0, def: 0, spd: 0 };
+  const heroMult = content.rarity[hero.rarity].statMultBp;
   if (template) {
-    for (const stat of STATS)
-      stats[stat] = template.base[stat] + template.growth[stat] * (hero.level - 1);
+    for (const stat of STATS) {
+      const raw = template.base[stat] + template.growth[stat] * (hero.level - 1);
+      stats[stat] = Math.floor(raw * heroMult / 1e4);
+    }
   }
   for (const slot of SLOTS) {
     const itemId = hero.equipment[slot];
@@ -722,7 +861,7 @@ function heroStats(state, hero) {
     }
     for (const affix of item.affixes) {
       const def = content.affixes[affix.id];
-      if (def) stats[def.stat] += affix.value;
+      if (def) stats[def.stat] += affixValue(item, affix);
     }
   }
   const pre = { ...stats };
@@ -772,14 +911,14 @@ function openEncounter(s, waveSize) {
   return encounter;
 }
 function spawnEnemy(s, encounter, defId, kind) {
-  const def = content.enemies[defId];
+  const def = enemyAt(defId, s.zone);
   const hp = def ? def.stats.hp : 1;
   const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp };
   encounter.enemies.push(enemy);
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
 }
 function pickWaveEnemy(s) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   const weights2 = {};
   for (const id of zone?.enemies ?? []) weights2[id] = 1;
   return drawWeighted(s, weights2);
@@ -797,7 +936,7 @@ function onTurnEnd(s) {
   s.turnToolCalls = 0;
 }
 function onRest(s) {
-  healParty(s, 3e3);
+  healParty(s, 5e3);
 }
 function refillFromQueue(s) {
   const encounter = s.encounter;
@@ -809,7 +948,7 @@ function refillFromQueue(s) {
   }
 }
 function spawnOnEmptyTick(s, effects) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   if (!zone) return;
   if (s.pendingTurnBoss) {
     const encounter2 = s.encounter ?? openEncounter(s, 0);
@@ -848,13 +987,14 @@ function grantXp(s, hero, xp, effects) {
 function changeZone(s, zone) {
   s.zone = zone;
   s.wave = 1;
+  s.zoneWipes = 0;
   if (zone > s.highestZone) s.highestZone = zone;
 }
 function onEnemyKilled(s, enemy, effects, drop) {
   const encounter = s.encounter;
   if (!encounter) return;
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id);
-  const def = content.enemies[enemy.def];
+  const def = enemyAt(enemy.def, s.zone);
   if (def) {
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects);
     const [min, max] = def.gold;
@@ -873,7 +1013,7 @@ function onEnemyKilled(s, enemy, effects, drop) {
   if (enemy.kind === "zone_boss") {
     const zone = s.zone;
     s.encounter = null;
-    const advance = !s.farm && zone < 12;
+    const advance = !s.farm && zone < LADDER_END;
     const advancedTo = advance ? zone + 1 : zone;
     effects.push({ k: "zone_cleared", zone, advancedTo });
     changeZone(s, advancedTo);
@@ -892,6 +1032,7 @@ function onEnemyKilled(s, enemy, effects, drop) {
   }
   if (current.waveSize === 0) s.encounter = null;
 }
+var RETREAT_AT = 3;
 function checkWipe(s, effects) {
   if (livingParty(s).length > 0) return false;
   s.battle = { gauges: [], queue: [], busy: 0 };
@@ -899,13 +1040,19 @@ function checkWipe(s, effects) {
     fullHealParty(s);
     return true;
   }
-  const retreatedTo = Math.max(1, s.zone - 1);
-  effects.push({ k: "wipe", retreatedTo });
   s.encounter = null;
   s.pendingTurnBoss = false;
   s.stats.wipes += 1;
   fullHealParty(s);
-  changeZone(s, retreatedTo);
+  if (s.zoneWipes + 1 < RETREAT_AT) {
+    effects.push({ k: "wipe", zone: s.zone });
+    s.wave = 1;
+    s.zoneWipes += 1;
+  } else {
+    const zone = Math.max(1, s.zone - 1);
+    effects.push({ k: "retreat", zone });
+    changeZone(s, zone);
+  }
   applyPendingParty(s, effects);
   fullHealParty(s);
   return true;
@@ -955,9 +1102,9 @@ function pushLog(s, entry) {
   if (s.lootLog.length > 50) s.lootLog.splice(0, s.lootLog.length - 50);
 }
 function rollContract(s, effects) {
-  const zone = content.zones[s.zone - 1];
-  if (!zone) return;
-  const rarity2 = drawWeighted(s, zone.bossRarityWeights);
+  const odds = oddsAt(s.zone);
+  if (!odds) return;
+  const rarity2 = drawWeighted(s, odds.bossRarityWeights);
   const hero = generateHero(s, rarity2);
   if (s.roster.length < s.rosterCap) {
     recruitHero(s, hero, "contract", effects);
@@ -970,7 +1117,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 5;
+var SIM_VERSION = 14;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1008,7 +1155,9 @@ function createInitialState(seed) {
     zone: 1,
     wave: 1,
     farm: false,
+    autoVendor: false,
     highestZone: 1,
+    zoneWipes: 0,
     roster: [],
     party: ["", "", ""],
     pendingParty: null,
@@ -1038,6 +1187,24 @@ function vendorValue(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
   return content.rarity[item.rarity].vendorGoldPerZone * minZone;
 }
+function baseTier(baseId) {
+  const minZone = content.itemBases[baseId]?.minZone ?? 1;
+  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER));
+}
+function dropTier(zone, baseId) {
+  const tier = zoneAt(zone)?.tier ?? 1;
+  if (tier === 1) return baseTier(baseId);
+  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1;
+}
+function tierMultBp(tier) {
+  return content.itemTierMultBp[tier - 1] ?? 1e4;
+}
+function affixValue(item, affix) {
+  return Math.floor(affix.value * tierMultBp(item.tier) / 1e4);
+}
+function reforgeCost(item) {
+  return Math.floor(content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier) / 1e4);
+}
 function rollItem(s, boss) {
   return rollItemFor(
     s,
@@ -1046,7 +1213,7 @@ function rollItem(s, boss) {
   );
 }
 function rollItemFor(s, boss, classes) {
-  const zone = content.zones[s.zone - 1];
+  const zone = oddsAt(s.zone);
   if (!zone) return null;
   const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
   const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
@@ -1059,7 +1226,15 @@ function rollItemFor(s, boss, classes) {
 }
 function rollItemOf(s, baseId, rarity2) {
   const affixes2 = rollAffixes(s, baseId, rarity2);
-  return { id: newId(s, "i"), base: baseId, rarity: rarity2, affixes: affixes2, equippedBy: null, tradeableAt: null };
+  return {
+    id: newId(s, "i"),
+    base: baseId,
+    rarity: rarity2,
+    tier: dropTier(s.zone, baseId),
+    affixes: affixes2,
+    equippedBy: null,
+    tradeableAt: null
+  };
 }
 function rollAffixes(s, baseId, rarity2) {
   const slot = content.itemBases[baseId]?.slot;
@@ -1079,14 +1254,25 @@ function rollRewardItem(seed, zone, classes) {
   const item = rollItemFor(scratch, true, classes);
   return item ? { ...item, id: "" } : null;
 }
+function autoVendors(s, item) {
+  if (!s.autoVendor) return false;
+  if (item.rarity !== "common" && !(item.rarity === "uncommon" && s.zone > 3)) return false;
+  const base2 = content.itemBases[item.base];
+  if (!base2) return false;
+  return !partyHeroes(s).some(
+    (h) => h.equipment[base2.slot] === null && base2.classes.includes(h.cls)
+  );
+}
 function takeDrop(s, item, effects) {
-  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item);
-  if (gold === null) {
+  const cause = s.inventory.length >= s.inventoryCap ? "full" : autoVendors(s, item) ? "setting" : null;
+  let gold = null;
+  if (cause === null) {
     s.inventory.push(item);
     effects.push({ k: "drop", item });
   } else {
+    gold = vendorValue(item);
     s.gold += gold;
-    effects.push({ k: "drop_vendored", item, gold });
+    effects.push({ k: "drop_vendored", item, gold, cause });
   }
   pushLog(s, {
     k: "item",
@@ -1113,6 +1299,108 @@ function rerollAffix(s, item, index) {
   if (!affix || !def) return;
   const [min, max] = def.range;
   affix.value = min + draw(s, max - min + 1);
+}
+
+// packages/sim/src/draft.ts
+function clone(value) {
+  if (Array.isArray(value)) return value.map((v) => clone(v));
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = clone(value[key]);
+    return out;
+  }
+  return value;
+}
+function reject(state, event, reason) {
+  return { state, effects: [{ k: "rejected", event, reason }] };
+}
+function draft(state, mutate) {
+  const s = clone(state);
+  const effects = [];
+  mutate(s, effects);
+  return { state: s, effects };
+}
+
+// packages/sim/src/migrate.ts
+var MIGRATIONS = {
+  // 5 → 6: ratio mitigation, gentler enemy growth and the flatter xp curve. Stats are derived, so
+  // every hero keeps its level and starts it again at 0 xp, a hero the ledger holds too; nothing
+  // changes shape.
+  5: {
+    state: (s) => ({
+      ...s,
+      roster: s.roster.map((h) => ({ ...h, xp: 0 }))
+    }),
+    goods: (g) => g.kind === "hero" ? { kind: "hero", hero: { ...g.hero, xp: 0 } } : g
+  },
+  // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
+  // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
+  6: { state: (s) => s },
+  // 7 → 8: an item carries its tier, from its base. The flat roll is what an affix stores and the
+  // tier scales it at read, so no roll changes; the items held outside the state gain it too.
+  7: {
+    state: (s) => ({ ...s, inventory: s.inventory.map(withBaseTier) }),
+    goods: (g) => g.kind === "item" ? { kind: "item", item: withBaseTier(g.item) } : g
+  },
+  // 8 → 9: a wipe restarts the zone and the third is a retreat; rests heal 50%. The state gains
+  // the count of wipes in its zone, at zero: no save remembers them, and zero only defers a retreat.
+  8: { state: (s) => ({ ...s, zoneWipes: 0 }) },
+  // 9 → 10: the auto-vendor setting. The state gains its flag, off: a save never sells a drop its
+  // player did not ask to sell.
+  9: { state: (s) => ({ ...s, autoVendor: false }) },
+  // 10 → 11: zone 12's boss opens tier 2, and the ladder runs to zone 36. `zone` stays one running
+  // number and every tier's numbers are derived from it, so nothing changes shape.
+  10: { state: (s) => s },
+  // 11 → 12: the arc retuned for the dedicated harness player (#151). Only content constants moved,
+  // and every enemy's numbers are derived from them, so nothing changes shape.
+  11: { state: (s) => s },
+  // 12 → 13: boss contracts past tier 1 roll the tier's odds, and tier 2 ramps from zone 12 with no
+  // step at its door (#152). Rules and content moved, and nothing changes shape.
+  12: { state: (s) => s },
+  // 13 → 14: the tier-1 arc slowed outside the kill rate (#153): zone bosses' hp ramps by zone, and
+  // zones 7 to 12 walk longer and pay more xp. Only content constants moved, and nothing changes shape.
+  13: { state: (s) => s }
+};
+function withBaseTier(item) {
+  const minZone = content.itemBases[item.base]?.minZone ?? 1;
+  return { ...item, tier: Math.max(1, Math.ceil(minZone / 3)) };
+}
+function walk(from, to, chain) {
+  if (!Number.isInteger(from)) return { ok: false, reason: "gap", from, to, at: from };
+  if (from > to) return { ok: false, reason: "ahead", from, to };
+  const steps = [];
+  for (let v = from; v < to; v++) {
+    const step2 = chain[v];
+    if (!step2) return { ok: false, reason: "gap", from, to, at: v };
+    steps.push(step2);
+  }
+  return steps;
+}
+function finish(s) {
+  if (!s.boss) {
+    s.encounter = null;
+    s.battle = { gauges: [], queue: [], busy: 0 };
+  }
+  for (const hero of s.roster) clampHp(s, hero);
+  return s;
+}
+function migrate(state, options = {}) {
+  const { chain = MIGRATIONS, to = SIM_VERSION } = options;
+  const from = state.v;
+  const steps = walk(from, to, chain);
+  if (!Array.isArray(steps)) return steps;
+  if (steps.length === 0) return { ok: true, state, from, steps: 0 };
+  let current = clone(state);
+  for (const [i, step2] of steps.entries()) current = { ...step2.state(current), v: from + i + 1 };
+  return { ok: true, state: finish(current), from, steps: steps.length };
+}
+function migrateGoods(goods, from, options = {}) {
+  const { chain = MIGRATIONS, to = SIM_VERSION } = options;
+  const steps = walk(from, to, chain);
+  if (!Array.isArray(steps)) return steps;
+  let current = goods;
+  for (const step2 of steps) current = step2.goods ? step2.goods(clone(current)) : current;
+  return { ok: true, goods: current };
 }
 
 // packages/sim/src/picker.ts
@@ -1187,13 +1475,18 @@ function pickAction(s, unit) {
 
 // packages/sim/src/combat.ts
 var STEPS = TICK_MS / STEP_MS;
+function mitigationBp(def) {
+  return Math.floor(1e6 / (100 + Math.max(0, def)));
+}
+function hitDamage(atk, def, varianceBp) {
+  return scaled(Math.max(1, Math.floor(atk * mitigationBp(def) * varianceBp / 1e8)));
+}
 function damage(s, atk, def) {
-  const v = 9e3 + draw(s, 2001);
-  return Math.max(1, Math.floor(atk * v / 1e4) - Math.floor(def / 2));
+  return hitDamage(atk, def, 9e3 + draw(s, 2001));
 }
 var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
 function zoneBossStats(zone) {
-  return content.enemies[content.zones[zone - 1]?.boss ?? ""]?.stats ?? NO_STATS;
+  return enemyAt(zoneAt(zone)?.def.boss ?? "", zone)?.stats ?? NO_STATS;
 }
 function scaledBossStats(s) {
   const carried = s.boss?.stats ?? NO_STATS;
@@ -1203,12 +1496,12 @@ function scaledBossStats(s) {
     hp: carried.hp,
     atk: Math.floor(carried.atk * zb.atk / Math.max(1, z1.atk)),
     def: Math.floor(carried.def * zb.def / Math.max(1, z1.def)),
-    spd: carried.spd + Math.floor(s.zone / 3)
+    spd: carried.spd + zb.spd - z1.spd
   };
 }
 function enemyStats(s, enemy) {
   if (enemy.kind === "world_boss") return scaledBossStats(s);
-  return content.enemies[enemy.def]?.stats ?? NO_STATS;
+  return enemyAt(enemy.def, s.zone)?.stats ?? NO_STATS;
 }
 function hitEnemy(s, by, enemy, amount, effects) {
   effects.push({ k: "hit", by, target: enemy.id, amount });
@@ -1239,7 +1532,7 @@ function heroAction(s, hero, choice, effects) {
     case "attack": {
       const target = encounter?.enemies.find((e) => e.id === choice.targetId);
       if (!target) return;
-      let amount = scaled(damage(s, stats.atk, enemyStats(s, target).def));
+      let amount = damage(s, stats.atk, enemyStats(s, target).def);
       if (hero.cls === "archer" && drawBp(s) < 2e3) amount *= 2;
       hitEnemy(s, hero.id, target, amount, effects);
       return;
@@ -1248,7 +1541,7 @@ function heroAction(s, hero, choice, effects) {
       const atk = Math.floor(stats.atk * 6e3 / 1e4);
       for (const target of [...encounter?.enemies ?? []]) {
         if (!s.encounter?.enemies.includes(target)) continue;
-        hitEnemy(s, hero.id, target, scaled(damage(s, atk, enemyStats(s, target).def)), effects);
+        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects);
       }
       return;
     }
@@ -1270,7 +1563,7 @@ function heroAction(s, hero, choice, effects) {
 function enemyAction(s, enemy, choice, effects) {
   const target = findHero(s, choice.targetId ?? "");
   if (!target || target.hp <= 0) return;
-  const amount = scaled(damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def));
+  const amount = damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def);
   target.hp = Math.max(0, target.hp - amount);
   effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
   if (target.hp === 0) fall(s, target, effects);
@@ -1346,26 +1639,6 @@ function advanceBattle(s, effects) {
   }
 }
 
-// packages/sim/src/draft.ts
-function clone(value) {
-  if (Array.isArray(value)) return value.map((v) => clone(v));
-  if (value !== null && typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value)) out[key] = clone(value[key]);
-    return out;
-  }
-  return value;
-}
-function reject(state, event, reason) {
-  return { state, effects: [{ k: "rejected", event, reason }] };
-}
-function draft(state, mutate) {
-  const s = clone(state);
-  const effects = [];
-  mutate(s, effects);
-  return { state: s, effects };
-}
-
 // packages/sim/src/commands.ts
 function tavernPrice(state) {
   const { baseCost, costGrowthBp } = content.tavern;
@@ -1431,7 +1704,7 @@ function reforge(state, event) {
   if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
     return reject(state, event, "bad_affix_index");
   }
-  const cost = content.rarity[item.rarity].reforgeCost;
+  const cost = reforgeCost(item);
   if (state.gold < cost) return reject(state, event, "not_enough_gold");
   return draft(state, (s) => {
     const it = s.inventory.find((i) => i.id === event.itemId);
@@ -1486,6 +1759,11 @@ function dismiss(state, event) {
 function setFarm(state, event) {
   return draft(state, (s) => {
     s.farm = event.on === true;
+  });
+}
+function setAutoVendor(state, event) {
+  return draft(state, (s) => {
+    s.autoVendor = event.on === true;
   });
 }
 function expand(state, event, which) {
@@ -1659,7 +1937,7 @@ function rewarded(state, event) {
   });
 }
 function noSuchZone(zone) {
-  return !Number.isInteger(zone) || content.zones[zone - 1] === void 0;
+  return zoneAt(zone) === void 0 || zone > LADDER_END;
 }
 function noSuchRarity(rarity2) {
   return !Object.hasOwn(content.rarity, rarity2);
@@ -1756,6 +2034,7 @@ var handlers = {
   recruit,
   dismiss,
   set_farm: setFarm,
+  set_auto_vendor: setAutoVendor,
   expand_inventory: expandInventory,
   expand_roster: expandRoster,
   listed,
@@ -1799,6 +2078,8 @@ export {
   GAUGE_FULL,
   GOLDEN_HASH,
   GOLDEN_SEED,
+  LADDER_END,
+  MIGRATIONS,
   POWER_BP,
   RARITIES,
   SANDBOX_EVENT_KINDS,
@@ -1807,14 +2088,24 @@ export {
   SPAWN_GAUGE_MAX,
   STEP_MS,
   TICK_MS,
+  TIER_GROWTH_BP,
+  affixValue,
+  baseTier,
   content,
   createInitialState,
+  dropTier,
+  enemyAt,
   fill,
   goldenEvents,
   hashState,
   heroStats,
+  migrate,
+  migrateGoods,
+  oddsAt,
+  reforgeCost,
   replay,
   rollRewardItem,
   step,
-  vendorValue
+  vendorValue,
+  zoneAt
 };

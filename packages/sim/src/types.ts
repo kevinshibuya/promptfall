@@ -1,4 +1,4 @@
-export const SIM_VERSION = 5 as const
+export const SIM_VERSION = 14 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -7,11 +7,17 @@ export type Slot = 'weapon' | 'armour' | 'accessory'
 export type Stat = 'hp' | 'atk' | 'def' | 'spd'
 export type Stats = Record<Stat, number>
 
-export type Affix = { id: string; value: number }
+export type Affix = {
+  id: string
+  /** The flat roll, as stored: what it counts for is scaled by its item's tier (`affixValue`). */
+  value: number
+}
 export type Item = {
   id: string
   base: string
   rarity: Rarity
+  /** 1 to 6, set at the drop: it scales the affixes' rolls at read and the reforge price. */
+  tier: number
   affixes: Affix[]
   equippedBy: string | null
   /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
@@ -81,6 +87,7 @@ export type PlayerEvent =
   | { t: 'recruit' }
   | { t: 'dismiss'; heroId: string }
   | { t: 'set_farm'; on: boolean }
+  | { t: 'set_auto_vendor'; on: boolean }
   | { t: 'expand_inventory' }
   | { t: 'expand_roster' }
 
@@ -159,14 +166,18 @@ export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
 
 export type Effect =
   | { k: 'drop'; item: Item }
-  | { k: 'drop_vendored'; item: Item; gold: number }
+  /** A drop sold on pickup: `full` for a full inventory, `setting` for the auto-vendor setting. */
+  | { k: 'drop_vendored'; item: Item; gold: number; cause: 'full' | 'setting' }
   | { k: 'gold'; amount: number }
   | { k: 'level_up'; heroId: string; level: number }
   | { k: 'wave_cleared'; zone: number; wave: number }
   | { k: 'zone_cleared'; zone: number; advancedTo: number }
   | { k: 'boss_spawned'; kind: 'zone_boss' | 'turn_boss'; def: string }
   | { k: 'hero_fell'; heroId: string }
-  | { k: 'wipe'; retreatedTo: number }
+  /** The party fell and restarts `zone`, the one it is in, at wave 1. */
+  | { k: 'wipe'; zone: number }
+  /** The party's third wipe in a zone: it fell back to `zone`, one lower, or restarts zone 1. */
+  | { k: 'retreat'; zone: number }
   | { k: 'party_applied'; heroIds: [string, string, string] }
   | { k: 'hero_recruited'; hero: Hero; via: RecruitVia }
   | { k: 'rejected'; event: Event; reason: string }
@@ -189,7 +200,11 @@ export type GameState = {
   zone: number
   wave: number
   farm: boolean
+  /** The auto-vendor setting, off on every save: Commons, and Uncommons past zone 3, sold on pickup. */
+  autoVendor: boolean
   highestZone: number
+  /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
+  zoneWipes: number
   roster: Hero[]
   party: [string, string, string]
   pendingParty: [string, string, string] | null

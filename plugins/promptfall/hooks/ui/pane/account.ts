@@ -6,6 +6,7 @@ import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
 import type { Line, Span } from '../../windows/kit'
 import { MOVE_HELP } from '../../windows/tuning'
+import { zoneMark } from '../../zone-words'
 import { clip } from '../format'
 import { wrap } from '../strip'
 import { cursorRow, hotkeySpans, TAB_LABELS } from './frame'
@@ -88,7 +89,10 @@ function accountDetail(input: PaneInput, inner: number, silent: boolean): Line[]
     text(clientLine(), inner),
     text(`Mode ${input.mode}`, inner),
     text(`Session ${account.leaseOwner ?? 'none'}`, inner),
-    text(`Highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}`, inner),
+    text(
+      `Highest zone ${zoneMark(view.highestZone)} · kills ${view.kills} · wipes ${view.wipes}`,
+      inner,
+    ),
     { spans: [] },
     ...link,
     ...(silent ? [{ spans: [] }, ...wrap(NO_PLAYER, inner - 1).map((t) => text(t, inner))] : []),
@@ -130,6 +134,16 @@ export function accountPane(input: PaneInput): PaneBuild {
       { t: 'setting', patch: { renderer: RENDERER_NEXT[settings.renderer] } },
       'x',
     ),
+    // The account's, not the machine's: a secondary shows it and sends nothing.
+    setting(
+      inner,
+      'autovendor',
+      [{ text: 'Auto-vendor' }],
+      view.autoVendor ? 'on' : 'off',
+      input.readOnly
+        ? { t: 'none' }
+        : { t: 'event', event: { t: 'set_auto_vendor', on: !view.autoVendor } },
+    ),
     setting(inner, 'band', [{ text: 'Band' }], account.collapsed ? 'collapsed' : 'shown', {
       t: 'band',
       collapsed: !account.collapsed,
@@ -159,7 +173,10 @@ export function accountPane(input: PaneInput): PaneBuild {
     yesNo: null,
     panel: null,
     error: null,
-    state: [`Enter: change it. ${MOVE_HELP}`, 'Settings are kept per machine.'],
+    state: [
+      `Enter: change it. ${MOVE_HELP}`,
+      'Auto-vendor is kept per account, the rest per machine.',
+    ],
     field: null,
     link: !view.account.linked && dialog.link ? { url: dialog.link.url } : null,
   }

@@ -9,7 +9,16 @@ import {
   type NewOrder,
   type Order,
 } from '@promptfall/protocol'
-import { content, type GameState, type Goods, type Item, type TradeKind } from '@promptfall/sim'
+import {
+  content,
+  type GameState,
+  type Goods,
+  type Item,
+  type MigrationChain,
+  migrateGoods,
+  SIM_VERSION,
+  type TradeKind,
+} from '@promptfall/sim'
 import { type AccountRecord, author, type Books, deliveryOf, hasRoom, publicName } from './books'
 import {
   atLeast,
@@ -23,6 +32,7 @@ import {
   validPrice,
 } from './goods'
 import { nextLedgerId } from './ids'
+import { refusalText } from './migrate'
 
 export type MarketContext = {
   books: Books
@@ -34,6 +44,10 @@ const LISTINGS_KEY = 'pf:listings'
 const ORDERS_KEY = 'pf:orders'
 const listingKey = (id: string) => `pf:listing:${id}`
 const orderKey = (id: string) => `pf:order:${id}`
+/** The sim version the listed goods are stored at. */
+const MARK_KEY = 'pf:market:v'
+/** The version of a book with no mark: written before marks, and no store predates version 5. */
+const UNMARKED = 5
 
 function refuse(reason: MarketRefusal): MarketResult {
   return { ok: false, reason }
@@ -93,6 +107,35 @@ async function closeOrder(ctx: MarketContext, id: string): Promise<void> {
     (await ids(ctx, ORDERS_KEY)).filter((x) => x !== id),
   )
   await ctx.books.kv.delete(orderKey(id))
+}
+
+/**
+ * Walks the listed goods through the chain's goods rule when the book's mark is behind the sim
+ * version, and marks it current. Orders hold no goods. A refused walk changes nothing, is logged
+ * and answers false, so the caller tries again on its next call; a current book answers true.
+ */
+export async function normaliseBook(
+  ctx: MarketContext,
+  chain: MigrationChain,
+  log: (line: string) => void,
+): Promise<boolean> {
+  const raw = await ctx.books.kv.get(MARK_KEY)
+  const from = typeof raw === 'number' ? raw : UNMARKED
+  if (from === SIM_VERSION) return true
+  const listings = await openListings(ctx)
+  const walked: Listing[] = []
+  for (const listing of listings) {
+    const r = migrateGoods(listing.goods, from, { chain })
+    if (!r.ok) {
+      log(`not migrated the market book from v${from}: ${refusalText(r)}`)
+      return false
+    }
+    walked.push({ ...listing, goods: r.goods })
+  }
+  for (const listing of walked) await ctx.books.kv.set(listingKey(listing.id), listing)
+  await ctx.books.kv.set(MARK_KEY, SIM_VERSION)
+  log(`migrated the market book from v${from} to v${SIM_VERSION}`)
+  return true
 }
 
 async function counterparty(ctx: MarketContext, accountId: string): Promise<AccountRecord> {

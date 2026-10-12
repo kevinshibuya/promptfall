@@ -105,6 +105,7 @@ const item = {
   id: 'i1',
   base: 'iron_sword',
   rarity: 'epic' as const,
+  tier: 1,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,

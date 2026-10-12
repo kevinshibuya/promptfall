@@ -85,6 +85,7 @@ function seeded(): GameState {
         id: 'iseed',
         base: 'iron_sword',
         rarity: 'common',
+        tier: 1,
         affixes: [],
         equippedBy: null,
         tradeableAt: null,
@@ -177,6 +178,7 @@ for (const surface of SURFACES) {
           id: 'iseed',
           base: 'iron_sword',
           rarity: 'common',
+          tier: 1,
           affixes: [],
           equippedBy: knight.id,
           tradeableAt: null,
@@ -231,7 +233,7 @@ const TEST_URL = 'http://test'
 type Sent = { method: string; path: string; query: Record<string, string>; body: unknown }
 
 function rareItem(id: string, base = 'steel_longsword'): Item {
-  return { id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null }
+  return { id, base, rarity: 'rare', tier: 1, affixes: [], equippedBy: null, tradeableAt: null }
 }
 
 function parseQuery(raw: string): Record<string, string> {

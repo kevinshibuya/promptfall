@@ -109,6 +109,7 @@ test("a zone boss's chest plays whole: the zone and wave hold through its reveal
           id: 'i1',
           base: 'iron_sword',
           rarity: 'legendary',
+          tier: 1,
           affixes: [],
           equippedBy: null,
           tradeableAt: null,
@@ -319,6 +320,7 @@ test('a wave clear: the hero killed in the clearing tick is down from his blow u
           id: 'i1',
           base: 'iron_sword',
           rarity: 'rare',
+          tier: 1,
           affixes: [],
           equippedBy: null,
           tradeableAt: null,
@@ -373,12 +375,20 @@ test('a drop row waits for its reveal; a market row never does', () => {
   const t = new StageTimeline()
   t.observe(wave(), NOW - 1)
   const item = (id: string, base: string) =>
-    ({ id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null }) as never
+    ({
+      id,
+      base,
+      rarity: 'rare',
+      tier: 1,
+      affixes: [],
+      equippedBy: null,
+      tradeableAt: null,
+    }) as never
   // A drop and a vendored drop: their chests fall on the front enemy now and show together.
   t.onEffects(
     [
       { k: 'drop', item: item('i1', 'silk_robe') },
-      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3 },
+      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3, cause: 'full' },
     ],
     NOW,
   )
@@ -404,6 +414,7 @@ const lootItem = (id: string) =>
     id,
     base: 'silk_robe',
     rarity: 'rare',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,

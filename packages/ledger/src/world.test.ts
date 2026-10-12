@@ -130,6 +130,7 @@ describe('names on the market', () => {
       id: 'i1',
       base: 'steel_longsword',
       rarity: 'rare',
+      tier: 2,
       affixes: [],
       equippedBy: null,
       tradeableAt: null,

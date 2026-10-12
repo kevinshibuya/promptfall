@@ -17,7 +17,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 5;
+declare const SIM_VERSION: 14;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -26,12 +26,15 @@ type Stat = 'hp' | 'atk' | 'def' | 'spd';
 type Stats = Record<Stat, number>;
 type Affix = {
     id: string;
+    /** The flat roll, as stored: what it counts for is scaled by its item's tier (`affixValue`). */
     value: number;
 };
 type Item = {
     id: string;
     base: string;
     rarity: Rarity;
+    /** 1 to 6, set at the drop: it scales the affixes' rolls at read and the reforge price. */
+    tier: number;
     affixes: Affix[];
     equippedBy: string | null;
     /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */
@@ -154,6 +157,9 @@ type PlayerEvent = {
     t: 'set_farm';
     on: boolean;
 } | {
+    t: 'set_auto_vendor';
+    on: boolean;
+} | {
     t: 'expand_inventory';
 } | {
     t: 'expand_roster';
@@ -260,10 +266,13 @@ declare const SERVER_EVENT_KINDS: readonly ServerEventKind[];
 type Effect = {
     k: 'drop';
     item: Item;
-} | {
+}
+/** A drop sold on pickup: `full` for a full inventory, `setting` for the auto-vendor setting. */
+ | {
     k: 'drop_vendored';
     item: Item;
     gold: number;
+    cause: 'full' | 'setting';
 } | {
     k: 'gold';
     amount: number;
@@ -286,9 +295,16 @@ type Effect = {
 } | {
     k: 'hero_fell';
     heroId: string;
-} | {
+}
+/** The party fell and restarts `zone`, the one it is in, at wave 1. */
+ | {
     k: 'wipe';
-    retreatedTo: number;
+    zone: number;
+}
+/** The party's third wipe in a zone: it fell back to `zone`, one lower, or restarts zone 1. */
+ | {
+    k: 'retreat';
+    zone: number;
 } | {
     k: 'party_applied';
     heroIds: [string, string, string];
@@ -342,7 +358,11 @@ type GameState = {
     zone: number;
     wave: number;
     farm: boolean;
+    /** The auto-vendor setting, off on every save: Commons, and Uncommons past zone 3, sold on pickup. */
+    autoVendor: boolean;
     highestZone: number;
+    /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
+    zoneWipes: number;
     roster: Hero[];
     party: [string, string, string];
     pendingParty: [string, string, string] | null;
@@ -512,7 +532,41 @@ type Content = {
     };
     tactics: Tactics;
     xpToNext: (level: number) => number;
+    /** An item tier's multiplier in basis points, tier 1 first. */
+    itemTierMultBp: readonly number[];
 };
+
+/**
+ * The growth of an enemy's stats, xp and gold per zone past the first tier, in basis points, one
+ * entry per tier from tier 2: zone 12 + k fights at zone 12's numbers grown once per zone, each
+ * zone at its own tier's rate. Tier 2 ramps from zone 12 at ×1.1325, so zone 24 lands where a
+ * ×2.78 step at zone 13 and ×1.04 a zone put it (1.1325¹² = 2.78 × 1.04¹² = 4.45, equal to the
+ * fourth decimal, so a defence or an attack there may sit a point or two off); tier 3 grows ×1.04
+ * from there. Both are tuned to the feel probe at tiers 2 and 3.
+ */
+declare const TIER_GROWTH_BP: readonly number[];
+
+/** The last zone of the ladder, tier 3's zone 12: the advance gate farms from here, and no zone past it exists. */
+declare const LADDER_END = 36;
+type ZoneAt = {
+    /** The zone within its tier, 1 to 12: whose enemies, boss, weights, name and backdrop it has. */
+    base: number;
+    tier: number;
+    def: ZoneDef;
+};
+/**
+ * A running zone number as its tier and base zone, with the base zone's content: 13 is tier 2's
+ * zone 1. Every content lookup by zone goes through here. Nothing for a zone below 1.
+ */
+declare function zoneAt(zone: number): ZoneAt | undefined;
+/**
+ * An enemy as it fights at a running zone: the content's own inside tier 1, past it zone 12's
+ * numbers grown per zone. Every lookup of an enemy's numbers by zone goes through here. Nothing
+ * for an unknown enemy or a zone off the ladder.
+ */
+declare function enemyAt(id: string, zone: number): EnemyDef | undefined;
+/** The zone whose rarity weights a running zone drops at: its base zone in tier 1, zone 12 past it. */
+declare function oddsAt(zone: number): ZoneDef | undefined;
 
 declare const content: Content;
 
@@ -526,13 +580,74 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "ea7e36dbcb84b67d";
+declare const GOLDEN_HASH = "42969ddaf82b0564";
 
 declare function hashState(state: GameState): string;
 
 declare function vendorValue(item: Item): number;
+/** The item tier of a base's drops: its minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
+declare function baseTier(baseId: string): number;
+/**
+ * The item tier of a base's drop at a running zone: its base's tier inside the ladder's first
+ * tier, then one past the base tiers per ladder tier: 5 in tier 2, 6 in tier 3.
+ */
+declare function dropTier(zone: number, baseId: string): number;
+/**
+ * What an affix counts for on its item, in stats and wherever it is shown: the stored flat roll
+ * scaled by the item's tier, floored. The sim and the plugin read it here and nowhere else.
+ */
+declare function affixValue(item: Item, affix: Affix): number;
+/** The gold a reforge costs: the rarity's price scaled by the item's tier, floored. */
+declare function reforgeCost(item: Item): number;
 /** A boss-rarity item of the zone for a party of these classes, drawn from `seed` alone. `id` is '' for the caller to replace. */
 declare function rollRewardItem(seed: number, zone: number, classes: readonly HeroClass[]): Item | null;
+
+/** A stored state of any version, in the shape its version had. */
+type VersionedState = {
+    v: number;
+} & Record<string, unknown>;
+type Migration = {
+    /** Rewrites a state of the step's version into the next one's shape. Pure on shape: it never reads the current rules. */
+    state: (state: VersionedState) => VersionedState;
+    /**
+     * Rewrites goods held outside the state: the ledger's market book, returns and server-event
+     * log. Absent, the identity: a step names one only when an item or hero changed shape.
+     */
+    goods?: (goods: Goods) => Goods;
+};
+/** One step per version, keyed by the version a step takes a state from. */
+type MigrationChain = Readonly<Record<number, Migration>>;
+declare const MIGRATIONS: MigrationChain;
+type MigrateOptions = {
+    chain?: MigrationChain;
+    to?: number;
+};
+type MigrateRefusal = {
+    ok: false;
+    reason: 'ahead';
+    from: number;
+    to: number;
+}
+/** `at` is the first version the chain has no step for. */
+ | {
+    ok: false;
+    reason: 'gap';
+    from: number;
+    to: number;
+    at: number;
+};
+type MigrateResult = {
+    ok: true;
+    state: GameState;
+    from: number;
+    steps: number;
+} | MigrateRefusal;
+declare function migrate(state: VersionedState, options?: MigrateOptions): MigrateResult;
+/** Walks goods stored at version `from` through each step's goods rule, as `migrate` walks a state. */
+declare function migrateGoods(goods: Goods, from: number, options?: MigrateOptions): {
+    ok: true;
+    goods: Goods;
+} | MigrateRefusal;
 
 declare function heroStats(state: GameState, hero: Hero): Stats;
 
@@ -541,4 +656,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type TradeKind, type Trait, type TraitDef, type VersionedState, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, vendorValue, zoneAt };

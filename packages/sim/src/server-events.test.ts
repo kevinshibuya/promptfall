@@ -23,6 +23,7 @@ function rare(id: string, equippedBy: string | null = null): Item {
     id,
     base: 'steel_longsword',
     rarity: 'rare',
+    tier: 2,
     affixes: [{ id: 'brutal', value: 5 }],
     equippedBy,
     tradeableAt: null,

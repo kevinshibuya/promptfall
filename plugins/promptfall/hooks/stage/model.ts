@@ -3,6 +3,8 @@ import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
 import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
+import { zoneAt } from '../vendor/sim.js'
+import { zoneHead } from '../zone-words'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
 import {
@@ -449,10 +451,12 @@ export function stageAt(
     }
   }
 
+  // Ground and backdrop are the base zone's: tier 2's zone 1 stands on zone 1's.
+  const base = zoneAt(view.zone)?.base
   return {
     box,
-    ground: ZONE_GROUND[view.zone - 1] ?? ZONE_GROUND[0] ?? 0,
-    backdrop: opts.compact ? null : backdropFor(view.zone, scale),
+    ground: ZONE_GROUND[(base ?? 1) - 1] ?? ZONE_GROUND[0] ?? 0,
+    backdrop: opts.compact || base === undefined ? null : backdropFor(base, scale),
     actors,
     numbers,
     glows,
@@ -566,5 +570,5 @@ export function effectAt(
 export function altText(view: GameView): string {
   const enemies = view.enemies.map((e) => `${e.name} ${e.hp}/${e.maxHp}`).join(', ')
   const heroes = view.heroes.map((h) => `${h.name} L${h.level}${h.alive ? '' : ' down'}`).join(', ')
-  return `Zone ${view.zone}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`
+  return `${zoneHead(view.zone)}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`
 }
