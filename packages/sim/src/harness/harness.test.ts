@@ -57,18 +57,19 @@ describe('the feel probe', () => {
     expect(outOfBand(inBand)).toEqual([])
   })
 
-  it('measures tiers 2 and 3 at their reference rows: a capped party in the tier’s item tier', () => {
-    expect(probe(2).zones.map((z) => z.zone)).toEqual([13, 18, 24])
+  it('measures tiers 2 and 3 at their reference rows: zone 12’s party at zone 13, capped past it', () => {
+    expect(probe(2).zones.map((z) => z.zone)).toEqual([13, 24])
     expect(probe(3).zones.map((z) => z.zone)).toEqual([25, 30, 36])
+    // Tier 2 ramps from zone 12 (#152), so its first zone takes the party that clears zone 12.
     expect(probe(2).zones[0]).toMatchObject({
       base: 1,
       tier: 2,
-      level: 50,
+      level: 37,
       knightRarity: 'legendary',
-      gearTier: 5,
-      gearRarity: 'epic',
-      rollBp: 0,
+      gearTier: 3,
+      gearRarity: 'uncommon',
     })
+    expect(probe(2).zones[1]).toMatchObject({ base: 12, level: 50, gearTier: 5 })
     expect(probe(3).zones[2]).toMatchObject({ base: 12, gearTier: 6, gearRarity: 'legendary' })
   })
 
