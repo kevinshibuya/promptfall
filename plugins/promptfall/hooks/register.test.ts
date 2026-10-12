@@ -2122,8 +2122,8 @@ test("the zone arrival toast lands when the backdrop changes, after the boss's d
   expect(raised.indexOf(drops[0] as (typeof raised)[number])).toBeLessThan(
     raised.indexOf(arrivals()[0] as (typeof raised)[number]),
   )
-  // The arrival has no cue.
-  expect(plays.filter((p) => p.at === at)).toEqual([])
+  // The arrival's cue plays with it, at the backdrop's show time, after the drop's.
+  expect(plays.filter((p) => p.at >= at)).toEqual([{ asset: 'cues/zone_cleared.wav', at }])
   await ui.unmount()
 })
 
@@ -2142,7 +2142,9 @@ test('the zone arrival toast on the desktop lands at the wake for its show time'
   expect(await pictured()).toMatch(/^Zone 1,/)
   await time.advance(1)
   expect(raised.filter((t) => t.text === ARRIVAL).map((t) => t.at)).toEqual([backdrop])
-  expect(plays.filter((p) => p.at === backdrop)).toEqual([])
+  expect(plays.filter((p) => p.at === backdrop)).toEqual([
+    { asset: 'cues/zone_cleared.wav', at: backdrop },
+  ])
   // The wake redraws: the backdrop changes with the toast, not at the next publish.
   expect(await pictured()).toMatch(/^Zone 2,/)
   await ui.unmount()
