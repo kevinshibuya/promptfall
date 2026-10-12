@@ -867,17 +867,17 @@ for (const surface of SURFACES) {
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
     await ui.press({ key: 'tab-account' })
     const before = await paneText(ui)
-    expect(before).toMatch(/Sound:? +off/)
+    expect(before).toMatch(/Sound:? +quiet/)
     expect(before).toMatch(/Motion:? +full/)
     expect(before).toMatch(/Renderer:? +auto \(/)
     await ui.press({ key: 'row:sound' })
     await ui.press({ key: 'row:motion' })
     await ui.press({ key: 'row:renderer' })
-    const next = { sound: true, motion: 'still', renderer: 'image', probed: null }
+    const next = { sound: 'normal', motion: 'still', renderer: 'image', probed: null }
     expect(data.get('promptfall:settings')).toEqual(next)
     expect(states.get('settings')).toEqual(next)
     const after = await paneText(ui)
-    expect(after).toMatch(/Sound:? +on/)
+    expect(after).toMatch(/Sound:? +normal/)
     expect(after).toMatch(/Motion:? +still/)
     expect(after).toMatch(/Renderer:? +image \(from next start\)/)
     await ui.unmount()
@@ -887,13 +887,13 @@ for (const surface of SURFACES) {
 test('an Account press merges into the stored settings, not an older copy in this session', async ($, on) => {
   const { data } = harness(on, seeded())
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  // Another session turned sound on after this one loaded its settings.
-  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  // Another session turned sound loud after this one loaded its settings.
+  data.set('promptfall:settings', { sound: 'loud', motion: 'full', renderer: 'auto' })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...PANE })
   await ui.press({ key: 'tab-account' })
   await ui.press({ key: 'row:motion' })
   expect(data.get('promptfall:settings')).toEqual({
-    sound: true,
+    sound: 'loud',
     motion: 'still',
     renderer: 'auto',
     probed: null,

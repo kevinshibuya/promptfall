@@ -2,7 +2,7 @@
 
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
 phase 3 on 2026-10-03, for phase 4 on 2026-10-04, for the staged state on
-2026-10-09 and for the curve on 2026-10-12. Every
+2026-10-09, for the curve on 2026-10-12 and for sound on 2026-10-12. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -68,8 +68,15 @@ Checked against Claude Code v2.1.287's mods API.
   instead (at most 131,072 characters; `isInteractive` runs SMIL in a sandboxed
   frame) and no Image or Raster. `$.ui.blit` repaints a Raster or swaps a keyed
   Image without a redraw, up to 120 a second taken.
-- Sound: `$.audio.play({ asset })` plays a file of the plugin's own through
-  `afplay` on macOS; Linux and Windows terminals play nothing. Clips do not queue.
+- Sound: `$.audio.play({ asset }, { gain })` plays a file of the plugin's own,
+  gain 0 to 4 (default 1), through `afplay` on a macOS terminal and through its
+  own audio element on the desktop on any system. Clips do not queue. A Linux or
+  Windows terminal has no player: as of v2.1.296 the engine logs "no audio player
+  on <os>; not played" and resolves at once (the declarations say "played or
+  skipped"), and it rejects only a clip that cannot play. The plugin tells a
+  skipped play by timing it on the engine's clock: a terminal play that resolves
+  in under 100 ms was skipped, since every cue is longer and a real play resolves
+  when its clip ends. `docs/upstream/audio-playback.md` asks for players there.
 - Dialog: `$.ui.open({ id, title, focus, closeOnEscape, holdToasts, rows })`
   drawn by a `ui.render` hook on `Pane`.
 - Timers: `$.clock.every(ms, fn)`. Each hook dispatch has a 10 second budget;
@@ -873,13 +880,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | event | purpose | tier | toast | folded (same kind, one burst) | cue |
 |---|---|---|---|---|---|
 | legendary drop | rare good news | long | `Legendary drop: Ironwood Staff`, at the reveal | never folds | legendary |
-| recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | none |
+| recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | recruit |
 | boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
-| retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | none |
+| retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | retreat |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
 | wipe | wants a decision | short | `The party fell, back to wave 1 of zone 4, Old Barrow Hills` | never folds | none |
-| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills`, at the backdrop change | never folds | none |
+| zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills`, at the backdrop change | never folds | zone_cleared |
 | rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
 | vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
 | level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
@@ -888,10 +895,20 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | returned | money moved | short | `Ironwood Staff returned, unsold` | `3 items returned, unsold` | none |
 | world boss down | rare good news | short | `World boss Gorvax is down` | n/a | none |
 
-  Two toasts sit outside the table, raised by the session rather than from a
+  Two rows land with the spec that raises them (Pull), each with its cue: the
+  goal met and achievement rows both take goal. Until then that cue ships
+  unplayed.
+
+  Three toasts sit outside the table, raised by the session rather than from a
   burst. The welcome: a first launch toasts `Welcome to Promptfall. /promptfall
-  heroes to meet your party` at the host's default length, and the band holds
-  it as a notice for 20 seconds. A boss already up at the first world poll
+  heroes to meet your party` at the host's default length, and the band holds a
+  notice for 20 seconds: `Sound on; /promptfall sound off silences it. Welcome
+  to Promptfall. /promptfall heroes to meet your party.`, or the toast's text
+  when the sound setting is off. The sound clause leads so the band's one notice
+  row shows the opt-out whole from 100 columns up. The sound news: the session
+  that rewrites a stored boolean sound setting leaves the news in the store, and
+  the first primary to start after the rewrite toasts it once, at the long tier,
+  `Sound is now on by default. /promptfall sound off silences it.` A boss already up at the first world poll
   toasts the world boss appeared row's text and tier with no cue: the boss is
   news, not a fight starting.
 
@@ -960,10 +977,20 @@ flags. No second server program, no Postgres, no Redis, no worker.
   when every hero reached the same level; otherwise it has one clause per hero,
   in effect order.
 
-- Sound (phase 4): off by default, a per-machine toggle in Account and
-  `/promptfall sound on|off`, fixed gain. Four cues, each with a toast: drop
-  (Rare, Epic), legendary drop, level up, world boss appeared. Only the primary
-  session plays them; `/promptfall off` hides the band, not the cues.
+- Sound: a per-machine volume with four steps, off, quiet, normal and loud,
+  passing the engine gains of 0.25, 0.5 and 1. Quiet is the default. `s` on the
+  Account tab cycles the steps and `/promptfall sound off|quiet|normal|loud`
+  sets one; `on` means quiet. A boolean stored before the steps reads as quiet,
+  true or false, since the renderer probe wrote it on every install; the session
+  that reads it rewrites it as quiet and leaves the sound news in the store, and
+  the first primary to start after the rewrite toasts it once.
+  The setting survives a reset. Eight cues, each riding a toast row (the table's
+  cue column). Only the primary session plays them; `/promptfall off` hides the
+  band, not the cues. On a terminal, the first play skipped or rejected marks
+  the session silent: it tries no more cues, the Account row reads
+  `Sound: quiet, silent here` and the detail window says this system has no
+  audio player and the setting is kept. The mark is not stored, so the next
+  session tries again, and the desktop never sets it.
 - Item sprites (phase 4): 16 px icons in the Inventory and Heroes list
   windows and the Market's on Image and Svg, none on half-block terminals (the
   raster windows leave the two cells blank).
@@ -988,8 +1015,10 @@ brim, no white mage with red triangle trim, no archer in a green pointed cap).
   generated against a style sheet Kevin approved first; the build slices and
   palette-locks them and fails a sprite that breaks a palette rule. The four
   heroes and four world bosses get a hand cleanup in Aseprite or Pixelorama.
-  Nothing third-party ships. Cues are four clips from Juhani Junkala's CC0 "512
-  Sound Effects (8-bit style)".
+  Nothing third-party ships. The eight cues are generated by the repo's script
+  (`scripts/cues.ts`, `pnpm cues`) in integer arithmetic, mono 16-bit at
+  22,050 Hz, each under 900 ms at one common peak; `pnpm cues:check` fails CI
+  when the committed clips are stale.
 - Source PNGs live in an `art/` folder; a build step turns them into a committed,
   generated module of indexed sprites (CI fails when stale). The mod reads no
   files for sprites; cues are plugin files the engine plays.

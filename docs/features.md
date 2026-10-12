@@ -347,8 +347,8 @@ and show the band for the session while play goes on, `farm` flips the tactics, 
 and `autovendor off` set the account's auto-vendor setting (any other word answers the usage),
 and `server <url>` or `server local` points the machine at an HTTP server or at the in-process
 fake, each with its own account; `server` alone says which is in force. A fresh install, with no server set, plays on
-the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
-machine's settings.
+the public server. `sound off|quiet|normal|loud`, `motion full|still` and
+`renderer auto|image|raster` set the machine's settings.
 
 **Primary session.** One session per account plays; running a gameplay verb or typing a prompt in
 another session makes that one the primary. A prompt goes through at once and the band catches up
@@ -386,16 +386,33 @@ A wipe or retreat toast can show up to one cadence before the last hero falls on
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
-**Cues.** Four toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up and a
-world boss appearing. A burst plays each of its cues once, after its toasts; a drop's cue plays
-with its toast, at the reveal. Only the primary
-session plays them, and hiding the band does not silence them.
+**Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
+world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays
+none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
+a drop's lands at the reveal and a zone arrival's with the new backdrop. Only the primary session
+plays them, and hiding the band does not silence them. The set holds eight cues, one family
+written by `pnpm cues` and checked in CI; the goal cue ships ahead of its toast rows and plays once
+a goal met or achievement toasts it.
 
 ## Sound
 
-**Sound toggle.** Sound is off by default and is one setting per machine: `s` on the Account tab
-or `/promptfall sound on|off`. It switches the cues, at a fixed volume, and plays on macOS; other
-systems stay silent. The setting survives a reset of the machine's data.
+**Volume.** Sound is on by default, at quiet. The volume is one setting per machine with four
+steps, off, quiet, normal and loud, which play the cues at a quarter, half and all of the engine's
+default gain. The Account tab's row reads "Sound: quiet" and `s` cycles the four steps;
+`/promptfall sound off|quiet|normal|loud` sets one and answers it, `on` still works and means
+quiet. The setting survives a reset of the machine's data. A first launch's welcome notice says
+sound is on and that `/promptfall sound off` silences it, unless the setting is off.
+
+**Silent here.** Claude Code plays the cues on macOS and in the desktop app; a Linux or Windows
+terminal has no player and skips them. The first cue a terminal skips or cannot play marks the
+session: it stops trying, the Account row reads "Sound: quiet, silent here" and the detail window
+explains that this system has no audio player and the setting is kept. The mark is the
+session's: the stored step is untouched, and the next session tries again.
+
+**The switch to on.** A machine that stored sound as on or off before the volume steps reads as
+quiet, since that value was mostly written by the renderer probe, not chosen. The first session
+to start there rewrites it and, once it plays, toasts once, for 8 seconds, "Sound is now on by
+default. /promptfall sound off silences it."
 
 ## Sandbox
 

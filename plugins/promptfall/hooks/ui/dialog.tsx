@@ -82,6 +82,7 @@ const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAU
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
+const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as const, false)
 
 /** Each tab's builder. */
 const BUILDERS: Record<DialogTab, (input: PaneInput) => PaneBuild> = {
@@ -113,6 +114,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const server: string = (await read($, serverAtom)) ?? 'in-process'
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
     const leaseOwner = (await read($, leaseOwnerAtom)) ?? null
+    const soundSilent = (await read($, soundSilentAtom)) ?? false
     // The atom keeps this render subscribed; the store is the truth (another session may write it).
     await read($, settingsAtom)
     const settings: Settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
@@ -198,7 +200,14 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             orders,
             chat,
             boards,
-            account: { server, leaseOwner, settings, renderer, collapsed: prefs.collapsed },
+            account: {
+              server,
+              leaseOwner,
+              settings,
+              renderer,
+              collapsed: prefs.collapsed,
+              soundSilent,
+            },
           })
         : // The Account tab works without a game view: a state from an older version is reset here.
           noViewPane({ ...frame(rows), server, hasGame: running !== null, hasInput: input })

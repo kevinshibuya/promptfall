@@ -22,7 +22,7 @@ import { PANE_ROWS } from './windows/tuning'
 export const PANE_ID = 'promptfall'
 
 const HINT =
-  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|autovendor on|off|server <url>|server local|sound on|off|motion full|still|renderer auto|image|raster'
+  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
 
 /** The command, its hint naming the sandbox verb only while the sandbox is on. */
 export function commandSpec(sandbox: boolean) {

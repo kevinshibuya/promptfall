@@ -265,9 +265,11 @@ export type WorldState = {
 
 /** The terminal's stage renderer: decided by the probe, or forced by `settings.renderer`. */
 export type Renderer = 'unknown' | 'image' | 'raster'
+/** The cues' volume step; off plays none. */
+export type Sound = 'off' | 'quiet' | 'normal' | 'loud'
 /** Per machine, in `$.store` under `promptfall:settings`. */
 export type Settings = {
-  sound: boolean
+  sound: Sound
   motion: 'full' | 'still'
   renderer: 'auto' | 'image' | 'raster'
   /**
@@ -303,6 +305,10 @@ declare module 'claude-code' {
       settings: PromptfallSettings
       /** Per session, owned by ui/band.tsx. */
       renderer: PromptfallRenderer
+      /** Per session, never stored: a play here was skipped or refused, so no cue is tried again. */
+      soundSilent: boolean
+      /** Per session: the surface it started on, so a hot reload (which starts with none) keeps it. */
+      surface: 'terminal' | 'desktop' | null
     }
   }
 }

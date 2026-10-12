@@ -142,7 +142,13 @@ export const PROBE_ALT_DENY =
 export const SVG_MAX_CHARS = 131_072
 export const RASTER_MAX_PAIRS = 1024
 
-export const CUE_GAIN = 0.6
+/** The gain each volume step passes the engine, which takes 0 to 4 (default 1). */
+export const SOUND_GAIN = { quiet: 0.25, normal: 0.5, loud: 1 } as const
+/**
+ * A play the engine answers sooner than this was skipped: every clip is longer, and a real play
+ * answers once its clip has ended. A terminal with no audio player answers at once.
+ */
+export const SKIPPED_PLAY_MS = 100
 
 // Colours, 0xRRGGBB.
 export const RARITY_RGB: Readonly<Record<string, number>> = {
