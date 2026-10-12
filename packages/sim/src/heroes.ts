@@ -1,4 +1,4 @@
-import { content } from './content'
+import { content, zoneAt } from './content'
 import { draw, drawWeighted, heroStats, newId } from './progression'
 import { compareCodeUnits } from './rng'
 import type { Effect, GameState, Hero, Rarity, RecruitVia, Trait } from './types'
@@ -52,7 +52,7 @@ export function pushLog(s: GameState, entry: GameState['lootLog'][number]): void
 
 /** A boss contract: recruit, or vendor it when the roster is full. */
 export function rollContract(s: GameState, effects: Effect[]): void {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   if (!zone) return
   const rarity = drawWeighted(s, zone.bossRarityWeights)
   const hero = generateHero(s, rarity)

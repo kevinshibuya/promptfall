@@ -18,6 +18,7 @@ import {
   heroStats,
   type Item,
   type LootEntry,
+  zoneAt,
 } from './vendor/sim.js'
 
 const LOOT_LINES = 12
@@ -288,7 +289,7 @@ export function toGameView(
     heroes,
     enemies,
     zone: state.zone,
-    zoneName: content.zones[state.zone - 1]?.name ?? `Zone ${state.zone}`,
+    zoneName: zoneAt(state.zone)?.def.name ?? `Zone ${state.zone}`,
     wave: state.wave,
     gold: state.gold,
     farm: state.farm,

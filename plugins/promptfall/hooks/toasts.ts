@@ -1,6 +1,6 @@
 import type { GameView } from '../types'
 import type { Cue } from './cues'
-import { content, type Effect, type Goods, type Rarity } from './vendor/sim.js'
+import { type Effect, type Goods, type Rarity, zoneAt } from './vendor/sim.js'
 import { heroName, tradeName } from './view'
 
 /** The everyday tier: the host's default, passed explicitly so a host change cannot move it. */
@@ -186,7 +186,7 @@ const TABLE = {
     single: ({ effect }: EffectInput) => {
       // A farming clear stays in its zone: only an advance is an arrival.
       if (effect.k !== 'zone_cleared' || effect.advancedTo <= effect.zone) return null
-      const name = content.zones[effect.advancedTo - 1]?.name
+      const name = zoneAt(effect.advancedTo)?.def.name
       return `The party reached zone ${effect.advancedTo}${name ? `, ${name}` : ''}`
     },
     // An arrival lands when the backdrop changes: the cleared zone's boss row has left.

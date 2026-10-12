@@ -1,5 +1,5 @@
 import { ACTION_STEPS, fill, GAUGE_FULL, STEP_MS, scaled, TICK_MS } from './battle'
-import { content } from './content'
+import { content, zoneAt } from './content'
 import { type Choice, pickAction, type Unit } from './picker'
 import {
   checkWipe,
@@ -22,7 +22,7 @@ function damage(s: GameState, atk: number, def: number): number {
 const NO_STATS: Stats = { hp: 1, atk: 1, def: 0, spd: 0 }
 
 function zoneBossStats(zone: number): Stats {
-  return content.enemies[content.zones[zone - 1]?.boss ?? '']?.stats ?? NO_STATS
+  return content.enemies[zoneAt(zone)?.def.boss ?? '']?.stats ?? NO_STATS
 }
 
 /**

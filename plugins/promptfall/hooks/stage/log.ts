@@ -7,7 +7,7 @@
 // `release`.
 import type { GameView, Settings } from '../../types'
 import { heroNameById, type Toast, type ToastWait } from '../toasts'
-import { content, type Effect, type Rarity } from '../vendor/sim.js'
+import { type Effect, type Rarity, zoneAt } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
 import { groups, type StageTimeline } from './timeline'
@@ -175,7 +175,7 @@ export class MessageLog {
       }
       case 'zone_cleared': {
         if (e.advancedTo <= e.zone) return { text: `Zone ${e.zone} cleared.`, key: true }
-        const zone = content.zones[e.advancedTo - 1]?.name
+        const zone = zoneAt(e.advancedTo)?.def.name
         return {
           text: `The party reached zone ${e.advancedTo}${zone ? `, ${zone}` : ''}.`,
           key: true,

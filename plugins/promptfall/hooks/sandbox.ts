@@ -1,5 +1,12 @@
 import { type GameHandle, PAUSED_LINE } from './engine'
-import { content, RARITIES, type Rarity, type SandboxEvent } from './vendor/sim.js'
+import {
+  content,
+  LADDER_END,
+  RARITIES,
+  type Rarity,
+  type SandboxEvent,
+  zoneAt,
+} from './vendor/sim.js'
 
 export const SANDBOX_OFF = 'Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.'
 export const SANDBOX_PINS_SERVER =
@@ -174,8 +181,8 @@ async function level(game: GameHandle, args: string): Promise<string> {
 async function zone(game: GameHandle, args: string): Promise<string> {
   if (!/^\d+$/.test(args)) return 'Usage: /promptfall sandbox zone <n>'
   const n = Number(args)
-  const def = content.zones[n - 1]
-  if (!def) return `Sandbox: zones run 1 to ${content.zones.length}`
+  const def = zoneAt(n)?.def
+  if (!def || n > LADDER_END) return `Sandbox: zones run 1 to ${LADDER_END}`
   const refused = await grant(game, { t: 'sandbox_zone', zone: n })
   return refused ?? `Sandbox: zone ${n}, ${def.name}`
 }

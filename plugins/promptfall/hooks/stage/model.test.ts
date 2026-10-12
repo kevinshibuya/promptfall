@@ -23,6 +23,7 @@ import {
   STEP_OUT_MS,
   STEP_PX,
   WINDUP_HOLD_MS,
+  ZONE_GROUND,
 } from './tuning'
 
 const NOW = 1_000_000 // bobbing(NOW) is 0
@@ -366,6 +367,15 @@ test('the backdrop is the zone painting at the stage scale, and none on the comp
   expect(hires.backdrop).toBe(backdropFor(1, 1.5))
   const compact = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
   expect(compact.backdrop).toBe(null)
+})
+
+test("tier 2's zone 1 stands on zone 1's ground and backdrop", () => {
+  const opts: Opts = { compact: false, motion: 'still' }
+  const zone1 = at(wave(), [], NOW, { columns: 120, rows: 8 }, opts)
+  const zone13 = at({ ...wave(), zone: 13 }, [], NOW, { columns: 120, rows: 8 }, opts)
+  expect(zone13.ground).toBe(ZONE_GROUND[0])
+  expect(zone13.ground).toBe(zone1.ground)
+  expect(zone13.backdrop).toBe(backdropFor(1, 1))
 })
 
 test('a world boss at an emptied bar stands whole until the server disengages it, then dissolves', () => {
