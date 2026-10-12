@@ -548,6 +548,53 @@ declare function vendorValue(item: Item): number;
 /** A boss-rarity item of the zone for a party of these classes, drawn from `seed` alone. `id` is '' for the caller to replace. */
 declare function rollRewardItem(seed: number, zone: number, classes: readonly HeroClass[]): Item | null;
 
+/** A stored state of any version, in the shape its version had. */
+type VersionedState = {
+    v: number;
+} & Record<string, unknown>;
+type Migration = {
+    /** Rewrites a state of the step's version into the next one's shape. Pure on shape: it never reads the current rules. */
+    state: (state: VersionedState) => VersionedState;
+    /**
+     * Rewrites goods held outside the state: the ledger's market book, returns and server-event
+     * log. Absent, the identity: a step names one only when an item or hero changed shape.
+     */
+    goods?: (goods: Goods) => Goods;
+};
+/** One step per version, keyed by the version a step takes a state from. */
+type MigrationChain = Readonly<Record<number, Migration>>;
+declare const MIGRATIONS: MigrationChain;
+type MigrateOptions = {
+    chain?: MigrationChain;
+    to?: number;
+};
+type MigrateRefusal = {
+    ok: false;
+    reason: 'ahead';
+    from: number;
+    to: number;
+}
+/** `at` is the first version the chain has no step for. */
+ | {
+    ok: false;
+    reason: 'gap';
+    from: number;
+    to: number;
+    at: number;
+};
+type MigrateResult = {
+    ok: true;
+    state: GameState;
+    from: number;
+    steps: number;
+} | MigrateRefusal;
+declare function migrate(state: VersionedState, options?: MigrateOptions): MigrateResult;
+/** Walks goods stored at version `from` through each step's goods rule, as `migrate` walks a state. */
+declare function migrateGoods(goods: Goods, from: number, options?: MigrateOptions): {
+    ok: true;
+    goods: Goods;
+} | MigrateRefusal;
+
 declare function heroStats(state: GameState, hero: Hero): Stats;
 
 declare function createInitialState(seed: number): GameState;
@@ -555,4 +602,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneAt, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue, zoneAt };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type VersionedState, type ZoneAt, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, migrate, migrateGoods, replay, rollRewardItem, step, vendorValue, zoneAt };
