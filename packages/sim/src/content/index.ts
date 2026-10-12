@@ -7,10 +7,14 @@ import { itemBases } from './items'
 import { rarity } from './rarity'
 import { tactics } from './tactics'
 import { tavern } from './tavern'
+import { itemTierMultBp } from './tiers'
 import { traits } from './traits'
 import type { Content } from './types'
+import { xpToNext } from './xp'
 import { zones } from './zones'
 
+export { TIER_GROWTH_BP } from './enemies'
+export { ZONES_PER_ITEM_TIER } from './tiers'
 export type {
   AffixDef,
   Archetype,
@@ -26,6 +30,8 @@ export type {
   WeightRule,
   ZoneDef,
 } from './types'
+export type { ZoneAt } from './zone'
+export { enemyAt, LADDER_END, oddsAt, zoneAt } from './zone'
 
 export const content: Content = {
   zones,
@@ -39,5 +45,6 @@ export const content: Content = {
   tavern,
   expansions,
   tactics,
-  xpToNext: (level: number) => 110 * level * level,
+  xpToNext,
+  itemTierMultBp,
 }

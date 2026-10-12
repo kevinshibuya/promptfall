@@ -1,4 +1,4 @@
-import { content } from './content'
+import { content, oddsAt, ZONES_PER_ITEM_TIER, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
@@ -11,6 +11,40 @@ export function vendorValue(item: Item): number {
   return content.rarity[item.rarity].vendorGoldPerZone * minZone
 }
 
+/** The item tier of a base's drops: its minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
+export function baseTier(baseId: string): number {
+  const minZone = content.itemBases[baseId]?.minZone ?? 1
+  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER))
+}
+
+/**
+ * The item tier of a base's drop at a running zone: its base's tier inside the ladder's first
+ * tier, then one past the base tiers per ladder tier: 5 in tier 2, 6 in tier 3.
+ */
+export function dropTier(zone: number, baseId: string): number {
+  const tier = zoneAt(zone)?.tier ?? 1
+  if (tier === 1) return baseTier(baseId)
+  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1
+}
+
+/** An item tier's multiplier in basis points; a tier off the table counts as tier 1. */
+function tierMultBp(tier: number): number {
+  return content.itemTierMultBp[tier - 1] ?? 10000
+}
+
+/**
+ * What an affix counts for on its item, in stats and wherever it is shown: the stored flat roll
+ * scaled by the item's tier, floored. The sim and the plugin read it here and nowhere else.
+ */
+export function affixValue(item: Item, affix: Affix): number {
+  return Math.floor((affix.value * tierMultBp(item.tier)) / 10000)
+}
+
+/** The gold a reforge costs: the rarity's price scaled by the item's tier, floored. */
+export function reforgeCost(item: Item): number {
+  return Math.floor((content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier)) / 10000)
+}
+
 function rollItem(s: GameState, boss: boolean): Item | null {
   return rollItemFor(
     s,
@@ -21,7 +55,7 @@ function rollItem(s: GameState, boss: boolean): Item | null {
 
 /** The draw order of ordinary drops: rarity, then base, then affixes. */
 function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[]): Item | null {
-  const zone = content.zones[s.zone - 1]
+  const zone = oddsAt(s.zone)
   if (!zone) return null
   const rarity = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights)
   const bases = Object.keys(content.itemBases)
@@ -35,13 +69,21 @@ function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[])
   return rollItemOf(s, baseId, rarity)
 }
 
-/** An item of this base and rarity: its affixes, then its id. */
+/** An item of this base and rarity, in its tier at the party's zone: its affixes, then its id. */
 export function rollItemOf(s: GameState, baseId: string, rarity: Rarity): Item {
   const affixes = rollAffixes(s, baseId, rarity)
-  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
+  return {
+    id: newId(s, 'i'),
+    base: baseId,
+    rarity,
+    tier: dropTier(s.zone, baseId),
+    affixes,
+    equippedBy: null,
+    tradeableAt: null,
+  }
 }
 
-/** The affixes of an item of this base and rarity: each one's id, then its value. */
+/** The affixes of an item of this base and rarity: each one's id, then its flat roll. */
 function rollAffixes(s: GameState, baseId: string, rarity: Rarity): Affix[] {
   const slot = content.itemBases[baseId]?.slot
   const pool = Object.keys(content.affixes)
@@ -69,15 +111,35 @@ export function rollRewardItem(
   return item ? { ...item, id: '' } : null
 }
 
-/** Takes a dropped item in on a draft: into the inventory, or vendored when it is full. */
+/**
+ * Whether the auto-vendor setting sells this drop: a Common, or an Uncommon past zone 3, unless a
+ * party hero has the item's slot empty and could wear it. A Rare or better never.
+ */
+function autoVendors(s: GameState, item: Item): boolean {
+  if (!s.autoVendor) return false
+  if (item.rarity !== 'common' && !(item.rarity === 'uncommon' && s.zone > 3)) return false
+  const base = content.itemBases[item.base]
+  if (!base) return false
+  return !partyHeroes(s).some(
+    (h) => h.equipment[base.slot] === null && base.classes.includes(h.cls),
+  )
+}
+
+/**
+ * Takes a dropped item in on a draft: into the inventory, or vendored when the inventory is full
+ * or the auto-vendor setting sells it.
+ */
 export function takeDrop(s: GameState, item: Item, effects: Effect[]): void {
-  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item)
-  if (gold === null) {
+  const cause =
+    s.inventory.length >= s.inventoryCap ? 'full' : autoVendors(s, item) ? 'setting' : null
+  let gold: number | null = null
+  if (cause === null) {
     s.inventory.push(item)
     effects.push({ k: 'drop', item })
   } else {
+    gold = vendorValue(item)
     s.gold += gold
-    effects.push({ k: 'drop_vendored', item, gold })
+    effects.push({ k: 'drop_vendored', item, gold, cause })
   }
   pushLog(s, {
     k: 'item',

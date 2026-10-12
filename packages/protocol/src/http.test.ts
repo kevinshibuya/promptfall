@@ -59,6 +59,7 @@ const listing: Listing = {
       id: 'i3',
       base: 'steel_longsword',
       rarity: 'rare',
+      tier: 2,
       affixes: [],
       equippedBy: null,
       tradeableAt: null,

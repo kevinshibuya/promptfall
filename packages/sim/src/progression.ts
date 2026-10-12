@@ -1,7 +1,7 @@
 import { SPAWN_GAUGE_MAX } from './battle'
-import { content } from './content'
+import { content, enemyAt, LADDER_END, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
-import { rollDrops, takeDrop } from './loot'
+import { affixValue, rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
 import type {
   Effect,
@@ -48,9 +48,13 @@ const SLOTS: Slot[] = ['weapon', 'armour', 'accessory']
 export function heroStats(state: GameState, hero: Hero): Stats {
   const template = content.heroTemplates[hero.template]
   const stats: Stats = { hp: 1, atk: 0, def: 0, spd: 0 }
+  // A hero's rarity multiplies its template's base and growth as an item's multiplies its base.
+  const heroMult = content.rarity[hero.rarity].statMultBp
   if (template) {
-    for (const stat of STATS)
-      stats[stat] = template.base[stat] + template.growth[stat] * (hero.level - 1)
+    for (const stat of STATS) {
+      const raw = template.base[stat] + template.growth[stat] * (hero.level - 1)
+      stats[stat] = Math.floor((raw * heroMult) / 10000)
+    }
   }
   for (const slot of SLOTS) {
     const itemId = hero.equipment[slot]
@@ -67,7 +71,7 @@ export function heroStats(state: GameState, hero: Hero): Stats {
     }
     for (const affix of item.affixes) {
       const def = content.affixes[affix.id]
-      if (def) stats[def.stat] += affix.value
+      if (def) stats[def.stat] += affixValue(item, affix)
     }
   }
   // Trait bonuses are computed from the pre-trait totals so their order does not matter.
@@ -133,7 +137,7 @@ function openEncounter(s: GameState, waveSize: number): Encounter {
 }
 
 function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: EnemyKind): void {
-  const def = content.enemies[defId]
+  const def = enemyAt(defId, s.zone)
   const hp = def ? def.stats.hp : 1
   const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp }
   encounter.enemies.push(enemy)
@@ -141,7 +145,7 @@ function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: Ene
 }
 
 function pickWaveEnemy(s: GameState): string {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   const weights: Record<string, number> = {}
   for (const id of zone?.enemies ?? []) weights[id] = 1
   return drawWeighted(s, weights)
@@ -163,7 +167,7 @@ export function onTurnEnd(s: GameState): void {
 }
 
 export function onRest(s: GameState): void {
-  healParty(s, 3000)
+  healParty(s, 5000)
 }
 
 export function refillFromQueue(s: GameState): void {
@@ -178,7 +182,7 @@ export function refillFromQueue(s: GameState): void {
 
 /** Step 3 of a tick: nothing is alive, so something new arrives. */
 export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   if (!zone) return
   if (s.pendingTurnBoss) {
     const encounter = s.encounter ?? openEncounter(s, 0)
@@ -222,6 +226,7 @@ export function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[])
 export function changeZone(s: GameState, zone: number): void {
   s.zone = zone
   s.wave = 1
+  s.zoneWipes = 0
   if (zone > s.highestZone) s.highestZone = zone
 }
 
@@ -233,7 +238,7 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   const encounter = s.encounter
   if (!encounter) return
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id)
-  const def: EnemyDef | undefined = content.enemies[enemy.def]
+  const def: EnemyDef | undefined = enemyAt(enemy.def, s.zone)
   if (def) {
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects)
     const [min, max] = def.gold
@@ -253,7 +258,7 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   if (enemy.kind === 'zone_boss') {
     const zone = s.zone
     s.encounter = null
-    const advance = !s.farm && zone < 12
+    const advance = !s.farm && zone < LADDER_END
     const advancedTo = advance ? zone + 1 : zone
     effects.push({ k: 'zone_cleared', zone, advancedTo })
     changeZone(s, advancedTo)
@@ -277,6 +282,9 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   if (current.waveSize === 0) s.encounter = null
 }
 
+/** A zone's third wipe with no boss kill between them is a retreat. */
+const RETREAT_AT = 3
+
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {
   if (livingParty(s).length > 0) return false
@@ -287,13 +295,19 @@ export function checkWipe(s: GameState, effects: Effect[]): boolean {
     fullHealParty(s)
     return true
   }
-  const retreatedTo = Math.max(1, s.zone - 1)
-  effects.push({ k: 'wipe', retreatedTo })
   s.encounter = null
   s.pendingTurnBoss = false
   s.stats.wipes += 1
   fullHealParty(s)
-  changeZone(s, retreatedTo)
+  if (s.zoneWipes + 1 < RETREAT_AT) {
+    effects.push({ k: 'wipe', zone: s.zone })
+    s.wave = 1
+    s.zoneWipes += 1
+  } else {
+    const zone = Math.max(1, s.zone - 1)
+    effects.push({ k: 'retreat', zone })
+    changeZone(s, zone)
+  }
   applyPendingParty(s, effects)
   fullHealParty(s)
   return true

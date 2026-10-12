@@ -1,0 +1,235 @@
+{
+  "v": 9,
+  "seed": 20261002,
+  "rng": 3073371152,
+  "counter": 55,
+  "tick": 176,
+  "gold": 77,
+  "zone": 1,
+  "wave": 1,
+  "farm": true,
+  "highestZone": 1,
+  "zoneWipes": 2,
+  "roster": [
+    {
+      "id": "h0",
+      "template": "knight_1",
+      "cls": "knight",
+      "epithet": "the Far-Sighted",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 45,
+      "hp": 30,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1",
+      "template": "black_mage_1",
+      "cls": "black_mage",
+      "epithet": "the Wry",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 0,
+      "hp": 41,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h2",
+      "template": "white_mage_1",
+      "cls": "white_mage",
+      "epithet": "the Lark",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 25,
+      "hp": 44,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h3",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Owl",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 30,
+      "hp": 44,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    }
+  ],
+  "party": [
+    "h0",
+    "h1",
+    "h2"
+  ],
+  "pendingParty": null,
+  "inventory": [
+    {
+      "id": "ic",
+      "base": "willow_staff",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ie",
+      "base": "iron_sword",
+      "rarity": "uncommon",
+      "tier": 1,
+      "affixes": [
+        {
+          "id": "brutal",
+          "value": 2
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "r0",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "tier": 2,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i13",
+      "base": "chainmail",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    }
+  ],
+  "inventoryCap": 30,
+  "rosterCap": 24,
+  "recruits": 0,
+  "turnToolCalls": 0,
+  "encounter": {
+    "enemies": [
+      {
+        "id": "e1g",
+        "def": "road_slime",
+        "kind": "wave",
+        "hp": 46,
+        "maxHp": 126
+      },
+      {
+        "id": "e1h",
+        "def": "road_slime",
+        "kind": "wave",
+        "hp": 92,
+        "maxHp": 126
+      },
+      {
+        "id": "e1i",
+        "def": "goblin_scout",
+        "kind": "wave",
+        "hp": 92,
+        "maxHp": 108
+      }
+    ],
+    "queue": [
+      {
+        "def": "road_slime",
+        "kind": "wave"
+      }
+    ],
+    "waveSize": 1,
+    "spawnedInWave": 0
+  },
+  "pendingTurnBoss": false,
+  "lootLog": [
+    {
+      "k": "item",
+      "itemId": "ic",
+      "base": "willow_staff",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ie",
+      "base": "iron_sword",
+      "rarity": "uncommon",
+      "vendoredFor": null
+    },
+    {
+      "k": "reward",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "gold": 45
+    },
+    {
+      "k": "item",
+      "itemId": "i13",
+      "base": "chainmail",
+      "rarity": "common",
+      "vendoredFor": null
+    }
+  ],
+  "stats": {
+    "kills": 18,
+    "bosses": 0,
+    "wipes": 8
+  },
+  "boss": null,
+  "battle": {
+    "gauges": [
+      {
+        "id": "h1",
+        "g": 6750
+      },
+      {
+        "id": "h2",
+        "g": 4522
+      },
+      {
+        "id": "e1g",
+        "g": 6400
+      },
+      {
+        "id": "e1h",
+        "g": 4400
+      },
+      {
+        "id": "h0",
+        "g": 0
+      },
+      {
+        "id": "e1i",
+        "g": 216
+      }
+    ],
+    "queue": [],
+    "busy": 4
+  }
+}

@@ -72,10 +72,11 @@ export function resolveClient(
     return {
       client: ledger,
       reads: {
-        browse: (auth, query) => ledger.browse(auth, query, { expire: false }),
-        myOrders: (auth) => ledger.myOrders(auth, { expire: false }),
-        matchingOrders: (auth, itemId) => ledger.matchingOrders(auth, itemId, { expire: false }),
-        world: (auth, since) => ledger.world(auth, since, { advance: false }),
+        browse: (auth, query) => ledger.browse(auth, query, { expire: false, persist: false }),
+        myOrders: (auth) => ledger.myOrders(auth, { expire: false, persist: false }),
+        matchingOrders: (auth, itemId) =>
+          ledger.matchingOrders(auth, itemId, { expire: false, persist: false }),
+        world: (auth, since) => ledger.world(auth, since, { advance: false, persist: false }),
       },
       tokenKey: 'deviceToken',
       label: IN_PROCESS,

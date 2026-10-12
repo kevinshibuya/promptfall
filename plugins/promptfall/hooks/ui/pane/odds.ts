@@ -1,9 +1,10 @@
 // The Odds tab as windows (docs/plans/2026-10-06-ui-pr3-remaining-tabs.md, "Odds"): the drop odds
 // as one table (zone, its boss, the tavern), then the inventory and roster expansions as rows.
 import { RARITY_RGB } from '../../stage/tuning'
-import { content, RARITIES } from '../../vendor/sim.js'
+import { content, oddsAt, RARITIES } from '../../vendor/sim.js'
 import type { Line, Span } from '../../windows/kit'
 import { DIM_RGB, MOVE_HELP, TEXT_RGB } from '../../windows/tuning'
+import { zonePhrase } from '../../zone-words'
 import { padEnd, padStart } from '../format'
 import { cursorRow } from './frame'
 import type { PaneInput } from './input'
@@ -13,6 +14,10 @@ import type { PaneBuild } from './types'
 
 const NAME_CELLS = 10
 const COLUMN_CELLS = 8
+/** One table for both: the sim multiplies a hero's base and growth as it does an item's base. */
+const RARITY_NOTE = 'Rarity multiplies base stats, heroes and items alike.'
+/** The sim scales the rarity's reforge price by the item's tier, as it scales the affixes. */
+const REFORGE_NOTE = 'Reforge is priced by rarity and tier.'
 
 /** `12.50%`: hundredths, floored. */
 export function percent(weight: number, total: number): string {
@@ -37,7 +42,8 @@ function tableLine(name: Span, columns: string[]): Span[] {
 export function oddsPane(input: PaneInput): PaneBuild {
   const { view, dialog } = input
   const inner = listInner(input)
-  const zone = content.zones[view.zone - 1]
+  // Past tier 1 the drops roll at zone 12's odds.
+  const zone = oddsAt(view.zone)
   const rows: ListRow[] = [
     {
       spans: tableLine({ text: 'Rarity' }, ['Zone', 'Boss', 'Tavern']),
@@ -60,6 +66,8 @@ export function oddsPane(input: PaneInput): PaneBuild {
       alt: `${r}: zone ${columns[0]}, boss ${columns[1]}, tavern ${columns[2]}`,
     })
   }
+  rows.push({ spans: [{ text: RARITY_NOTE, rgb: DIM_RGB }], alt: RARITY_NOTE })
+  rows.push({ spans: [{ text: REFORGE_NOTE, rgb: DIM_RGB }], alt: REFORGE_NOTE })
   rows.push({ spans: [{ text: 'Expansions' }], rule: true, alt: 'Expansions' })
   const expansion = (
     id: 'inventory' | 'roster',
@@ -113,8 +121,8 @@ export function oddsPane(input: PaneInput): PaneBuild {
   }
 
   const spec: ListSpec = {
-    title: [{ text: `Odds · zone ${view.zone}` }],
-    altTitle: `Odds in zone ${view.zone}`,
+    title: [{ text: `Odds · ${zonePhrase(view.zone)}` }],
+    altTitle: `Odds in ${zonePhrase(view.zone)}`,
     rows,
     empty: '',
     cursor,
@@ -125,7 +133,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
     error: null,
     state: [
       on?.startsWith('expand-') ? `Enter: buy it. ${MOVE_HELP}` : MOVE_HELP,
-      `Drop odds in zone ${view.zone}, its boss, and the tavern.`,
+      `Drop odds in ${zonePhrase(view.zone)}, its boss, and the tavern.`,
     ],
     field: null,
     link: null,

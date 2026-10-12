@@ -164,6 +164,7 @@ const server = createFakeServer({
   githubLog: (line) => console.error(`promptfall fake: ${line}`),
   adminToken,
   adminLog: (line) => console.log(line),
+  ledgerLog: (line) => console.log(`promptfall ledger: ${line}`),
 })
 
 const listening = await server.listen(port, values.host)

@@ -34,6 +34,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     '▶ Sound | off',
     ' | Motion | full',
     ' | Renderer | auto (image)',
+    ' | Auto-vendor | off',
     ' | Band | shown',
     ' | Band off',
     ' | Link GitHub',
@@ -48,6 +49,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     ['row:sound', 's'],
     ['row:motion', 'n'],
     ['row:renderer', 'x'],
+    ['row:autovendor', undefined],
     ['row:band', undefined],
     ['row:off', undefined],
     ['row:link', undefined],
@@ -56,12 +58,13 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
   ])
 })
 
-test('the actions: settings, the band, off, link, reset and delete opening their Yes/Nos on No', () => {
+test('the actions: settings, auto-vendor, the band, off, link, reset and delete opening their Yes/Nos on No', () => {
   const b = accountPane(input({}, { view: unlinked() }))
   expect(cursors(b).map((s) => s.action)).toEqual([
     { t: 'setting', patch: { sound: true } },
     { t: 'setting', patch: { motion: 'still' } },
     { t: 'setting', patch: { renderer: 'image' } },
+    { t: 'event', event: { t: 'set_auto_vendor', on: true } },
     { t: 'band', collapsed: true },
     { t: 'off' },
     { t: 'link' },
@@ -80,8 +83,22 @@ test('the actions: settings, the band, off, link, reset and delete opening their
   )
   const lines = linesOf(win(forced, 'list'))
   expect(lines[2]?.endsWith('raster (from next start)')).toBe(true)
-  expect(lines[3]?.endsWith('collapsed')).toBe(true)
+  expect(lines[4]?.endsWith('collapsed')).toBe(true)
   expect(cursors(forced)[2]?.action).toEqual({ t: 'setting', patch: { renderer: 'auto' } })
+})
+
+test("Auto-vendor reads the account's setting and toggles it; read-only it shows and sends nothing", () => {
+  const on = { ...paneView(), autoVendor: true }
+  const row = (b: ReturnType<typeof accountPane>) =>
+    cursors(b).find((s) => s.key === 'row:autovendor')
+  const lines = (b: ReturnType<typeof accountPane>) =>
+    linesOf(win(b, 'list')).map((l) => l.replace(/ {2,}/g, ' | ').trim())
+  const b = accountPane(input({}, { view: on }))
+  expect(lines(b)).toContain('| Auto-vendor | on')
+  expect(row(b)?.action).toEqual({ t: 'event', event: { t: 'set_auto_vendor', on: false } })
+  const secondary = accountPane(input({}, { view: on, readOnly: true, mode: 'secondary' }))
+  expect(lines(secondary)).toContain('| Auto-vendor | on')
+  expect(row(secondary)?.action).toEqual({ t: 'none' })
 })
 
 test('Link GitHub goes when linked, read-only, or while a code is pending', () => {
@@ -163,7 +180,7 @@ test('the detail lines and the message', () => {
   )
   expect(message(b)).toEqual([
     'Enter: change it. Tab or arrows: move.',
-    'Settings are kept per machine.',
+    'Auto-vendor is kept per account, the rest per machine.',
   ])
 })
 

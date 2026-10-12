@@ -138,8 +138,10 @@ test('an interactive terminal session plays and commits a batch', async ($, on) 
   await $.turn.start({ text: 'go', turnId: 't1' })
   for (let i = 0; i < 5; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
   await time.advance(16_000)
-  const view = last.get('view') as { enemies: unknown[] } | null
-  expect(view?.enemies.length).toBeGreaterThan(0)
+  // The tool calls spawned enemies: still on the field, or already killed. The account's seed is
+  // random, and on about a fifth of seeds the party clears the field inside the 16 seconds.
+  const view = last.get('view') as { enemies: unknown[]; kills: number } | null
+  expect((view?.enemies.length ?? 0) + (view?.kills ?? 0)).toBeGreaterThan(0)
   const commit = writes.find(
     (w) => w.key.startsWith('promptfall:pf:acct:') && (w.value as { seq?: number }).seq === 1,
   )

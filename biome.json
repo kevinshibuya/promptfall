@@ -15,6 +15,7 @@
       "!plugins/promptfall/hooks/stage/goldens",
       "!plugins/promptfall/.claude-plugin/types",
       "!plugins/promptfall/tsconfig.json",
+      "!packages/sim/src/fixtures",
       "!**/dist",
       "!docs",
       "!HANDOFF*.md"

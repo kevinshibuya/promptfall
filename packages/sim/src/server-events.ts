@@ -1,5 +1,5 @@
 import { SPAWN_GAUGE_MAX } from './battle'
-import { content } from './content'
+import { content, LADDER_END, zoneAt } from './content'
 import { clone, draft, reject } from './draft'
 import { generateHero, pushLog, recruitHero } from './heroes'
 import { rollItemOf, takeDrop } from './loot'
@@ -200,7 +200,7 @@ export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
 // Sandbox grants: each hands out what play would earn, through the path play takes.
 
 function noSuchZone(zone: number): boolean {
-  return !Number.isInteger(zone) || content.zones[zone - 1] === undefined
+  return zoneAt(zone) === undefined || zone > LADDER_END
 }
 
 function noSuchRarity(rarity: string): boolean {

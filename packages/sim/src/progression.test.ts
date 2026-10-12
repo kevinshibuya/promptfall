@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { GAUGE_FULL } from './battle'
-import { content } from './content'
+import { content, enemyAt } from './content'
 import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
-import type { Effect, Enemy, EnemyKind, Event, GameState } from './types'
+import type { Effect, Enemy, EnemyKind, Event, GameState, Hero, Item, Rarity } from './types'
+import { RARITIES } from './types'
 
 const toolCall = { t: 'tool_call' } as const
 const turnEnd = { t: 'turn_end' } as const
@@ -200,16 +201,202 @@ describe('zone boss and pending party', () => {
   })
 })
 
+describe('tiers', () => {
+  /** The zone's boss at 1 hp, the party ready: the next tick kills it. */
+  function bossDown(zone: number, farm = false): { state: GameState; effects: Effect[] } {
+    let s: GameState = { ...createInitialState(5), zone, highestZone: zone, wave: 11, farm }
+    const boss = content.zones[(zone - 1) % 12]?.boss ?? ''
+    s = run(s, [tick]).state
+    const enc = s.encounter
+    const front = enc?.enemies[0]
+    if (!enc || front?.def !== boss) throw new Error(`no ${boss} at zone ${zone}`)
+    return run(ready({ ...s, encounter: { ...enc, enemies: [{ ...front, hp: 1 }] } }), [tick])
+  }
+
+  it("beating zone 12's boss with farm off moves the party to zone 13, tier 2's zone 1", () => {
+    const r = bossDown(12)
+    expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 12, advancedTo: 13 })
+    expect(r.state).toMatchObject({ zone: 13, wave: 1, highestZone: 13 })
+  })
+
+  it("zone 13 spawns zone 1's roster at its own tier's numbers", () => {
+    let s: GameState = { ...createInitialState(5), zone: 13, highestZone: 13 }
+    s = run(s, [tick, tick, tick]).state
+    const enemies = s.encounter?.enemies ?? []
+    expect(enemies.length).toBeGreaterThan(0)
+    for (const e of enemies) {
+      expect(content.zones[0]?.enemies).toContain(e.def)
+      expect(e.maxHp).toBe(enemyAt(e.def, 13)?.stats.hp)
+    }
+  })
+
+  it("a kill in zone 13 grants its tier's xp and gold", () => {
+    // Level 15: the kill's xp levels nobody, so it is what the hero holds after.
+    const s = { ...createInitialState(5), zone: 13, highestZone: 13 }
+    const at15 = { ...s, roster: s.roster.map((h) => ({ ...h, level: 15, xp: 0 })) }
+    const r = run(finishFront(injectEnemy(at15, 'road_slime')), [tick])
+    const slime = r.state.encounter?.enemies.find((e) => e.def === 'road_slime')
+    if (slime) throw new Error('the slime lived')
+    const def = enemyAt('road_slime', 13)
+    expect(r.state.roster.find((h) => h.id === r.state.party[0])?.xp).toBe(def?.xp)
+    const gold = r.effects.find((e) => e.k === 'gold')
+    const [min, max] = def?.gold ?? [0, 0]
+    expect(gold?.k === 'gold' && gold.amount >= min && gold.amount <= max).toBe(true)
+  })
+
+  it("zone 36's boss farms: the ladder ends there", () => {
+    const r = bossDown(36)
+    expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 36, advancedTo: 36 })
+    expect(r.state.zone).toBe(36)
+  })
+})
+
+describe('the xp curve', () => {
+  const table = Array.from({ length: 50 }, (_, i) => content.xpToNext(i + 1))
+  const toReach = (level: number) => table.slice(0, level - 1).reduce((n, xp) => n + xp, 0)
+
+  it('is a table of 50 integers, each level dearer than the last', () => {
+    for (const xp of table) expect(Number.isInteger(xp)).toBe(true)
+    for (let i = 1; i < table.length; i++) expect(table[i]).toBeGreaterThan(table[i - 1] ?? 0)
+  })
+
+  it('takes about 10k, 68k, 207k and 836k xp to reach levels 10, 20, 30 and 50', () => {
+    const near = (level: number, total: number) => {
+      expect(toReach(level)).toBeGreaterThan(total * 0.95)
+      expect(toReach(level)).toBeLessThan(total * 1.05)
+    }
+    near(10, 10000)
+    near(20, 68000)
+    near(30, 207000)
+    near(50, 836000)
+  })
+
+  it("levels a hero when a kill's xp reaches the table's entry for its level", () => {
+    const s0 = createInitialState(1)
+    const knight = s0.roster[0]
+    if (!knight) throw new Error('roster')
+    const roster = s0.roster.map((h) =>
+      h.id === knight.id ? { ...h, level: 10, xp: content.xpToNext(10) - 1 } : h,
+    )
+    let s = injectEnemy({ ...s0, roster }, 'road_slime')
+    const enemy = s.encounter?.enemies[0]
+    if (!s.encounter || !enemy) throw new Error('setup')
+    s = { ...s, encounter: { ...s.encounter, enemies: [{ ...enemy, hp: 1 }] } }
+    const r = run(ready(s), [tick])
+    expect(r.effects).toContainEqual({ k: 'level_up', heroId: knight.id, level: 11 })
+    expect(r.state.roster[0]?.level).toBe(11)
+  })
+})
+
+describe('hero rarity', () => {
+  const s0 = createInitialState(1)
+  const knight = (rarity: Rarity, extra: Partial<Hero> = {}): Hero => ({
+    id: `k_${rarity}`,
+    template: 'knight_1',
+    cls: 'knight',
+    epithet: '',
+    rarity,
+    traits: [],
+    level: 12,
+    xp: 0,
+    hp: 1,
+    equipment: { weapon: null, armour: null, accessory: null },
+    tradeableAt: null,
+    ...extra,
+  })
+
+  it("multiplies a template's base and growth by the rarity table's multiplier", () => {
+    const common = heroStats(s0, knight('common'))
+    for (const rarity of RARITIES) {
+      const mult = content.rarity[rarity].statMultBp
+      const stats = heroStats(s0, knight(rarity))
+      for (const stat of ['hp', 'atk', 'def', 'spd'] as const) {
+        expect(stats[stat], `${rarity} ${stat}`).toBe(Math.floor((common[stat] * mult) / 10000))
+      }
+    }
+    expect(heroStats(s0, knight('rare')).hp).toBeGreaterThan(common.hp)
+    expect(heroStats(s0, knight('legendary', { level: 1 })).atk).toBe(
+      Math.floor((9 * 15000) / 10000),
+    )
+  })
+
+  it('applies traits to the pre-trait total and adds affixes flat, whatever the rarity', () => {
+    const item: Item = {
+      id: 'iX',
+      base: 'steel_longsword',
+      rarity: 'common',
+      tier: 1,
+      affixes: [{ id: 'brutal', value: 4 }],
+      equippedBy: null,
+      tradeableAt: null,
+    }
+    const s: GameState = { ...s0, inventory: [item] }
+    const weaponAtk = (content.itemBases.steel_longsword?.stats.atk ?? 0) + 4
+    for (const rarity of RARITIES) {
+      const bare = heroStats(s0, knight(rarity))
+      const armed = knight(rarity, {
+        traits: [{ id: 'fierce', valueBp: 1000 }],
+        equipment: { weapon: 'iX', armour: null, accessory: null },
+      })
+      const pre = bare.atk + weaponAtk
+      expect(heroStats(s, armed).atk, rarity).toBe(pre + Math.floor((pre * 1000) / 10000))
+    }
+  })
+
+  it('leaves the level caps where they were', () => {
+    expect(RARITIES.map((r) => content.rarity[r].levelCap)).toEqual([20, 30, 40, 45, 50])
+  })
+})
+
+describe('item tiers', () => {
+  const s0 = createInitialState(1)
+  const knight: Hero = {
+    id: 'kT',
+    template: 'knight_1',
+    cls: 'knight',
+    epithet: '',
+    rarity: 'common',
+    traits: [],
+    level: 12,
+    xp: 0,
+    hp: 1,
+    equipment: { weapon: 'iT', armour: null, accessory: null },
+    tradeableAt: null,
+  }
+  const sword = (tier: number): Item => ({
+    id: 'iT',
+    base: 'iron_sword',
+    rarity: 'common',
+    tier,
+    affixes: [{ id: 'brutal', value: 4 }],
+    equippedBy: knight.id,
+    tradeableAt: null,
+  })
+
+  it("counts an affix at its roll times the item tier's multiplier, floored", () => {
+    const bare = heroStats(s0, {
+      ...knight,
+      equipment: { weapon: null, armour: null, accessory: null },
+    })
+    const swordAtk = content.itemBases.iron_sword?.stats.atk ?? 0
+    const affixAtk = (tier: number) =>
+      heroStats({ ...s0, inventory: [sword(tier)] }, knight).atk - bare.atk - swordAtk
+    // ×1, ×2, ×3.5, ×6, ×10 and ×16 on a roll of 4. Tier 1 counts the roll as it always did.
+    expect([1, 2, 3, 4, 5, 6].map(affixAtk)).toEqual([4, 8, 14, 24, 40, 64])
+  })
+})
+
 describe('rest', () => {
-  it('heals 30% and revives the fallen at 30%', () => {
+  it('heals 50% and revives the fallen at 50%', () => {
     const s0 = createInitialState(1)
     const roster = s0.roster.map((h, i) =>
       i === 0 ? { ...h, hp: 0 } : i === 1 ? { ...h, hp: 1 } : h,
     )
     const r = run({ ...s0, roster }, [{ t: 'rest' }])
     const [k, b, w] = r.state.roster
-    expect(k?.hp).toBe(Math.floor((60 * 3000) / 10000))
-    expect(b?.hp).toBe(1 + Math.floor((36 * 3000) / 10000))
+    // The Knight's maximum is 60 and the Black Mage's 36.
+    expect(k?.hp).toBe(30)
+    expect(b?.hp).toBe(1 + 18)
     expect(w?.hp).toBe(40)
   })
 })
@@ -298,9 +485,99 @@ describe('wipe', () => {
       injectEnemy({ ...createInitialState(1), zone: 2, highestZone: 2 }, 'field_rat'),
     )
     const r = run(s, [tick])
-    expect(r.effects).toContainEqual({ k: 'wipe', retreatedTo: 1 })
+    expect(r.effects).toContainEqual({ k: 'wipe', zone: 2 })
     expect(r.state.battle).toEqual({ gauges: [], queue: [], busy: 0 })
     expect(r.state.encounter).toBeNull()
+  })
+
+  /** The party falls in the next tick, wherever `s` stands. */
+  const wipeIn = (s: GameState) => run(beaten(injectEnemy(s, 'field_rat')), [tick])
+  const inZone4: GameState = { ...createInitialState(1), zone: 4, highestZone: 4, wave: 7 }
+
+  it('the first two wipes in a zone restart it at wave 1, healed, and raise the count', () => {
+    let s: GameState = { ...inZone4, pendingTurnBoss: true }
+    for (const count of [1, 2]) {
+      const r = wipeIn(s)
+      expect(r.effects).toContainEqual({ k: 'wipe', zone: 4 })
+      expect(r.effects.some((e) => e.k === 'retreat')).toBe(false)
+      expect(r.state.zone).toBe(4)
+      expect(r.state.wave).toBe(1)
+      expect(r.state.zoneWipes).toBe(count)
+      expect(r.state.stats.wipes).toBe(count)
+      expect(r.state.encounter).toBeNull()
+      expect(r.state.pendingTurnBoss).toBe(false)
+      for (const id of r.state.party) {
+        const hero = r.state.roster.find((h) => h.id === id)
+        if (!hero) throw new Error(id)
+        expect(hero.hp).toBe(heroStats(r.state, hero).hp)
+      }
+      s = { ...r.state, wave: 7 }
+    }
+  })
+
+  it('a wipe applies the pending party', () => {
+    const [k, b, , a] = inZone4.roster
+    if (!k || !b || !a) throw new Error('roster')
+    const r = wipeIn({ ...inZone4, pendingParty: [k.id, b.id, a.id] })
+    expect(r.effects).toContainEqual({ k: 'party_applied', heroIds: [k.id, b.id, a.id] })
+    expect(r.state.party).toEqual([k.id, b.id, a.id])
+  })
+
+  it('the third wipe in a zone is a retreat one zone back, and the count starts again', () => {
+    const r = wipeIn({ ...inZone4, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 3 })
+    expect(r.effects.some((e) => e.k === 'wipe')).toBe(false)
+    expect(r.state.zone).toBe(3)
+    expect(r.state.wave).toBe(1)
+    expect(r.state.highestZone).toBe(4)
+    expect(r.state.zoneWipes).toBe(0)
+    expect(r.state.stats.wipes).toBe(1)
+  })
+
+  it('a retreat from tier 2’s zone 1 falls back to zone 12', () => {
+    const r = wipeIn({ ...createInitialState(5), zone: 13, highestZone: 13, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 12 })
+    expect(r.state).toMatchObject({ zone: 12, highestZone: 13 })
+  })
+
+  it('the third wipe in zone 1 restarts zone 1 as a retreat', () => {
+    const r = wipeIn({ ...createInitialState(1), wave: 5, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 1 })
+    expect(r.state.zone).toBe(1)
+    expect(r.state.wave).toBe(1)
+    expect(r.state.zoneWipes).toBe(0)
+  })
+
+  it('a zone boss kill resets the count, farming included', () => {
+    for (const farm of [false, true]) {
+      let s: GameState = { ...createInitialState(5), wave: 11, farm, zoneWipes: 2 }
+      s = injectEnemy(s, 'bandit_captain')
+      const r = run(finishFront(s), [tick])
+      expect(r.effects.some((e) => e.k === 'zone_cleared')).toBe(true)
+      expect(r.state.zoneWipes).toBe(0)
+    }
+  })
+
+  it('a zone change resets the count', () => {
+    const r = step({ ...inZone4, zoneWipes: 2 }, { t: 'sandbox_zone', zone: 6 })
+    expect(r.state.zone).toBe(6)
+    expect(r.state.zoneWipes).toBe(0)
+  })
+
+  it('a wipe in boss mode counts nothing', () => {
+    const engaged = run({ ...inZone4, zoneWipes: 2 }, [
+      {
+        t: 'boss_engaged',
+        bossId: 'wb1',
+        name: 'The Promptwyrm',
+        glyph: '☠',
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+      },
+    ]).state
+    const r = run(beaten(engaged), [tick])
+    expect(r.state.zone).toBe(4)
+    expect(r.state.zoneWipes).toBe(2)
+    expect(r.effects.some((e) => e.k === 'wipe' || e.k === 'retreat')).toBe(false)
   })
 })
 

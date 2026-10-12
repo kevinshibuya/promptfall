@@ -18,8 +18,8 @@ Install it from this repository's marketplace in a Claude Code session:
 The band appears above the prompt once the session starts. Your three heroes fight on their own.
 Every tool call Claude makes spawns an enemy, at most three fight at once and ten wait in a queue.
 A turn with ten or more tool calls ends with a turn boss. Each prompt you submit heals the party
-30% and revives the fallen. With nothing alive, the next enemy of the wave walks in, so an idle
-session still fights, one round every 5 seconds instead of every 2.
+50% and revives the fallen at 50%. With nothing alive, the next enemy of the wave walks in, so an
+idle session still fights, one round every 5 seconds instead of every 2.
 
 A zone is ten waves and a boss. Beating the boss moves you to the next zone. A wipe sends you back
 one zone at full health and costs nothing else.
@@ -124,9 +124,10 @@ queue, and arrives as a `returned` loot line when a slot frees. The boss
 board counts every hit, past the boss's remaining HP too.
 
 The game is at sim version 5 (`SIM_VERSION` in `packages/sim/src/types.ts`), and the plugin's
-version moves with it. A store or a fake snapshot from an older sim is behind it: the band reads
-the older-version notice, and `/promptfall account`, `Reset this machine's data` starts a fresh
-account. A server whose sim is newer than the plugin's pauses play with `Update Promptfall:
+version moves with it. A store or a fake snapshot from an older sim is migrated by the ledger the
+first time it loads it, in process as on a server; only one the migration chain cannot carry (a gap)
+stays behind, and then the band reads the older-version notice and `/promptfall account`, `Reset
+this machine's data` starts a fresh account. A server whose sim is newer than the plugin's pauses play with `Update Promptfall:
 /plugin update promptfall`. The in-process ledger runs no world boss outside the sandbox.
 
 ### Account tab
@@ -137,7 +138,7 @@ picture, and polls until the server approves it, then reads `Linked as <login>`.
 `player`, the HTTP fake as its `--player-name`. The polling belongs to the session, so closing the
 dialog does not stop it. `Reset this machine's data` asks Yes or No, opening on No, then deletes
 every Promptfall key in the store but the lease and starts a fresh account on the same server. It is how a state from an older version
-of the game is cleared: the band then reads the older-version notice and the Account tab is the
+the server could not migrate is cleared: the band then reads the older-version notice and the Account tab is the
 one tab that still works.
 
 ### Hotkeys

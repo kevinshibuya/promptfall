@@ -17,12 +17,29 @@ export type {
   ItemBase,
   RarityRule,
   TraitDef,
+  ZoneAt,
   ZoneDef,
 } from './content'
-export { content } from './content'
+export {
+  content,
+  enemyAt,
+  LADDER_END,
+  oddsAt,
+  TIER_GROWTH_BP,
+  zoneAt,
+} from './content'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
-export { rollRewardItem, vendorValue } from './loot'
+export { affixValue, baseTier, dropTier, reforgeCost, rollRewardItem, vendorValue } from './loot'
+export type {
+  MigrateOptions,
+  MigrateRefusal,
+  MigrateResult,
+  Migration,
+  MigrationChain,
+  VersionedState,
+} from './migrate'
+export { MIGRATIONS, migrate, migrateGoods } from './migrate'
 export { heroStats } from './progression'
 export { createInitialState } from './state'
 export { replay, step } from './step'

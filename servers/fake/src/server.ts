@@ -22,7 +22,7 @@ import {
   NewOrderSchema,
   ROUTES,
 } from '@promptfall/protocol'
-import { SIM_VERSION } from '@promptfall/sim'
+import { type MigrationChain, SIM_VERSION } from '@promptfall/sim'
 import { type ZodType, z } from 'zod'
 import { githubApprover } from './github'
 import { MINTS_PER_HOUR, MintCap } from './mint-cap'
@@ -53,6 +53,10 @@ export type FakeServerOptions = {
   adminLog?: (line: string) => void
   /** Accounts one client address may mint per hour of the server's clock. Default 5. */
   mintsPerHour?: number
+  /** The ledger's notes: a migrated record, a record refused a migration, a boss with nothing to undo. */
+  ledgerLog?: (line: string) => void
+  /** The migration chain; the sim's when absent. Tests register a stub. */
+  migrations?: MigrationChain
 }
 
 export type FakeServer = {
@@ -269,6 +273,8 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
             log: options.githubLog,
           })
         : approveAs(options.playerName),
+    ...(options.ledgerLog && { log: options.ledgerLog }),
+    ...(options.migrations && { migrations: options.migrations }),
   })
 
   const mintCap = new MintCap(options.mintsPerHour ?? MINTS_PER_HOUR)

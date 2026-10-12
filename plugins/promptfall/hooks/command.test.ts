@@ -3,11 +3,21 @@ import type { WorldState } from '../types'
 import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { bandKey, stageKey } from './stage/loop'
+import {
+  BACKLOG_ROUNDS,
+  CHEST_FALL_MS,
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
+  DISSOLVE_MS,
+  REVEAL_FADE_MS,
+  REVEAL_HOLD_MS,
+  REVEAL_RISE_MS,
+} from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
 import { approveAs, Ledger } from './vendor/ledger.js'
-import { content, createInitialState } from './vendor/sim.js'
+import { content, createInitialState, hashState, TICK_MS } from './vendor/sim.js'
 import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
@@ -55,6 +65,24 @@ test('/promptfall farm toggles the farm flag', async ($, on) => {
   expect((states.get('view') as { farm: boolean }).farm).toBe(true)
 })
 
+test('/promptfall autovendor on|off sets the setting and answers; a bad word answers the usage', async ($, on) => {
+  const { states } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const autoVendor = () => (states.get('view') as { autoVendor: boolean }).autoVendor
+  expect(autoVendor()).toBe(false)
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'autovendor on' })
+  expect(r.text).toBe('Promptfall auto-vendor is on')
+  expect(autoVendor()).toBe(true)
+  const off = await $.command.run({ ...RUN, command: 'promptfall', args: 'AutoVendor off' })
+  expect(off.text).toBe('Promptfall auto-vendor is off')
+  expect(autoVendor()).toBe(false)
+  for (const args of ['autovendor', 'autovendor maybe']) {
+    const bad = await $.command.run({ ...RUN, command: 'promptfall', args })
+    expect(bad.text).toBe('Usage: /promptfall autovendor on or /promptfall autovendor off')
+  }
+  expect(autoVendor()).toBe(false)
+})
+
 test('/promptfall in a secondary session takes the lease', async ($, on) => {
   const { states } = harness(on, {
     'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
@@ -87,7 +115,13 @@ test('a paused primary answers farm and the sandbox verbs as paused, not as anot
   expect(states.get('mode')).toBe('paused')
   const zoneBoss = content.zones[0]?.boss ?? ''
   const base = Object.values(content.itemBases)[0]?.id ?? ''
-  const verbs = ['farm', 'sandbox gold 100', `sandbox boss ${zoneBoss}`, `sandbox item ${base}`]
+  const verbs = [
+    'farm',
+    'autovendor on',
+    'sandbox gold 100',
+    `sandbox boss ${zoneBoss}`,
+    `sandbox item ${base}`,
+  ]
   verbs.push('sandbox level Aria 5', 'sandbox zone 2', 'sandbox recruit', 'sandbox wipe')
   verbs.push('sandbox worldboss')
   for (const args of verbs) {
@@ -203,6 +237,60 @@ test(
   },
 )
 
+/** A sandbox save whose knight wears an Iron Sword, with auto-vendor on. */
+function wornSwordSave(): Record<string, unknown> {
+  const s0 = createInitialState(99)
+  const knight = s0.roster[0]
+  if (!knight) throw new Error('knight')
+  const sword = {
+    id: 'iseed',
+    base: 'iron_sword',
+    rarity: 'common' as const,
+    tier: 1,
+    affixes: [],
+    equippedBy: knight.id,
+    tradeableAt: null,
+  }
+  const state = {
+    ...s0,
+    autoVendor: true,
+    roster: s0.roster.map((h) =>
+      h.id === knight.id ? { ...h, equipment: { ...h.equipment, weapon: sword.id } } : h,
+    ),
+    inventory: [sword],
+  }
+  const account = { accountId: 'acct-1', seed: 99, createdAt: 0, displayName: null, linked: null }
+  return {
+    [`${SANDBOX_PREFIX}deviceToken`]: 'token-1',
+    [`${SANDBOX_PREFIX}pf:token:token-1`]: 'acct-1',
+    [`${SANDBOX_PREFIX}pf:acct:acct-1:record`]: {
+      account,
+      state,
+      seq: 0,
+      refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
+    },
+  }
+}
+
+test('sandbox item that auto-vendor sells with room in the inventory answers the gold it paid', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $, wornSwordSave())
+  expect(view().autoVendor).toBe(true)
+  const ids = view().inventory.map((i) => i.id)
+  expect(ids.length).toBeLessThan(view().inventoryCap)
+  const value =
+    content.rarity.common.vendorGoldPerZone * (content.itemBases.iron_sword?.minZone ?? 1)
+  expect(await run('item iron_sword')).toBe(`Sandbox: Iron Sword auto-vendored, ${value}G`)
+  expect(view().inventory.map((i) => i.id)).toEqual(ids)
+})
+
 test('sandbox level raises a hero level by level, refuses its own level and stops at the cap', async ($, on) => {
   const { run, view, toasts } = await sandboxOn(on, $)
   const aldric = () => view().roster.find((h) => h.name.startsWith('Aldric'))
@@ -229,8 +317,11 @@ test('sandbox zone moves the party to that zone at wave 1; outside the content a
   expect(view().zone).toBe(4)
   expect(view().wave).toBe(1)
   expect(view().zoneName).toBe('Old Barrow Hills')
-  expect(await run('zone 13')).toBe(`Sandbox: zones run 1 to ${content.zones.length}`)
-  expect(view().zone).toBe(4)
+  expect(await run('zone 36')).toBe('Sandbox: tier 3, zone 12, The Unwritten Reach')
+  expect(view().zone).toBe(36)
+  expect(view().zoneName).toBe('The Unwritten Reach')
+  expect(await run('zone 37')).toBe('Sandbox: zones run 1 to 36')
+  expect(view().zone).toBe(36)
 })
 
 test('sandbox recruit adds a hero of that rarity through the recruit path', async ($, on) => {
@@ -255,14 +346,30 @@ test(
   },
 )
 
-test('sandbox wipe makes the party fall and retreat one zone', async ($, on) => {
+test('sandbox wipe restarts the zone twice, and the third retreats one zone', async ($, on) => {
   const { run, view, toasts } = await sandboxOn(on, $)
   await run('zone 3')
   const wipes = view().wipes
-  expect(await run('wipe')).toBe('Sandbox: the party fell, retreating to zone 2')
+  for (let i = 1; i <= 2; i++) {
+    expect(await run('wipe')).toBe('Sandbox: the party fell, back to wave 1 of zone 3')
+    expect(view().zone).toBe(3)
+    expect(view().wave).toBe(1)
+    expect(view().wipes).toBe(wipes + i)
+  }
+  expect(toasts).toContain('The party fell, back to wave 1 of zone 3, Marsh of Sighs')
+  expect(await run('wipe')).toBe('Sandbox: the party retreats to zone 2')
   expect(view().zone).toBe(2)
-  expect(view().wipes).toBe(wipes + 1)
-  expect(toasts).toContain('The party fell, retreating to zone 2')
+  expect(view().wipes).toBe(wipes + 3)
+  expect(toasts).toContain('The party retreats to zone 2, Whisperwood')
+})
+
+test('sandbox wipe past tier 1 names the tier and its zone', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $)
+  await run('zone 14')
+  expect(await run('wipe')).toBe('Sandbox: the party fell, back to wave 1 of tier 2, zone 2')
+  await run('wipe')
+  expect(await run('wipe')).toBe('Sandbox: the party retreats to tier 2, zone 1')
+  expect(view().zone).toBe(13)
 })
 
 test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
@@ -691,13 +798,25 @@ test('in play, the strip’s hero HP trails the state until the hit lands, never
     return [...line.matchAll(/H\s+(\d+)/g)].map((m) => Number(m[1]))
   }
   let trailed = 0
-  // Each hero's state HP over the last two ticks: a heal still to land holds the strip at one.
+  // A heal lands once the stage lets its tick go (spec, the staged state): the actions it still
+  // holds, at most BACKLOG_ROUNDS ticks of them, then the tick's departed rows fading and their
+  // chests played, the slowest a Legendary's. Each hero's state HP over that long: a heal still to
+  // land holds the strip at one of them.
+  const settleMs =
+    BACKLOG_ROUNDS * TICK_MS +
+    DISSOLVE_MS +
+    CHEST_FALL_MS +
+    CHEST_SIT_MS +
+    CHEST_OPEN_MS +
+    REVEAL_RISE_MS +
+    REVEAL_HOLD_MS.legendary +
+    REVEAL_FADE_MS
   const recent: number[][] = []
   for (let step = 0; step < 600; step++) {
     await clock.advance(50)
     const state = view().heroes.map((h) => h.hp)
     recent.push(state)
-    if (recent.length > 80) recent.shift()
+    if (recent.length > Math.ceil(settleMs / 50)) recent.shift()
     const strip = await shown()
     if (strip.length !== state.length) continue
     // Never below what the state was: the strip only holds back a hit or a heal not yet landed.

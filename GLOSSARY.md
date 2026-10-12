@@ -72,8 +72,10 @@ _Avoid_: active session, owner
 
 **Migration**:
 The rewrite of a stored state from one sim version to the next, so a save keeps its heroes,
-items and gold across a bump. Runs on the ledger's records and on the machine's save alike. A
-save is never reset for being old (ADR 0013).
+items and gold across a bump. The ledger runs it on a record the first time it loads it behind
+the version, on every host, so the in-process fake's local and sandbox saves migrate too; the
+client never migrates on its own. A save is reset only when the chain cannot migrate it (ADR
+0013).
 _Avoid_: upgrade, conversion, reset (that is what a migration replaces)
 
 ### Market
@@ -170,13 +172,14 @@ a technique. Picked by a weighted draw among the actions that make sense right n
 _Avoid_: move, command, turn, ability
 
 **Wipe**:
-Every hero down. The party restarts the zone it is in at wave 1, healed, and nothing is lost.
-An everyday event, not a weighty one.
+Every hero down. The party restarts the zone it is in at wave 1, healed, and nothing is lost;
+the zone's wipe count rises. An everyday event, not a weighty one.
 _Avoid_: death, game over, party kill, retreat (that is the fall-back after several wipes)
 
 **Retreat**:
-The fall-back one zone the party makes after its third wipe in a zone with no boss kill between
-them. The weighty event a wipe used to be.
+The fall-back one zone the party makes on its third wipe in a zone with no zone boss kill
+between them, never below zone 1; the wipe count starts again. The weighty event a wipe used to
+be.
 _Avoid_: wipe, defeat, demotion
 
 **Travel**:
@@ -186,9 +189,15 @@ _Avoid_: teleport, warp, zone select, fast travel
 
 **Tier**:
 A full pass of the twelve zones at one difficulty. Clearing zone 12's boss opens the next tier,
-where the same zones hold stronger enemies and drop a tier higher. The ladder stays one ladder:
-tier 2's zone 1 ranks above tier 1's zone 12.
-_Avoid_: prestige, New Game+, difficulty, loop, ascension
+where the same zones hold stronger enemies and drop at a higher item tier. The ladder stays one
+ladder, ending at tier 3 for now: `zone` is one running number, and tier 2's zone 1 (zone 13)
+ranks above tier 1's zone 12.
+_Avoid_: prestige, New Game+, difficulty, loop, ascension, item tier (that is an item's)
+
+**Item tier**:
+The step an item stores from its drop that multiplies its affix rolls at read and its reforge
+price: 1 to 4 from its base's minimum zone, 5 and 6 for every drop in tiers 2 and 3.
+_Avoid_: item level, tier (that is the ladder's)
 
 **Reactive event**:
 A change in the fight that answers what Claude is doing: Haste while a turn runs, Enrage on a

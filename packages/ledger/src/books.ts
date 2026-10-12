@@ -16,6 +16,7 @@ import {
   step,
 } from '@promptfall/sim'
 import { isBlocked } from './blocklist'
+import { behind, type Migrator, migrateRecord, refusalText } from './migrate'
 
 export type BatchRecord = { batchId: string; hash: string; seq: number }
 export type LogEntry = { n: number; event: ServerEvent }
@@ -205,11 +206,43 @@ export class TrackedKeyValue implements KeyValue {
 
 /** Record and token access over the tracked store. */
 export class Books {
-  constructor(readonly kv: TrackedKeyValue) {}
+  /** Records refused a migration and already logged, as `<account>:v<version>`: one line each per process. */
+  private readonly refused = new Set<string>()
+  /** Records migrated and already logged, keyed the same way: a load migrates until a write saves it. */
+  private readonly migrated = new Set<string>()
 
+  constructor(
+    readonly kv: TrackedKeyValue,
+    readonly migrator: Migrator,
+  ) {}
+
+  /**
+   * The one way a record enters the ledger. A record behind the sim version is migrated here, in
+   * memory: only an operation that writes anyway saves it, so a secondary session's reads never
+   * write over the primary's record (spec §9). One the chain refuses is answered as stored.
+   */
   async load(accountId: string): Promise<AccountRecord | null> {
     const raw = await this.kv.get(recordKey(accountId))
-    return raw ? (raw as AccountRecord) : null
+    if (!raw) return null
+    const record = raw as AccountRecord
+    if (behind(record)) await this.migrate(record)
+    return record
+  }
+
+  private async migrate(record: AccountRecord): Promise<void> {
+    const id = record.account.accountId
+    const from = (record.committedState ?? record.state).v
+    const key = `${id}:v${from}`
+    const refusal = await migrateRecord(record, this.migrator)
+    if (refusal) {
+      if (this.refused.has(key)) return
+      this.refused.add(key)
+      this.migrator.log(`not migrated account ${id} from v${from}: ${refusalText(refusal)}`)
+      return
+    }
+    if (this.migrated.has(key)) return
+    this.migrated.add(key)
+    this.migrator.log(`migrated account ${id} from v${from} to v${SIM_VERSION}`)
   }
 
   async save(record: AccountRecord): Promise<void> {
