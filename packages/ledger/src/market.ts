@@ -111,26 +111,31 @@ async function closeOrder(ctx: MarketContext, id: string): Promise<void> {
 
 /**
  * Walks the listed goods through the chain's goods rule when the book's mark is behind the sim
- * version, and marks it current. Orders hold no goods. A refused walk changes nothing and is logged.
+ * version, and marks it current. Orders hold no goods. A refused walk changes nothing, is logged
+ * and answers false, so the caller tries again on its next call; a current book answers true.
  */
 export async function normaliseBook(
   ctx: MarketContext,
   chain: MigrationChain,
   log: (line: string) => void,
-): Promise<void> {
+): Promise<boolean> {
   const raw = await ctx.books.kv.get(MARK_KEY)
   const from = typeof raw === 'number' ? raw : UNMARKED
-  if (from === SIM_VERSION) return
+  if (from === SIM_VERSION) return true
   const listings = await openListings(ctx)
   const walked: Listing[] = []
   for (const listing of listings) {
     const r = migrateGoods(listing.goods, from, { chain })
-    if (!r.ok) return log(`not migrated the market book from v${from}: ${refusalText(r)}`)
+    if (!r.ok) {
+      log(`not migrated the market book from v${from}: ${refusalText(r)}`)
+      return false
+    }
     walked.push({ ...listing, goods: r.goods })
   }
   for (const listing of walked) await ctx.books.kv.set(listingKey(listing.id), listing)
   await ctx.books.kv.set(MARK_KEY, SIM_VERSION)
   log(`migrated the market book from v${from} to v${SIM_VERSION}`)
+  return true
 }
 
 async function counterparty(ctx: MarketContext, accountId: string): Promise<AccountRecord> {

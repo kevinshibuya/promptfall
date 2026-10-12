@@ -169,7 +169,7 @@ export function startBots(options: BotOptions): Bots {
       let b = await boot(saved)
       // A token the store no longer knows, or a name from before the bot mark (an unmarked
       // account that would hold a rank), is minted again. A bot behind the sim version is not:
-      // its bootstrap migrated it, listings and all.
+      // its bootstrap migrates it, listings and all, and its first write saves it.
       if (
         'refusal' in b ||
         b.account.accountId !== saved.accountId ||

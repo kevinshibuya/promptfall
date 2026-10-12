@@ -3,9 +3,8 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SIM_VERSION } from '../types'
-import { outOfBand, probe, referenceParty } from './probe'
-import { referenceRow } from './reference'
-import { runScenario, type ScenarioOptions, type ScenarioReport } from './scenario'
+import { outOfBand, probe } from './probe'
+import type { ScenarioOptions, ScenarioReport } from './scenario'
 
 // The arc of spec #130 at the reference cadence, played by the dedicated player (#151): nine
 // seeds, 120 live hours each. Every sim bump runs it, so the numbers in the content tables are the
@@ -64,6 +63,30 @@ function zone12(r: ScenarioReport): number {
   return cleared(r, 12) ?? Number.POSITIVE_INFINITY
 }
 
+function zone13(r: ScenarioReport): number {
+  return cleared(r, 13) ?? Number.POSITIVE_INFINITY
+}
+
+/** Tier 2's door: the hours from zone 12's first clear to zone 13's. */
+function gap13(r: ScenarioReport): number {
+  return zone13(r) - zone12(r)
+}
+
+function wipes13(r: ScenarioReport): number {
+  return r.zones.find((z) => z.zone === 13)?.wipes ?? 0
+}
+
+/** How long each zone took, 1 to 13: its first clear less the one before it's, or less hour 0. */
+function durations(r: ScenarioReport): number[] {
+  let before = 0
+  return Array.from({ length: 13 }, (_, i) => {
+    const hour = cleared(r, i + 1) ?? Number.POSITIVE_INFINITY
+    const took = hour - before
+    before = hour
+    return Number.isNaN(took) ? Number.POSITIVE_INFINITY : took
+  })
+}
+
 function perLevel(r: ScenarioReport): number {
   const at30 = reached(r, 30)
   return at30 === Number.POSITIVE_INFINITY ? at30 : (at30 - reached(r, 10)) / 20
@@ -112,16 +135,28 @@ afterAll(() => {
   if (runs.size < SEEDS.length) return
   const rows = SEEDS.map((seed) => {
     const r = arc(seed)
-    return `| ${seed} | ${hours(cleared(r, 1) ?? Number.POSITIVE_INFINITY)} | ${hours(zone12(r))} | ${hours(perLevel(r), 3)} | ${hours(cap(r))} |`
+    return `| ${seed} | ${hours(cleared(r, 1) ?? Number.POSITIVE_INFINITY)} | ${hours(zone12(r))} | ${hours(zone13(r))} | ${hours(gap13(r))} | ${wipes13(r)} | ${hours(perLevel(r), 3)} | ${hours(cap(r))} |`
   })
+  const zones = Array.from({ length: 13 }, (_, i) => i + 1)
+  const took = SEEDS.map(
+    (seed) =>
+      `| ${seed} | ${durations(arc(seed))
+        .map((h) => hours(h))
+        .join(' | ')} |`,
+  )
   console.log(
     [
       `the arc at sim version ${SIM_VERSION}, ${SEEDS.length} seeds, ${HOURS} live hours`,
-      '| seed | zone 1 clear (h) | zone 12 clear (h) | hours per level 10→30 | cap (h) |',
-      '|---|---|---|---|---|',
+      '| seed | zone 1 clear (h) | zone 12 clear (h) | zone 13 clear (h) | zone 13 − zone 12 (h) | zone 13 wipes | hours per level 10→30 | cap (h) |',
+      '|---|---|---|---|---|---|---|---|',
       ...rows,
-      `medians: zone 12 ${hours(median(zone12))}, hours per level ${hours(median(perLevel), 4)}, cap ${hours(median(cap))}`,
-      `inside the run: zone 12 on ${within(zone12)}/${SEEDS.length}, cap on ${within(cap)}/${SEEDS.length}`,
+      `medians: zone 12 ${hours(median(zone12))}, zone 13 ${hours(median(zone13))}, zone 13 − zone 12 ${hours(median(gap13))}, zone 13 wipes ${median(wipes13)}, hours per level ${hours(median(perLevel), 4)}, cap ${hours(median(cap))}`,
+      `inside the run: zone 12 on ${within(zone12)}/${SEEDS.length}, zone 13 on ${within(zone13)}/${SEEDS.length}, cap on ${within(cap)}/${SEEDS.length}`,
+      '',
+      'each zone’s first clear less the one before it (h)',
+      `| seed | ${zones.join(' | ')} |`,
+      `|---|${zones.map(() => '---').join('|')}|`,
+      ...took,
     ].join('\n'),
   )
 })
@@ -137,17 +172,10 @@ describe('the arc, nine seeds, at the reference cadence', () => {
 })
 
 describe('tier 2, at the reference cadence', () => {
-  // A capped party (the Knight Legendary at 50, Epics at 45) in tier-5 gear at mid rolls.
-  it("clears zone 13, tier 2's first zone", () => {
-    const row = { ...referenceRow(13), rollBp: 5000 }
-    const r = runScenario({
-      seed: 1,
-      hours: 24,
-      legendaryAtHour: null,
-      start: referenceParty(row, 1),
-    })
-    expect(r.zones.find((z) => z.zone === 13)?.firstClearedHour ?? null).not.toBeNull()
-  }, 120_000)
+  // Tier 2 ramps from zone 12 (#152): the party the arc brings there walks on through its door.
+  it("the arc's own party first clears zone 13 inside the run on at least seven of the nine seeds", () => {
+    expect(within(zone13)).toBeGreaterThanOrEqual(7)
+  })
 })
 
 describe('the feel probe', () => {

@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { enemyAt, LADDER_END, oddsAt, TIER_ENTRY_BP, TIER_GROWTH_BP, zoneAt } from '../index'
+import { enemyAt, LADDER_END, oddsAt, TIER_GROWTH_BP, zoneAt } from '../index'
 import { content } from './index'
 
 /** `bp` applied `k` times, as a plain ratio. */
 const grown = (bp: number, k: number) => (bp / 10000) ** k
+const [TIER2_BP = 0, TIER3_BP = 0] = TIER_GROWTH_BP
 
 describe('zoneAt', () => {
   it('answers zone 1 as tier 1, base zone 1, with its content', () => {
@@ -48,16 +49,16 @@ describe('enemyAt', () => {
     }
   })
 
-  it('gives zone 13 zone 1’s roster at zone 12’s numbers for its kind, stepped up and grown once', () => {
+  it('gives zone 13 zone 1’s roster at zone 12’s numbers for its kind, grown once', () => {
     const boss = enemyAt('bandit_captain', 13)
     const top = content.enemies.unwritten_one
     if (!boss || !top) throw new Error('no boss')
     expect(boss).toMatchObject({ id: 'bandit_captain', name: 'Bandit Captain', zone: 13 })
     expect(boss.kind).toBe('zone_boss')
-    const g = grown(TIER_GROWTH_BP, 1)
-    // The step is on the stats alone: xp and gold only grow.
+    const g = grown(TIER2_BP, 1)
+    // No step at the tier's door: stats, xp and gold grow alike.
     for (const stat of ['hp', 'atk', 'def'] as const) {
-      expect(boss.stats[stat] / top.stats[stat], stat).toBeCloseTo((TIER_ENTRY_BP / 10000) * g, 1)
+      expect(boss.stats[stat] / top.stats[stat], stat).toBeCloseTo(g, 1)
     }
     expect(boss.stats.spd).toBe(top.stats.spd)
     expect(boss.xp / top.xp).toBeCloseTo(g, 1)
@@ -81,10 +82,10 @@ describe('enemyAt', () => {
       before = at
     }
     const top = content.enemies.unwritten_one
-    const step = (TIER_ENTRY_BP / 10000) * grown(TIER_GROWTH_BP, 12)
-    expect((boss(24)?.stats.atk ?? 0) / (top?.stats.atk ?? 1)).toBeCloseTo(step, 0)
-    expect((boss(24)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(grown(TIER_GROWTH_BP, 12), 1)
-    expect((boss(36)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(grown(TIER_GROWTH_BP, 24), 1)
+    const ramp = grown(TIER2_BP, 12)
+    expect((boss(24)?.stats.atk ?? 0) / (top?.stats.atk ?? 1)).toBeCloseTo(ramp, 0)
+    expect((boss(24)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(ramp, 0)
+    expect((boss(36)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(ramp * grown(TIER3_BP, 12), 0)
     expect((boss(36)?.gold[1] ?? 0) / (top?.gold[1] ?? 1)).toBeGreaterThan(2)
   })
 

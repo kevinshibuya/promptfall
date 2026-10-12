@@ -8,7 +8,7 @@ import { step } from '../step'
 import type { Effect, Event, GameState, Hero, HeroClass, Item, Rarity } from '../types'
 import { type CadenceSpec, REFERENCE, turnSource } from './cadence'
 import { atTurnEnd, noSpending, type Seat, type Spending, wear } from './player'
-import { LEGENDARY_AT_HOUR, referenceRow } from './reference'
+import { LEGENDARY_AT_HOUR } from './reference'
 
 /**
  * Who plays: the dedicated player of #151 (scores every stat, spends gold, picks its party), or
@@ -46,7 +46,7 @@ export type LevelAt = { level: number; hour: number }
 
 export type LegendaryTimeline = {
   grantedHour: number
-  /** The zone the party was in at the grant, whose reference level it was granted at. */
+  /** The zone the party was in at the grant. */
   zone: number
   level: number
   /** Each level it gained after the grant. */
@@ -300,7 +300,8 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
 
   const maybeGrant = (): void => {
     if (legendaryAt === null || legendaryId !== null || elapsed < legendaryAt * 3600) return
-    const level = referenceRow(state.zone).level
+    // At the level of the Knight it replaces: the party the player built, not the probe's row.
+    const level = state.roster.find((h) => h.id === state.party[0])?.level ?? 1
     const granted = grantLegendary(state, level)
     state = granted.state
     legendaryId = granted.hero.id

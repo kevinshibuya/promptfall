@@ -24,12 +24,14 @@ export type MigrationChain = Readonly<Record<number, Migration>>
 
 export const MIGRATIONS: MigrationChain = {
   // 5 → 6: ratio mitigation, gentler enemy growth and the flatter xp curve. Stats are derived, so
-  // every hero keeps its level and starts it again at 0 xp; nothing changes shape.
+  // every hero keeps its level and starts it again at 0 xp, a hero the ledger holds too; nothing
+  // changes shape.
   5: {
     state: (s) => ({
       ...s,
       roster: (s.roster as Record<string, unknown>[]).map((h) => ({ ...h, xp: 0 })),
     }),
+    goods: (g) => (g.kind === 'hero' ? { kind: 'hero', hero: { ...g.hero, xp: 0 } } : g),
   },
   // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
   // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
@@ -52,6 +54,9 @@ export const MIGRATIONS: MigrationChain = {
   // 11 → 12: the arc retuned for the dedicated harness player (#151). Only content constants moved,
   // and every enemy's numbers are derived from them, so nothing changes shape.
   11: { state: (s) => s },
+  // 12 → 13: boss contracts past tier 1 roll the tier's odds, and tier 2 ramps from zone 12 with no
+  // step at its door (#152). Rules and content moved, and nothing changes shape.
+  12: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

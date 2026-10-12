@@ -44,12 +44,16 @@ describe('the level timeline', () => {
 })
 
 describe('the Legendary grant', () => {
-  it('puts a Legendary Knight in the Knight’s place at the reference level of its zone', () => {
+  it('puts a Legendary Knight in the Knight’s place at the level of the Knight it replaces', () => {
     const l = run.legendary
     expect(l).not.toBeNull()
     if (!l) return
     expect(l.grantedHour).toBe(1)
-    expect(l.level).toBe(referenceRow(l.zone).level)
+    // The same run without the grant, stopped at the grant's hour: its Knight's level.
+    const replaced = runScenario({ seed: 7, hours: 1, legendaryAtHour: null }).party[0]
+    expect(replaced?.cls).toBe('knight')
+    expect(l.level).toBe(replaced?.level)
+    expect(l.level).not.toBe(referenceRow(l.zone).level)
     expect(l.level).toBeLessThan(50)
     expect(run.party[0]).toMatchObject({ cls: 'knight', rarity: 'legendary' })
     for (const { level, hour } of l.levels) {

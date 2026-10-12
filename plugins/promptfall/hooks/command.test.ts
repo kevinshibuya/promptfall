@@ -309,6 +309,15 @@ test('sandbox wipe restarts the zone twice, and the third retreats one zone', as
   expect(toasts).toContain('The party retreats to zone 2, Whisperwood')
 })
 
+test('sandbox wipe past tier 1 names the tier and its zone', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $)
+  await run('zone 14')
+  expect(await run('wipe')).toBe('Sandbox: the party fell, back to wave 1 of tier 2, zone 2')
+  await run('wipe')
+  expect(await run('wipe')).toBe('Sandbox: the party retreats to tier 2, zone 1')
+  expect(view().zone).toBe(13)
+})
+
 test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {
   const { run, view, data } = await sandboxOn(on, $)
   await run('zone 3')

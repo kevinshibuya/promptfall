@@ -3,7 +3,7 @@ import { nextExpansionCost, tavernPrice } from '../commands'
 import { content } from '../content'
 import { reforgeCost } from '../loot'
 import { heroStats } from '../progression'
-import type { Effect, Event, GameState, Hero, Item, Slot, Stats } from '../types'
+import type { Effect, Event, GameState, Hero, HeroClass, Item, Slot, Stats } from '../types'
 
 // The dedicated player (#151): the harness's model of a player who works the game. One habit per
 // decision, each a plain rule a tester can read: score, wear, spend, pick the party, dispose.
@@ -219,8 +219,10 @@ export function spendGold(seat: Seat, spent: Spending): void {
 }
 
 /**
- * Habit 4's choice: the three heroes of highest potential, a Knight in the first slot for the
- * probe's reference (`first` when the harness names one, its granted Legendary).
+ * Habit 4's choice: one hero a class, the composition the probe, the starting party and the
+ * reference rows assume. The lead Knight (`first` when the harness names one, its granted
+ * Legendary), then the Black Mage and the White Mage, each the best of its class by potential.
+ * Raw stats score neither a heal nor a sweep, so a party ranked on them alone fields Knights.
  */
 export function bestParty(
   state: GameState,
@@ -229,12 +231,13 @@ export function bestParty(
   const scored = state.roster
     .map((hero) => ({ hero, score: potential(state, hero) }))
     .sort((a, b) => b.score - a.score)
-  const lead =
-    scored.find((x) => x.hero.id === first) ?? scored.find((x) => x.hero.cls === 'knight')
-  if (!lead) return null
-  const [a, b] = scored.filter((x) => x !== lead)
-  if (!a || !b) return null
-  return [lead.hero.id, a.hero.id, b.hero.id]
+  const best = (cls: HeroClass) => scored.find((x) => x.hero.cls === cls)?.hero.id
+  const named = scored.find((x) => x.hero.id === first && x.hero.cls === 'knight')?.hero.id
+  const lead = named ?? best('knight')
+  const black = best('black_mage')
+  const white = best('white_mage')
+  if (!lead || !black || !white) return null
+  return [lead, black, white]
 }
 
 /**

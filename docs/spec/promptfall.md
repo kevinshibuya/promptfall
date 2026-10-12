@@ -144,10 +144,12 @@ Checked against Claude Code v2.1.287's mods API.
   accessor (`zoneAt`) gives a running zone's tier and base zone (1 to 12), and
   every content lookup by zone goes through it, so the content stays twelve
   zones. A zone past 12 holds its base zone's enemies, boss, name and backdrop
-  at zone 12's numbers, stepped once at zone 13 on HP, attack and defence
-  (`TIER_ENTRY_BP`) and grown per zone past 12 on HP, attack, defence, XP and
-  gold (`TIER_GROWTH_BP`); speed stays at zone 12's. It drops at zone 12's
-  rarity weights, every item at item tier 5 in tier 2 and 6 in tier 3 (§4.4).
+  at zone 12's numbers grown once per zone past 12 on HP, attack, defence, XP
+  and gold at its tier's rate (`TIER_GROWTH_BP`): a ramp with no step at the
+  tier's door, ×1.1325 a zone through tier 2 and ×1.04 through tier 3, so zone
+  24 lands where a ×2.78 step at zone 13 put it. Speed stays at zone 12's. It
+  drops, and its boss contracts roll, at zone 12's rarity weights, every item at
+  item tier 5 in tier 2 and 6 in tier 3 (§4.4).
   The world boss scales by the running zone through the same accessor.
 - Arc targets, in live hours at the reference cadence (turns drawn from Kevin's
   transcripts: a median of 2 tool calls a turn, about 5 prompts an hour, 60% of
@@ -165,16 +167,21 @@ Checked against Claude Code v2.1.287's mods API.
   room (dismissing its weakest bench hero from a full roster no better than the
   party), expands a full inventory and reforges a worn item's weakest affix when
   that costs under a tenth of its gold, and never trades; after a recruit it
-  fields the three heroes of highest score, a Knight first; and it vendors the
-  unworn items no hero would wear. It grants itself a Legendary Knight at hour 9.
+  fields one hero a class, the Knight first, then the Black Mage and the White
+  Mage, each the best of its class by score; and it vendors the unworn items no
+  hero would wear. It grants itself a Legendary Knight at hour 9, at the level
+  of the Knight it replaces.
 - `arc.test.ts` measures the arc in every gate: nine seeds (1 to 9) of 120 live
   hours each. What gates: every seed first clears zone 1 inside the first 30
   minutes and first clears each zone later than the one before; at least seven
   of the nine first clear zone 12, and at least seven take the granted Legendary
-  to 50, inside the run (the completion floors); a capped party in tier-5 gear
-  clears zone 13; the feel probe holds at every zone. The three medians (zone
+  to 50, inside the run (the completion floors); at least seven of the nine
+  first clear zone 13 with the arc's own party, inside the run; the feel probe
+  holds at every zone. The three medians (zone
   12's first clear, the hours per level through 10 to 30, the Legendary's cap)
-  are a report, never a gate: the test prints them with the per-seed table, each
+  are a report, never a gate: the test prints them with the per-seed table (with
+  each zone's first-clear duration, zone 13's first clear, its wipes and its gap
+  over zone 12), each
   bump ticket pastes that table in its closing comment, and Kevin judges the
   medians on the PR.
 

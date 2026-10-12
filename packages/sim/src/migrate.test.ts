@@ -274,6 +274,21 @@ describe('the 5→6 step: ratio mitigation and the flatter xp curve', () => {
     })
   }
 
+  it("the 5→6 goods rule zeroes a held hero's xp and leaves an item alone", () => {
+    const v5 = fixture('v5-deep.json')
+    const held = v5.roster.find((h) => h.xp > 0)
+    const [item] = v5.inventory
+    if (!held || !item) throw new Error('deep fixture')
+    expect(migrateGoods({ kind: 'hero', hero: held }, 5, { to: 6 })).toEqual({
+      ok: true,
+      goods: { kind: 'hero', hero: { ...held, xp: 0 } },
+    })
+    expect(migrateGoods({ kind: 'item', item }, 5, { to: 6 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item },
+    })
+  })
+
   it('clears the encounter outside boss mode and keeps the world boss in it', () => {
     const golden5 = migrate(fixture('v5.json'), { to: 6 })
     const deep5 = migrate(fixture('v5-deep.json'), { to: 6 })
@@ -539,6 +554,43 @@ describe('the 11→12 step: the arc retuned for the dedicated player', () => {
       ok: true,
       goods: { kind: 'item', item },
     })
+  })
+})
+
+describe('the 12→13 step: tier odds for contracts, the tier ramp', () => {
+  // A rule and content constants moved and nothing else: every field keeps its shape and value.
+  const PINNED = { golden: 'dbecd3ebfdcac781', deep: '575db2b950c5f53f' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v12-deep.json' : 'v12.json')
+    const r = migrate(before, { to: 13 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version, the encounter and the battle`, () => {
+      expect(after.v).toBe(13)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v12 = fixture('v12-deep.json')
+    const [item] = v12.inventory
+    const [hero] = v12.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 12, { to: 13 })).toEqual({ ok: true, goods })
+    }
   })
 })
 

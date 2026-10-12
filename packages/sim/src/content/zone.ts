@@ -1,4 +1,4 @@
-import { buildTierEnemies, ENEMY_TUNING, enemies, TIER_ENTRY_BP, TIER_GROWTH_BP } from './enemies'
+import { buildTierEnemies, ENEMY_TUNING, enemies, TIER_GROWTH_BP } from './enemies'
 import type { EnemyDef, ZoneDef } from './types'
 import { zones } from './zones'
 
@@ -24,7 +24,7 @@ export function zoneAt(zone: number): ZoneAt | undefined {
   return { base, tier: Math.floor((zone - 1) / zones.length) + 1, def }
 }
 
-const tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_ENTRY_BP, TIER_GROWTH_BP, LADDER_END)
+const tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_GROWTH_BP, LADDER_END)
 
 /**
  * An enemy as it fights at a running zone: the content's own inside tier 1, past it zone 12's
