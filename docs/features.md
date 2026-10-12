@@ -310,8 +310,8 @@ still play. It is set with `n` on the Account tab or `/promptfall motion full|st
 and show the band for the session while play goes on, `farm` flips the tactics, and `server <url>`
 or `server local` points the machine at an HTTP server or at the in-process fake, each with its
 own account; `server` alone says which is in force. A fresh install, with no server set, plays on
-the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
-machine's settings.
+the public server. `sound off|quiet|normal|loud`, `motion full|still` and
+`renderer auto|image|raster` set the machine's settings.
 
 **Primary session.** One session per account plays; running a gameplay verb or typing a prompt in
 another session makes that one the primary. A prompt goes through at once and the band catches up
@@ -354,9 +354,23 @@ session plays them, and hiding the band does not silence them.
 
 ## Sound
 
-**Sound toggle.** Sound is off by default and is one setting per machine: `s` on the Account tab
-or `/promptfall sound on|off`. It switches the cues, at a fixed volume, and plays on macOS; other
-systems stay silent. The setting survives a reset of the machine's data.
+**Volume.** Sound is on by default, at quiet. The volume is one setting per machine with four
+steps, off, quiet, normal and loud, which play the cues at a quarter, half and all of the engine's
+default gain. The Account tab's row reads "Sound: quiet" and `s` cycles the four steps;
+`/promptfall sound off|quiet|normal|loud` sets one and answers it, `on` still works and means
+quiet. The setting survives a reset of the machine's data. A first launch's welcome notice says
+sound is on and that `/promptfall sound off` silences it, unless the setting is off.
+
+**Silent here.** Claude Code plays the cues on macOS and in the desktop app; a Linux or Windows
+terminal has no player and skips them. The first cue a terminal skips, or one that cannot play,
+marks the session: it stops trying, the Account row reads "Sound: quiet, silent here" and the
+detail window explains that this system has no audio player and the setting is kept. The mark
+is the session's: the stored step is untouched, and the next session tries again.
+
+**The switch to on.** A machine that stored sound as on or off before the volume steps reads as
+quiet, since that value was mostly written by the renderer probe, not chosen. The first session
+that plays there toasts once, for 8 seconds, "Sound is now on by default. /promptfall sound off
+silences it."
 
 ## Sandbox
 

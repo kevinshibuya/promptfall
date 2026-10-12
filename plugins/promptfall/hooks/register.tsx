@@ -24,7 +24,7 @@ import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
 import { StageTimeline } from './stage/timeline'
-import { CUE_GAIN } from './stage/tuning'
+import { SKIPPED_PLAY_MS, SOUND_GAIN } from './stage/tuning'
 import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
@@ -34,10 +34,11 @@ import {
   parseSettings,
   SETTINGS_DEFAULT,
   SETTINGS_KEY,
+  soundWasBoolean,
   WORLD_DEFAULT,
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
-import { type Toast, toastsFor, worldToast } from './toasts'
+import { LONG_MS, type Toast, toastsFor, worldToast } from './toasts'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -86,8 +87,13 @@ type Io = {
   invalidate: () => void
   view: () => Promise<GameView | null>
   settings: () => Promise<Settings>
-  /** Plays a file of the plugin's; resolves or rejects with nothing played off macOS. */
+  /**
+   * Plays a file of the plugin's; resolves once played or skipped (a terminal off macOS has no
+   * player), rejects when the clip cannot play.
+   */
   play: (asset: string, gain: number) => Promise<void>
+  /** The surface the session plays on: the desktop plays through its own audio element anywhere. */
+  surface: RenderSurface
   /** The sandbox switch, read once for the session: its own save on the in-process ledger. */
   sandbox: boolean
 }
@@ -127,7 +133,12 @@ const FLUSH_MS = 15_000
 const LEASE_RENEW_MS = 10_000
 
 const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
+/** The welcome's notice when sound is not off: the toast keeps WELCOME. */
+const WELCOME_SOUND =
+  'Welcome to Promptfall. Sound is on; /promptfall sound off silences it. /promptfall heroes to meet your party.'
 const WELCOME_MS = 20_000
+/** Once per machine, for a setting stored before the steps: sound was off by default then. */
+const SOUND_NEWS = 'Sound is now on by default. /promptfall sound off silences it.'
 
 /**
  * One session's game: the engine, the lease, and the timers. Module state, so
@@ -149,6 +160,10 @@ class GameSession implements GameHandle {
   private timers: Timer[] = []
   private pending: Promise<void> = Promise.resolve()
   private firstRun = false
+  /** The stored sound was a boolean: the next promotion says sound is now on. */
+  private soundNews = false
+  /** A play here was skipped or refused: no cue is tried for the rest of the session. */
+  private soundSilent = false
   private paneNoticeGen = 0
   private readonly poller: WorldPoller
   private readonly loops = new Map<RenderSurface, StageLoop>()
@@ -229,14 +244,27 @@ class GameSession implements GameHandle {
   }
 
   /**
-   * Plays a cue on the primary with sound on. `/promptfall off` hides the band, not the cues.
-   * Off macOS the engine plays nothing; a rejection is swallowed either way.
+   * Plays a cue on the primary at the stored step. `/promptfall off` hides the band, not the cues.
+   * On a terminal, a play the engine answers before any clip could end was skipped (no player off
+   * macOS), and one it rejects cannot play: either marks the session, and no cue is tried again.
    */
   private async playCue(cue: Cue): Promise<void> {
-    if (this.role !== 'primary') return
-    const settings = await this.io.settings()
-    if (!settings.sound || this.role !== 'primary') return
-    this.io.play(CUE_ASSET[cue], CUE_GAIN).catch(() => undefined)
+    if (this.role !== 'primary' || this.soundSilent) return
+    const { sound } = await this.io.settings()
+    if (sound === 'off' || this.role !== 'primary') return
+    // Read alongside the play, not before it: the cue starts with its toast. A clock that fails
+    // reads as a play that took its time, which marks nothing.
+    const started = this.io.now().catch(() => Number.NEGATIVE_INFINITY)
+    const played = await this.io
+      .play(CUE_ASSET[cue], SOUND_GAIN[sound])
+      .then(
+        () => this.io.now().then(async (ended) => ended - (await started) >= SKIPPED_PLAY_MS),
+        () => false,
+      )
+      .catch(() => true)
+    if (played || this.io.surface !== 'terminal' || this.soundSilent) return
+    this.soundSilent = true
+    await this.io.publish({ soundSilent: true }).catch(() => undefined)
   }
 
   /**
@@ -310,9 +338,16 @@ class GameSession implements GameHandle {
   }
 
   async start(): Promise<void> {
+    // Before anything else writes the settings back, which would turn the boolean into a step.
+    const stored = await this.io.store.get(`${PREFIX}${SETTINGS_KEY}`)
+    if (soundWasBoolean(stored)) {
+      this.soundNews = true
+      await this.io.store.set(`${PREFIX}${SETTINGS_KEY}`, parseSettings(stored))
+    }
     const setting = await this.readSetting()
     if (setting !== null) this.useServer(setting)
-    await this.io.publish({ server: setting })
+    // A new session tries its plays afresh: a player may have appeared since.
+    await this.io.publish({ server: setting, soundSilent: false })
     // A code from before a hot reload has no poll behind it any more.
     await this.io.clearDialog()
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
@@ -685,10 +720,15 @@ class GameSession implements GameHandle {
     await this.engine.start()
     await this.io.publish({ mode: this.mode() })
     await this.poller.start()
+    if (this.soundNews) {
+      this.soundNews = false
+      this.io.toast(SOUND_NEWS, LONG_MS)
+    }
     if (this.firstRun) {
       this.firstRun = false
       this.io.toast(WELCOME)
-      this.engine.notice(WELCOME, WELCOME_MS)
+      const { sound } = await this.io.settings()
+      this.engine.notice(sound === 'off' ? WELCOME : WELCOME_SOUND, WELCOME_MS)
       await this.engine.settled()
     }
   }
@@ -813,6 +853,7 @@ const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAU
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as const, false)
 
 let game: GameSession | null = null
 /** PROMPTFALL_SANDBOX=1, read at session start and at the desktop attach. */
@@ -871,6 +912,9 @@ export const register: Register = (on) => {
           if (patch.boards !== undefined) {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
+          if (patch.soundSilent !== undefined) {
+            await update($, soundSilentAtom, () => patch.soundSilent ?? false)
+          }
         },
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
@@ -903,6 +947,8 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        // A hot reload starts with no surface: only a terminal's plays are timed.
+        surface: e.surface === 'terminal' ? 'terminal' : 'desktop',
         sandbox,
       })
       game = session
@@ -949,6 +995,9 @@ export const register: Register = (on) => {
           if (patch.boards !== undefined) {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
           }
+          if (patch.soundSilent !== undefined) {
+            await update($, soundSilentAtom, () => patch.soundSilent ?? false)
+          }
         },
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
@@ -981,6 +1030,7 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
+        surface: 'desktop',
         sandbox,
       })
       game = session

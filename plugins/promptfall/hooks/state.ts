@@ -6,6 +6,7 @@ import type {
   OrdersState,
   Prefs,
   Settings,
+  Sound,
   WorldState,
 } from '../types'
 
@@ -43,7 +44,7 @@ export const WORLD_DEFAULT: WorldState = {
 export const CHAT_DEFAULT: ChatState = { draft: '', busy: false, error: null }
 export const BOARDS_DEFAULT: BoardsState = { boards: null, busy: false, error: null }
 export const SETTINGS_DEFAULT: Settings = {
-  sound: false,
+  sound: 'quiet',
   motion: 'full',
   renderer: 'auto',
   probed: null,
@@ -51,13 +52,24 @@ export const SETTINGS_DEFAULT: Settings = {
 /** The store key of the settings, under `promptfall:`; `reset()` keeps it as it keeps the lease. */
 export const SETTINGS_KEY = 'settings'
 
+const SOUND_STEPS: readonly Sound[] = ['off', 'quiet', 'normal', 'loud']
+const isSound = (v: unknown): v is Sound => SOUND_STEPS.includes(v as Sound)
+
+/**
+ * A stored boolean: from before the volume steps, written by the renderer probe as often as by
+ * the player, so it carries no choice. It reads as quiet, and the primary says sound is now on.
+ */
+export const soundWasBoolean = (raw: unknown): boolean =>
+  typeof raw === 'object' && raw !== null && typeof (raw as { sound?: unknown }).sound === 'boolean'
+
 /** The stored settings over the defaults; a missing or malformed field takes its default. */
 export function parseSettings(raw: unknown): Settings {
   const r = (typeof raw === 'object' && raw !== null ? raw : {}) as Partial<
     Record<keyof Settings, unknown>
   >
   return {
-    sound: typeof r.sound === 'boolean' ? r.sound : SETTINGS_DEFAULT.sound,
+    // A boolean from before the steps reads as the default too: see soundWasBoolean.
+    sound: isSound(r.sound) ? r.sound : SETTINGS_DEFAULT.sound,
     motion: r.motion === 'still' || r.motion === 'full' ? r.motion : SETTINGS_DEFAULT.motion,
     renderer:
       r.renderer === 'image' || r.renderer === 'raster' || r.renderer === 'auto'
@@ -68,7 +80,8 @@ export function parseSettings(raw: unknown): Settings {
 }
 
 /**
- * A settings subcommand (`sound on|off`, `motion full|still`, `renderer auto|image|raster`):
+ * A settings subcommand (`sound off|quiet|normal|loud`, `motion full|still`,
+ * `renderer auto|image|raster`):
  * the change and its answer, a usage line for a bad value, or null for another subcommand.
  */
 export function settingCommand(
@@ -77,9 +90,10 @@ export function settingCommand(
   const [name, value, ...extra] = arg.split(/\s+/)
   const ok = extra.length === 0
   if (name === 'sound') {
-    if (!ok || (value !== 'on' && value !== 'off'))
-      return { usage: 'usage: /promptfall sound on|off' }
-    return { patch: { sound: value === 'on' }, text: value === 'on' ? 'Sound on' : 'Sound off' }
+    // `on`, from before the steps, means the default step.
+    const step = value === 'on' ? 'quiet' : value
+    if (!ok || !isSound(step)) return { usage: 'usage: /promptfall sound off|quiet|normal|loud' }
+    return { patch: { sound: step }, text: `Sound: ${step}` }
   }
   if (name === 'motion') {
     if (!ok || (value !== 'full' && value !== 'still')) {

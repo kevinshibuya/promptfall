@@ -7,6 +7,7 @@ import { CLIENT_VERSION } from '../../version'
 import type { Line, Span } from '../../windows/kit'
 import { MOVE_HELP } from '../../windows/tuning'
 import { clip } from '../format'
+import { wrap } from '../strip'
 import { cursorRow, hotkeySpans, TAB_LABELS } from './frame'
 import type { FrameInput, PaneInput } from './input'
 import { listInner, rowSpans } from './inventory'
@@ -20,7 +21,19 @@ export const RENDERER_NEXT: Record<Settings['renderer'], Settings['renderer']> =
   raster: 'auto',
 }
 
+/** What `s` cycles the sound through. */
+export const SOUND_NEXT: Record<Settings['sound'], Settings['sound']> = {
+  off: 'quiet',
+  quiet: 'normal',
+  normal: 'loud',
+  loud: 'off',
+}
+
 const VALUE_CELLS = 24
+/** After the step on a session marked silent: "quiet, silent here" is 18 of the value's 24 cells. */
+const SILENT_NOTE = ', silent here'
+const NO_PLAYER =
+  'This system has no audio player. Claude Code plays sound on macOS; the setting is kept.'
 const RESET = "Reset this machine's data"
 const RESET_QUESTION = "Reset this machine's data? The game starts over."
 const NOT_STARTED = 'Promptfall has not started in this session.'
@@ -61,7 +74,7 @@ function setting(
   }
 }
 
-function accountDetail(input: PaneInput, inner: number): Line[] {
+function accountDetail(input: PaneInput, inner: number, silent: boolean): Line[] {
   const { view, account, dialog } = input
   const link = view.account.linked
     ? [text(`Linked as ${view.account.linked}`, inner)]
@@ -78,6 +91,7 @@ function accountDetail(input: PaneInput, inner: number): Line[] {
     text(`Highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}`, inner),
     { spans: [] },
     ...link,
+    ...(silent ? [{ spans: [] }, ...wrap(NO_PLAYER, inner - 1).map((t) => text(t, inner))] : []),
   ]
 }
 
@@ -85,6 +99,8 @@ export function accountPane(input: PaneInput): PaneBuild {
   const { view, account, dialog } = input
   const { settings } = account
   const inner = listInner(input)
+  // Off is off on any system: the note is for a step that should be heard.
+  const silent = account.soundSilent && settings.sound !== 'off'
   const renderer =
     settings.renderer === 'auto'
       ? `auto (${account.renderer})`
@@ -94,8 +110,8 @@ export function accountPane(input: PaneInput): PaneBuild {
       inner,
       'sound',
       hotkeySpans('Sound', 's'),
-      settings.sound ? 'on' : 'off',
-      { t: 'setting', patch: { sound: !settings.sound } },
+      silent ? `${settings.sound}${SILENT_NOTE}` : settings.sound,
+      { t: 'setting', patch: { sound: SOUND_NEXT[settings.sound] } },
       's',
     ),
     setting(
@@ -138,7 +154,7 @@ export function accountPane(input: PaneInput): PaneBuild {
     rows,
     empty: '',
     cursor,
-    detail: (w) => accountDetail(input, w),
+    detail: (w) => accountDetail(input, w, silent),
     menu: null,
     yesNo: null,
     panel: null,
