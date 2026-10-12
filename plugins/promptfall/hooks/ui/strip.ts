@@ -33,7 +33,7 @@ import {
   TEXT_RGB,
   WARN_RGB,
 } from '../windows/tuning'
-import { zoneHead } from '../zone-words'
+import { zoneMark } from '../zone-words'
 import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
 import { recordsRow, worldRows } from './world-rows'
@@ -132,9 +132,10 @@ function enemyLabel(input: StripInput): { title: string; boss: boolean } {
   const { view } = input
   const left = worldBossLeft(input)
   if (left !== null) return { title: left ? `World boss · ${left}` : 'World boss', boss: true }
+  // Past tier 1 the short form: "Tier 2, zone 1 · Wave 10" outruns the window's 21 title cells.
   if (view.wave >= 11 || view.enemies.some((e) => e.kind === 'zone_boss' || e.kind === 'turn_boss'))
-    return { title: `${zoneHead(view.zone)} · Boss`, boss: true }
-  return { title: `${zoneHead(view.zone)} · Wave ${view.wave}`, boss: false }
+    return { title: `${zoneMark(view.zone, 'Zone ')} · Boss`, boss: true }
+  return { title: `${zoneMark(view.zone, 'Zone ')} · Wave ${view.wave}`, boss: false }
 }
 
 /** The staged enemies in line order, each with its staged HP, the world boss's bar included. */

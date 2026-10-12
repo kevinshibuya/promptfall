@@ -55,9 +55,10 @@ zone 12's takes four times as long against its waves, and from zone 7 the waves 
 more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
 backdrop, ramping on from zone 12's numbers with no wall at the door, stronger with every zone and
 worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity odds; a boss
-contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the enemy window
-title, the arrival toast and the log name the tier: "Tier 2, zone 1 · Wave 3", "The party reached
-tier 2, zone 1, Greenmeadow Road". Inside tier 1 they read as before.
+contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the arrival toast
+and the log name the tier in words, "The party reached tier 2, zone 1, Greenmeadow Road", and the
+enemy window's title in the short form that fits it, "T2 Z1 · Wave 3". Inside tier 1 they read as
+before.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that

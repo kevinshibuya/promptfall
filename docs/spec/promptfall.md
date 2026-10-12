@@ -641,7 +641,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   with no painting stand on a one-row ground strip coloured per zone. Under it
   the window strip (ADR 0005), Dragon Quest V's
   windows in its pixel font: the enemy window (titled with the zone and wave,
-  `Tier 2, zone 1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
+  `T2 Z1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
   boss with its percentage), the message window (the command line, then the
   combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
@@ -926,9 +926,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
     zone's name follows its number with no article ("zone 4, Old Barrow
     Hills", since zone 12 is "The Unwritten Reach"), and a zone with no name
     reads "The party reached zone N". Past tier 1 the tier leads: "tier 2,
-    zone 1, Greenmeadow Road". The wipe, retreat and arrival rows, the log,
-    the enemy window's title and the Odds tab's title name a zone this one
-    way (`hooks/zone-words.ts`).
+    zone 1, Greenmeadow Road". The wipe, retreat and arrival rows, the log
+    and the Odds tab's title name a zone this one way; the enemy window's
+    title, with 21 cells, takes the short `T2 Z1` the boards use
+    (`hooks/zone-words.ts`).
   - The combat log says "The party fell." for a wipe and "The party retreats
     to zone 3." for a retreat.
   - The vendored row fires only for Rare or better: a full inventory vendors
