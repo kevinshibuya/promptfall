@@ -365,15 +365,15 @@ quiet. The setting survives a reset of the machine's data. A first launch's welc
 sound is on and that `/promptfall sound off` silences it, unless the setting is off.
 
 **Silent here.** Claude Code plays the cues on macOS and in the desktop app; a Linux or Windows
-terminal has no player and skips them. The first cue a terminal skips, or one that cannot play,
-marks the session: it stops trying, the Account row reads "Sound: quiet, silent here" and the
-detail window explains that this system has no audio player and the setting is kept. The mark
-is the session's: the stored step is untouched, and the next session tries again.
+terminal has no player and skips them. The first cue a terminal skips or cannot play marks the
+session: it stops trying, the Account row reads "Sound: quiet, silent here" and the detail window
+explains that this system has no audio player and the setting is kept. The mark is the
+session's: the stored step is untouched, and the next session tries again.
 
 **The switch to on.** A machine that stored sound as on or off before the volume steps reads as
 quiet, since that value was mostly written by the renderer probe, not chosen. The first session
-that plays there toasts once, for 8 seconds, "Sound is now on by default. /promptfall sound off
-silences it."
+to start there rewrites it and, once it plays, toasts once, for 8 seconds, "Sound is now on by
+default. /promptfall sound off silences it."
 
 ## Sandbox
 
