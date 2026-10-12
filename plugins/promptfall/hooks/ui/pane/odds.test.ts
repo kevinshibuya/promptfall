@@ -63,6 +63,17 @@ test('the table: a heading, one line per rarity with zone, boss and tavern, as t
   expect(message(b)[0]).toBe('Tab or arrows: move.')
 })
 
+test("past tier 1 the title names the tier and the table shows zone 12's odds", () => {
+  const b = oddsPane(input({ zone: 13 }))
+  const list = win(b, 'list')
+  expect(list?.title).toEqual([{ text: 'Odds · tier 2, zone 1' }])
+  const zone = content.zones[11]
+  const z = shares(zone?.rarityWeights ?? {})
+  const boss = shares(zone?.bossRarityWeights ?? {})
+  const lines = linesOf(list)
+  expect(lines[5]).toContain(`${z[4] ?? ''}`.padStart(8) + `${boss[4] ?? ''}`.padStart(8))
+})
+
 test('a short pane shows the table: the ▶ starts on it and Down walks on to the expansions', () => {
   // 120 × 16 keeps the tab window: 7 list lines. The expansion rows sit on the second page.
   const b = oddsPane(input({}, {}, { rows: 16 }))

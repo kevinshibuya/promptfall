@@ -46,6 +46,9 @@ export const MIGRATIONS: MigrationChain = {
   // 9 → 10: the auto-vendor setting. The state gains its flag, off: a save never sells a drop its
   // player did not ask to sell.
   9: { state: (s) => ({ ...s, autoVendor: false }) },
+  // 10 → 11: zone 12's boss opens tier 2, and the ladder runs to zone 36. `zone` stays one running
+  // number and every tier's numbers are derived from it, so nothing changes shape.
+  10: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

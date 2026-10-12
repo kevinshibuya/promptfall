@@ -53,10 +53,10 @@ var ARCHETYPES = {
 };
 var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
-  growthBp: { hp: 11900, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
+  growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
   zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 7500, 7e3, 8500, 10500],
-  zoneXpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4]
+  zoneXpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 13e3, 13e3, 1e4]
 };
 function grow(value, bp, steps) {
   let v = value * 1e4;
@@ -188,36 +188,59 @@ function kindOf(archetype) {
 function scale(value, bp) {
   return Math.max(1, Math.floor(value * bp / 1e4));
 }
+function enemyOf([id, name, archetype], zone, b, spdZone) {
+  const a = ARCHETYPES[archetype];
+  const kind = kindOf(archetype);
+  const stats = {
+    hp: scale(b.hp, a.hpBp),
+    atk: scale(b.atk, a.atkBp),
+    def: scale(b.def, a.defBp),
+    spd: a.spd + Math.floor(spdZone / 3)
+  };
+  const bossMult = kind === "zone_boss" ? 8 : kind === "turn_boss" ? 4 : 1;
+  return {
+    id,
+    name,
+    glyph: GLYPHS[archetype],
+    zone,
+    kind,
+    archetype,
+    stats,
+    xp: b.xp * bossMult,
+    gold: [b.goldMin * bossMult, b.goldMax * bossMult],
+    dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : 1500,
+    contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
+  };
+}
 function buildEnemies(t) {
   const out = {};
   ROSTERS.forEach((roster, i) => {
-    const zone = i + 1;
-    const { hp, atk, def, xp, goldMin, goldMax } = baseline(t, i);
-    for (const [id, name, archetype] of roster) {
-      const a = ARCHETYPES[archetype];
-      const kind = kindOf(archetype);
-      const stats = {
-        hp: scale(hp, a.hpBp),
-        atk: scale(atk, a.atkBp),
-        def: scale(def, a.defBp),
-        spd: a.spd + Math.floor(zone / 3)
-      };
-      const bossMult = kind === "zone_boss" ? 8 : kind === "turn_boss" ? 4 : 1;
-      out[id] = {
-        id,
-        name,
-        glyph: GLYPHS[archetype],
-        zone,
-        kind,
-        archetype,
-        stats,
-        xp: xp * bossMult,
-        gold: [goldMin * bossMult, goldMax * bossMult],
-        dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : 1500,
-        contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
-      };
-    }
+    const b = baseline(t, i);
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1);
   });
+  return out;
+}
+var TIER_ENTRY_BP = 27800;
+var TIER_GROWTH_BP = 10400;
+function buildTierEnemies(t, entryBp, growthBp, last) {
+  const top = ROSTERS.length;
+  const b12 = baseline(t, top - 1);
+  const out = {};
+  for (let zone = top + 1; zone <= last; zone++) {
+    const k = zone - top;
+    const b = {
+      hp: grow(scale(b12.hp, entryBp), growthBp, k),
+      atk: grow(scale(b12.atk, entryBp), growthBp, k),
+      def: grow(scale(b12.def, entryBp), growthBp, k),
+      xp: grow(b12.xp, growthBp, k),
+      goldMin: grow(b12.goldMin, growthBp, k),
+      goldMax: grow(b12.goldMax, growthBp, k)
+    };
+    const at = {};
+    for (const roster of ROSTERS)
+      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top);
+    out[zone] = at;
+  }
   return out;
 }
 var enemies = buildEnemies(ENEMY_TUNING);
@@ -598,13 +621,24 @@ var zones = NAMES.map((name, i) => {
 });
 
 // packages/sim/src/content/zone.ts
-var LADDER_END = 12;
+var LADDER_END = 36;
 function zoneAt(zone) {
   if (!Number.isInteger(zone) || zone < 1) return void 0;
   const base2 = (zone - 1) % zones.length + 1;
   const def = zones[base2 - 1];
   if (!def) return void 0;
   return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
+}
+var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_ENTRY_BP, TIER_GROWTH_BP, LADDER_END);
+function enemyAt(id, zone) {
+  const at = zoneAt(zone);
+  if (!at || zone > LADDER_END) return void 0;
+  return at.tier === 1 ? enemies[id] : tierEnemies[zone]?.[id];
+}
+function oddsAt(zone) {
+  const at = zoneAt(zone);
+  if (!at) return void 0;
+  return at.tier === 1 ? at.def : zones[zones.length - 1];
 }
 
 // packages/sim/src/content/index.ts
@@ -685,7 +719,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "806c5e12c6b4b928";
+var GOLDEN_HASH = "d903b0fbd669e221";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -852,7 +886,7 @@ function openEncounter(s, waveSize) {
   return encounter;
 }
 function spawnEnemy(s, encounter, defId, kind) {
-  const def = content.enemies[defId];
+  const def = enemyAt(defId, s.zone);
   const hp = def ? def.stats.hp : 1;
   const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp };
   encounter.enemies.push(enemy);
@@ -935,7 +969,7 @@ function onEnemyKilled(s, enemy, effects, drop) {
   const encounter = s.encounter;
   if (!encounter) return;
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id);
-  const def = content.enemies[enemy.def];
+  const def = enemyAt(enemy.def, s.zone);
   if (def) {
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects);
     const [min, max] = def.gold;
@@ -1058,7 +1092,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 10;
+var SIM_VERSION = 11;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1132,6 +1166,11 @@ function baseTier(baseId) {
   const minZone = content.itemBases[baseId]?.minZone ?? 1;
   return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER));
 }
+function dropTier(zone, baseId) {
+  const tier = zoneAt(zone)?.tier ?? 1;
+  if (tier === 1) return baseTier(baseId);
+  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1;
+}
 function tierMultBp(tier) {
   return content.itemTierMultBp[tier - 1] ?? 1e4;
 }
@@ -1149,7 +1188,7 @@ function rollItem(s, boss) {
   );
 }
 function rollItemFor(s, boss, classes) {
-  const zone = zoneAt(s.zone)?.def;
+  const zone = oddsAt(s.zone);
   if (!zone) return null;
   const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
   const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
@@ -1166,7 +1205,7 @@ function rollItemOf(s, baseId, rarity2) {
     id: newId(s, "i"),
     base: baseId,
     rarity: rarity2,
-    tier: baseTier(baseId),
+    tier: dropTier(s.zone, baseId),
     affixes: affixes2,
     equippedBy: null,
     tradeableAt: null
@@ -1281,7 +1320,10 @@ var MIGRATIONS = {
   8: { state: (s) => ({ ...s, zoneWipes: 0 }) },
   // 9 → 10: the auto-vendor setting. The state gains its flag, off: a save never sells a drop its
   // player did not ask to sell.
-  9: { state: (s) => ({ ...s, autoVendor: false }) }
+  9: { state: (s) => ({ ...s, autoVendor: false }) },
+  // 10 → 11: zone 12's boss opens tier 2, and the ladder runs to zone 36. `zone` stays one running
+  // number and every tier's numbers are derived from it, so nothing changes shape.
+  10: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -1408,7 +1450,7 @@ function damage(s, atk, def) {
 }
 var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
 function zoneBossStats(zone) {
-  return content.enemies[zoneAt(zone)?.def.boss ?? ""]?.stats ?? NO_STATS;
+  return enemyAt(zoneAt(zone)?.def.boss ?? "", zone)?.stats ?? NO_STATS;
 }
 function scaledBossStats(s) {
   const carried = s.boss?.stats ?? NO_STATS;
@@ -1418,12 +1460,12 @@ function scaledBossStats(s) {
     hp: carried.hp,
     atk: Math.floor(carried.atk * zb.atk / Math.max(1, z1.atk)),
     def: Math.floor(carried.def * zb.def / Math.max(1, z1.def)),
-    spd: carried.spd + Math.floor(s.zone / 3)
+    spd: carried.spd + zb.spd - z1.spd
   };
 }
 function enemyStats(s, enemy) {
   if (enemy.kind === "world_boss") return scaledBossStats(s);
-  return content.enemies[enemy.def]?.stats ?? NO_STATS;
+  return enemyAt(enemy.def, s.zone)?.stats ?? NO_STATS;
 }
 function hitEnemy(s, by, enemy, amount, effects) {
   effects.push({ k: "hit", by, target: enemy.id, amount });
@@ -2010,16 +2052,21 @@ export {
   SPAWN_GAUGE_MAX,
   STEP_MS,
   TICK_MS,
+  TIER_ENTRY_BP,
+  TIER_GROWTH_BP,
   affixValue,
   baseTier,
   content,
   createInitialState,
+  dropTier,
+  enemyAt,
   fill,
   goldenEvents,
   hashState,
   heroStats,
   migrate,
   migrateGoods,
+  oddsAt,
   reforgeCost,
   replay,
   rollRewardItem,

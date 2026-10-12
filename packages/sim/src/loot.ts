@@ -1,4 +1,4 @@
-import { content, ZONES_PER_ITEM_TIER, zoneAt } from './content'
+import { content, oddsAt, ZONES_PER_ITEM_TIER, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
@@ -15,6 +15,16 @@ export function vendorValue(item: Item): number {
 export function baseTier(baseId: string): number {
   const minZone = content.itemBases[baseId]?.minZone ?? 1
   return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER))
+}
+
+/**
+ * The item tier of a base's drop at a running zone: its base's tier inside the ladder's first
+ * tier, then one past the base tiers per ladder tier: 5 in tier 2, 6 in tier 3.
+ */
+export function dropTier(zone: number, baseId: string): number {
+  const tier = zoneAt(zone)?.tier ?? 1
+  if (tier === 1) return baseTier(baseId)
+  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1
 }
 
 /** An item tier's multiplier in basis points; a tier off the table counts as tier 1. */
@@ -45,7 +55,7 @@ function rollItem(s: GameState, boss: boolean): Item | null {
 
 /** The draw order of ordinary drops: rarity, then base, then affixes. */
 function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[]): Item | null {
-  const zone = zoneAt(s.zone)?.def
+  const zone = oddsAt(s.zone)
   if (!zone) return null
   const rarity = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights)
   const bases = Object.keys(content.itemBases)
@@ -59,14 +69,14 @@ function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[])
   return rollItemOf(s, baseId, rarity)
 }
 
-/** An item of this base and rarity, in its base's tier: its affixes, then its id. */
+/** An item of this base and rarity, in its tier at the party's zone: its affixes, then its id. */
 export function rollItemOf(s: GameState, baseId: string, rarity: Rarity): Item {
   const affixes = rollAffixes(s, baseId, rarity)
   return {
     id: newId(s, 'i'),
     base: baseId,
     rarity,
-    tier: baseTier(baseId),
+    tier: dropTier(s.zone, baseId),
     affixes,
     equippedBy: null,
     tradeableAt: null,

@@ -54,6 +54,20 @@ test('the 42 lines page by the ▶', () => {
   expect(lines[6]).toBe('  Boss damage this week')
 })
 
+test('the highest zone past tier 1 reads its tier and base zone', () => {
+  const loaded = boardsLoaded().boards
+  const top = [
+    { accountId: 'p0', name: 'player0', value: 36 },
+    { accountId: 'p1', name: 'player1', value: 13 },
+    { accountId: 'a1', name: 'kevin', value: 12 },
+  ]
+  const b = boardsPane(input({ boards: loaded ? { ...loaded, highestZone: top } : null }))
+  const lines = linesOf(win(b, 'list'))
+  expect(lines[1]).toMatch(/^▶ 1\. player0 +zone T3 Z12$/)
+  expect(lines[2]).toMatch(/^ {2}2\. player1 +zone T2 Z1$/)
+  expect(lines[3]).toMatch(/^ {2}3\. kevin +zone 12$/)
+})
+
 test('no boss damage yet, loading, closed', () => {
   const loaded = boardsLoaded().boards
   const none = boardsPane(

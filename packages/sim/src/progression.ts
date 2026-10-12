@@ -1,5 +1,5 @@
 import { SPAWN_GAUGE_MAX } from './battle'
-import { content, LADDER_END, zoneAt } from './content'
+import { content, enemyAt, LADDER_END, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { affixValue, rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
@@ -137,7 +137,7 @@ function openEncounter(s: GameState, waveSize: number): Encounter {
 }
 
 function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: EnemyKind): void {
-  const def = content.enemies[defId]
+  const def = enemyAt(defId, s.zone)
   const hp = def ? def.stats.hp : 1
   const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp }
   encounter.enemies.push(enemy)
@@ -238,7 +238,7 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   const encounter = s.encounter
   if (!encounter) return
   encounter.enemies = encounter.enemies.filter((e) => e.id !== enemy.id)
-  const def: EnemyDef | undefined = content.enemies[enemy.def]
+  const def: EnemyDef | undefined = enemyAt(enemy.def, s.zone)
   if (def) {
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects)
     const [min, max] = def.gold

@@ -148,6 +148,17 @@ const SINGLE: [string, Effect, Toast][] = [
     },
   ],
   [
+    'a zone arrival past tier 1',
+    { k: 'zone_cleared', zone: 12, advancedTo: 13 },
+    {
+      row: 'zone_arrival',
+      text: 'The party reached tier 2, zone 1, Greenmeadow Road',
+      timeoutMs: SHORT,
+      cue: null,
+      wait: { zone: 12 },
+    },
+  ],
+  [
     'a zone arrival',
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
     {

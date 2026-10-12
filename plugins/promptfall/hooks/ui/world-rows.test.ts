@@ -43,6 +43,12 @@ test('the World rows say the boss is off in place', () => {
   // On, with no boss up: the records as they were.
   const on = worldRows(view, worldWith({ 'worldboss.enabled': true }), NOW)[1]
   expect(on?.text).toBe('highest zone 1 · kills 0 · wipes 0')
+  const tier2 = worldRows(
+    { ...view, highestZone: 13 },
+    worldWith({ 'worldboss.enabled': true }),
+    NOW,
+  )
+  expect(tier2[1]?.text).toBe('highest zone T2 Z1 · kills 0 · wipes 0')
   // Before the first snapshot the bootstrap config's flag decides.
   const before: WorldState = { ...worldWith({}), snapshot: null }
   expect(worldRows(view, before, NOW)[1]?.text).toMatch(/ · world boss is off$/)

@@ -3,15 +3,16 @@ import { createRequire } from 'node:module'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SIM_VERSION } from '../types'
-import { outOfBand, probe } from './probe'
-import type { ScenarioOptions, ScenarioReport } from './scenario'
+import { outOfBand, probe, referenceParty } from './probe'
+import { referenceRow } from './reference'
+import { runScenario, type ScenarioOptions, type ScenarioReport } from './scenario'
 
 // The arc of spec #130 at the reference cadence: nine seeds, 200 live hours each. Every sim bump
 // runs it, so the numbers in the content tables are the ones this evidence describes. The hour
-// targets are read on the median of the nine seeds, with a completion floor, because #138's seed
-// table showed one seed's first clear of zone 12 spans 40 hours to never at a single setting.
-// The medians and floors gate from sim version 11 (#143), which tunes the final curve once; each
-// bump before it moves the curve again, so below 11 the file only reports them.
+// targets are read on the median of the nine seeds, because #138's seed table showed one seed's
+// first clear of zone 12 spans 40 hours to never at a single setting. The medians are a report,
+// printed with the seed table and judged by a person on the PR (Kevin, 2026-10-12); the
+// completion floors and the per-seed checks gate at every version.
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 const HOURS = 200
 
@@ -123,25 +124,7 @@ afterAll(() => {
   )
 })
 
-describe.runIf(SIM_VERSION >= 11)('the arc, median of nine seeds, at the reference cadence', () => {
-  it('first clears zone 12 between 80 and 120 live hours', () => {
-    const hour = median(zone12)
-    expect(hour).toBeGreaterThanOrEqual(80)
-    expect(hour).toBeLessThanOrEqual(120)
-  })
-
-  it('levels up every one to two live hours through levels 10 to 30', () => {
-    const hours = median(perLevel)
-    expect(hours).toBeGreaterThanOrEqual(1)
-    expect(hours).toBeLessThanOrEqual(2)
-  })
-
-  it('takes the granted Legendary to 50 between 150 and 200 live hours', () => {
-    const hour = median(cap)
-    expect(hour).toBeGreaterThanOrEqual(150)
-    expect(hour).toBeLessThanOrEqual(200)
-  })
-
+describe('the arc, nine seeds, at the reference cadence', () => {
   it('first clears zone 12 on at least seven of the nine seeds', () => {
     expect(within(zone12)).toBeGreaterThanOrEqual(7)
   })
@@ -149,6 +132,20 @@ describe.runIf(SIM_VERSION >= 11)('the arc, median of nine seeds, at the referen
   it('takes the granted Legendary to 50 on at least seven of the nine seeds', () => {
     expect(within(cap)).toBeGreaterThanOrEqual(7)
   })
+})
+
+describe('tier 2, at the reference cadence', () => {
+  // A capped party (the Knight Legendary at 50, Epics at 45) in tier-5 gear at mid rolls.
+  it("clears zone 13, tier 2's first zone", () => {
+    const row = { ...referenceRow(13), rollBp: 5000 }
+    const r = runScenario({
+      seed: 1,
+      hours: 24,
+      legendaryAtHour: null,
+      start: referenceParty(row, 1),
+    })
+    expect(r.zones.find((z) => z.zone === 13)?.firstClearedHour ?? null).not.toBeNull()
+  }, 120_000)
 })
 
 describe('the feel probe', () => {

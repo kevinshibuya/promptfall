@@ -1,9 +1,10 @@
 // The Odds tab as windows (docs/plans/2026-10-06-ui-pr3-remaining-tabs.md, "Odds"): the drop odds
 // as one table (zone, its boss, the tavern), then the inventory and roster expansions as rows.
 import { RARITY_RGB } from '../../stage/tuning'
-import { content, RARITIES, zoneAt } from '../../vendor/sim.js'
+import { content, oddsAt, RARITIES } from '../../vendor/sim.js'
 import type { Line, Span } from '../../windows/kit'
 import { DIM_RGB, MOVE_HELP, TEXT_RGB } from '../../windows/tuning'
+import { zonePhrase } from '../../zone-words'
 import { padEnd, padStart } from '../format'
 import { cursorRow } from './frame'
 import type { PaneInput } from './input'
@@ -41,7 +42,8 @@ function tableLine(name: Span, columns: string[]): Span[] {
 export function oddsPane(input: PaneInput): PaneBuild {
   const { view, dialog } = input
   const inner = listInner(input)
-  const zone = zoneAt(view.zone)?.def
+  // Past tier 1 the drops roll at zone 12's odds.
+  const zone = oddsAt(view.zone)
   const rows: ListRow[] = [
     {
       spans: tableLine({ text: 'Rarity' }, ['Zone', 'Boss', 'Tavern']),
@@ -119,7 +121,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
   }
 
   const spec: ListSpec = {
-    title: [{ text: `Odds · zone ${view.zone}` }],
+    title: [{ text: `Odds · ${zonePhrase(view.zone)}` }],
     altTitle: `Odds in zone ${view.zone}`,
     rows,
     empty: '',

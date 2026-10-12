@@ -474,6 +474,40 @@ describe('the 9→10 step: the auto-vendor setting', () => {
   })
 })
 
+describe('the 10→11 step: tiers', () => {
+  // Zone 12's boss opens tier 2: the running zone number and every field keep their shape.
+  const PINNED = { golden: '44c344a2ce5e44b4', deep: '676937b7250d020d' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v10-deep.json' : 'v10.json')
+    const r = migrate(before, { to: 11 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version, the encounter and the battle`, () => {
+      expect(after.v).toBe(11)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v10 = fixture('v10-deep.json')
+    const [item] = v10.inventory
+    if (!item) throw new Error('deep fixture')
+    expect(migrateGoods({ kind: 'item', item }, 10, { to: 11 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item },
+    })
+  })
+})
+
 describe('the chain', () => {
   for (const kind of ['golden', 'deep'] as const) {
     it(`takes the oldest ${kind} fixture to the current version`, () => {

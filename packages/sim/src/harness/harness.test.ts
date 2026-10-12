@@ -57,8 +57,23 @@ describe('the feel probe', () => {
     expect(outOfBand(inBand)).toEqual([])
   })
 
+  it('measures tiers 2 and 3 at their reference rows: a capped party in the tier’s item tier', () => {
+    expect(probe(2).zones.map((z) => z.zone)).toEqual([13, 18, 24])
+    expect(probe(3).zones.map((z) => z.zone)).toEqual([25, 30, 36])
+    expect(probe(2).zones[0]).toMatchObject({
+      base: 1,
+      tier: 2,
+      level: 50,
+      knightRarity: 'legendary',
+      gearTier: 5,
+      gearRarity: 'epic',
+      rollBp: 0,
+    })
+    expect(probe(3).zones[2]).toMatchObject({ base: 12, gearTier: 6, gearRarity: 'legendary' })
+  })
+
   it('refuses a tier past the ladder’s end', () => {
-    expect(() => probe(2)).toThrow(/past the ladder's end/)
+    expect(() => probe(4)).toThrow(/past the ladder's end/)
     expect(() => probe(0)).toThrow(/tier/)
   })
 })

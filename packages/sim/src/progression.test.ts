@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { GAUGE_FULL } from './battle'
-import { content } from './content'
+import { content, enemyAt } from './content'
 import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
@@ -198,6 +198,56 @@ describe('zone boss and pending party', () => {
     expect(r.state.zone).toBe(1)
     expect(r.state.wave).toBe(1)
     expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 1, advancedTo: 1 })
+  })
+})
+
+describe('tiers', () => {
+  /** The zone's boss at 1 hp, the party ready: the next tick kills it. */
+  function bossDown(zone: number, farm = false): { state: GameState; effects: Effect[] } {
+    let s: GameState = { ...createInitialState(5), zone, highestZone: zone, wave: 11, farm }
+    const boss = content.zones[(zone - 1) % 12]?.boss ?? ''
+    s = run(s, [tick]).state
+    const enc = s.encounter
+    const front = enc?.enemies[0]
+    if (!enc || front?.def !== boss) throw new Error(`no ${boss} at zone ${zone}`)
+    return run(ready({ ...s, encounter: { ...enc, enemies: [{ ...front, hp: 1 }] } }), [tick])
+  }
+
+  it("beating zone 12's boss with farm off moves the party to zone 13, tier 2's zone 1", () => {
+    const r = bossDown(12)
+    expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 12, advancedTo: 13 })
+    expect(r.state).toMatchObject({ zone: 13, wave: 1, highestZone: 13 })
+  })
+
+  it("zone 13 spawns zone 1's roster at its own tier's numbers", () => {
+    let s: GameState = { ...createInitialState(5), zone: 13, highestZone: 13 }
+    s = run(s, [tick, tick, tick]).state
+    const enemies = s.encounter?.enemies ?? []
+    expect(enemies.length).toBeGreaterThan(0)
+    for (const e of enemies) {
+      expect(content.zones[0]?.enemies).toContain(e.def)
+      expect(e.maxHp).toBe(enemyAt(e.def, 13)?.stats.hp)
+    }
+  })
+
+  it("a kill in zone 13 grants its tier's xp and gold", () => {
+    // Level 15: the kill's xp levels nobody, so it is what the hero holds after.
+    const s = { ...createInitialState(5), zone: 13, highestZone: 13 }
+    const at15 = { ...s, roster: s.roster.map((h) => ({ ...h, level: 15, xp: 0 })) }
+    const r = run(finishFront(injectEnemy(at15, 'road_slime')), [tick])
+    const slime = r.state.encounter?.enemies.find((e) => e.def === 'road_slime')
+    if (slime) throw new Error('the slime lived')
+    const def = enemyAt('road_slime', 13)
+    expect(r.state.roster.find((h) => h.id === r.state.party[0])?.xp).toBe(def?.xp)
+    const gold = r.effects.find((e) => e.k === 'gold')
+    const [min, max] = def?.gold ?? [0, 0]
+    expect(gold?.k === 'gold' && gold.amount >= min && gold.amount <= max).toBe(true)
+  })
+
+  it("zone 36's boss farms: the ladder ends there", () => {
+    const r = bossDown(36)
+    expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 36, advancedTo: 36 })
+    expect(r.state.zone).toBe(36)
   })
 })
 
@@ -482,6 +532,12 @@ describe('wipe', () => {
     expect(r.state.highestZone).toBe(4)
     expect(r.state.zoneWipes).toBe(0)
     expect(r.state.stats.wipes).toBe(1)
+  })
+
+  it('a retreat from tier 2’s zone 1 falls back to zone 12', () => {
+    const r = wipeIn({ ...createInitialState(5), zone: 13, highestZone: 13, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 12 })
+    expect(r.state).toMatchObject({ zone: 12, highestZone: 13 })
   })
 
   it('the third wipe in zone 1 restarts zone 1 as a retreat', () => {
