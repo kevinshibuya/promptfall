@@ -50,7 +50,9 @@ Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
 played and its row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
-percentage. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
+percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
+zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
+more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
 backdrop, ramping on from zone 12's numbers with no wall at the door, stronger with every zone and
 worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity odds; a boss
 contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the enemy window

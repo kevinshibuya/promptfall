@@ -13,13 +13,32 @@ describe('buildEnemies', () => {
     expect(tuned.sigh_hag?.xp).toBe(Math.floor((wave * 5000) / 10000) * 8)
     expect(tuned.bramble_wolf?.xp).toBe(base.bramble_wolf?.xp)
   })
+
+  it("scales a zone boss's hp by its zone's zoneBossHpBp, and nothing else", () => {
+    const base = buildEnemies({ ...ENEMY_TUNING, zoneBossHpBp: [] })
+    const tuned = buildEnemies({ ...ENEMY_TUNING, zoneBossHpBp: [10000, 10000, 25000] })
+
+    const boss = base.sigh_hag
+    if (!boss) throw new Error('no boss')
+    expect(tuned.sigh_hag?.stats).toEqual({
+      ...boss.stats,
+      hp: Math.floor((boss.stats.hp * 25000) / 10000),
+    })
+    expect(tuned.sigh_hag?.xp).toBe(boss.xp)
+    expect(tuned.elder_treant).toEqual(base.elder_treant)
+    expect(tuned.bog_lurker).toEqual(base.bog_lurker)
+    expect(tuned.giant_heron).toEqual(base.giant_heron)
+  })
 })
 
 describe('the tier ramp', () => {
   // Sim 12's numbers, when tier 2 opened on a ×2.78 step and grew ×1.04 a zone: the ramp keeps
   // zone 24 and tier 3 where they were, since 1.1325¹² = 2.78 × 1.04¹² = 4.45. The two products
-  // agree to the fourth decimal and not past it, so hp and atk land on the same point and def,
-  // floored from a smaller baseline, one or two points above.
+  // agree to the fourth decimal and not past it, so atk lands on the same point and def, floored
+  // from a smaller baseline, one or two points above. Hp follows zone 12's since sim 12: sim 14
+  // (#153) raised its wave hp from 4750 to zoneHpBp's and its boss's by zoneBossHpBp, so tier
+  // hp is sim 12's times that factor, to within the floors.
+  const SIM_12_ZONE_12_HP_BP = 4750
   const SIM_12: Record<number, Record<string, { hp: number; atk: number; def: number }>> = {
     24: {
       road_slime: { hp: 3850, atk: 337, def: 409 },
@@ -40,13 +59,17 @@ describe('the tier ramp', () => {
   }
 
   for (const zone of [24, 36]) {
-    it(`keeps zone ${zone}'s enemy stats at sim 12's, one enemy per archetype`, () => {
+    it(`keeps zone ${zone}'s atk and def at sim 12's and its hp at zone 12's, one enemy per archetype`, () => {
+      const hpBp = ENEMY_TUNING.zoneHpBp[11] ?? 0
+      const bossBp = ENEMY_TUNING.zoneBossHpBp[11] ?? 0
       for (const [id, was] of Object.entries(SIM_12[zone] ?? {})) {
-        const now = enemyAt(id, zone)?.stats
-        expect(now?.hp, `${id} hp`).toBe(was.hp)
-        expect(now?.atk, `${id} atk`).toBe(was.atk)
-        expect(now?.def, `${id} def`).toBeGreaterThanOrEqual(was.def)
-        expect(now?.def, `${id} def`).toBeLessThanOrEqual(Math.ceil(was.def * 1.005))
+        const now = enemyAt(id, zone)
+        const factor =
+          (hpBp / SIM_12_ZONE_12_HP_BP) * (now?.kind === 'zone_boss' ? bossBp / 10000 : 1)
+        expect((now?.stats.hp ?? 0) / was.hp / factor, `${id} hp`).toBeCloseTo(1, 2)
+        expect(now?.stats.atk, `${id} atk`).toBe(was.atk)
+        expect(now?.stats.def, `${id} def`).toBeGreaterThanOrEqual(was.def)
+        expect(now?.stats.def, `${id} def`).toBeLessThanOrEqual(Math.ceil(was.def * 1.005))
       }
     })
   }

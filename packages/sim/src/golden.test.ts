@@ -29,6 +29,8 @@ describe('golden replay', () => {
   // moves it through zone 1's hp and xp: the script kills faster and takes more drops.
   // SIM_VERSION 13 (contracts at the tier's odds, the tier ramp) moves it through `v` alone: the
   // script never leaves zone 1, which neither change reaches.
+  // SIM_VERSION 14 (zone bosses' hp ramps by zone, zones 7 to 12 walk longer and pay more xp)
+  // moves it through `v` alone: zone 1's boss stays at ×1 and its waves are untouched.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -37,7 +39,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('3d3528f569bd176b')
+    expect(GOLDEN_HASH).toBe('42969ddaf82b0564')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)

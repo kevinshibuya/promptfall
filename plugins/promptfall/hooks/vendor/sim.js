@@ -55,8 +55,22 @@ var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
-  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 4500, 4500, 3400, 3150, 3850, 4750],
-  zoneXpBp: [13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3]
+  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 5850, 7650, 7140, 7875, 13956, 21945],
+  zoneXpBp: [13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 21125, 29835, 36855, 43875, 38830, 34360],
+  zoneBossHpBp: [
+    1e4,
+    12750,
+    15500,
+    18250,
+    21e3,
+    23750,
+    26500,
+    29250,
+    32e3,
+    34750,
+    37500,
+    4e4
+  ]
 };
 function grow(value, bp, steps) {
   let v = value * 1e4;
@@ -188,11 +202,12 @@ function kindOf(archetype) {
 function scale(value, bp) {
   return Math.max(1, Math.floor(value * bp / 1e4));
 }
-function enemyOf([id, name, archetype], zone, b, spdZone) {
+function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
   const a = ARCHETYPES[archetype];
   const kind = kindOf(archetype);
+  const hp = scale(b.hp, a.hpBp);
   const stats = {
-    hp: scale(b.hp, a.hpBp),
+    hp: kind === "zone_boss" ? scale(hp, bossHpBp) : hp,
     atk: scale(b.atk, a.atkBp),
     def: scale(b.def, a.defBp),
     spd: a.spd + Math.floor(spdZone / 3)
@@ -216,7 +231,8 @@ function buildEnemies(t) {
   const out = {};
   ROSTERS.forEach((roster, i) => {
     const b = baseline(t, i);
-    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1);
+    const bossHpBp = t.zoneBossHpBp[i] ?? 1e4;
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp);
   });
   return out;
 }
@@ -229,6 +245,7 @@ function growThrough(value, bps) {
 function buildTierEnemies(t, growthBp, last) {
   const top = ROSTERS.length;
   const b12 = baseline(t, top - 1);
+  const bossHpBp = t.zoneBossHpBp[top - 1] ?? 1e4;
   const out = {};
   const steps = [];
   for (let zone = top + 1; zone <= last; zone++) {
@@ -246,7 +263,7 @@ function buildTierEnemies(t, growthBp, last) {
     };
     const at = {};
     for (const roster of ROSTERS)
-      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top);
+      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp);
     out[zone] = at;
   }
   return out;
@@ -727,7 +744,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "3d3528f569bd176b";
+var GOLDEN_HASH = "42969ddaf82b0564";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -1100,7 +1117,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 13;
+var SIM_VERSION = 14;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1339,7 +1356,10 @@ var MIGRATIONS = {
   11: { state: (s) => s },
   // 12 → 13: boss contracts past tier 1 roll the tier's odds, and tier 2 ramps from zone 12 with no
   // step at its door (#152). Rules and content moved, and nothing changes shape.
-  12: { state: (s) => s }
+  12: { state: (s) => s },
+  // 13 → 14: the tier-1 arc slowed outside the kill rate (#153): zone bosses' hp ramps by zone, and
+  // zones 7 to 12 walk longer and pay more xp. Only content constants moved, and nothing changes shape.
+  13: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;

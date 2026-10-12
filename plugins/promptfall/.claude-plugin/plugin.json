@@ -1,6 +1,6 @@
 {
   "name": "promptfall",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "description": "An idle fantasy RPG above the prompt: tool calls spawn enemies, long turns end in bosses.",
   "types": "./types/index.d.ts"
 }

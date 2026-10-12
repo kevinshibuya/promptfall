@@ -594,6 +594,43 @@ describe('the 12→13 step: tier odds for contracts, the tier ramp', () => {
   })
 })
 
+describe('the 13→14 step: the tier-1 arc slowed outside the kill rate', () => {
+  // Content constants moved and nothing else: every field keeps its shape and value.
+  const PINNED = { golden: '6a5ac1e47d62fb5e', deep: '847c5a583968a89a' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v13-deep.json' : 'v13.json')
+    const r = migrate(before, { to: 14 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version, the encounter and the battle`, () => {
+      expect(after.v).toBe(14)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v13 = fixture('v13-deep.json')
+    const [item] = v13.inventory
+    const [hero] = v13.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 13, { to: 14 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
 describe('the chain', () => {
   for (const kind of ['golden', 'deep'] as const) {
     it(`takes the oldest ${kind} fixture to the current version`, () => {
