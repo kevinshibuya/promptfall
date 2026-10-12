@@ -30,7 +30,7 @@ export function heroName(template: string, epithet: string): string {
   return epithet ? `${name} ${epithet}` : name
 }
 
-export function vendorValue(item: Item): number {
+export function vendorValue(item: Pick<Item, 'base' | 'rarity'>): number {
   const minZone = content.itemBases[item.base]?.minZone ?? 1
   return content.rarity[item.rarity].vendorGoldPerZone * minZone
 }

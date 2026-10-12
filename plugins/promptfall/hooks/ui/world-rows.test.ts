@@ -36,6 +36,16 @@ const messageText = (scene: Scene) =>
     .map((s) => ('text' in s ? s.text : ''))
     .join('')
 
+test('the presence row names the running zone as today inside tier 1, by its tier past it', () => {
+  const world = worldWith({})
+  expect(worldRows({ ...wave(), zone: 12 }, world, NOW)[0]?.text).toBe(
+    '1 online · zone 12: nobody else here',
+  )
+  expect(worldRows({ ...wave(), zone: 13 }, world, NOW)[0]?.text).toBe(
+    '1 online · T2 Z1: nobody else here',
+  )
+})
+
 test('the World rows say the boss is off in place', () => {
   const view = wave()
   const off = worldRows(view, worldWith({ 'worldboss.enabled': false }), NOW)[1]

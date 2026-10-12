@@ -122,7 +122,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
 
   const spec: ListSpec = {
     title: [{ text: `Odds · ${zonePhrase(view.zone)}` }],
-    altTitle: `Odds in zone ${view.zone}`,
+    altTitle: `Odds in ${zonePhrase(view.zone)}`,
     rows,
     empty: '',
     cursor,
@@ -133,7 +133,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
     error: null,
     state: [
       on?.startsWith('expand-') ? `Enter: buy it. ${MOVE_HELP}` : MOVE_HELP,
-      `Drop odds in zone ${view.zone}, its boss, and the tavern.`,
+      `Drop odds in ${zonePhrase(view.zone)}, its boss, and the tavern.`,
     ],
     field: null,
     link: null,

@@ -165,8 +165,8 @@ the message window, with a hotkey to the Account tab.
 ## World
 
 **Presence.** The World tab shows how many players are online and the names in your zone, and the
-Leaderboards tab shows who is online by zone. Without fresh news from the server for 45 seconds,
-the World tab dims as stale.
+Leaderboards tab shows who is online by zone. Both name a zone past tier 1 as "T2 Z1" and one
+inside it as today. Without fresh news from the server for 45 seconds, the World tab dims as stale.
 
 **Chat.** One global channel lives in the pane's Chat tab: a row per message, newest at the
 bottom, the ▶ message whole in the detail window. Enter on a row puts the cursor in the compose
@@ -331,8 +331,8 @@ server, each of the last two asking Yes or No. A session that is not playing sho
 cannot change it. Its detail window names the server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
-sells the inventory and roster expansions. Past tier 1 its title names the tier ("Odds · tier 2,
-zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
+sells the inventory and roster expansions. Past tier 1 its title and its message name the tier
+("Odds · tier 2, zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
 the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
 priced by rarity and tier.
 
@@ -424,7 +424,8 @@ with the kill's XP and gold, and a zone boss's kill clears its zone. With no mon
 between spawns or against a world boss, the item drops alone: against a world boss its chest
 falls on the boss, and between spawns a chest on the empty ground still plays on the front slot,
 the next monster stepping on after it. With the inventory full, or when the auto-vendor setting
-sells it, it is vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
+sells it, it is vendored, as in play, and the reply says which: `vendored, inventory full`, or
+`auto-vendored` with the gold the vendor paid. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1, any zone up to the ladder's end at 36,
 and refuses past it with the range. `recruit [rarity]` recruits a hero, and
 refuses with a full roster. `wipe` makes the party fall now: it restarts the

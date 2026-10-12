@@ -17,7 +17,7 @@ import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
 import { approveAs, Ledger } from './vendor/ledger.js'
-import { content, createInitialState, TICK_MS } from './vendor/sim.js'
+import { content, createInitialState, hashState, TICK_MS } from './vendor/sim.js'
 import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
@@ -236,6 +236,60 @@ test(
     expect(toasts).toEqual([`Inventory full: Oak Staff vendored for ${value} gold`])
   },
 )
+
+/** A sandbox save whose knight wears an Iron Sword, with auto-vendor on. */
+function wornSwordSave(): Record<string, unknown> {
+  const s0 = createInitialState(99)
+  const knight = s0.roster[0]
+  if (!knight) throw new Error('knight')
+  const sword = {
+    id: 'iseed',
+    base: 'iron_sword',
+    rarity: 'common' as const,
+    tier: 1,
+    affixes: [],
+    equippedBy: knight.id,
+    tradeableAt: null,
+  }
+  const state = {
+    ...s0,
+    autoVendor: true,
+    roster: s0.roster.map((h) =>
+      h.id === knight.id ? { ...h, equipment: { ...h.equipment, weapon: sword.id } } : h,
+    ),
+    inventory: [sword],
+  }
+  const account = { accountId: 'acct-1', seed: 99, createdAt: 0, displayName: null, linked: null }
+  return {
+    [`${SANDBOX_PREFIX}deviceToken`]: 'token-1',
+    [`${SANDBOX_PREFIX}pf:token:token-1`]: 'acct-1',
+    [`${SANDBOX_PREFIX}pf:acct:acct-1:record`]: {
+      account,
+      state,
+      seq: 0,
+      refillAt: { tick: 1_000_000, tool_call: 1_000_000, rest: 1_000_000, turn_end: 1_000_000 },
+      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      batches: [],
+      cursor: 0,
+      committedCursor: 0,
+      committedState: state,
+      committedHash: hashState(state),
+      log: [],
+      returns: [],
+    },
+  }
+}
+
+test('sandbox item that auto-vendor sells with room in the inventory answers the gold it paid', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $, wornSwordSave())
+  expect(view().autoVendor).toBe(true)
+  const ids = view().inventory.map((i) => i.id)
+  expect(ids.length).toBeLessThan(view().inventoryCap)
+  const value =
+    content.rarity.common.vendorGoldPerZone * (content.itemBases.iron_sword?.minZone ?? 1)
+  expect(await run('item iron_sword')).toBe(`Sandbox: Iron Sword auto-vendored, ${value}G`)
+  expect(view().inventory.map((i) => i.id)).toEqual(ids)
+})
 
 test('sandbox level raises a hero level by level, refuses its own level and stops at the cap', async ($, on) => {
   const { run, view, toasts } = await sandboxOn(on, $)

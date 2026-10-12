@@ -3,6 +3,7 @@ import type { BoardsState, DialogState, GameView, WorldState } from '../../../ty
 import { WORLD_DEFAULT } from '../../state'
 import { tilePositions } from '../../windows/kit'
 import { GAUGE_FULL_RGB, TEXT_RGB, WARN_RGB } from '../../windows/tuning'
+import { onlineLine } from '../leaderboards'
 import { boardsLoaded, paneInput, paneView } from './fixtures'
 import type { PaneInput } from './input'
 import { boardsPane } from './leaderboards'
@@ -110,6 +111,26 @@ test('the detail: who is online, as a sentence', () => {
     ' Online by zone: z1 3 · z2 5',
   ])
   expect(linesOf(win(boardsPane(input()), 'detail'))[1]).toBe(' Connecting to the world…')
+})
+
+test('Online by zone marks a zone past tier 1 by its tier and leaves tier 1 as today', () => {
+  const world: WorldState = {
+    ...WORLD_DEFAULT,
+    snapshot: {
+      serverNow: 0,
+      speed: 1,
+      online: 3,
+      zones: [
+        { zone: 12, count: 2 },
+        { zone: 13, count: 1 },
+      ],
+      here: [],
+      boss: null,
+      chat: [],
+      flags: {},
+    },
+  }
+  expect(onlineLine(openView(), world)).toBe('Online by zone: z12 2 · T2 Z1 1')
 })
 
 test('wide and narrow pass tilePositions', () => {

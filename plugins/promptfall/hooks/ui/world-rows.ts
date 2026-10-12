@@ -51,7 +51,10 @@ export function worldRows(
   else if (!snapshot) presence = { text: 'connecting to the world…', dim: true }
   else {
     const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
-    presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
+    presence = {
+      text: `${snapshot.online} online · ${zoneMark(view.zone, 'zone ')}: ${here}`,
+      dim: world.stale,
+    }
   }
   const shown = shownBoss(view, world)
   let records = recordsRow(view, world)
