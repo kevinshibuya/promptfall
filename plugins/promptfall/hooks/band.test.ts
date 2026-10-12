@@ -939,8 +939,8 @@ describe('the first session, its renderer unknown, read only', () => {
       expect(await rows(ui), 'narrow terminal: one row').toHaveLength(1)
       // A notice (here the first-run welcome) shows on the one line too.
       expect(
-        await ui.find({ text: /Welcome to Promptfall/ }),
-        'narrow terminal: the welcome on its row',
+        await ui.find({ text: /Sound on; \/promptfall sound off/ }),
+        'narrow terminal: the welcome on its row, its opt-out first',
       ).toBeDefined()
       await ui.unmount()
     }

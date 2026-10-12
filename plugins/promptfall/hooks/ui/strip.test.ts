@@ -98,6 +98,19 @@ test('a notice replaces the third message row, on Loot too', () => {
   expect(lineText(win(scene, 'message').lines[2])).toContain('Promptfall: server unreachable')
 })
 
+test('the welcome notice shows its opt-out whole at 120 columns full and at 100 compact', () => {
+  const notice =
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
+  for (const [kind, columns] of [
+    ['full', 120],
+    ['compact', 100],
+  ] as const) {
+    const { scene } = stripScene({ ...strip('strip-rest'), kind, columns, notice })
+    const rows = scene.windows.flatMap((w) => w.lines.map(lineText))
+    expect(rows.some((row) => row.includes('/promptfall sound off'))).toBe(true)
+  }
+})
+
 test('a log line longer than the message window wraps over both rows', () => {
   const input = strip('strip-rest')
   // full at 110 columns keeps the enemy window: the message window is 30 wide, 26 cells of text.

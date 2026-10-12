@@ -156,7 +156,7 @@ test('a first run welcomes the player and its notice says sound is on', async ($
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(toasts).toContain('Welcome to Promptfall. /promptfall heroes to meet your party')
   expect(last.get('notice')).toBe(
-    'Welcome to Promptfall. Sound is on; /promptfall sound off silences it. /promptfall heroes to meet your party.',
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.',
   )
 })
 
@@ -781,7 +781,9 @@ test('the reset on a v1 store starts a fresh account and keeps the lease', async
   expect(view.accountId).not.toBe('acct-1')
   expect(last.get('mode')).toBe('primary')
   // A fresh account: the welcome replaces the old-version notice.
-  expect(last.get('notice')).toMatch(/^Welcome to Promptfall\. Sound is on;/)
+  expect(last.get('notice')).toMatch(
+    /^Sound on; \/promptfall sound off silences it\. Welcome to Promptfall\./,
+  )
   expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
   expect(data.has('promptfall:lease')).toBe(true)
   await ui.unmount()
@@ -1755,6 +1757,28 @@ test('a secondary reading a stored boolean raises no news toast', async ($, on) 
   expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([])
 })
 
+test('the news a secondary rewrote waits for the next primary, which toasts it once', async ($, on) => {
+  const { time, raised, last, data } = sounding(on, {
+    ...record(dropping('rare')),
+    ...settingsAt(true),
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get('promptfall:settings') as { sound: unknown }).sound).toBe('quiet')
+  // The other session closes and its lease goes: a fresh session starts primary on a step.
+  data.delete('promptfall:lease')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([
+    { text: SOUND_NEWS, timeoutMs: 8000 },
+  ])
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toHaveLength(1)
+})
+
 /**
  * A state whose next tick kills two 1 hp Goblin Scouts, each dropping a rare item, and levels
  * the party's lead: one burst with two rare drops and one level-up.
@@ -2481,6 +2505,24 @@ test('a terminal play answered after its clip sets no mark: the next cue plays',
   const text = await accountText($)
   expect(text).toMatch(/Sound:? +quiet/)
   expect(text).not.toMatch(/silent here/)
+})
+
+test('a terminal session keeps its surface over a hot reload: a play answered at once still marks it', async ($, on) => {
+  const { time, last, plays } = sandboxSounding(on, {}, 'at once')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // The reload: register runs again and session.start fires with surface null.
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await twoCues($, time, last)
+  expect(plays).toEqual(['cues/boss.wav'])
+  expect(await accountText($)).toMatch(SILENT_ROW)
+})
+
+test('a sandbox recruit plays the recruit cue', async ($, on) => {
+  const { time, plays } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'sandbox recruit epic' })
+  await time.settle()
+  expect(plays).toEqual(['cues/recruit.wav'])
 })
 
 test('the desktop never marks the session, whatever its plays answer', async ($, on) => {
