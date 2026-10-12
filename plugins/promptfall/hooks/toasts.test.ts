@@ -39,7 +39,15 @@ test('a hero the roster does not hold reads "A hero"; so does any hero with no v
 })
 
 function oakStaff(rarity: Rarity): Item {
-  return { id: 'i1', base: 'oak_staff', rarity, affixes: [], equippedBy: null, tradeableAt: null }
+  return {
+    id: 'i1',
+    base: 'oak_staff',
+    rarity,
+    tier: 1,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
 }
 
 /** Morwen the Bold, a rare recruit. */

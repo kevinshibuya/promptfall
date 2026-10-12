@@ -23,9 +23,16 @@ describe('content reference', () => {
     expect(lines).toContain("| `will_o_wisp` | Will-o'-Wisp | caster |")
   })
 
-  it('lists item bases by id, name, glyph and slot, escaping a pipe glyph', () => {
-    expect(lines).toContain('| `oak_staff` | Oak Staff | `\\|` | weapon |')
-    expect(lines).toContain('| `iron_sword` | Iron Sword | `/` | weapon |')
+  it('lists item bases by id, name, glyph, slot, minimum zone and tier, escaping a pipe glyph', () => {
+    expect(lines).toContain('| `oak_staff` | Oak Staff | `\\|` | weapon | 1 | 1 |')
+    expect(lines).toContain('| `iron_sword` | Iron Sword | `/` | weapon | 1 | 1 |')
+    expect(lines).toContain('| `dragonfang` | Dragonfang | `/` | weapon | 10 | 4 |')
+  })
+
+  it("lists the item tiers with their multipliers on an affix's roll and the reforge price", () => {
+    expect(lines).toContain('| 1 | ×1 |')
+    expect(lines).toContain('| 3 | ×3.5 |')
+    expect(lines).toContain('| 6 | ×16 |')
   })
 
   it('lists hero templates by id, name and class', () => {
@@ -44,7 +51,8 @@ describe('content reference', () => {
       Object.keys(content.enemies).length +
       Object.keys(content.itemBases).length +
       Object.keys(content.heroTemplates).length +
-      Object.keys(content.rarity).length
+      Object.keys(content.rarity).length +
+      content.itemTierMultBp.length
     expect(rows).toHaveLength(expected)
   })
 })

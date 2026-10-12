@@ -23,7 +23,7 @@ export type {
 export { content, LADDER_END, zoneAt } from './content'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
-export { rollRewardItem, vendorValue } from './loot'
+export { affixValue, baseTier, reforgeCost, rollRewardItem, vendorValue } from './loot'
 export type {
   MigrateOptions,
   MigrateRefusal,

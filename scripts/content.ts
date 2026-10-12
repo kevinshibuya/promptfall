@@ -4,11 +4,13 @@
 // tsx scripts/content.ts
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Content } from '@promptfall/sim'
+import { baseTier, type Content } from '@promptfall/sim'
 
 /** A table cell: pipes escaped so a glyph like `|` stays in its column. */
 const cell = (s: string | number) => String(s).replaceAll('|', '\\|')
 const code = (s: string) => `\`${cell(s)}\``
+/** `×3.5`: a multiplier in basis points. */
+const times = (bp: number) => `×${bp / 10000}`
 
 function table(head: string[], rows: (string | number)[][]): string[] {
   return [
@@ -49,8 +51,24 @@ export function contentReference(c: Content): string {
     '## Item bases',
     '',
     ...table(
-      ['Id', 'Name', 'Glyph', 'Slot'],
-      Object.values(c.itemBases).map((i) => [code(i.id), cell(i.name), code(i.glyph), i.slot]),
+      ['Id', 'Name', 'Glyph', 'Slot', 'Min zone', 'Tier'],
+      Object.values(c.itemBases).map((i) => [
+        code(i.id),
+        cell(i.name),
+        code(i.glyph),
+        i.slot,
+        i.minZone,
+        baseTier(i.id),
+      ]),
+    ),
+    '',
+    '## Item tiers',
+    '',
+    "An item's tier multiplies its affixes' rolls and its reforge price.",
+    '',
+    ...table(
+      ['Tier', 'Multiplier'],
+      c.itemTierMultBp.map((bp, i) => [i + 1, times(bp)]),
     ),
     '',
     '## Hero templates',

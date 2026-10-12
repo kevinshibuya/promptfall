@@ -42,6 +42,7 @@ const item = (base: string, rarity: Rarity = 'rare', id = 'i1') => ({
   id,
   base,
   rarity,
+  tier: 1,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,

@@ -275,6 +275,7 @@ describe('hero rarity', () => {
       id: 'iX',
       base: 'steel_longsword',
       rarity: 'common',
+      tier: 1,
       affixes: [{ id: 'brutal', value: 4 }],
       equippedBy: null,
       tradeableAt: null,
@@ -294,6 +295,44 @@ describe('hero rarity', () => {
 
   it('leaves the level caps where they were', () => {
     expect(RARITIES.map((r) => content.rarity[r].levelCap)).toEqual([20, 30, 40, 45, 50])
+  })
+})
+
+describe('item tiers', () => {
+  const s0 = createInitialState(1)
+  const knight: Hero = {
+    id: 'kT',
+    template: 'knight_1',
+    cls: 'knight',
+    epithet: '',
+    rarity: 'common',
+    traits: [],
+    level: 12,
+    xp: 0,
+    hp: 1,
+    equipment: { weapon: 'iT', armour: null, accessory: null },
+    tradeableAt: null,
+  }
+  const sword = (tier: number): Item => ({
+    id: 'iT',
+    base: 'iron_sword',
+    rarity: 'common',
+    tier,
+    affixes: [{ id: 'brutal', value: 4 }],
+    equippedBy: knight.id,
+    tradeableAt: null,
+  })
+
+  it("counts an affix at its roll times the item tier's multiplier, floored", () => {
+    const bare = heroStats(s0, {
+      ...knight,
+      equipment: { weapon: null, armour: null, accessory: null },
+    })
+    const swordAtk = content.itemBases.iron_sword?.stats.atk ?? 0
+    const affixAtk = (tier: number) =>
+      heroStats({ ...s0, inventory: [sword(tier)] }, knight).atk - bare.atk - swordAtk
+    // ×1, ×2, ×3.5, ×6, ×10 and ×16 on a roll of 4. Tier 1 counts the roll as it always did.
+    expect([1, 2, 3, 4, 5, 6].map(affixAtk)).toEqual([4, 8, 14, 24, 40, 64])
   })
 })
 

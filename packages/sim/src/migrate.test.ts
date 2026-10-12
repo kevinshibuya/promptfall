@@ -7,7 +7,7 @@ import { type MigrationChain, migrate, migrateGoods, type VersionedState } from 
 import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
-import type { GameState, Goods } from './types'
+import type { GameState, Goods, Item } from './types'
 import { SIM_VERSION } from './types'
 
 const FIXTURES = join(import.meta.dirname, 'fixtures')
@@ -322,6 +322,64 @@ describe('the 6→7 step: hero rarity multiplies base stats and growth', () => {
     expect(golden6.state.encounter).toBeNull()
     expect(deep6.state.boss).not.toBeNull()
     expect(deep6.state.encounter?.enemies[0]?.kind).toBe('world_boss')
+  })
+})
+
+describe('the 7→8 step: an item carries its tier', () => {
+  // The tier comes from each item's base, and the roll is what is stored, so no affix changes;
+  // the tier scales it at read. Levels, xp and HP are kept: nothing else changes shape.
+  const PINNED = { golden: '825df69707110269', deep: '9993826bbc4bb0a1' } as const
+  const tierOf = (base: string) => Math.ceil((content.itemBases[base]?.minZone ?? 1) / 3)
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v7-deep.json' : 'v7.json')
+    const r = migrate(before, { to: 8 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`gives every item of the ${kind} fixture its base's tier and keeps every roll`, () => {
+      expect(before.inventory.length).toBeGreaterThan(0)
+      expect(after.v).toBe(8)
+      expect(after.inventory).toEqual(before.inventory.map((i) => ({ ...i, tier: tierOf(i.base) })))
+    })
+
+    it(`keeps every hero's level, xp and HP and the gold, zone and party of the ${kind} fixture`, () => {
+      expect(after.roster.map((h) => [h.id, h.level, h.xp, h.hp])).toEqual(
+        before.roster.map((h) => [h.id, h.level, h.xp, h.hp]),
+      )
+      expect(after.gold).toBe(before.gold)
+      expect(after.zone).toBe(before.zone)
+      expect(after.party).toEqual(before.party)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('puts tiers 3 and 4 in the deep fixture, whose affixes now count at ×3.5 and ×6', () => {
+    const r = migrate(fixture('v7-deep.json'), { to: 8 })
+    if (!r.ok) throw new Error(r.reason)
+    const tiers = new Set(r.state.inventory.filter((i) => i.affixes.length > 0).map((i) => i.tier))
+    expect(tiers).toContain(3)
+    expect(tiers).toContain(4)
+  })
+
+  it("adds the tier to an item handed to its goods rule and leaves a hero's alone", () => {
+    const v7 = fixture('v7-deep.json')
+    const [item] = v7.inventory
+    const held = v7.roster[4]
+    if (!item || !held) throw new Error('deep fixture')
+    const { tier: _, ...untiered } = item as Item & { tier?: number }
+    expect(migrateGoods({ kind: 'item', item: untiered as Item }, 7, { to: 8 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item: { ...untiered, tier: tierOf(item.base) } },
+    })
+    expect(migrateGoods({ kind: 'hero', hero: held }, 7, { to: 8 })).toEqual({
+      ok: true,
+      goods: { kind: 'hero', hero: held },
+    })
   })
 })
 

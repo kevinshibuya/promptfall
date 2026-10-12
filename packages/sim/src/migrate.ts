@@ -1,6 +1,7 @@
+import { content } from './content'
 import { clone } from './draft'
 import { clampHp } from './progression'
-import type { GameState, Goods } from './types'
+import type { GameState, Goods, Item } from './types'
 import { SIM_VERSION } from './types'
 
 // Saves migrate (ADR 0013): a stored state walks one step per version up to the current one.
@@ -33,6 +34,18 @@ export const MIGRATIONS: MigrationChain = {
   // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
   // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
   6: { state: (s) => s },
+  // 7 → 8: an item carries its tier, from its base. The flat roll is what an affix stores and the
+  // tier scales it at read, so no roll changes; the items held outside the state gain it too.
+  7: {
+    state: (s) => ({ ...s, inventory: (s.inventory as Item[]).map(withBaseTier) }),
+    goods: (g) => (g.kind === 'item' ? { kind: 'item', item: withBaseTier(g.item) } : g),
+  },
+}
+
+/** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
+function withBaseTier(item: Item): Item {
+  const minZone = content.itemBases[item.base]?.minZone ?? 1
+  return { ...item, tier: Math.max(1, Math.ceil(minZone / 3)) }
 }
 
 export type MigrateOptions = { chain?: MigrationChain; to?: number }

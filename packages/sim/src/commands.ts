@@ -1,7 +1,7 @@
 import { content } from './content'
 import { draft, reject } from './draft'
 import { generateHero, recruitHero } from './heroes'
-import { rerollAffix, vendorValue } from './loot'
+import { reforgeCost, rerollAffix, vendorValue } from './loot'
 import { clampHp, drawWeighted, findHero } from './progression'
 import type { Event, GameState, StepResult } from './types'
 
@@ -77,7 +77,7 @@ export function reforge(state: GameState, event: Of<'reforge'>): StepResult {
   if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
     return reject(state, event, 'bad_affix_index')
   }
-  const cost = content.rarity[item.rarity].reforgeCost
+  const cost = reforgeCost(item)
   if (state.gold < cost) return reject(state, event, 'not_enough_gold')
   return draft(state, (s) => {
     const it = s.inventory.find((i) => i.id === event.itemId)

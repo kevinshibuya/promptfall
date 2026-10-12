@@ -12,12 +12,14 @@ import type {
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
 import {
+  affixValue,
   content,
   fill,
   type GameState,
   heroStats,
   type Item,
   type LootEntry,
+  reforgeCost,
   zoneAt,
 } from './vendor/sim.js'
 
@@ -55,7 +57,9 @@ export function tradeName(kind: 'item' | 'hero', base: string): string {
 }
 
 function affixLine(item: Item): string {
-  return item.affixes.map((a) => `${content.affixes[a.id]?.name ?? a.id} +${a.value}`).join(', ')
+  return item.affixes
+    .map((a) => `${content.affixes[a.id]?.name ?? a.id} +${affixValue(item, a)}`)
+    .join(', ')
 }
 
 export function listingView(listing: Listing): ListingView {
@@ -157,12 +161,12 @@ function itemView(item: Item): ItemView {
     rarity: item.rarity,
     affixes: item.affixes.map((a) => {
       const def = content.affixes[a.id]
-      return def ? `${def.name} +${a.value} ${def.stat}` : a.id
+      return def ? `${def.name} +${affixValue(item, a)} ${def.stat}` : a.id
     }),
     equippedBy: item.equippedBy,
     classes: base?.classes ?? [],
     vendorValue: vendorValue(item),
-    reforgeCost: content.rarity[item.rarity].reforgeCost,
+    reforgeCost: reforgeCost(item),
     tradeableAt: item.tradeableAt,
   }
 }

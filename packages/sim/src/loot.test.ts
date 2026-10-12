@@ -77,6 +77,25 @@ describe('rollDrops', () => {
     expect(r.effects.filter((e) => e.k === 'drop_vendored')).toHaveLength(1)
   })
 
+  it("a dropped item carries its base's tier: minimum zone 1 to 3 is tier 1, up to 10 to 12 at 4", () => {
+    const tierOf = (minZone: number) => Math.ceil(minZone / 3)
+    const seen = new Set<number>()
+    for (let seed = 1; seed <= 60; seed++) {
+      const s = { ...createInitialState(seed), zone: 12 }
+      const drop = dropMany(s, forced('goblin_scout'), 1).effects.find((e) => e.k === 'drop')
+      if (drop?.k !== 'drop') throw new Error('no drop')
+      const minZone = content.itemBases[drop.item.base]?.minZone ?? 0
+      expect(drop.item.tier, drop.item.base).toBe(tierOf(minZone))
+      seen.add(drop.item.tier)
+      for (const affix of drop.item.affixes) {
+        const [min, max] = content.affixes[affix.id]?.range ?? [0, 0]
+        expect(affix.value).toBeGreaterThanOrEqual(min)
+        expect(affix.value).toBeLessThanOrEqual(max)
+      }
+    }
+    expect([...seen].sort()).toEqual([1, 2, 3, 4])
+  })
+
   it('contracts recruit a hero from a boss', () => {
     const s = createInitialState(2)
     const def = { ...forced('bandit_captain'), contractBp: 10000 }

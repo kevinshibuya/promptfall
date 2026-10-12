@@ -477,6 +477,10 @@ var tavern = {
   odds: { common: 6e3, uncommon: 2800, rare: 950, epic: 200, legendary: 50 }
 };
 
+// packages/sim/src/content/tiers.ts
+var itemTierMultBp = [1e4, 2e4, 35e3, 6e4, 1e5, 16e4];
+var ZONES_PER_ITEM_TIER = 3;
+
 // packages/sim/src/content/traits.ts
 var traits = {
   stalwart: { id: "stalwart", name: "Stalwart", stat: "hp", rangeBp: [500, 1500] },
@@ -616,7 +620,8 @@ var content = {
   tavern,
   expansions,
   tactics,
-  xpToNext
+  xpToNext,
+  itemTierMultBp
 };
 
 // packages/sim/src/golden.ts
@@ -625,6 +630,7 @@ var GOLDEN_REWARD = {
   id: "r0",
   base: "steel_longsword",
   rarity: "rare",
+  tier: 2,
   affixes: [],
   equippedBy: null,
   tradeableAt: null
@@ -679,7 +685,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "9ac1f3f9fb2dfe77";
+var GOLDEN_HASH = "c36cb20bd3da7b91";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -796,7 +802,7 @@ function heroStats(state, hero) {
     }
     for (const affix of item.affixes) {
       const def = content.affixes[affix.id];
-      if (def) stats[def.stat] += affix.value;
+      if (def) stats[def.stat] += affixValue(item, affix);
     }
   }
   const pre = { ...stats };
@@ -1044,7 +1050,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 7;
+var SIM_VERSION = 8;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1112,6 +1118,19 @@ function vendorValue(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
   return content.rarity[item.rarity].vendorGoldPerZone * minZone;
 }
+function baseTier(baseId) {
+  const minZone = content.itemBases[baseId]?.minZone ?? 1;
+  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER));
+}
+function tierMultBp(tier) {
+  return content.itemTierMultBp[tier - 1] ?? 1e4;
+}
+function affixValue(item, affix) {
+  return Math.floor(affix.value * tierMultBp(item.tier) / 1e4);
+}
+function reforgeCost(item) {
+  return Math.floor(content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier) / 1e4);
+}
 function rollItem(s, boss) {
   return rollItemFor(
     s,
@@ -1133,7 +1152,15 @@ function rollItemFor(s, boss, classes) {
 }
 function rollItemOf(s, baseId, rarity2) {
   const affixes2 = rollAffixes(s, baseId, rarity2);
-  return { id: newId(s, "i"), base: baseId, rarity: rarity2, affixes: affixes2, equippedBy: null, tradeableAt: null };
+  return {
+    id: newId(s, "i"),
+    base: baseId,
+    rarity: rarity2,
+    tier: baseTier(baseId),
+    affixes: affixes2,
+    equippedBy: null,
+    tradeableAt: null
+  };
 }
 function rollAffixes(s, baseId, rarity2) {
   const slot = content.itemBases[baseId]?.slot;
@@ -1221,8 +1248,18 @@ var MIGRATIONS = {
   },
   // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
   // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
-  6: { state: (s) => s }
+  6: { state: (s) => s },
+  // 7 → 8: an item carries its tier, from its base. The flat roll is what an affix stores and the
+  // tier scales it at read, so no roll changes; the items held outside the state gain it too.
+  7: {
+    state: (s) => ({ ...s, inventory: s.inventory.map(withBaseTier) }),
+    goods: (g) => g.kind === "item" ? { kind: "item", item: withBaseTier(g.item) } : g
+  }
 };
+function withBaseTier(item) {
+  const minZone = content.itemBases[item.base]?.minZone ?? 1;
+  return { ...item, tier: Math.max(1, Math.ceil(minZone / 3)) };
+}
 function walk(from, to, chain) {
   if (!Number.isInteger(from)) return { ok: false, reason: "gap", from, to, at: from };
   if (from > to) return { ok: false, reason: "ahead", from, to };
@@ -1562,7 +1599,7 @@ function reforge(state, event) {
   if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
     return reject(state, event, "bad_affix_index");
   }
-  const cost = content.rarity[item.rarity].reforgeCost;
+  const cost = reforgeCost(item);
   if (state.gold < cost) return reject(state, event, "not_enough_gold");
   return draft(state, (s) => {
     const it = s.inventory.find((i) => i.id === event.itemId);
@@ -1940,6 +1977,8 @@ export {
   SPAWN_GAUGE_MAX,
   STEP_MS,
   TICK_MS,
+  affixValue,
+  baseTier,
   content,
   createInitialState,
   fill,
@@ -1948,6 +1987,7 @@ export {
   heroStats,
   migrate,
   migrateGoods,
+  reforgeCost,
   replay,
   rollRewardItem,
   step,

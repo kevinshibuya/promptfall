@@ -1,5 +1,6 @@
 import { enemyStats, hitDamage, NO_VARIANCE_BP } from '../combat'
 import { content, LADDER_END, zoneAt } from '../content'
+import { baseTier } from '../loot'
 import { heroStats } from '../progression'
 import { compareCodeUnits } from '../rng'
 import { createInitialState } from '../state'
@@ -69,6 +70,7 @@ function referenceKnight(zone: number, row: ReferenceRow): { s: GameState; knigh
       id: `probe_${slot}`,
       base,
       rarity: row.gearRarity,
+      tier: baseTier(base),
       affixes: [],
       equippedBy: knight.id,
       tradeableAt: null,
