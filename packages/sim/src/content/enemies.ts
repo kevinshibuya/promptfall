@@ -13,7 +13,7 @@ const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number
 
 /**
  * The numbers every enemy is built from: the zone 1 baseline, how each stat grows per zone in
- * basis points, and a per-zone multiplier on atk and on hp over the growth curve.
+ * basis points, and a per-zone multiplier on atk, hp and xp over the growth curve.
  */
 export type EnemyTuning = {
   zone1: { hp: number; atk: number; def: number; xp: number; goldMin: number; goldMax: number }
@@ -21,6 +21,7 @@ export type EnemyTuning = {
   /** One entry per base zone, in basis points. */
   zoneAtkBp: readonly number[]
   zoneHpBp: readonly number[]
+  zoneXpBp: readonly number[]
 }
 
 // Zones 9 to 12 moved for sim version 7 (#139): the reference Knight there is Legendary, and its
@@ -30,6 +31,7 @@ export const ENEMY_TUNING: EnemyTuning = {
   growthBp: { hp: 11900, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
   zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 7500, 7000, 8500, 10500],
+  zoneXpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000],
 }
 
 /**
@@ -58,7 +60,7 @@ function baseline(t: EnemyTuning, z: number): Baseline {
     hp: Math.floor((grow(zone1.hp, growthBp.hp, z) * (t.zoneHpBp[z] ?? 10000)) / 10000),
     atk: Math.floor((grow(zone1.atk, growthBp.atk, z) * (t.zoneAtkBp[z] ?? 10000)) / 10000),
     def: grow(zone1.def, growthBp.def, z),
-    xp: grow(zone1.xp, growthBp.xp, z),
+    xp: Math.floor((grow(zone1.xp, growthBp.xp, z) * (t.zoneXpBp[z] ?? 10000)) / 10000),
     goldMin: grow(zone1.goldMin, growthBp.gold, z),
     goldMax: grow(zone1.goldMax, growthBp.gold, z),
   }

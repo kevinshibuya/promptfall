@@ -55,7 +55,8 @@ var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 11900, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
-  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 7500, 7e3, 8500, 10500]
+  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 7500, 7e3, 8500, 10500],
+  zoneXpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4]
 };
 function grow(value, bp, steps) {
   let v = value * 1e4;
@@ -68,7 +69,7 @@ function baseline(t, z) {
     hp: Math.floor(grow(zone1.hp, growthBp.hp, z) * (t.zoneHpBp[z] ?? 1e4) / 1e4),
     atk: Math.floor(grow(zone1.atk, growthBp.atk, z) * (t.zoneAtkBp[z] ?? 1e4) / 1e4),
     def: grow(zone1.def, growthBp.def, z),
-    xp: grow(zone1.xp, growthBp.xp, z),
+    xp: Math.floor(grow(zone1.xp, growthBp.xp, z) * (t.zoneXpBp[z] ?? 1e4) / 1e4),
     goldMin: grow(zone1.goldMin, growthBp.gold, z),
     goldMax: grow(zone1.goldMax, growthBp.gold, z)
   };
