@@ -70,6 +70,12 @@ _Avoid_: event stream (the long-poll ADR 0012 leaves out), pending events, push
 The one session per account that ticks and submits; every other session renders read-only.
 _Avoid_: active session, owner
 
+**Migration**:
+The rewrite of a stored state from one sim version to the next, so a save keeps its heroes,
+items and gold across a bump. Runs on the ledger's records and on the machine's save alike. A
+save is never reset for being old (ADR 0013).
+_Avoid_: upgrade, conversion, reset (that is what a migration replaces)
+
 ### Market
 
 **Listing**:
@@ -162,6 +168,100 @@ _Avoid_: turn order, initiative, round
 What a unit does when its turn in the action queue comes: an attack, a heal, later a skill or
 a technique. Picked by a weighted draw among the actions that make sense right now.
 _Avoid_: move, command, turn, ability
+
+**Wipe**:
+Every hero down. The party restarts the zone it is in at wave 1, healed, and nothing is lost.
+An everyday event, not a weighty one.
+_Avoid_: death, game over, party kill, retreat (that is the fall-back after several wipes)
+
+**Retreat**:
+The fall-back one zone the party makes after its third wipe in a zone with no boss kill between
+them. The weighty event a wipe used to be.
+_Avoid_: wipe, defeat, demotion
+
+**Travel**:
+The player's move of the party to any zone up to the highest it has reached, at once, the
+encounter cleared with no drops and no XP. Navigation, never a cost.
+_Avoid_: teleport, warp, zone select, fast travel
+
+**Tier**:
+A full pass of the twelve zones at one difficulty. Clearing zone 12's boss opens the next tier,
+where the same zones hold stronger enemies and drop a tier higher. The ladder stays one ladder:
+tier 2's zone 1 ranks above tier 1's zone 12.
+_Avoid_: prestige, New Game+, difficulty, loop, ascension
+
+**Reactive event**:
+A change in the fight that answers what Claude is doing: Haste while a turn runs, Enrage on a
+failed tool call, Camp on compaction, Guard while a permission waits, and the enemy kind a tool
+kind spawns. Every one is seen on the stage and read in the combat log. None changes what an
+enemy drops.
+_Avoid_: trigger, integration, buff (that is one kind), bonus
+
+**Haste**:
+The reactive event of a running turn: every hero's gauge fills faster while Claude works, speed
+streaks on the party.
+_Avoid_: speed-up, boost, turbo, frenzy
+
+**Enrage**:
+The reactive event of a failed tool call: the front enemy's next hit lands harder, a red flash
+on it.
+_Avoid_: rage, berserk, punishment, penalty
+
+**Camp**:
+The reactive event of a compaction: the party camps and heals, a campfire on the stage.
+_Avoid_: rest (that is a prompt), inn, respite, break
+
+**Guard**:
+The reactive event of a waiting permission prompt: the heroes hold a guard stance, take less
+damage and attack nobody until the player answers.
+_Avoid_: defend, pause, block, shield wall
+
+### Progress
+
+**Tavern guarantee**:
+The tavern's promise that a recruit of at least a given rarity comes within a set number of
+recruits, one count per rarity, published on the Odds tab beside the odds. Contracts from
+bosses are drops and never count.
+_Avoid_: pity, pity counter, pity timer, mercy
+
+**Session summary**:
+What the game tells the player on the first tick of a session about the play since the last
+one: kills, zones, levels, rare drops, gold and sales. One toast and the message window's first
+line. Nothing is summarised after a short break.
+_Avoid_: recap, while you were away (there is no away progress), report
+
+**Achievement**:
+A thing done once and kept for good, counted in play that happens anyway (kills, bosses, zones,
+drops, recruits, collections). Never counted in logins, tool calls or turns.
+_Avoid_: trophy, badge, milestone, quest
+
+**Daily goal**:
+One target a day per account, in play that happens anyway (kills, zone bosses, rare drops, a
+turn boss, a world boss), scaled to the party's zone and paid in gold when met. Set the same
+way on client and server from the day and the account, so nobody has to deliver it. A missed
+goal costs nothing but the streak.
+_Avoid_: daily quest, daily, task, mission, challenge
+
+**Streak**:
+The count of consecutive work days on which the daily goal was met. A work day missed ends it.
+A rest day neither counts nor ends it. Its lengths are achievements; the streak itself pays
+nothing.
+_Avoid_: login streak (nothing counts a login), combo, chain, run
+
+**Rest day**:
+A weekday the player names as off, two a week, Saturday and Sunday unless changed. A change
+takes effect from the next Monday.
+_Avoid_: freeze, skip, forgiveness, grace day
+
+**Weekly hunt**:
+One target a week shared by every player on the server, counted in play that happens anyway,
+with a progress bar on the World tab and a reward to every contributor when it is met.
+_Avoid_: event, community goal, raid, world quest
+
+**Journal**:
+The pane's tab for what the player has seen and done: the bestiary by zone, the item
+collection, the achievements, the daily goal and the streak, each with its mark.
+_Avoid_: bestiary tab, collection, codex, trophies
 
 ### Presentation
 
