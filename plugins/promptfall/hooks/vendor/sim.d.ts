@@ -17,7 +17,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 6;
+declare const SIM_VERSION: 7;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -540,7 +540,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "b232da742e509922";
+declare const GOLDEN_HASH = "9ac1f3f9fb2dfe77";
 
 declare function hashState(state: GameState): string;
 

@@ -54,8 +54,8 @@ var ARCHETYPES = {
 var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 11900, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
-  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 6900, 5700, 5250, 4600],
-  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 10500, 9500]
+  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
+  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 7500, 7e3, 8500, 10500]
 };
 function grow(value, bp, steps) {
   let v = value * 1e4;
@@ -678,7 +678,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "b232da742e509922";
+var GOLDEN_HASH = "9ac1f3f9fb2dfe77";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -773,9 +773,12 @@ var SLOTS = ["weapon", "armour", "accessory"];
 function heroStats(state, hero) {
   const template = content.heroTemplates[hero.template];
   const stats = { hp: 1, atk: 0, def: 0, spd: 0 };
+  const heroMult = content.rarity[hero.rarity].statMultBp;
   if (template) {
-    for (const stat of STATS)
-      stats[stat] = template.base[stat] + template.growth[stat] * (hero.level - 1);
+    for (const stat of STATS) {
+      const raw = template.base[stat] + template.growth[stat] * (hero.level - 1);
+      stats[stat] = Math.floor(raw * heroMult / 1e4);
+    }
   }
   for (const slot of SLOTS) {
     const itemId = hero.equipment[slot];
@@ -1040,7 +1043,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 6;
+var SIM_VERSION = 7;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1214,7 +1217,10 @@ var MIGRATIONS = {
       ...s,
       roster: s.roster.map((h) => ({ ...h, xp: 0 }))
     })
-  }
+  },
+  // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
+  // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
+  6: { state: (s) => s }
 };
 function walk(from, to, chain) {
   if (!Number.isInteger(from)) return { ok: false, reason: "gap", from, to, at: from };

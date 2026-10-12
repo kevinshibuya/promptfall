@@ -27,8 +27,8 @@ describe('createInitialState', () => {
     expect(s.stats).toEqual({ kills: 0, bosses: 0, wipes: 0 })
   })
 
-  it('is version 6 with an empty battle', () => {
-    expect(s.v).toBe(6)
+  it('is version 7 with an empty battle', () => {
+    expect(s.v).toBe(7)
     expect(s.battle).toEqual({ gauges: [], queue: [], busy: 0 })
   })
 

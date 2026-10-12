@@ -23,11 +23,13 @@ export type EnemyTuning = {
   zoneHpBp: readonly number[]
 }
 
+// Zones 9 to 12 moved for sim version 7 (#139): the reference Knight there is Legendary, and its
+// rarity now multiplies its base and growth by 1.5.
 export const ENEMY_TUNING: EnemyTuning = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 11900, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
-  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 6900, 5700, 5250, 4600],
-  zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10500, 9500],
+  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
+  zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 7500, 7000, 8500, 10500],
 }
 
 /**

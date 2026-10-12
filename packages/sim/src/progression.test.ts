@@ -4,7 +4,8 @@ import { content } from './content'
 import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
-import type { Effect, Enemy, EnemyKind, Event, GameState } from './types'
+import type { Effect, Enemy, EnemyKind, Event, GameState, Hero, Item, Rarity } from './types'
+import { RARITIES } from './types'
 
 const toolCall = { t: 'tool_call' } as const
 const turnEnd = { t: 'turn_end' } as const
@@ -234,6 +235,65 @@ describe('the xp curve', () => {
     const r = run(ready(s), [tick])
     expect(r.effects).toContainEqual({ k: 'level_up', heroId: knight.id, level: 11 })
     expect(r.state.roster[0]?.level).toBe(11)
+  })
+})
+
+describe('hero rarity', () => {
+  const s0 = createInitialState(1)
+  const knight = (rarity: Rarity, extra: Partial<Hero> = {}): Hero => ({
+    id: `k_${rarity}`,
+    template: 'knight_1',
+    cls: 'knight',
+    epithet: '',
+    rarity,
+    traits: [],
+    level: 12,
+    xp: 0,
+    hp: 1,
+    equipment: { weapon: null, armour: null, accessory: null },
+    tradeableAt: null,
+    ...extra,
+  })
+
+  it("multiplies a template's base and growth by the rarity table's multiplier", () => {
+    const common = heroStats(s0, knight('common'))
+    for (const rarity of RARITIES) {
+      const mult = content.rarity[rarity].statMultBp
+      const stats = heroStats(s0, knight(rarity))
+      for (const stat of ['hp', 'atk', 'def', 'spd'] as const) {
+        expect(stats[stat], `${rarity} ${stat}`).toBe(Math.floor((common[stat] * mult) / 10000))
+      }
+    }
+    expect(heroStats(s0, knight('rare')).hp).toBeGreaterThan(common.hp)
+    expect(heroStats(s0, knight('legendary', { level: 1 })).atk).toBe(
+      Math.floor((9 * 15000) / 10000),
+    )
+  })
+
+  it('applies traits to the pre-trait total and adds affixes flat, whatever the rarity', () => {
+    const item: Item = {
+      id: 'iX',
+      base: 'steel_longsword',
+      rarity: 'common',
+      affixes: [{ id: 'brutal', value: 4 }],
+      equippedBy: null,
+      tradeableAt: null,
+    }
+    const s: GameState = { ...s0, inventory: [item] }
+    const weaponAtk = (content.itemBases.steel_longsword?.stats.atk ?? 0) + 4
+    for (const rarity of RARITIES) {
+      const bare = heroStats(s0, knight(rarity))
+      const armed = knight(rarity, {
+        traits: [{ id: 'fierce', valueBp: 1000 }],
+        equipment: { weapon: 'iX', armour: null, accessory: null },
+      })
+      const pre = bare.atk + weaponAtk
+      expect(heroStats(s, armed).atk, rarity).toBe(pre + Math.floor((pre * 1000) / 10000))
+    }
+  })
+
+  it('leaves the level caps where they were', () => {
+    expect(RARITIES.map((r) => content.rarity[r].levelCap)).toEqual([20, 30, 40, 45, 50])
   })
 })
 

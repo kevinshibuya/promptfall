@@ -48,9 +48,13 @@ const SLOTS: Slot[] = ['weapon', 'armour', 'accessory']
 export function heroStats(state: GameState, hero: Hero): Stats {
   const template = content.heroTemplates[hero.template]
   const stats: Stats = { hp: 1, atk: 0, def: 0, spd: 0 }
+  // A hero's rarity multiplies its template's base and growth as an item's multiplies its base.
+  const heroMult = content.rarity[hero.rarity].statMultBp
   if (template) {
-    for (const stat of STATS)
-      stats[stat] = template.base[stat] + template.growth[stat] * (hero.level - 1)
+    for (const stat of STATS) {
+      const raw = template.base[stat] + template.growth[stat] * (hero.level - 1)
+      stats[stat] = Math.floor((raw * heroMult) / 10000)
+    }
   }
   for (const slot of SLOTS) {
     const itemId = hero.equipment[slot]
