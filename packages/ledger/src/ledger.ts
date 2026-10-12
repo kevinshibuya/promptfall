@@ -35,6 +35,8 @@ import {
   createInitialState,
   type GameState,
   hashState,
+  MIGRATIONS,
+  type MigrationChain,
   type PlayerEvent,
   type PlayerEventKind,
   replay,
@@ -117,8 +119,10 @@ export type LedgerOptions = {
   linkApprover: LinkApprover
   /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
   presenceTtlMs?: number
-  /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
+  /** Ledger notes that are not errors (a disengage with nothing to undo, a migrated record). Default: dropped. */
   log?: (line: string) => void
+  /** The migration chain a record behind the sim version walks on load. Default the sim's; tests register a stub. */
+  migrations?: MigrationChain
 }
 
 export type LedgerHost = {
@@ -246,12 +250,18 @@ export class Ledger implements ServerClient {
   private readonly memo = new world.WorldMemo()
   /** The flags under `pf:flags`, over the start flags. */
   private stored: Partial<Record<SettableFlag, boolean>> = {}
+  /** Whether this ledger has brought the market book up to the sim version. */
+  private bookCurrent = false
   /** The stored flags read at start; every operation waits on it. */
   private readonly loaded: Promise<void>
 
   constructor(private readonly options: LedgerOptions) {
     this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key))
-    this.books = new Books(this.kv)
+    this.books = new Books(this.kv, {
+      chain: options.migrations ?? MIGRATIONS,
+      now: options.now,
+      log: options.log ?? (() => undefined),
+    })
     this.loaded = (async () => {
       this.stored = settable(await options.kv.get(FLAGS_KEY))
     })()
@@ -354,8 +364,15 @@ export class Ledger implements ServerClient {
     }
   }
 
+  /** Every market call starts here, so the book is normalised before its first read. */
   private async marketContext(): Promise<market.MarketContext> {
-    return { books: this.books, now: await this.options.now(), flags: this.flags() }
+    const ctx = { books: this.books, now: await this.options.now(), flags: this.flags() }
+    if (!this.bookCurrent) {
+      const { chain, log } = this.books.migrator
+      await market.normaliseBook(ctx, chain, log)
+      this.bookCurrent = true
+    }
+    return ctx
   }
 
   private async worldContext(at?: number): Promise<world.WorldContext> {

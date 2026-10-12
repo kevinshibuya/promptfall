@@ -41,7 +41,11 @@ const ZONE1 = { hp: 630, atk: 14, def: 4, spd: 5 }
 function context(now = GRID, flags: Record<string, boolean> = {}) {
   const mem = new MemoryKeyValue()
   const ctx: WorldContext = {
-    books: new Books(new TrackedKeyValue(mem)),
+    books: new Books(new TrackedKeyValue(mem), {
+      chain: sim.MIGRATIONS,
+      now: async () => now,
+      log: () => undefined,
+    }),
     now,
     flags,
     presence: new Map(),

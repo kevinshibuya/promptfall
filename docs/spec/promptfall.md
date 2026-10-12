@@ -330,11 +330,15 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - On hash mismatch the server wins. Small drift is corrected silently; a revoked
   drop raises a toast; repeated revocations flag the account.
 - Hard version gate: a client below the server's minimum version shows an update
-  banner and the sim pauses. No multi-version replay on the server, and no
-  state migration between sim versions: a state behind the client's sim version
-  raises the reset notice and is reset from the Account tab; a state ahead of
-  it raises the update notice. Only the version-gate and sim-version acks pause
-  a submit with the update notice.
+  banner and the sim pauses. No multi-version replay on the server. A record
+  whose committed state is behind the sim version is migrated by the ledger the
+  first time it loads it (ADR 0013): the committed snapshot walks the migration
+  chain, the effective state is rebuilt by replaying the log over it, and the
+  record is saved current. A record the chain cannot migrate (a gap) is answered
+  unchanged, raises the reset notice and is reset from the Account tab; a state
+  ahead of the client's sim version raises the update notice. The ledger logs
+  each migration and each refusal. Only the version-gate and sim-version acks
+  pause a submit with the update notice.
 - Server unreachable: the banner shows at once; the sim keeps ticking and
   buffering for 2 minutes of wall clock from the first failure, then pauses;
   retries back off from 1 to 30 seconds with jitter; the first success flushes

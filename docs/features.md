@@ -324,8 +324,10 @@ what the old one already toasted, nor leaves out what arrived after the old one 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
 again. The first answer sends everything played during the outage at once. When the server runs a
-newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
-older game, it asks for a reset from the Account tab. When the server will not make this machine
+newer game than the plugin, the band asks for a plugin update. A save from an older game is
+migrated by the server the first time it loads it, heroes, items and gold kept, and the local and
+sandbox saves the same way; the band asks for a reset from the Account tab only when the server
+cannot migrate it, and the server's log says why. When the server will not make this machine
 an account (too many new ones from its address this hour), the band shows the server's message
 and the plugin asks again five minutes later. A banned account's band shows the ban and its reason,
 and play stays paused until a new session asks again.
