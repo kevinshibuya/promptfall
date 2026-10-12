@@ -17,13 +17,19 @@ const STEPS = TICK_MS / STEP_MS
 /** The variance roll that changes nothing: the middle of a hit's ±10%. */
 export const NO_VARIANCE_BP = 10000
 
+/** The share of an attack a defence lets through, in basis points: 100 / (100 + def), floored. */
+function mitigationBp(def: number): number {
+  return Math.floor(1000000 / (100 + Math.max(0, def)))
+}
+
 /**
- * One hit of this attack on this defence, before the Archer's double: the variance roll in basis
- * points, the mitigation, then the power scaling. Integer math only. The harness's feel probe
- * calls it at NO_VARIANCE_BP, so a formula change here moves the probe too.
+ * One hit of this attack on this defence, before the Archer's double: the attack scaled by the
+ * mitigation and the variance roll, both in basis points, floored, at least 1, then the power
+ * scaling. Integer math only. The harness's feel probe calls it at NO_VARIANCE_BP, so a formula
+ * change here moves the probe too.
  */
 export function hitDamage(atk: number, def: number, varianceBp: number): number {
-  return scaled(Math.max(1, Math.floor((atk * varianceBp) / 10000) - Math.floor(def / 2)))
+  return scaled(Math.max(1, Math.floor((atk * mitigationBp(def) * varianceBp) / 100000000)))
 }
 
 function damage(s: GameState, atk: number, def: number): number {

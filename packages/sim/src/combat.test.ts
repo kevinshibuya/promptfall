@@ -420,6 +420,76 @@ describe('the battle loop', () => {
   })
 })
 
+describe('mitigation', () => {
+  type Hit = Extract<Effect, { k: 'hit' }>
+  const hits = (effects: Effect[]): Hit[] => effects.filter((e): e is Hit => e.k === 'hit')
+
+  /** The Knight's hits on a world boss of this defence, the Knight's atk raised to 1000 by an affix. */
+  function knightHits(def: number): number[] {
+    const s0 = engaged({ hp: 100000, atk: 1, def, spd: 0 })
+    const knight = s0.roster.find((h) => h.cls === 'knight')
+    if (!knight) throw new Error('roster')
+    const atk = heroStats(s0, knight).atk
+    const ring: Item = {
+      id: 'iatk',
+      base: 'copper_ring',
+      rarity: 'common',
+      affixes: [{ id: 'mighty', value: 1000 - atk - 1 }],
+      equippedBy: knight.id,
+      tradeableAt: null,
+    }
+    let s: GameState = {
+      ...s0,
+      inventory: [ring],
+      roster: s0.roster.map((h) =>
+        h.id === knight.id ? { ...h, equipment: { ...h.equipment, accessory: 'iatk' } } : h,
+      ),
+    }
+    const armed = s.roster.find((h) => h.id === knight.id)
+    if (!armed) throw new Error('knight')
+    expect(heroStats(s, armed).atk).toBe(1000)
+    const out: number[] = []
+    for (let i = 0; i < 60; i++) {
+      const r = step(s, { t: 'tick' })
+      s = r.state
+      for (const h of hits(r.effects)) if (h.by === knight.id) out.push(h.amount)
+    }
+    expect(out.length).toBeGreaterThan(10)
+    return out
+  }
+
+  it('a hit against a defence of 0 lands the whole attack, ±10%, doubled by power', () => {
+    for (const amount of knightHits(0)) {
+      expect(amount).toBeGreaterThanOrEqual(2 * 900)
+      expect(amount).toBeLessThanOrEqual(2 * 1100)
+    }
+  })
+
+  it('a hit against a defence of 100 lands half the attack, ±10%, doubled by power', () => {
+    const amounts = knightHits(100)
+    for (const amount of amounts) {
+      expect(amount).toBeGreaterThanOrEqual(2 * 450)
+      expect(amount).toBeLessThanOrEqual(2 * 550)
+    }
+    // The variance still spreads the hits: not every hit lands the same.
+    expect(new Set(amounts).size).toBeGreaterThan(1)
+  })
+
+  it('a hit never lands below 1 before the power doubling, whatever the defence', () => {
+    // An atk-1 world boss on heroes with defence above 0: every hit rounds to its floor of 1.
+    let s = engaged({ hp: 100000, atk: 1, def: 0, spd: 20 })
+    const boss = s.encounter?.enemies[0]?.id
+    const amounts: number[] = []
+    for (let i = 0; i < 20; i++) {
+      const r = step(s, { t: 'tick' })
+      s = r.state
+      for (const h of hits(r.effects)) if (h.by === boss) amounts.push(h.amount)
+    }
+    expect(amounts.length).toBeGreaterThan(0)
+    expect(new Set(amounts)).toEqual(new Set([scaled(1)]))
+  })
+})
+
 describe('power scaling', () => {
   it('stays integer and at least 1 for any power', () => {
     expect(scaled(8, 21000)).toBe(16)
