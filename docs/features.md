@@ -9,11 +9,11 @@ words.
 generated name, a rarity and the traits its rarity rolls. It levels from kill XP up to its
 rarity's cap, from 20 for Common to 50 for Legendary. Rarer heroes carry higher base stats and
 growth: the rarity multiplies them by the table items use, from 100% for Common to 150% for
-Legendary, so a Rare recruit outhits and outlasts a Common of its level from level 1. Each level costs a little more XP than the
-last, from 60 for level 2 to about 45 thousand for level 50: about 10 thousand in all to reach
-level 10, 207 thousand to reach 30 and 836 thousand to reach 50. A hit lands its attack scaled
-by 100 / (100 + the target's defence), so 100 defence halves it, never below 1. Its sprite wears
-its rarity colour, from Common grey to Legendary gold.
+Legendary, so a Rare recruit outhits and outlasts a Common of its level from level 1. Each level
+costs a little more XP than the last, from 60 for level 2 to about 45 thousand for level 50:
+about 10 thousand in all to reach level 10, 207 thousand to reach 30 and 836 thousand to reach
+50. A hit lands its attack scaled by 100 / (100 + the target's defence), so 100 defence halves
+it, never below 1. Its sprite wears its rarity colour, from Common grey to Legendary gold.
 
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
@@ -45,30 +45,31 @@ ally. The party window shows each hero's gauge filling and turning gold when ful
 the hero who is acting; enemies' gauges never show.
 
 **Zone bosses.** After the tenth wave the zone's boss takes the stage, standing at its full size
-over the small party. Beating it moves the party on to the next of twelve zones, from Greenmeadow
-Road to The Unwritten Reach. The zone's words arrive with the new backdrop: once the boss's chest
-has played and its row has left, the backdrop changes, and only then does the combat log say "The
+over the small party. Beating it moves the party on to the next zone: twelve of them, from
+Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
+all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
+played and its row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
-percentage. Zone 12's boss opens tier 2: the same twelve zones again, zone 13 to 24 on the one
-ladder, with each zone's own monsters, boss and backdrop but stronger than zone 12's and stronger
-with every zone, worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity
-odds. Tier 3, zones 25 to 36, drops at item tier 6; the ladder ends there for now, and zone 36's
-boss farms. Past tier 1 the enemy window title, the arrival toast and the log name the tier:
-"Tier 2, zone 1 · Wave 3", "The party reached tier 2, zone 1, Greenmeadow Road". Inside tier 1
-they read as before.
+percentage. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
+backdrop, but stronger than zone 12's and stronger with every zone, worth more XP and gold, and
+dropping any base at item tier 5 at zone 12's rarity odds. Tier 3, zones 25 to 36, drops at item
+tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the enemy window
+title, the arrival toast and the log name the tier: "Tier 2, zone 1 · Wave 3", "The party reached
+tier 2, zone 1, Greenmeadow Road". Inside tier 1 they read as before.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
 arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
 
 **Wipe.** When every hero falls, the party restarts the zone it is in at wave 1, at full health,
-and nothing is lost. The combat log says "The party fell.", and a short toast reads "The party
-fell, back to wave 1 of zone 4, Old Barrow Hills".
+and nothing is lost; the game counts the zone's wipes. The combat log says "The party fell.", and
+a short toast reads "The party fell, back to wave 1 of zone 4, Old Barrow Hills".
 
 **Retreat.** The third wipe in a zone with no zone boss kill between them is a retreat: the party
-falls back one zone to wave 1 at full health (in zone 1 it restarts zone 1), and the count starts
-again. A zone boss kill or any change of zone also starts it again. The combat log says "The party
-retreats to zone 3.", and a long toast names the zone it fell back to.
+falls back one zone to wave 1 at full health (in zone 1 it restarts zone 1), and the wipe count
+starts again. A zone boss kill or any change of zone also starts it again. The combat log says
+"The party retreats to zone 3.", and a long toast reads "The party retreats to zone 3, Marsh of
+Sighs".
 
 **Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
@@ -82,20 +83,21 @@ that fall behind are dropped; kills, drops, level-ups, deaths and sales always g
 
 **Drops and rarities.** Kills drop items. An item is a base type, a rarity (Common, Uncommon,
 Rare, Epic, Legendary) and one rolled affix for each rarity step above Common, and rarer items
-carry higher base stats. An item also carries a tier, set when it drops from its base's minimum
-zone (zones 1 to 3 are tier 1, 4 to 6 tier 2, 7 to 9 tier 3, 10 to 12 tier 4): an affix keeps its
-flat roll, and what it counts for in stats, in the detail window and in a listing is that roll
-times the tier's multiplier (×1, ×2, ×3.5, ×6), so a deeper item beats a rarer shallow one. Deeper
-zones and bosses roll rarer drops. A kill that drops an item
-leaves a chest where the enemy stood: it falls out of the enemy as it fades, sits closed, opens,
-and the item rises out of it on a glow in its rarity colour, wider the rarer the item. The item
-holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
-item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
-the same chest, and a sandbox item is the drop of the front monster, struck down for it. The combat log's drop
-line, the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits
-for the reveal: they land together once the item has risen, not at the kill, while sales and
-purchases show at once. The Loot tab shows the last two rows, drops and sales
-alike, coloured by rarity.
+carry higher base stats. An item also carries an item tier, set when it drops from its base's
+minimum zone (zones 1 to 3 are tier 1, 4 to 6 tier 2, 7 to 9 tier 3, 10 to 12 tier 4), and every drop in
+the ladder's tier 2 is item tier 5 and in tier 3 item tier 6. An affix keeps its flat roll, and
+what it counts for in stats, in the detail window and in a listing is that roll times the item
+tier's multiplier (×1, ×2, ×3.5, ×6, ×10, ×16), so a deeper item beats a rarer shallow one.
+Deeper zones and bosses roll rarer drops. A kill that drops an item leaves a chest where the
+enemy stood: it falls out of the enemy as it fades, sits closed, opens, and the item rises out of
+it on a glow in its rarity colour, wider the rarer the item. The item holds there longer the
+rarer it is (under a second for a Common, two for a Legendary), then the item, its glow and the
+chest fade; the next enemy steps on after it. An auto-vendored drop plays the same chest, and a
+sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
+the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
+the reveal: they land together once the item has risen, not at the kill, while sales and
+purchases show at once. The Loot tab shows the last two rows, drops and sales alike, coloured by
+rarity.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its
@@ -330,7 +332,9 @@ cannot change it. Its detail window names the server, the client, the mode and t
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions. Past tier 1 its title names the tier ("Odds · tier 2,
-zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at.
+zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
+the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
+priced by rarity and tier.
 
 **Motion.** Motion is full by default; set to still, the idle bob stops while attacks and hits
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
@@ -419,8 +423,8 @@ strikes the front monster down and the item, common unless a rarity is given, is
 with the kill's XP and gold, and a zone boss's kill clears its zone. With no monster on the field,
 between spawns or against a world boss, the item drops alone: against a world boss its chest
 falls on the boss, and between spawns a chest on the empty ground still plays on the front slot,
-the next monster stepping on after it. With the inventory full it is
-vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
+the next monster stepping on after it. With the inventory full, or when the auto-vendor setting
+sells it, it is vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1, any zone up to the ladder's end at 36,
 and refuses past it with the range. `recruit [rarity]` recruits a hero, and
 refuses with a full roster. `wipe` makes the party fall now: it restarts the

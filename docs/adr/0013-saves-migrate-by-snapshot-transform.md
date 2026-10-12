@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 ---
 
 # Saves migrate by snapshot transform
@@ -11,8 +11,9 @@ loop work changes the combat formula, the XP curve, hero stats and affix values,
 `SIM_VERSION` bump, and the game is played on a public server by people who keep their party
 for months. A reset per bump would throw their party away four times in a row.
 
-So a sim bump ships with a **migration**: a pure function per step, `migrate(state, from)`,
-that rewrites a stored `GameState` of version N into one of version N+1 and nothing else. The
+So a sim bump ships with a **migration**: a pure function per step that rewrites a stored
+`GameState` of version N into one of version N+1 and nothing else, walked by one
+`migrate(state)` from the state's own version (5 or above) to the current one. The
 ledger runs the chain when it first loads a record whose committed state is behind: it
 migrates the **committed snapshot only**, rebuilds the effective state by replaying the
 record's log of server events over it, recomputes the committed hash and writes the record
@@ -21,23 +22,27 @@ two snapshots independently would not, since a server event replayed over a migr
 is not the same as a migrated state that already held its effect. The client never migrates
 on its own: the server's bootstrap answers a current state, and the in-process fake is the
 ledger, so the local and sandbox saves go through the same code. A golden test per step pins
-it: a fixture of version N in, the expected version N+1 state out, on a plain fixture and on
+it: a fixture of version N in, the expected hash of version N+1 out, on a plain fixture and on
 a deep one with rare heroes, tiered items and a boss engaged.
 
 Rules a migration follows, so every step reads the same way:
 
 - A step is pure on shape: it rewrites fields and never reads the current rules, so its
-  pinned output does not drift when a later bump changes a formula.
-- A hero keeps its level; its XP into the level becomes 0. Stats are derived from level,
-  class and rarity, so a new formula applies to old heroes at once.
-- Items keep their base, rarity and affix rolls. An affix stores its flat roll and is scaled
-  at read by the item's tier, so a value rule never needs a migration.
+  pinned output does not drift when a later bump changes a formula. A rule a step needs is
+  frozen inside it: the 7 → 8 step reads only a base's minimum zone from the content and
+  carries its own copy of the tier rule.
+- A hero keeps its level. A step that changes the XP curve sets its XP into the level to 0;
+  any other step keeps it. Stats are derived from level, class and rarity, so a new formula
+  applies to old heroes at once.
+- Items keep their base, rarity and affix rolls. An item stores its tier, given once from its
+  base by the 7 → 8 step; an affix stores its flat roll and is scaled at read by that tier,
+  so a value rule never needs a migration.
 - Gold, zone, wave, roster, inventory and market goods are copied untouched.
 - Anything the new version has that the old one lacked starts at its initial value.
 - A step may name a goods rule for items and heroes the ledger holds outside the state (the
   market book, the returns, the log's server events); identity unless an item or hero
-  changed shape. The ledger applies it once, under a version mark, as it applies the chain
-  to a record.
+  changed shape. The ledger applies it with the chain to a record's log and returns, and to
+  the market book once per bump, under the book's version mark.
 - Two finishers run once at the chain's end and read the current rules: outside boss mode
   the encounter and the battle are cleared so the next tick spawns, and in boss mode both
   are left as they are; each hero's HP is clamped to its new maximum. A hero stores no old
