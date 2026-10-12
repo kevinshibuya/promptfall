@@ -18,8 +18,8 @@ Install it from this repository's marketplace in a Claude Code session:
 The band appears above the prompt once the session starts. Your three heroes fight on their own.
 Every tool call Claude makes spawns an enemy, at most three fight at once and ten wait in a queue.
 A turn with ten or more tool calls ends with a turn boss. Each prompt you submit heals the party
-30% and revives the fallen. With nothing alive, the next enemy of the wave walks in, so an idle
-session still fights, one round every 5 seconds instead of every 2.
+50% and revives the fallen at 50%. With nothing alive, the next enemy of the wave walks in, so an
+idle session still fights, one round every 5 seconds instead of every 2.
 
 A zone is ten waves and a boss. Beating the boss moves you to the next zone. A wipe sends you back
 one zone at full health and costs nothing else.

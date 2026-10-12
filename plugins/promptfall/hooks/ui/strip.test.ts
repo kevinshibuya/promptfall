@@ -61,9 +61,28 @@ test('the enemy window titles: a wave, a boss, the world boss with its time left
   expect(titled({ ...rest, view: at(rest.view) })).toBe('Zone 3 · Wave 2')
   const boss = strip('strip-boss')
   expect(titled({ ...boss, view: { ...boss.view, zone: 3 } })).toBe('Zone 3 · Boss')
-  expect(titled({ ...rest, view: { ...at(rest.view), zone: 13 } })).toBe('Tier 2, zone 1 · Wave 2')
-  expect(titled({ ...boss, view: { ...boss.view, zone: 36 } })).toBe('Tier 3, zone 12 · Boss')
   expect(titled(strip('strip-world-boss'))).toBe('World boss · 11m')
+})
+
+test('past tier 1 the enemy window title takes the short tier form and fits the window whole', () => {
+  const rest = strip('strip-rest')
+  const boss = strip('strip-boss')
+  const cases: [StripInput, string][] = [
+    [{ ...rest, view: { ...rest.view, zone: 13, wave: 10 } }, 'T2 Z1 · Wave 10'],
+    [{ ...rest, view: { ...rest.view, zone: 24, wave: 10 } }, 'T2 Z12 · Wave 10'],
+    [{ ...boss, view: { ...boss.view, zone: 36 } }, 'T3 Z12 · Boss'],
+    // Inside tier 1 the title is unchanged.
+    [{ ...rest, view: { ...rest.view, zone: 1, wave: 2 } }, 'Zone 1 · Wave 2'],
+  ]
+  // The band's widths with an enemy window: its narrowest, the default and the widest.
+  for (const columns of [116, 120, 160])
+    for (const [input, title] of cases) {
+      const enemy = win(stripScene({ ...input, columns }).scene, 'enemy')
+      const spans = enemy.title ?? []
+      expect(lineText({ spans })).toBe(title)
+      // The border lays a title from cell 2 to the last cell before the corner.
+      expect([...lineText({ spans })].length).toBeLessThanOrEqual(enemy.columns - 4)
+    }
 })
 
 test("the compact window's title carries the world boss's time left", () => {
