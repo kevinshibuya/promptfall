@@ -1,8 +1,8 @@
 # Promptfall, product and architecture spec
 
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
-phase 3 on 2026-10-03, for phase 4 on 2026-10-04 and for the staged state on
-2026-10-09. Every
+phase 3 on 2026-10-03, for phase 4 on 2026-10-04, for the staged state on
+2026-10-09 and for the curve on 2026-10-12. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -115,8 +115,8 @@ Checked against Claude Code v2.1.287's mods API.
   mini-boss with raised drop rates and a hero contract chance. It is not the
   zone boss. One that spawns mid-wave joins the wave's encounter and leaves its
   progress alone: the wave clears, with its heal, when its last monster is gone.
-- `prompt.submit` is a short rest: every hero heals 30% of max HP, fallen heroes
-  revive at 30%.
+- `prompt.submit` is a short rest: every hero heals 50% of max HP, fallen heroes
+  revive at 50%.
 - When no enemy is present a tick spawns the next enemy of the current wave, so
   idle sessions still fight.
 
@@ -124,11 +124,31 @@ Checked against Claude Code v2.1.287's mods API.
 
 - 12 zones, each 10 waves then a zone boss. Waves have 1 to 3 enemies drawn
   from the zone's enemy list.
-- Clearing the zone boss advances to the next zone unless the farm toggle is on,
-  in which case the zone restarts at wave 1.
+- Clearing the zone boss advances to the next zone unless the farm toggle is on
+  or the party is at the ladder's end, in which case the zone restarts at wave 1.
 - Wave clear heals every hero 15% and revives fallen heroes at 15%.
-- Party wipe: retreat one zone (never below zone 1), wave 1, full heal, encounter
-  and queue cleared. Nothing is lost.
+- Party wipe: every hero down. Full heal, encounter and queue cleared, the
+  pending party applied, nothing lost. The state counts the wipes in the
+  current zone (`zoneWipes`); a zone boss kill and any change of zone reset the
+  count. A wipe with fewer than two before it restarts the same zone at wave 1
+  and raises the count; its effect is a wipe naming the zone.
+- Retreat: the third wipe in a zone with no zone boss kill between them. The
+  party falls back one zone to wave 1 (in zone 1 it restarts zone 1) and the
+  count resets; its effect is a retreat naming the zone fallen to. Boss mode's
+  wipe counts nothing (§4.6), and the farm toggle is unchanged.
+- Tiers: zone 12's boss opens tier 2, the same twelve zones again as zones 13
+  to 24, and zone 24's boss opens tier 3, zones 25 to 36. The ladder ends at
+  tier 3 for now (`LADDER_END`, 36), where the advance gate farms as the farm
+  toggle does. `zone` stays one running number in the state and on the wire, and
+  `highestZone` with it, so tier 2's zone 1 ranks above tier 1's zone 12. One
+  accessor (`zoneAt`) gives a running zone's tier and base zone (1 to 12), and
+  every content lookup by zone goes through it, so the content stays twelve
+  zones. A zone past 12 holds its base zone's enemies, boss, name and backdrop
+  at zone 12's numbers, stepped once at zone 13 on HP, attack and defence
+  (`TIER_ENTRY_BP`) and grown per zone past 12 on HP, attack, defence, XP and
+  gold (`TIER_GROWTH_BP`); speed stays at zone 12's. It drops at zone 12's
+  rarity weights, every item at item tier 5 in tier 2 and 6 in tier 3 (§4.4).
+  The world boss scales by the running zone through the same accessor.
 - Arc targets, in live hours at the reference cadence (turns drawn from Kevin's
   transcripts: a median of 2 tool calls a turn, about 5 prompts an hour, 60% of
   live time inside turns, a rest on every prompt), for a dedicated player and read
@@ -147,7 +167,16 @@ Checked against Claude Code v2.1.287's mods API.
   that costs under a tenth of its gold, and never trades; after a recruit it
   fields the three heroes of highest score, a Knight first; and it vendors the
   unworn items no hero would wear. It grants itself a Legendary Knight at hour 9.
-- Difficulty tiers are a later prestige layer on the same ladder, not v1.
+- `arc.test.ts` measures the arc in every gate: nine seeds (1 to 9) of 120 live
+  hours each. What gates: every seed first clears zone 1 inside the first 30
+  minutes and first clears each zone later than the one before; at least seven
+  of the nine first clear zone 12, and at least seven take the granted Legendary
+  to 50, inside the run (the completion floors); a capped party in tier-5 gear
+  clears zone 13; the feel probe holds at every zone. The three medians (zone
+  12's first clear, the hours per level through 10 to 30, the Legendary's cap)
+  are a report, never a gate: the test prints them with the per-seed table, each
+  bump ticket pastes that table in its closing comment, and Kevin judges the
+  medians on the PR.
 
 ### 4.3 Heroes
 
@@ -161,7 +190,10 @@ Checked against Claude Code v2.1.287's mods API.
   Legendary 4. Level cap by rarity: 20, 30, 40, 45, 50.
 - Hero names are the template name plus a generated epithet, never player
   typed.
-- Stats: HP, attack, defence, speed. Growth per level by class table. XP from
+- Stats: HP, attack, defence, speed. Growth per level by class table. A hero's
+  rarity multiplies its template's base stats and per-level growth by the
+  rarity's stat multiplier, the table items use (§4.4): 100, 110, 120, 135, 150
+  percent. Traits apply to the pre-trait total; affixes add flat. XP from
   kills. A per-class resource (mana, stamina) is deferred until a skill system
   gives it a use.
 - Actions: every class attacks. The Knight hits one enemy, the front one most
@@ -193,9 +225,25 @@ Checked against Claude Code v2.1.287's mods API.
   rarity: 0, 1, 2, 3, 4. Rarity also multiplies base stats: 100, 110, 120, 135,
   150 percent.
 - Rarity tiers everywhere: Common, Uncommon, Rare, Epic, Legendary.
+- An item stores its item tier, set when it drops: a base's minimum zone 1 to 3
+  is tier 1, 4 to 6 tier 2, 7 to 9 tier 3, 10 to 12 tier 4, and every drop past
+  the ladder's tier 1 is tier 5 (tier 2) or 6 (tier 3). An affix stores its flat
+  roll, and the tier's multiplier scales it at read: ×1, ×2, ×3.5, ×6, ×10, ×16,
+  in basis points, floored. The scaled value is what the affix counts for in
+  stats and wherever the plugin shows it (the detail window, a listing), so
+  stats still add flat and a deeper item beats a rarer shallow one.
 - Inventory 30 slots, expandable with gold, and equipped items occupy slots. A
   drop into a full inventory is auto-vendored and the loot log says so.
-- Reforge rerolls one affix for gold, price by rarity.
+- Reforge rerolls one affix for gold: the same flat range, the item's tier kept.
+  The price is the rarity's price times the item tier's multiplier, floored,
+  shown on the Reforge row of the Inventory command window before the pick.
+- Auto-vendor: a per-account setting in the state beside the farm flag
+  (`autoVendor`), off on every save, set by the player event `set_auto_vendor`.
+  When on, a Common drop, or an Uncommon drop while the party's zone is past 3,
+  is vendored on pickup unless a party hero has the item's slot empty and could
+  wear it; a Rare or better never. The vendored effect carries its cause, a full
+  inventory or the setting; the chest plays as for a full inventory and the loot
+  log reads `Oak Staff vendored, 3G.`
 
 ### 4.5 Gold
 
@@ -246,7 +294,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Browsing is open to every account. Listing, buying and ordering need a linked
   GitHub account and `market.enabled`; the dialog says so in place.
 - Published odds: an Odds screen in the dialog shows drop, rarity and tavern
-  tables.
+  tables, at zone 12's rarity odds past tier 1, and says that rarity multiplies
+  base stats, heroes and items alike, and that reforge is priced by rarity and
+  tier.
 
 ## 6. Social (phase 3)
 
@@ -260,8 +310,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   lives in the ledger's memory on every host, the real server too; a restart
   loses it and the next polls rebuild it. The World tab shows the count online
   and the names in your zone; the Leaderboards pane shows the count per zone.
-- Leaderboards: highest zone reached (all time) and world boss damage (weekly,
-  reset Monday 00:00 UTC on the server clock). Both come from the ledger's own
+- Leaderboards: highest zone reached (all time, the running zone, read `T2 Z1`
+  past 12) and world boss damage (weekly, reset Monday 00:00 UTC on the server
+  clock). Both come from the ledger's own
   records, never from client claims, maintained incrementally at each commit and
   each contribution, 20 rows each, read on demand. Names are the display name,
   else `adventurer`; a name matching the blocklist shows as `adventurer`.
@@ -344,15 +395,28 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - On hash mismatch the server wins. Small drift is corrected silently; a revoked
   drop raises a toast; repeated revocations flag the account.
 - Hard version gate: a client below the server's minimum version shows an update
-  banner and the sim pauses. No multi-version replay on the server. A record
-  whose committed state is behind the sim version is migrated by the ledger the
-  first time it loads it (ADR 0013): the committed snapshot walks the migration
-  chain, the effective state is rebuilt by replaying the log over it, and the
-  record is saved current. A record the chain cannot migrate (a gap) is answered
-  unchanged, raises the reset notice and is reset from the Account tab; a state
-  ahead of the client's sim version raises the update notice. The ledger logs
-  each migration and each refusal. Only the version-gate and sim-version acks
-  pause a submit with the update notice.
+  banner and the sim pauses. No multi-version replay on the server.
+- Saves migrate (ADR 0013). The sim exports one `migrate` that walks a stored
+  state from any version at or above 5 to the current one, one pure step per
+  version, and refuses a version with no step (a gap) or one ahead. The ledger
+  runs it the first time it loads a record whose committed state is behind:
+  the committed snapshot walks the chain, the goods held outside the state (the
+  log's server events and the returns) walk each step's goods rule, the
+  effective state is rebuilt by replaying the log over the migrated snapshot,
+  the committed hash is recomputed and the record is saved current. The market
+  book's listings walk the goods rule once per bump, under the book's version
+  mark. The client never migrates: it replays the same delivery over the same
+  snapshot, and the in-process fake is the ledger, so the local and sandbox
+  saves migrate by the same code, and a bot behind the version is migrated, not
+  minted again. The ledger logs one line per migrated record and per refusal,
+  with the account and the versions.
+- A batch whose sim version is not the server's is refused with `sim_version`,
+  and a client behind the server shows the update notice: the server is
+  updated first, always. A record the chain refuses is answered as stored; the
+  plugin raises the reset notice for it, and the player resets this machine's
+  data from the Account tab. A state ahead of the client's sim version raises
+  the update notice. Only the version-gate and sim-version acks pause a submit
+  with the update notice. Every bump moves the plugin's version.
 - Server unreachable: the banner shows at once; the sim keeps ticking and
   buffering for 2 minutes of wall clock from the first failure, then pauses;
   retries back off from 1 to 30 seconds with jitter; the first success flushes
@@ -525,11 +589,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   end` (`spawnBoss` and `settleBoss`, then one world poll so the "appeared" or
   "down" toast fires inside the command), `item <base> [rarity]`
   (`sandbox_item`: the sim's roll through the drop intake, vendored when the
-  inventory is full), `level <hero> <n>` (`sandbox_level`: XP level by level, up
-  to the rarity cap), `gold <n>` (`credited` with reason `sandbox`), `zone <n>`
-  (`sandbox_zone`: wave 1), `recruit [rarity]` (`sandbox_recruit`, refused on a
-  full roster), `wipe` (`sandbox_wipe`: the wipe path) and `reset` (the account
-  reset). Rarity defaults to common; names match by case-insensitive prefix of
+  inventory is full or the auto-vendor setting sells it), `level <hero> <n>`
+  (`sandbox_level`: XP level by level, up to the rarity cap), `gold <n>`
+  (`credited` with reason `sandbox`), `zone <n>` (`sandbox_zone`: wave 1, any
+  zone up to the ladder's end, 36), `recruit [rarity]` (`sandbox_recruit`,
+  refused on a full roster), `wipe` (`sandbox_wipe`: the wipe path, so the third
+  in a zone retreats) and `reset` (the account reset). Rarity defaults to
+  common; names match by case-insensitive prefix of
   the display name, a word in it or the id. `boss`, `zone` and `wipe` are
   unapplicable in boss mode. Each verb syncs after the host call, so the grant is
   in the view before the reply. The sandbox save is separate: its books, device
@@ -568,8 +634,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
   with no painting stand on a one-row ground strip coloured per zone. Under it
   the window strip (ADR 0005), Dragon Quest V's
   windows in its pixel font: the enemy window (titled with the zone and wave,
-  one row per enemy with an HP bar, a boss with its percentage), the message
-  window (the command line, then the combat log), the party window (each hero's
+  `Tier 2, zone 1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
+  boss with its percentage), the message window (the command line, then the
+  combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
   fills between ticks and turns gold when full) and the purse window (gold and
   the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
@@ -712,8 +779,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
   titles, the compact window and its front enemy, and the world boss bar on
   every tab read the staged state. The sim, the server and the pane read the
   state. The toasts read the state, except those with a show time, which land
-  when the stage plays their event; the wipe toast may lead the last hero's
-  fall by at most one cadence. The strip's hero HP trails the state and never leads it.
+  when the stage plays their event; the wipe and retreat toasts may lead the
+  last hero's fall by at most one cadence. The strip's hero HP trails the state
+  and never leads it.
 - World tab rows (phase 3), in the message window: the count online and the
   names in your zone, you excluded; then the latest chat message as a ticker,
   or highest zone, kills and wipes when chat is closed or quiet, ending in
@@ -776,15 +844,18 @@ flags. No second server program, no Postgres, no Redis, no worker.
   typed price. Mobile has no field and lists preset prices. Market and Orders
   are always listed; a closed market or an unlinked account is said in the
   message window, with a hotkey to the Account tab.
-- Account tab: the settings as rows (`s` sound, `n` motion, `x` renderer), the
-  band shown or collapsed, band off, link GitHub (the device flow: a code in
+- Account tab: the settings as rows (`s` sound, `n` motion, `x` renderer, and
+  "Auto-vendor: off / on", which sends `set_auto_vendor` and is the account's,
+  not the machine's: a secondary session shows it read-only), the band shown or
+  collapsed, band off, link GitHub (the device flow: a code in
   the detail window, the URL as a link under the picture, a poll), and a reset
   of this machine's data, which asks Yes or No and opens on No. The detail
   window holds the server, the client, the mode and the session. Before a game
   view exists the pane says Promptfall has not started, and Account still
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag. `/promptfall server <url>|local` picks the server.
+  toggles the farm flag. `/promptfall autovendor on|off` sets the auto-vendor
+  setting. `/promptfall server <url>|local` picks the server.
 - Toasts: one sentence in the game's voice for an event worth a glance away
   from Claude's work: rare good news, a state that wants a decision, or money
   that moved. The table below says which events toast and how each reads, and
@@ -797,9 +868,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | legendary drop | rare good news | long | `Legendary drop: Ironwood Staff`, at the reveal | never folds | legendary |
 | recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | none |
 | boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
-| wipe | wants a decision | long | `The party fell, retreating to zone 2` | never folds | none |
+| retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | none |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
+| wipe | wants a decision | short | `The party fell, back to wave 1 of zone 4, Old Barrow Hills` | never folds | none |
 | zone arrival | wants a decision | short | `The party reached zone 4, Old Barrow Hills`, at the backdrop change | never folds | none |
 | rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
 | vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
@@ -822,9 +894,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
   plays then; a zone arrival lands at the backdrop change, when the zone boss's
   row has left, with its log line, after the boss's drop. A drop whose item has
   no chest on the stage, a zone arrival with no zone boss row on the stage, or
-  either while no stage is drawn, toasts with its burst. The wipe toast may lead the last hero's fall on the stage by
-  at most one cadence: the tick that wipes the party toasts as it lands, while
-  the stage plays that tick's blows over the cadence that follows.
+  either while no stage is drawn, toasts with its burst. The wipe and retreat
+  toasts may lead the last hero's fall on the stage by at most one cadence: the
+  tick that wipes the party toasts as it lands, while the stage plays that
+  tick's blows over the cadence that follows.
 
   Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
@@ -845,7 +918,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   - A zone arrival toasts only when the party advances to a higher zone; the
     zone's name follows its number with no article ("zone 4, Old Barrow
     Hills", since zone 12 is "The Unwritten Reach"), and a zone with no name
-    reads "The party reached zone N".
+    reads "The party reached zone N". Past tier 1 the tier leads: "tier 2,
+    zone 1, Greenmeadow Road". The wipe, retreat and arrival rows, the log,
+    the enemy window's title and the Odds tab's title name a zone this one
+    way (`hooks/zone-words.ts`).
+  - The combat log says "The party fell." for a wipe and "The party retreats
+    to zone 3." for a retreat.
   - The vendored row fires only for Rare or better: a full inventory vendors
     every drop, and the loss of something worth keeping is the signal.
   - The combat log uses the same nouns and verbs for the same events, with "G"
