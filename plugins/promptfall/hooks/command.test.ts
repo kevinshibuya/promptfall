@@ -3,11 +3,21 @@ import type { WorldState } from '../types'
 import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { bandKey, stageKey } from './stage/loop'
+import {
+  BACKLOG_ROUNDS,
+  CHEST_FALL_MS,
+  CHEST_OPEN_MS,
+  CHEST_SIT_MS,
+  DISSOLVE_MS,
+  REVEAL_FADE_MS,
+  REVEAL_HOLD_MS,
+  REVEAL_RISE_MS,
+} from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
 import { approveAs, Ledger } from './vendor/ledger.js'
-import { content, createInitialState } from './vendor/sim.js'
+import { content, createInitialState, TICK_MS } from './vendor/sim.js'
 import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
@@ -725,13 +735,25 @@ test('in play, the strip’s hero HP trails the state until the hit lands, never
     return [...line.matchAll(/H\s+(\d+)/g)].map((m) => Number(m[1]))
   }
   let trailed = 0
-  // Each hero's state HP over the last two ticks: a heal still to land holds the strip at one.
+  // A heal lands once the stage lets its tick go (spec, the staged state): the actions it still
+  // holds, at most BACKLOG_ROUNDS ticks of them, then the tick's departed rows fading and their
+  // chests played, the slowest a Legendary's. Each hero's state HP over that long: a heal still to
+  // land holds the strip at one of them.
+  const settleMs =
+    BACKLOG_ROUNDS * TICK_MS +
+    DISSOLVE_MS +
+    CHEST_FALL_MS +
+    CHEST_SIT_MS +
+    CHEST_OPEN_MS +
+    REVEAL_RISE_MS +
+    REVEAL_HOLD_MS.legendary +
+    REVEAL_FADE_MS
   const recent: number[][] = []
   for (let step = 0; step < 600; step++) {
     await clock.advance(50)
     const state = view().heroes.map((h) => h.hp)
     recent.push(state)
-    if (recent.length > 80) recent.shift()
+    if (recent.length > Math.ceil(settleMs / 50)) recent.shift()
     const strip = await shown()
     if (strip.length !== state.length) continue
     // Never below what the state was: the strip only holds back a hit or a heal not yet landed.
