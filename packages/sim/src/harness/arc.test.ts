@@ -1,7 +1,10 @@
+import { fork } from 'node:child_process'
+import { createRequire } from 'node:module'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SIM_VERSION } from '../types'
 import { outOfBand, probe } from './probe'
-import { runScenario, type ScenarioReport } from './scenario'
+import type { ScenarioOptions, ScenarioReport } from './scenario'
 
 // The arc of spec #130 at the reference cadence: nine seeds, 200 live hours each. Every sim bump
 // runs it, so the numbers in the content tables are the ones this evidence describes. The hour
@@ -12,9 +15,31 @@ import { runScenario, type ScenarioReport } from './scenario'
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 const HOURS = 200
 
+// The seeds run in child processes, at most four at once: the machine that gates has 8 GB.
+const PROCESSES = 4
+const TSX = pathToFileURL(createRequire(import.meta.url).resolve('tsx')).href
+const SEED_SCRIPT = fileURLToPath(new URL('./arc-seed.ts', import.meta.url))
+
+function runSeed(seed: number): Promise<ScenarioReport> {
+  const options: ScenarioOptions = { seed, hours: HOURS }
+  return new Promise((resolve, reject) => {
+    const child = fork(SEED_SCRIPT, [], { execArgv: ['--import', TSX], serialization: 'advanced' })
+    child.once('message', (report) => resolve(report as ScenarioReport))
+    child.once('error', reject)
+    child.once('exit', (code) => reject(new Error(`seed ${seed}: exited with ${code}`)))
+    child.send(options)
+  })
+}
+
 const runs = new Map<number, ScenarioReport>()
-beforeAll(() => {
-  for (const seed of SEEDS) runs.set(seed, runScenario({ seed, hours: HOURS }))
+beforeAll(async () => {
+  const queue = [...SEEDS]
+  const lane = async () => {
+    for (let seed = queue.shift(); seed !== undefined; seed = queue.shift()) {
+      runs.set(seed, await runSeed(seed))
+    }
+  }
+  await Promise.all(Array.from({ length: PROCESSES }, lane))
 }, 600_000)
 
 function arc(seed: number): ScenarioReport {
