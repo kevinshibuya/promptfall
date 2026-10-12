@@ -20,7 +20,8 @@ always the full stage scaled to the band), four sound cues, sprites in the dialo
 art pipeline that builds them, all on the concept sheets as placeholders.
 Phase 4, PR 2 is the real art: 4 heroes with attack poses, 72 monsters and bosses, 4 world bosses
 and 40 items, drawn by gpt-image-2 on sprite sheets and cut to size (`pnpm slice`), with the hero
-sprites cleaned by hand, and four CC0 8-bit sound cues. Each sprite is drawn twice: the 1.5× art
+sprites cleaned by hand, and four CC0 8-bit sound cues, since replaced by eight generated ones
+(Licence, below). Each sprite is drawn twice: the 1.5× art
 for the full stage in Ghostty, kitty and the desktop, and the 1× art for half-block terminals, the
 compact stage and the lists (ADR 0006).
 
@@ -120,10 +121,6 @@ next is in [docs/roadmap.md](docs/roadmap.md).
 ## Licence
 
 MIT: see [LICENSE](LICENSE). The third-party code and font the plugin ships keep their own
-licences, listed in [plugins/promptfall/NOTICE.md](plugins/promptfall/NOTICE.md); the sound cues
-are CC0 (below).
-
-## Credits
-
-The four sound cues come from Juhani Junkala's "512 Sound Effects (8-bit style)", released under
-CC0: https://opengameart.org/content/512-sound-effects-8-bit-style
+licences, listed in [plugins/promptfall/NOTICE.md](plugins/promptfall/NOTICE.md). The eight sound
+cues are the repository's own: `scripts/cues.ts` writes them (`pnpm cues`) and CI checks the
+committed clips against it, so they are MIT like the rest.

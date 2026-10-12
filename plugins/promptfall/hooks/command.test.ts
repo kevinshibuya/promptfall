@@ -135,23 +135,32 @@ test('the settings commands write the store and the atom, and answer', async ($,
   const { data, states } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const run = (args: string) => $.command.run({ ...RUN, command: 'promptfall', args })
-  expect((await run('sound on')).text).toBe('Sound on')
+  expect((await run('sound loud')).text).toBe('Sound: loud')
   expect((await run('motion still')).text).toBe('Motion: still')
   expect((await run('renderer raster')).text).toBe(
     'Renderer: raster (applies at the next session start)',
   )
-  const stored = { sound: true, motion: 'still', renderer: 'raster', probed: null }
+  const stored = { sound: 'loud', motion: 'still', renderer: 'raster', probed: null }
   expect(data.get('promptfall:settings')).toEqual(stored)
   expect(states.get('settings')).toEqual(stored)
-  expect((await run('sound off')).text).toBe('Sound off')
-  expect((data.get('promptfall:settings') as { sound: boolean }).sound).toBe(false)
+  const sound = () => (data.get('promptfall:settings') as { sound: string }).sound
+  expect((await run('sound off')).text).toBe('Sound: off')
+  expect(sound()).toBe('off')
+  expect((await run('sound normal')).text).toBe('Sound: normal')
+  expect(sound()).toBe('normal')
+  // The old word still works, and means the quiet step.
+  expect((await run('sound on')).text).toBe('Sound: quiet')
+  expect(sound()).toBe('quiet')
 })
 
 test('a bad setting value answers its usage and writes nothing', async ($, on) => {
   const { data } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const run = (args: string) => $.command.run({ ...RUN, command: 'promptfall', args })
-  expect((await run('sound loud')).text).toBe('usage: /promptfall sound on|off')
+  const usage = 'usage: /promptfall sound off|quiet|normal|loud'
+  expect((await run('sound loudest')).text).toBe(usage)
+  expect((await run('sound')).text).toBe(usage)
+  expect((await run('sound quiet please')).text).toBe(usage)
   expect((await run('motion')).text).toBe('usage: /promptfall motion full|still')
   expect((await run('renderer svg')).text).toBe('usage: /promptfall renderer auto|image|raster')
   expect(data.has('promptfall:settings')).toBe(false)
@@ -439,7 +448,7 @@ async function bandRaster(ui: Finder): Promise<Found | undefined> {
 
 test('sandbox worldboss engages the party in boss mode; worldboss end pays it and the boss is down', async ($, on) => {
   const { run, view, states, toasts } = await sandboxOn(on, $, {
-    'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'raster' },
   })
   expect(await run('worldboss')).toBe('Sandbox: world boss The Promptwyrm has appeared')
   // One undying enemy: the world boss, whose name travels with the engagement.
@@ -514,7 +523,7 @@ test(
   { timeoutMs: 15_000 },
   async ($, on) => {
     const { run, view, clock } = await sandboxOn(on, $, {
-      'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+      'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'image' },
     })
     expect(await run('boss treant')).toBe('Sandbox: Elder Treant is next')
     for (let i = 0; i < 40 && !view().enemies.some((e) => e.name === 'Elder Treant'); i++)
@@ -711,7 +720,7 @@ async function compactAt110($: Mounting, renderer: 'image' | 'raster') {
 describe('in play, the Image band read at 165 and 110 columns, one boot', () => {
   test('one element, the strip inside the picture; compact one element on the shell', async ($, on) => {
     await sandboxOn(on, $, {
-      'promptfall:settings': { sound: false, motion: 'full', renderer: 'image' },
+      'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'image' },
     })
     await imageAt165($)
     await compactAt110($, 'image')
@@ -721,7 +730,7 @@ describe('in play, the Image band read at 165 and 110 columns, one boot', () => 
 describe('in play, the Raster band read at 165, 160 by 16 and 110 columns, one boot', () => {
   test('one element with the shell around the playfield, cropped and compact', async ($, on) => {
     await sandboxOn(on, $, {
-      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+      'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'raster' },
     })
     await rasterAt165($)
     await compactAt110($, 'raster')
@@ -735,7 +744,7 @@ for (const renderer of ['image', 'raster'] as const) {
     { timeoutMs: 15_000 },
     async ($, on) => {
       await sandboxOn(on, $, {
-        'promptfall:settings': { sound: false, motion: 'full', renderer },
+        'promptfall:settings': { sound: 'off', motion: 'full', renderer },
       })
       const wide = { ...BAND, props: { ...BAND.props, maxRows: 30, bodyColumns: 165 } }
       const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...wide })
@@ -789,7 +798,7 @@ for (const renderer of ['image', 'raster'] as const) {
 
 test('in play, the strip’s hero HP trails the state until the hit lands, never leads it (#20)', async ($, on) => {
   const { view, clock } = await sandboxOn(on, $, {
-    'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'raster' },
   })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
   await ui.press({ key: 'hot-p' })

@@ -90,7 +90,7 @@ const SINGLE: [string, Effect, Toast][] = [
   [
     'a recruit',
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
-    { row: 'recruit', text: 'Rare recruit: Morwen the Bold', timeoutMs: LONG, cue: null },
+    { row: 'recruit', text: 'Rare recruit: Morwen the Bold', timeoutMs: LONG, cue: 'recruit' },
   ],
   [
     'a reward of gold alone',
@@ -134,7 +134,7 @@ const SINGLE: [string, Effect, Toast][] = [
       row: 'retreat',
       text: 'The party retreats to zone 3, Marsh of Sighs',
       timeoutMs: LONG,
-      cue: null,
+      cue: 'retreat',
     },
   ],
   [
@@ -154,7 +154,7 @@ const SINGLE: [string, Effect, Toast][] = [
       row: 'zone_arrival',
       text: 'The party reached tier 2, zone 1, Greenmeadow Road',
       timeoutMs: SHORT,
-      cue: null,
+      cue: 'zone_cleared',
       wait: { zone: 12 },
     },
   ],
@@ -165,7 +165,7 @@ const SINGLE: [string, Effect, Toast][] = [
       row: 'zone_arrival',
       text: 'The party reached zone 4, Old Barrow Hills',
       timeoutMs: SHORT,
-      cue: null,
+      cue: 'zone_cleared',
       wait: { zone: 3 },
     },
   ],

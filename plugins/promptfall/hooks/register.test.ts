@@ -6,7 +6,7 @@ import { SANDBOX_PINS_SERVER } from './sandbox'
 import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
 import { CHEST_SHOW_MS, StageTimeline } from './stage/timeline'
-import { CUE_GAIN, EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
+import { EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
 import { test } from './testing'
 import { worldRows } from './ui/band'
@@ -30,6 +30,7 @@ import {
 } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
+import { PANE_ROWS } from './windows/tuning'
 import { WORLD_POLL_FAST_MS, WORLD_POLL_MS, WORLD_STALE_MS, WorldPoller } from './world'
 
 /**
@@ -148,9 +149,23 @@ test('an interactive terminal session plays and commits a batch', async ($, on) 
   expect(commit).toBeDefined()
 })
 
-test('a first run welcomes the player', async ($, on) => {
+test('a first run welcomes the player and its notice says sound is on', async ($, on) => {
   mock.clock(on, { now: 1_000_000 })
   store(on)
+  const last = states(on)
+  const toasts: string[] = []
+  engineBottom(on, toasts)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(toasts).toContain('Welcome to Promptfall. /promptfall heroes to meet your party')
+  expect(last.get('notice')).toBe(
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.',
+  )
+})
+
+test('a first run with sound off has no sound clause in its notice', async ($, on) => {
+  mock.clock(on, { now: 1_000_000 })
+  // A reset keeps the settings: a player who chose off and reset is not told sound is on.
+  store(on, { 'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'auto' } })
   const last = states(on)
   const toasts: string[] = []
   engineBottom(on, toasts)
@@ -768,7 +783,9 @@ test('the reset on a v1 store starts a fresh account and keeps the lease', async
   expect(view.accountId).not.toBe('acct-1')
   expect(last.get('mode')).toBe('primary')
   // A fresh account: the welcome replaces the old-version notice.
-  expect(last.get('notice')).toBe('Welcome to Promptfall. /promptfall heroes to meet your party')
+  expect(last.get('notice')).toMatch(
+    /^Sound on; \/promptfall sound off silences it\. Welcome to Promptfall\./,
+  )
   expect(data.has('promptfall:pf:acct:acct-1:record')).toBe(false)
   expect(data.has('promptfall:lease')).toBe(true)
   await ui.unmount()
@@ -1523,7 +1540,7 @@ test('a forced renderer sends no probe', async ($, on) => {
     on,
     {},
     {
-      'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+      'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'raster' },
     },
   )
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1549,7 +1566,7 @@ test('effects with a hit wake the stage loop', async ($, on) => {
     on,
     {},
     {
-      'promptfall:settings': { sound: false, motion: 'still', renderer: 'raster' },
+      'promptfall:settings': { sound: 'off', motion: 'still', renderer: 'raster' },
     },
   )
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1631,9 +1648,28 @@ function dropping(rarity: string): GameState {
   throw new Error(`no ${rarity} drop`)
 }
 
-const SOUND_ON = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'auto' } }
+const SOUND_ON = { 'promptfall:settings': { sound: 'quiet', motion: 'full', renderer: 'auto' } }
+const settingsAt = (sound: unknown) => ({
+  'promptfall:settings': { sound, motion: 'full', renderer: 'auto' },
+})
 
-function sounding(on: On, seed: Record<string, unknown>) {
+/** How long a real clip takes to play: a play answered before SKIPPED_PLAY_MS was skipped. */
+const CLIP_MS = 400
+
+/**
+ * How the test's engine answers a play: after the clip (`late`), at once as a terminal with no
+ * player does (`at once`), or with a rejection naming the cause (`reject`).
+ */
+type PlayAnswer = 'late' | 'at once' | 'reject'
+
+/** Answers `audio.play` as `answer` says, the clock being `time`'s. */
+async function answerPlay(time: { sleep: (ms: number) => Promise<void> }, answer: PlayAnswer) {
+  if (answer === 'reject') throw new Error('no audio player on linux; not played')
+  if (answer === 'late') await time.sleep(CLIP_MS)
+  return { value: undefined }
+}
+
+function sounding(on: On, seed: Record<string, unknown>, answer: PlayAnswer = 'late') {
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on, seed)
   const last = states(on)
@@ -1648,7 +1684,7 @@ function sounding(on: On, seed: Record<string, unknown>) {
   on('audio.play', (_$, e) => {
     plays.push({ asset: e.clip.asset ?? '', gain: e.gain })
     order.push(`cue ${e.clip.asset ?? ''}`)
-    return { value: undefined }
+    return answerPlay(time, answer)
   })
   return { time, data, last, plays, raised, order }
 }
@@ -1662,9 +1698,88 @@ for (const [rarity, asset] of [
     const { time, plays } = sounding(on, { ...record(dropping(rarity)), ...SOUND_ON })
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
     await time.advance(5_000)
-    expect(plays).toEqual([{ asset, gain: CUE_GAIN }])
+    expect(plays).toEqual([{ asset, gain: 0.25 }])
   })
 }
+
+for (const [sound, gains] of [
+  ['quiet', [0.25]],
+  ['normal', [0.5]],
+  ['loud', [1]],
+  ['off', []],
+] as const) {
+  test(`a rare drop at ${sound} plays the drop cue at ${gains[0] ?? 'no'} gain`, async ($, on) => {
+    const { time, plays } = sounding(on, { ...record(dropping('rare')), ...settingsAt(sound) })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(plays).toEqual(gains.map((gain) => ({ asset: 'cues/drop.wav', gain })))
+  })
+}
+
+const SOUND_NEWS = 'Sound is now on by default. /promptfall sound off silences it.'
+
+for (const stored of [true, false]) {
+  test(`a stored sound ${stored} reads as quiet and toasts the news once`, async ($, on) => {
+    const { time, plays, raised, data } = sounding(on, {
+      ...record(dropping('rare')),
+      ...settingsAt(stored),
+    })
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: 0.25 }])
+    expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([
+      { text: SOUND_NEWS, timeoutMs: 8000 },
+    ])
+    expect((data.get('promptfall:settings') as { sound: unknown }).sound).toBe('quiet')
+    // The next session reads a step, not a boolean: no second toast.
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    await time.advance(5_000)
+    expect(raised.filter((t) => t.text === SOUND_NEWS)).toHaveLength(1)
+  })
+}
+
+test('a fresh machine is quiet with no news toast', async ($, on) => {
+  const { time, plays, raised, data } = sounding(on, record(dropping('rare')))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: 0.25 }])
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([])
+  expect(data.has('promptfall:settings')).toBe(false)
+})
+
+test('a secondary reading a stored boolean raises no news toast', async ($, on) => {
+  const { time, raised, last } = sounding(on, {
+    ...record(dropping('rare')),
+    ...settingsAt(true),
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(5_000)
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([])
+})
+
+test('the news a secondary rewrote waits for the next primary, which toasts it once', async ($, on) => {
+  const { time, raised, last, data } = sounding(on, {
+    ...record(dropping('rare')),
+    ...settingsAt(true),
+    'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get('promptfall:settings') as { sound: unknown }).sound).toBe('quiet')
+  // The other session closes and its lease goes: a fresh session starts primary on a step.
+  data.delete('promptfall:lease')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(last.get('mode')).toBe('primary')
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toEqual([
+    { text: SOUND_NEWS, timeoutMs: 8000 },
+  ])
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(5_000)
+  expect(raised.filter((t) => t.text === SOUND_NEWS)).toHaveLength(1)
+})
 
 /**
  * A state whose next tick kills two 1 hp Goblin Scouts, each dropping a rare item, and levels
@@ -1747,7 +1862,7 @@ test('a legendary drop toasts for 8 s and plays the legendary cue once', async (
 // Held toasts: a drop's toast and cue land at its reveal's show time
 
 /** The band forced to Raster with sound on, so the band picture mounts the frame loop at once. */
-const STAGED = { 'promptfall:settings': { sound: true, motion: 'full', renderer: 'raster' } }
+const STAGED = { 'promptfall:settings': { sound: 'quiet', motion: 'full', renderer: 'raster' } }
 
 /** `sounding` with the band's blits taken and every toast and cue stamped with its time. */
 function staging(on: On, seed: Record<string, unknown>, env: Record<string, string> = {}) {
@@ -1759,7 +1874,7 @@ function staging(on: On, seed: Record<string, unknown>, env: Record<string, stri
   const plays: { asset: string; at: number }[] = []
   on('audio.play', (_$, e) => {
     plays.push({ asset: e.clip.asset ?? '', at: time.now() })
-    return { value: undefined }
+    return answerPlay(time, 'late')
   })
   const blits: number[] = []
   on('ui.blit', () => {
@@ -2033,8 +2148,8 @@ test("the zone arrival toast lands when the backdrop changes, after the boss's d
   expect(raised.indexOf(drops[0] as (typeof raised)[number])).toBeLessThan(
     raised.indexOf(arrivals()[0] as (typeof raised)[number]),
   )
-  // The arrival has no cue.
-  expect(plays.filter((p) => p.at === at)).toEqual([])
+  // The arrival's cue plays with it, at the backdrop's show time, after the drop's.
+  expect(plays.filter((p) => p.at >= at)).toEqual([{ asset: 'cues/zone_cleared.wav', at }])
   await ui.unmount()
 })
 
@@ -2053,7 +2168,9 @@ test('the zone arrival toast on the desktop lands at the wake for its show time'
   expect(await pictured()).toMatch(/^Zone 1,/)
   await time.advance(1)
   expect(raised.filter((t) => t.text === ARRIVAL).map((t) => t.at)).toEqual([backdrop])
-  expect(plays.filter((p) => p.at === backdrop)).toEqual([])
+  expect(plays.filter((p) => p.at === backdrop)).toEqual([
+    { asset: 'cues/zone_cleared.wav', at: backdrop },
+  ])
   // The wake redraws: the backdrop changes with the toast, not at the next publish.
   expect(await pictured()).toMatch(/^Zone 2,/)
   await ui.unmount()
@@ -2158,19 +2275,19 @@ test('a common drop plays nothing; sound off plays nothing', async ($, on) => {
 })
 
 test('sound off plays nothing on an epic drop', async ($, on) => {
-  const { time, plays } = sounding(on, record(dropping('epic')))
+  const { time, plays } = sounding(on, { ...record(dropping('epic')), ...settingsAt('off') })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await time.advance(5_000)
   expect(plays).toEqual([])
 })
 
 test('sound turned on in another session reaches the primary without a restart', async ($, on) => {
-  const { time, plays, data } = sounding(on, record(dropping('epic')))
+  const { time, plays, data } = sounding(on, { ...record(dropping('epic')), ...settingsAt('off') })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  // Another session's /promptfall sound on writes the machine's store, not this session's atom.
-  data.set('promptfall:settings', { sound: true, motion: 'full', renderer: 'auto' })
+  // Another session's /promptfall sound loud writes the machine's store, not this session's atom.
+  data.set('promptfall:settings', { sound: 'loud', motion: 'full', renderer: 'auto' })
   await time.advance(5_000)
-  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: CUE_GAIN }])
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', gain: 1 }])
 })
 
 test('a secondary plays nothing', async ($, on) => {
@@ -2230,19 +2347,31 @@ const PAST_GRID_BOSS = BOSS_WINDOW_MS + 1_000_000
 const APPEARED = 'World boss The Promptwyrm has appeared'
 const DOWN = 'World boss The Promptwyrm is down'
 
-function sandboxSounding(on: On, seed: Record<string, unknown> = {}) {
+function sandboxSounding(
+  on: On,
+  seed: Record<string, unknown> = {},
+  answer: PlayAnswer = 'late',
+  env: Record<string, string> = { PROMPTFALL_SANDBOX: '1' },
+) {
   const time = mock.clock(on, { now: PAST_GRID_BOSS })
   const { data } = store(on, { ...SOUND_ON, ...seed })
   const last = states(on)
   const toasts: string[] = []
   const raised: Raised[] = []
-  engineBottom(on, toasts, { PROMPTFALL_SANDBOX: '1' }, (toast) => raised.push(toast))
+  /** Toasts and cues in the order the host received them. */
+  const order: string[] = []
+  engineBottom(on, toasts, env, (toast) => {
+    raised.push(toast)
+    order.push(`toast ${toast.text}`)
+  })
   const plays: string[] = []
   on('audio.play', (_$, e) => {
     plays.push(e.clip.asset ?? '')
-    return { value: undefined }
+    order.push(`cue ${e.clip.asset ?? ''}`)
+    return answerPlay(time, answer)
   })
-  return { time, data, last, toasts, plays, raised }
+  on('session.attach', (_$, e) => ({ clientId: e.clientId }))
+  return { time, data, last, toasts, plays, raised, order }
 }
 
 test('sandbox worldboss has toasted and cued when it returns; worldboss end has toasted down', async ($, on) => {
@@ -2303,4 +2432,137 @@ test('a read-only sandbox session raises no world boss toast and no cue; its ban
   await time.advance(WORLD_POLL_FAST_MS)
   expect(toasts.filter((t) => t.startsWith('World boss '))).toEqual([])
   expect(plays).toEqual([])
+})
+
+// ---------------------------------------------------------------------------
+// Silent here: a play the system skipped marks the session, never the store
+
+const SILENT_ROW = /Sound:? +quiet, silent here/
+const NO_PLAYER =
+  'This system has no audio player. Claude Code plays sound on macOS; the setting is kept.'
+
+/** The pane 100 columns wide at its full height, so the detail window shows its last lines. */
+const FULL_PANE = { ...PANE, props: { ...PANE.props, scroll: { offset: 0, bodyRows: PANE_ROWS } } }
+
+/** The Account tab's text in FULL_PANE. */
+async function accountText($: Parameters<TestBody>[0]): Promise<string> {
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...FULL_PANE })
+  await ui.press({ key: 'tab-account' })
+  const text = await paneText(ui)
+  await ui.unmount()
+  return text
+}
+
+/** The detail window's lines, right of the list's border, joined so a wrapped sentence reads whole. */
+const detailText = (text: string) =>
+  text
+    .split('\n')
+    .flatMap((row) => {
+      const right = row.split('││')[1]
+      return right === undefined ? [] : [right.replace(/│$/, '').trim()]
+    })
+    .filter(Boolean)
+    .join(' ')
+
+/** A world boss cue, then a level-up cue, each raised by a sandbox verb, each clip let finish. */
+async function twoCues(
+  $: Parameters<TestBody>[0],
+  time: { advance: (ms: number) => Promise<void> },
+  last: Map<string, unknown>,
+) {
+  const run = (args: string) =>
+    $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })
+  await run('worldboss')
+  await time.advance(CLIP_MS + 100)
+  const lead = (last.get('view') as GameView).roster[0]
+  await run(`level ${lead?.name ?? ''} ${(lead?.level ?? 1) + 1}`)
+  await time.advance(CLIP_MS + 100)
+}
+
+for (const answer of ['at once', 'reject'] as const) {
+  test(`a terminal play answered ${answer} marks the session: no next cue, the row and the detail say so`, async ($, on) => {
+    const { time, data, last, plays } = sandboxSounding(on, {}, answer)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const stored = JSON.stringify(data.get('promptfall:settings'))
+    await twoCues($, time, last)
+    expect(plays).toEqual(['cues/boss.wav'])
+    const text = await accountText($)
+    expect(text).toMatch(SILENT_ROW)
+    expect(detailText(text)).toContain(NO_PLAYER)
+    // The mark is the session's: the stored step is untouched.
+    expect(JSON.stringify(data.get('promptfall:settings'))).toBe(stored)
+    // A new session starts unmarked and tries again.
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    expect(await accountText($)).not.toMatch(/silent here/)
+    const lead = (last.get('view') as GameView).roster[0]
+    await $.command.run({
+      ...RUN,
+      command: 'promptfall',
+      args: `sandbox level ${lead?.name ?? ''} ${(lead?.level ?? 1) + 1}`,
+    })
+    await time.settle()
+    expect(plays).toEqual(['cues/boss.wav', 'cues/level_up.wav'])
+  })
+}
+
+test('a terminal play answered after its clip sets no mark: the next cue plays', async ($, on) => {
+  const { time, last, plays } = sandboxSounding(on, {}, 'late')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await twoCues($, time, last)
+  expect(plays).toEqual(['cues/boss.wav', 'cues/level_up.wav'])
+  const text = await accountText($)
+  expect(text).toMatch(/Sound:? +quiet/)
+  expect(text).not.toMatch(/silent here/)
+})
+
+test('a terminal session keeps its surface over a hot reload: a play answered at once still marks it', async ($, on) => {
+  const { time, last, plays } = sandboxSounding(on, {}, 'at once')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // The reload: register runs again and session.start fires with surface null.
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await twoCues($, time, last)
+  expect(plays).toEqual(['cues/boss.wav'])
+  expect(await accountText($)).toMatch(SILENT_ROW)
+})
+
+test('a sandbox recruit plays the recruit cue', async ($, on) => {
+  const { time, plays } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'sandbox recruit epic' })
+  await time.settle()
+  expect(plays).toEqual(['cues/recruit.wav'])
+})
+
+test('a sandbox retreat plays the retreat cue once, after its long toast; a wipe plays none', async ($, on) => {
+  const { time, plays, raised, order } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = async (args: string) =>
+    (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
+  await run('zone 3')
+  await time.settle()
+  const before = plays.length
+  expect(await run('wipe')).toMatch(/^Sandbox: the party fell, back to wave 1 of zone 3/)
+  await time.settle()
+  expect(raised.filter((t) => t.text.startsWith('The party fell')).map((t) => t.timeoutMs)).toEqual(
+    [4000],
+  )
+  expect(plays.slice(before)).toEqual([])
+  await run('wipe')
+  await time.settle()
+  expect(await run('wipe')).toMatch(/^Sandbox: the party retreats to zone 2/)
+  await time.settle()
+  const retreat = raised.filter((t) => t.text.startsWith('The party retreats'))
+  expect(retreat).toEqual([{ text: retreat[0]?.text, timeoutMs: 8000 }])
+  expect(plays.slice(before)).toEqual(['cues/retreat.wav'])
+  const toastAt = order.indexOf(`toast ${retreat[0]?.text}`)
+  expect(toastAt).toBeGreaterThanOrEqual(0)
+  expect(order.indexOf('cue cues/retreat.wav')).toBeGreaterThan(toastAt)
+})
+
+test('the desktop never marks the session, whatever its plays answer', async ($, on) => {
+  const { time, last, plays } = sandboxSounding(on, {}, 'at once')
+  await $.session.start({ cwd: '/repo', surface: null, isInteractive: false })
+  await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
+  await twoCues($, time, last)
+  expect(plays).toEqual(['cues/boss.wav', 'cues/level_up.wav'])
 })
