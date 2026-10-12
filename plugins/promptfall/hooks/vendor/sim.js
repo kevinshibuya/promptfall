@@ -1194,9 +1194,11 @@ function pickAction(s, unit) {
 
 // packages/sim/src/combat.ts
 var STEPS = TICK_MS / STEP_MS;
+function hitDamage(atk, def, varianceBp) {
+  return scaled(Math.max(1, Math.floor(atk * varianceBp / 1e4) - Math.floor(def / 2)));
+}
 function damage(s, atk, def) {
-  const v = 9e3 + draw(s, 2001);
-  return Math.max(1, Math.floor(atk * v / 1e4) - Math.floor(def / 2));
+  return hitDamage(atk, def, 9e3 + draw(s, 2001));
 }
 var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
 function zoneBossStats(zone) {
@@ -1246,7 +1248,7 @@ function heroAction(s, hero, choice, effects) {
     case "attack": {
       const target = encounter?.enemies.find((e) => e.id === choice.targetId);
       if (!target) return;
-      let amount = scaled(damage(s, stats.atk, enemyStats(s, target).def));
+      let amount = damage(s, stats.atk, enemyStats(s, target).def);
       if (hero.cls === "archer" && drawBp(s) < 2e3) amount *= 2;
       hitEnemy(s, hero.id, target, amount, effects);
       return;
@@ -1255,7 +1257,7 @@ function heroAction(s, hero, choice, effects) {
       const atk = Math.floor(stats.atk * 6e3 / 1e4);
       for (const target of [...encounter?.enemies ?? []]) {
         if (!s.encounter?.enemies.includes(target)) continue;
-        hitEnemy(s, hero.id, target, scaled(damage(s, atk, enemyStats(s, target).def)), effects);
+        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects);
       }
       return;
     }
@@ -1277,7 +1279,7 @@ function heroAction(s, hero, choice, effects) {
 function enemyAction(s, enemy, choice, effects) {
   const target = findHero(s, choice.targetId ?? "");
   if (!target || target.hp <= 0) return;
-  const amount = scaled(damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def));
+  const amount = damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def);
   target.hp = Math.max(0, target.hp - amount);
   effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
   if (target.hp === 0) fall(s, target, effects);
