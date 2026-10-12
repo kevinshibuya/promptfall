@@ -4109,6 +4109,7 @@ var ItemSchema = external_exports.object({
   id,
   base: id,
   rarity: RaritySchema,
+  tier: positive,
   affixes: external_exports.array(external_exports.object({ id, value: int })),
   equippedBy: id.nullable(),
   tradeableAt: count.nullable()

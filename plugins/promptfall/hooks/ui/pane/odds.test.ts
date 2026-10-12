@@ -51,8 +51,13 @@ test('the table: a heading, one line per rarity with zone, boss and tavern, as t
     text: 'Rarity multiplies base stats, heroes and items alike.',
     rgb: DIM_RGB,
   })
-  expect(lines[7]).toBe('  Expansions')
-  expect(list?.lines[7]?.rule).toBe(true)
+  expect(lines[7]).toBe('  Reforge is priced by rarity and tier.')
+  expect(list?.lines[7]?.spans).toContainEqual({
+    text: 'Reforge is priced by rarity and tier.',
+    rgb: DIM_RGB,
+  })
+  expect(lines[8]).toBe('  Expansions')
+  expect(list?.lines[8]?.rule).toBe(true)
   // The rarity rows are stops that do nothing; the ▶ starts on the first.
   expect(b.focus).toBe('row:r-common')
   expect(message(b)[0]).toBe('Tab or arrows: move.')
@@ -82,18 +87,18 @@ test('the expansion rows: their events, dim when gold is short, at max with no s
     ['row:expand-inventory', { t: 'event', event: { t: 'expand_inventory' } }],
     ['row:expand-roster', { t: 'event', event: { t: 'expand_roster' } }],
   ])
-  expect(linesOf(win(b, 'list'))[8]).toMatch(/^ {2}Inventory \+10 slots +500G$/)
+  expect(linesOf(win(b, 'list'))[9]).toMatch(/^ {2}Inventory \+10 slots +500G$/)
   const short = oddsPane(input({ gold: 450 }))
-  expect(win(short, 'list')?.lines[8]?.spans).toContainEqual({
+  expect(win(short, 'list')?.lines[9]?.spans).toContainEqual({
     text: 'Inventory +10 slots',
     rgb: DIM_RGB,
   })
-  expect(win(short, 'list')?.lines[9]?.spans).toContainEqual({
+  expect(win(short, 'list')?.lines[10]?.spans).toContainEqual({
     text: 'Roster +4 heroes',
     rgb: TEXT,
   })
   const max = oddsPane(input({ nextInventoryCost: null }))
-  expect(linesOf(win(max, 'list'))[8]).toBe('  Inventory at max')
+  expect(linesOf(win(max, 'list'))[9]).toBe('  Inventory at max')
   expect(cursors(max).at(-1)?.key).toBe('row:expand-roster')
   expect(cursors(max).some((s) => s.key === 'row:expand-inventory')).toBe(false)
 })

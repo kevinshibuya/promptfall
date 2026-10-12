@@ -1,4 +1,4 @@
-import { content, zoneAt } from './content'
+import { content, ZONES_PER_ITEM_TIER, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
@@ -9,6 +9,30 @@ import type { Affix, Effect, GameState, HeroClass, Item, Rarity, StepResult } fr
 export function vendorValue(item: Item): number {
   const minZone = content.itemBases[item.base]?.minZone ?? 1
   return content.rarity[item.rarity].vendorGoldPerZone * minZone
+}
+
+/** The item tier of a base's drops: its minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
+export function baseTier(baseId: string): number {
+  const minZone = content.itemBases[baseId]?.minZone ?? 1
+  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER))
+}
+
+/** An item tier's multiplier in basis points; a tier off the table counts as tier 1. */
+function tierMultBp(tier: number): number {
+  return content.itemTierMultBp[tier - 1] ?? 10000
+}
+
+/**
+ * What an affix counts for on its item, in stats and wherever it is shown: the stored flat roll
+ * scaled by the item's tier, floored. The sim and the plugin read it here and nowhere else.
+ */
+export function affixValue(item: Item, affix: Affix): number {
+  return Math.floor((affix.value * tierMultBp(item.tier)) / 10000)
+}
+
+/** The gold a reforge costs: the rarity's price scaled by the item's tier, floored. */
+export function reforgeCost(item: Item): number {
+  return Math.floor((content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier)) / 10000)
 }
 
 function rollItem(s: GameState, boss: boolean): Item | null {
@@ -35,13 +59,21 @@ function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[])
   return rollItemOf(s, baseId, rarity)
 }
 
-/** An item of this base and rarity: its affixes, then its id. */
+/** An item of this base and rarity, in its base's tier: its affixes, then its id. */
 export function rollItemOf(s: GameState, baseId: string, rarity: Rarity): Item {
   const affixes = rollAffixes(s, baseId, rarity)
-  return { id: newId(s, 'i'), base: baseId, rarity, affixes, equippedBy: null, tradeableAt: null }
+  return {
+    id: newId(s, 'i'),
+    base: baseId,
+    rarity,
+    tier: baseTier(baseId),
+    affixes,
+    equippedBy: null,
+    tradeableAt: null,
+  }
 }
 
-/** The affixes of an item of this base and rarity: each one's id, then its value. */
+/** The affixes of an item of this base and rarity: each one's id, then its flat roll. */
 function rollAffixes(s: GameState, baseId: string, rarity: Rarity): Affix[] {
   const slot = content.itemBases[baseId]?.slot
   const pool = Object.keys(content.affixes)

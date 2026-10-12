@@ -1,7 +1,7 @@
 import type { OrdersState, RarityName } from '../../types'
 import type { GameHandle } from '../engine'
 import { validPrice } from '../vendor/ledger.js'
-import { type Item, vendorValue } from '../vendor/sim.js'
+import { baseTier, type Item, vendorValue } from '../vendor/sim.js'
 import { listingView, orderView } from '../view'
 import { type After, errorText, flash, refusalText, type Updater } from './trade'
 
@@ -80,6 +80,14 @@ export async function placeOrder(
 
 /** The rare vendor value of a base: what the presets multiply. */
 export function baseValue(base: string, rarity: RarityName): number {
-  const probe: Item = { id: 'p', base, rarity, affixes: [], equippedBy: null, tradeableAt: null }
+  const probe: Item = {
+    id: 'p',
+    base,
+    rarity,
+    tier: baseTier(base),
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
   return vendorValue(probe)
 }

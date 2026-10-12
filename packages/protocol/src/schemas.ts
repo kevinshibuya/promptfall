@@ -74,6 +74,7 @@ export const ItemSchema: z.ZodType<Item> = z.object({
   id,
   base: id,
   rarity: RaritySchema,
+  tier: positive,
   affixes: z.array(z.object({ id, value: int })),
   equippedBy: id.nullable(),
   tradeableAt: count.nullable(),

@@ -35,6 +35,7 @@ const sword = (id: string): Item => ({
   id,
   base: 'steel_longsword',
   rarity: 'rare',
+  tier: 2,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,

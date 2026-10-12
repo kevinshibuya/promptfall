@@ -1,6 +1,7 @@
 import { content, zoneAt } from '../content'
 import { clone } from '../draft'
 import { generateHero } from '../heroes'
+import { affixValue } from '../loot'
 import { heroStats, livingParty } from '../progression'
 import { createInitialState } from '../state'
 import { step } from '../step'
@@ -96,7 +97,7 @@ function itemScore(item: Item): number {
     Math.floor(((base.stats.def ?? 0) * mult) / 10000)
   for (const affix of item.affixes) {
     const stat = content.affixes[affix.id]?.stat
-    if (stat === 'atk' || stat === 'def') score += affix.value
+    if (stat === 'atk' || stat === 'def') score += affixValue(item, affix)
   }
   return score
 }

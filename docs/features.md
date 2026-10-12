@@ -71,7 +71,11 @@ that fall behind are dropped; kills, drops, level-ups, deaths and sales always g
 
 **Drops and rarities.** Kills drop items. An item is a base type, a rarity (Common, Uncommon,
 Rare, Epic, Legendary) and one rolled affix for each rarity step above Common, and rarer items
-carry higher base stats. Deeper zones and bosses roll rarer drops. A kill that drops an item
+carry higher base stats. An item also carries a tier, set when it drops from its base's minimum
+zone (zones 1 to 3 are tier 1, 4 to 6 tier 2, 7 to 9 tier 3, 10 to 12 tier 4): an affix keeps its
+flat roll, and what it counts for in stats, in the detail window and in a listing is that roll
+times the tier's multiplier (×1, ×2, ×3.5, ×6), so a deeper item beats a rarer shallow one. Deeper
+zones and bosses roll rarer drops. A kill that drops an item
 leaves a chest where the enemy stood: it falls out of the enemy as it fades, sits closed, opens,
 and the item rises out of it on a glow in its rarity colour, wider the rarer the item. The item
 holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
@@ -91,8 +95,10 @@ armour, accessory), items are gated by class, and an equipped item still takes a
 Uncommon items can only be vendored. A drop that finds the inventory full is vendored on the spot,
 and the combat log says so.
 
-**Reforging.** Reforging rerolls one affix of an item for gold, priced by the item's rarity. The
-affix to reroll is chosen in a command window.
+**Reforging.** Reforging rerolls one affix of an item for gold: it rolls the same flat range and
+the item keeps its tier. The price is the rarity's price times the item tier's multiplier, shown on
+the Reforge row of the Inventory command window before the pick, and the Odds tab says reforge is
+priced by rarity and tier. The affix to reroll is chosen in a command window.
 
 **Expansions.** The inventory starts at 30 slots and grows to 90; the roster starts at 24 heroes
 and grows to 48. Each step is bought with gold from the Odds tab, which shows the next step's

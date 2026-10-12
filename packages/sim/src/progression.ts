@@ -1,7 +1,7 @@
 import { SPAWN_GAUGE_MAX } from './battle'
 import { content, LADDER_END, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
-import { rollDrops, takeDrop } from './loot'
+import { affixValue, rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
 import type {
   Effect,
@@ -71,7 +71,7 @@ export function heroStats(state: GameState, hero: Hero): Stats {
     }
     for (const affix of item.affixes) {
       const def = content.affixes[affix.id]
-      if (def) stats[def.stat] += affix.value
+      if (def) stats[def.stat] += affixValue(item, affix)
     }
   }
   // Trait bonuses are computed from the pre-trait totals so their order does not matter.

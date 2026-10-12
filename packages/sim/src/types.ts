@@ -1,4 +1,4 @@
-export const SIM_VERSION = 7 as const
+export const SIM_VERSION = 8 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -7,11 +7,17 @@ export type Slot = 'weapon' | 'armour' | 'accessory'
 export type Stat = 'hp' | 'atk' | 'def' | 'spd'
 export type Stats = Record<Stat, number>
 
-export type Affix = { id: string; value: number }
+export type Affix = {
+  id: string
+  /** The flat roll, as stored: what it counts for is scaled by its item's tier (`affixValue`). */
+  value: number
+}
 export type Item = {
   id: string
   base: string
   rarity: Rarity
+  /** 1 to 6, set at the drop: it scales the affixes' rolls at read and the reforge price. */
+  tier: number
   affixes: Affix[]
   equippedBy: string | null
   /** Server epoch ms before which the ledger refuses to list it; null when never traded. Data, never a rule. */

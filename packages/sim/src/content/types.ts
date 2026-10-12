@@ -99,4 +99,6 @@ export type Content = {
   }
   tactics: Tactics
   xpToNext: (level: number) => number
+  /** An item tier's multiplier in basis points, tier 1 first. */
+  itemTierMultBp: readonly number[]
 }

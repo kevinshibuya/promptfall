@@ -1,4 +1,5 @@
 import {
+  baseTier,
   content,
   createInitialState,
   GAUGE_FULL,
@@ -92,7 +93,17 @@ const DAY = 86_400_000
 const WEEK = 604_800_000
 
 function rareItem(id: string, base = 'steel_longsword', patch: Partial<Item> = {}): Item {
-  return { id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null, ...patch }
+  const tier = baseTier(base)
+  return {
+    id,
+    base,
+    rarity: 'rare',
+    tier,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+    ...patch,
+  }
 }
 
 function commonItem(id: string): Item {
@@ -100,6 +111,7 @@ function commonItem(id: string): Item {
     id,
     base: 'iron_sword',
     rarity: 'common',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,

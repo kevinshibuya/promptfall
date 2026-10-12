@@ -17,6 +17,8 @@ describe('golden replay', () => {
   // and every level-up, so the script lands elsewhere.
   // SIM_VERSION 7 (hero rarity multiplies base stats and growth) moves it through `v` alone: the
   // script's heroes are all Common and it never leaves zone 1.
+  // SIM_VERSION 8 (an item carries its tier; affixes scale at read) moves it through `v` and each
+  // item's tier: the script's one affix is on a tier-1 charm, so no stat changes.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -25,7 +27,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('9ac1f3f9fb2dfe77')
+    expect(GOLDEN_HASH).toBe('c36cb20bd3da7b91')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)

@@ -9,7 +9,7 @@ function rejectedReason(effects: Effect[]): string | undefined {
 }
 
 function item(id: string, base: string, equippedBy: string | null = null): Item {
-  return { id, base, rarity: 'common', affixes: [], equippedBy, tradeableAt: null }
+  return { id, base, rarity: 'common', tier: 1, affixes: [], equippedBy, tradeableAt: null }
 }
 
 const s0 = createInitialState(1)
@@ -126,6 +126,44 @@ describe('vendor, reforge, unequip', () => {
     const value = r.state.inventory[0]?.affixes[0]?.value ?? 0
     expect(value).toBeGreaterThanOrEqual(1)
     expect(value).toBeLessThanOrEqual(4)
+  })
+
+  it("reforge costs the rarity's price times the item tier's multiplier, floored", () => {
+    // An Uncommon's 25 G at tier 3's ×3.5.
+    const magic: Item = {
+      ...item('i1', 'mithril_blade'),
+      rarity: 'uncommon',
+      tier: 3,
+      affixes: [{ id: 'keen', value: 1 }],
+    }
+    const s = { ...s0, inventory: [magic] }
+    expect(
+      rejectedReason(
+        step({ ...s, gold: 86 }, { t: 'reforge', itemId: 'i1', affixIndex: 0 }).effects,
+      ),
+    ).toBe('not_enough_gold')
+    const r = step({ ...s, gold: 100 }, { t: 'reforge', itemId: 'i1', affixIndex: 0 })
+    expect(r.state.gold).toBe(13)
+  })
+
+  it('a reroll rolls the flat range and keeps the tier', () => {
+    const values = new Set<number>()
+    for (let seed = 1; seed <= 30; seed++) {
+      const magic: Item = {
+        ...item('i1', 'mithril_blade'),
+        rarity: 'uncommon',
+        tier: 3,
+        affixes: [{ id: 'vicious', value: 3 }],
+      }
+      const s = { ...createInitialState(seed), gold: 1000, inventory: [magic] }
+      const after = step(s, { t: 'reforge', itemId: 'i1', affixIndex: 0 }).state.inventory[0]
+      expect(after?.tier).toBe(3)
+      values.add(after?.affixes[0]?.value ?? 0)
+    }
+    // Vicious rolls 3 to 7 flat; the tier scales it at read.
+    expect(Math.min(...values)).toBeGreaterThanOrEqual(3)
+    expect(Math.max(...values)).toBeLessThanOrEqual(7)
+    expect(values.size).toBeGreaterThan(1)
   })
 
   it('unequip refuses an empty slot', () => {

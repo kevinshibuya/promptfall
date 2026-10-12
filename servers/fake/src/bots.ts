@@ -9,6 +9,7 @@ import type {
 } from '@promptfall/protocol'
 import { Mirror } from '@promptfall/protocol/mirror'
 import {
+  baseTier,
   content,
   type GameState,
   type Item,
@@ -293,6 +294,7 @@ export function startBots(options: BotOptions): Bots {
         id: 'probe',
         base,
         rarity: 'rare',
+        tier: baseTier(base),
         affixes: [],
         equippedBy: null,
         tradeableAt: null,

@@ -48,6 +48,7 @@ function filler(n: number): Item[] {
     id: `f${i}`,
     base: 'oak_staff',
     rarity: 'common',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,

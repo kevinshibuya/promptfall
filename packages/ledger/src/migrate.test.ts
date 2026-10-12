@@ -46,6 +46,7 @@ const rareItem = (id: string): Item => ({
   id,
   base: 'steel_longsword',
   rarity: 'rare',
+  tier: 2,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,
@@ -231,6 +232,70 @@ describe('a record behind the sim version', () => {
     await third.ledger.browse(auth, { kind: 'item', sort: 'newest', page: 0 })
     expect(seen.filter((id) => id === 'listed-1')).toEqual(['listed-1'])
     expect(seen.filter((id) => id === 'waiting-1')).toEqual(['waiting-1'])
+  })
+})
+
+describe('the 7→8 step on the ledger', () => {
+  it('adds the tier to a listed item and a waiting return and keeps every roll', async () => {
+    const kv = new MemoryKeyValue()
+    const blade = (id: string): Item => ({
+      ...rareItem(id),
+      base: 'mithril_blade',
+      tier: 3,
+      affixes: [{ id: 'brutal', value: 3 }],
+    })
+    const untiered = ({ tier: _, ...rest }: Item) => rest
+    const first = makeLedger(kv)
+    const seller = await first.ledger.host.mint({
+      state: { ...createInitialState(5), gold: 1000, inventory: [blade('listed-1')] },
+      name: 'Cy',
+      linked: true,
+    })
+    const listed = await first.ledger.list(
+      { deviceToken: seller.deviceToken },
+      { kind: 'item', id: 'listed-1', price: 50 },
+    )
+    expect(listed.ok).toBe(true)
+    // The store as v7 left it: the book's mark, its listing and a return with items of no tier.
+    await kv.set('pf:market:v', 7)
+    for (const key of kv.keys().filter((k) => k.startsWith('pf:listing:'))) {
+      const listing = (await kv.get(key)) as { goods: Goods }
+      if (listing.goods.kind === 'item') {
+        await kv.set(key, {
+          ...listing,
+          goods: { kind: 'item', item: untiered(listing.goods.item) },
+        })
+      }
+    }
+    await rewind(kv, seller.accountId, 7, [], {
+      returns: [
+        { listingId: 'gone', goods: { kind: 'item', item: untiered(blade('waiting-1')) as Item } },
+      ],
+    })
+    await kv.set('pf:returns', [seller.accountId])
+
+    const second = makeLedger(kv)
+    const buyer = await second.ledger.host.mint({
+      state: { ...createInitialState(6), gold: 1000 },
+      name: 'Di',
+      linked: true,
+    })
+    const page = await second.ledger.browse(
+      { deviceToken: buyer.deviceToken },
+      { kind: 'item', sort: 'newest', page: 0 },
+    )
+    if ('reason' in page) throw new Error(page.reason)
+    const goods = page.listings[0]?.goods
+    expect(goods?.kind === 'item' && goods.item).toEqual({ ...blade('listed-1'), equippedBy: null })
+
+    await second.ledger.host.sweep()
+    const info = await second.ledger.account({ deviceToken: seller.deviceToken })
+    if ('reason' in info) throw new Error(info.reason)
+    const returned = info.delivery.events.map((e) => e.event).find((e) => e.t === 'returned')
+    expect(returned?.t === 'returned' && returned.goods).toEqual({
+      kind: 'item',
+      item: blade('waiting-1'),
+    })
   })
 })
 

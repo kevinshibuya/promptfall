@@ -7,11 +7,13 @@ import { itemBases } from './items'
 import { rarity } from './rarity'
 import { tactics } from './tactics'
 import { tavern } from './tavern'
+import { itemTierMultBp } from './tiers'
 import { traits } from './traits'
 import type { Content } from './types'
 import { xpToNext } from './xp'
 import { zones } from './zones'
 
+export { ZONES_PER_ITEM_TIER } from './tiers'
 export type {
   AffixDef,
   Archetype,
@@ -43,4 +45,5 @@ export const content: Content = {
   expansions,
   tactics,
   xpToNext,
+  itemTierMultBp,
 }

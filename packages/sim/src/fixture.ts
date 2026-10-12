@@ -11,6 +11,11 @@ import type { Effect, Event, GameState, HeroClass, Rarity, Slot } from './types'
 import { SIM_VERSION } from './types'
 
 const DEEP_SEED = 20261011
+/**
+ * Where the deep fixture's Epic and Rare take their wounds: deep enough to touch them, shallow
+ * enough not to wipe. Zone 5 until version 8, whose tiered affixes made the kits outgrow it.
+ */
+const WOUND_ZONE = 8
 
 /** Tier-4 weapons and tier-3 armour by class; the accessory is tier 4 for everyone. */
 const KIT: Record<HeroClass, Record<Slot, string>> = {
@@ -73,15 +78,15 @@ function deepFixture(): GameState {
   script.run({ t: 'set_party', heroIds: [knight, epic, rare] })
   script.run({ t: 'credited', gold: 12345, reason: 'fixture' })
   // The kits raised their maximum HP: rests fill it. Zone 10 wipes any party the game can make
-  // today, so the wounds come from zone 5, and the sandbox moves the party on without a heal.
+  // today, so the wounds come from a shallower zone, and the sandbox moves the party on without a heal.
   for (let i = 0; i < 4; i++) script.run({ t: 'rest' })
-  script.run({ t: 'sandbox_zone', zone: 5 })
+  script.run({ t: 'sandbox_zone', zone: WOUND_ZONE })
   for (let i = 0; i < 200 && !(hurt(script.state, epic) && hurt(script.state, rare)); i++) {
     script.run({ t: 'tool_call' })
     script.run({ t: 'tick' })
   }
-  if (!hurt(script.state, epic) || !hurt(script.state, rare) || script.state.zone !== 5) {
-    throw new Error('the fight in zone 5 did not wound the Epic and the Rare')
+  if (!hurt(script.state, epic) || !hurt(script.state, rare) || script.state.zone !== WOUND_ZONE) {
+    throw new Error(`the fight in zone ${WOUND_ZONE} did not wound the Epic and the Rare`)
   }
   script.run({ t: 'sandbox_zone', zone: 10 })
   for (let i = 0; script.state.inventory.length < script.state.inventoryCap; i++) {
