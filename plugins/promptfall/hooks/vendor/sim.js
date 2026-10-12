@@ -1122,6 +1122,66 @@ function rerollAffix(s, item, index) {
   affix.value = min + draw(s, max - min + 1);
 }
 
+// packages/sim/src/draft.ts
+function clone(value) {
+  if (Array.isArray(value)) return value.map((v) => clone(v));
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = clone(value[key]);
+    return out;
+  }
+  return value;
+}
+function reject(state, event, reason) {
+  return { state, effects: [{ k: "rejected", event, reason }] };
+}
+function draft(state, mutate) {
+  const s = clone(state);
+  const effects = [];
+  mutate(s, effects);
+  return { state: s, effects };
+}
+
+// packages/sim/src/migrate.ts
+var MIGRATIONS = {};
+function walk(from, to, chain) {
+  if (!Number.isInteger(from)) return { ok: false, reason: "gap", from, to, at: from };
+  if (from > to) return { ok: false, reason: "ahead", from, to };
+  const steps = [];
+  for (let v = from; v < to; v++) {
+    const step2 = chain[v];
+    if (!step2) return { ok: false, reason: "gap", from, to, at: v };
+    steps.push(step2);
+  }
+  return steps;
+}
+function finish(s) {
+  if (!s.boss) {
+    s.encounter = null;
+    s.battle = { gauges: [], queue: [], busy: 0 };
+  }
+  for (const hero of s.roster) clampHp(s, hero);
+  return s;
+}
+function migrate(state, options = {}) {
+  const { chain = MIGRATIONS, to = SIM_VERSION } = options;
+  const from = state.v;
+  const steps = walk(from, to, chain);
+  if (!Array.isArray(steps)) return steps;
+  if (steps.length === 0) return { ok: true, state, from, steps: 0 };
+  let current = clone(state);
+  for (const [i, step2] of steps.entries()) current = { ...step2.state(current), v: from + i + 1 };
+  return { ok: true, state: finish(current), from, steps: steps.length };
+}
+function migrateGoods(goods, from, options = {}) {
+  const { chain = MIGRATIONS, to = SIM_VERSION } = options;
+  const steps = walk(from, to, chain);
+  if (!Array.isArray(steps)) return steps;
+  let current = goods;
+  for (const step2 of steps) current = step2.goods ? step2.goods(clone(current)) : current;
+  return { ok: true, goods: current };
+}
+
 // packages/sim/src/picker.ts
 function heroBodies(s) {
   return livingParty(s).map((h) => ({ id: h.id, hp: h.hp, max: heroStats(s, h).hp, cls: h.cls }));
@@ -1351,26 +1411,6 @@ function advanceBattle(s, effects) {
       }
     }
   }
-}
-
-// packages/sim/src/draft.ts
-function clone(value) {
-  if (Array.isArray(value)) return value.map((v) => clone(v));
-  if (value !== null && typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value)) out[key] = clone(value[key]);
-    return out;
-  }
-  return value;
-}
-function reject(state, event, reason) {
-  return { state, effects: [{ k: "rejected", event, reason }] };
-}
-function draft(state, mutate) {
-  const s = clone(state);
-  const effects = [];
-  mutate(s, effects);
-  return { state: s, effects };
 }
 
 // packages/sim/src/commands.ts
@@ -1807,6 +1847,7 @@ export {
   GOLDEN_HASH,
   GOLDEN_SEED,
   LADDER_END,
+  MIGRATIONS,
   POWER_BP,
   RARITIES,
   SANDBOX_EVENT_KINDS,
@@ -1821,6 +1862,8 @@ export {
   goldenEvents,
   hashState,
   heroStats,
+  migrate,
+  migrateGoods,
   replay,
   rollRewardItem,
   step,

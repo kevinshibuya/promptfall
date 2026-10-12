@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
-    "harness": "tsx src/harness/cli.ts"
+    "harness": "tsx src/harness/cli.ts",
+    "fixture": "tsx src/fixture.ts"
   },
   "devDependencies": {
     "vitest": "^5.0.3",
