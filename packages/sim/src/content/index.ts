@@ -26,6 +26,8 @@ export type {
   WeightRule,
   ZoneDef,
 } from './types'
+export type { ZoneAt } from './zone'
+export { LADDER_END, zoneAt } from './zone'
 
 export const content: Content = {
   zones,

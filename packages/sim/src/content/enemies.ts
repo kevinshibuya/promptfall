@@ -24,18 +24,15 @@ function grow(value: number, bp: number, steps: number): number {
 // Per-zone difficulty on top of the growth curve, in basis points on hp and atk.
 const ZONE_BP = [10000, 10000, 13000, 12000, 11000, 11000, 11000, 11000, 11000, 11000, 11000, 11000]
 
-// Zone baselines: hp, atk, def, xp, gold min, gold max.
-const BASELINES: [number, number, number, number, number, number][] = Array.from(
-  { length: 12 },
-  (_, z) => [
-    Math.floor((grow(ZONE1.hp, GROWTH_BP.hp, z) * (ZONE_BP[z] ?? 10000)) / 10000),
-    Math.floor((grow(ZONE1.atk, GROWTH_BP.atk, z) * (ZONE_BP[z] ?? 10000)) / 10000),
-    grow(ZONE1.def, GROWTH_BP.def, z),
-    grow(ZONE1.xp, GROWTH_BP.xp, z),
-    grow(ZONE1.goldMin, GROWTH_BP.gold, z),
-    grow(ZONE1.goldMax, GROWTH_BP.gold, z),
-  ],
-)
+// Base zone baselines, one per entry of ZONE_BP: hp, atk, def, xp, gold min, gold max.
+const BASELINES: [number, number, number, number, number, number][] = ZONE_BP.map((zoneBp, z) => [
+  Math.floor((grow(ZONE1.hp, GROWTH_BP.hp, z) * zoneBp) / 10000),
+  Math.floor((grow(ZONE1.atk, GROWTH_BP.atk, z) * zoneBp) / 10000),
+  grow(ZONE1.def, GROWTH_BP.def, z),
+  grow(ZONE1.xp, GROWTH_BP.xp, z),
+  grow(ZONE1.goldMin, GROWTH_BP.gold, z),
+  grow(ZONE1.goldMax, GROWTH_BP.gold, z),
+])
 
 // Per zone: four wave enemies (brute, swift, tank, caster), the zone boss, the turn boss.
 const ROSTERS: [string, string, Archetype][][] = [

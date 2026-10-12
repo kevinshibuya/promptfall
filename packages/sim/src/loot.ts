@@ -1,4 +1,4 @@
-import { content } from './content'
+import { content, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
@@ -21,7 +21,7 @@ function rollItem(s: GameState, boss: boolean): Item | null {
 
 /** The draw order of ordinary drops: rarity, then base, then affixes. */
 function rollItemFor(s: GameState, boss: boolean, classes: readonly HeroClass[]): Item | null {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   if (!zone) return null
   const rarity = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights)
   const bases = Object.keys(content.itemBases)

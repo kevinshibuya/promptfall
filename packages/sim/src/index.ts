@@ -17,9 +17,10 @@ export type {
   ItemBase,
   RarityRule,
   TraitDef,
+  ZoneAt,
   ZoneDef,
 } from './content'
-export { content } from './content'
+export { content, LADDER_END, zoneAt } from './content'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
 export { rollRewardItem, vendorValue } from './loot'

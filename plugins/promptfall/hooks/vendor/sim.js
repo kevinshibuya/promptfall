@@ -59,17 +59,14 @@ function grow(value, bp, steps) {
   return Math.max(1, v);
 }
 var ZONE_BP = [1e4, 1e4, 13e3, 12e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3];
-var BASELINES = Array.from(
-  { length: 12 },
-  (_, z) => [
-    Math.floor(grow(ZONE1.hp, GROWTH_BP.hp, z) * (ZONE_BP[z] ?? 1e4) / 1e4),
-    Math.floor(grow(ZONE1.atk, GROWTH_BP.atk, z) * (ZONE_BP[z] ?? 1e4) / 1e4),
-    grow(ZONE1.def, GROWTH_BP.def, z),
-    grow(ZONE1.xp, GROWTH_BP.xp, z),
-    grow(ZONE1.goldMin, GROWTH_BP.gold, z),
-    grow(ZONE1.goldMax, GROWTH_BP.gold, z)
-  ]
-);
+var BASELINES = ZONE_BP.map((zoneBp, z) => [
+  Math.floor(grow(ZONE1.hp, GROWTH_BP.hp, z) * zoneBp / 1e4),
+  Math.floor(grow(ZONE1.atk, GROWTH_BP.atk, z) * zoneBp / 1e4),
+  grow(ZONE1.def, GROWTH_BP.def, z),
+  grow(ZONE1.xp, GROWTH_BP.xp, z),
+  grow(ZONE1.goldMin, GROWTH_BP.gold, z),
+  grow(ZONE1.goldMax, GROWTH_BP.gold, z)
+]);
 var ROSTERS = [
   [
     ["road_slime", "Road Slime", "tank"],
@@ -532,6 +529,16 @@ var zones = NAMES.map((name, i) => {
   };
 });
 
+// packages/sim/src/content/zone.ts
+var LADDER_END = 12;
+function zoneAt(zone) {
+  if (!Number.isInteger(zone) || zone < 1) return void 0;
+  const base2 = (zone - 1) % zones.length + 1;
+  const def = zones[base2 - 1];
+  if (!def) return void 0;
+  return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
+}
+
 // packages/sim/src/content/index.ts
 var content = {
   zones,
@@ -779,7 +786,7 @@ function spawnEnemy(s, encounter, defId, kind) {
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
 }
 function pickWaveEnemy(s) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   const weights2 = {};
   for (const id of zone?.enemies ?? []) weights2[id] = 1;
   return drawWeighted(s, weights2);
@@ -809,7 +816,7 @@ function refillFromQueue(s) {
   }
 }
 function spawnOnEmptyTick(s, effects) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   if (!zone) return;
   if (s.pendingTurnBoss) {
     const encounter2 = s.encounter ?? openEncounter(s, 0);
@@ -873,7 +880,7 @@ function onEnemyKilled(s, enemy, effects, drop) {
   if (enemy.kind === "zone_boss") {
     const zone = s.zone;
     s.encounter = null;
-    const advance = !s.farm && zone < 12;
+    const advance = !s.farm && zone < LADDER_END;
     const advancedTo = advance ? zone + 1 : zone;
     effects.push({ k: "zone_cleared", zone, advancedTo });
     changeZone(s, advancedTo);
@@ -955,7 +962,7 @@ function pushLog(s, entry) {
   if (s.lootLog.length > 50) s.lootLog.splice(0, s.lootLog.length - 50);
 }
 function rollContract(s, effects) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   if (!zone) return;
   const rarity2 = drawWeighted(s, zone.bossRarityWeights);
   const hero = generateHero(s, rarity2);
@@ -1046,7 +1053,7 @@ function rollItem(s, boss) {
   );
 }
 function rollItemFor(s, boss, classes) {
-  const zone = content.zones[s.zone - 1];
+  const zone = zoneAt(s.zone)?.def;
   if (!zone) return null;
   const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
   const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
@@ -1193,7 +1200,7 @@ function damage(s, atk, def) {
 }
 var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
 function zoneBossStats(zone) {
-  return content.enemies[content.zones[zone - 1]?.boss ?? ""]?.stats ?? NO_STATS;
+  return content.enemies[zoneAt(zone)?.def.boss ?? ""]?.stats ?? NO_STATS;
 }
 function scaledBossStats(s) {
   const carried = s.boss?.stats ?? NO_STATS;
@@ -1659,7 +1666,7 @@ function rewarded(state, event) {
   });
 }
 function noSuchZone(zone) {
-  return !Number.isInteger(zone) || content.zones[zone - 1] === void 0;
+  return zoneAt(zone) === void 0 || zone > LADDER_END;
 }
 function noSuchRarity(rarity2) {
   return !Object.hasOwn(content.rarity, rarity2);
@@ -1799,6 +1806,7 @@ export {
   GAUGE_FULL,
   GOLDEN_HASH,
   GOLDEN_SEED,
+  LADDER_END,
   POWER_BP,
   RARITIES,
   SANDBOX_EVENT_KINDS,
@@ -1816,5 +1824,6 @@ export {
   replay,
   rollRewardItem,
   step,
-  vendorValue
+  vendorValue,
+  zoneAt
 };

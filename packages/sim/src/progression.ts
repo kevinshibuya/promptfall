@@ -1,5 +1,5 @@
 import { SPAWN_GAUGE_MAX } from './battle'
-import { content } from './content'
+import { content, LADDER_END, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
@@ -141,7 +141,7 @@ function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: Ene
 }
 
 function pickWaveEnemy(s: GameState): string {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   const weights: Record<string, number> = {}
   for (const id of zone?.enemies ?? []) weights[id] = 1
   return drawWeighted(s, weights)
@@ -178,7 +178,7 @@ export function refillFromQueue(s: GameState): void {
 
 /** Step 3 of a tick: nothing is alive, so something new arrives. */
 export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
-  const zone = content.zones[s.zone - 1]
+  const zone = zoneAt(s.zone)?.def
   if (!zone) return
   if (s.pendingTurnBoss) {
     const encounter = s.encounter ?? openEncounter(s, 0)
@@ -253,7 +253,7 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   if (enemy.kind === 'zone_boss') {
     const zone = s.zone
     s.encounter = null
-    const advance = !s.farm && zone < 12
+    const advance = !s.farm && zone < LADDER_END
     const advancedTo = advance ? zone + 1 : zone
     effects.push({ k: 'zone_cleared', zone, advancedTo })
     changeZone(s, advancedTo)

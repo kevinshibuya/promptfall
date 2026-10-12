@@ -514,6 +514,20 @@ type Content = {
     xpToNext: (level: number) => number;
 };
 
+/** The last zone of the ladder: the advance gate farms from here, and no zone past it exists. */
+declare const LADDER_END = 12;
+type ZoneAt = {
+    /** The zone within its tier, 1 to 12: whose enemies, boss, weights, name and backdrop it has. */
+    base: number;
+    tier: number;
+    def: ZoneDef;
+};
+/**
+ * A running zone number as its tier and base zone, with the base zone's content: 13 is tier 2's
+ * zone 1. Every content lookup by zone goes through here. Nothing for a zone below 1.
+ */
+declare function zoneAt(zone: number): ZoneAt | undefined;
+
 declare const content: Content;
 
 declare const GOLDEN_SEED = 20261002;
@@ -541,4 +555,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, type TradeKind, type Trait, type TraitDef, type ZoneAt, type ZoneDef, content, createInitialState, fill, goldenEvents, hashState, heroStats, replay, rollRewardItem, step, vendorValue, zoneAt };
