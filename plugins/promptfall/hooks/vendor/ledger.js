@@ -7,17 +7,76 @@ function isBlocked(text) {
 
 // packages/ledger/src/books.ts
 import {
-  BUDGETS
+  BUDGETS as BUDGETS2
 } from './protocol.js';
 import {
-  hashState,
-  replay,
-  SIM_VERSION,
+  hashState as hashState2,
+  replay as replay2,
+  SIM_VERSION as SIM_VERSION2,
   step
 } from './sim.js';
+
+// packages/ledger/src/migrate.ts
+import { BUDGETS } from './protocol.js';
+import {
+  hashState,
+  migrate,
+  migrateGoods,
+  replay,
+  SIM_VERSION
+} from './sim.js';
+function refusalText(refusal) {
+  return refusal.reason === "ahead" ? `v${refusal.from} is ahead of v${refusal.to}` : `gap in the chain, no step from v${refusal.at}`;
+}
+function walkGoods(goods, from, chain) {
+  const r = migrateGoods(goods, from, { chain });
+  if (!r.ok) throw new Error(`migrate: goods refused from v${from}: ${refusalText(r)}`);
+  return r.goods;
+}
+function eventGoods(event, rule) {
+  switch (event.t) {
+    case "returned":
+    case "bought":
+      return { ...event, goods: rule(event.goods) };
+    case "rewarded":
+      return { ...event, goods: event.goods && rule(event.goods) };
+    case "order_filled": {
+      const goods = rule({ kind: "item", item: event.item });
+      return goods.kind === "item" ? { ...event, item: goods.item } : event;
+    }
+    default:
+      return event;
+  }
+}
+async function migrateRecord(record, { chain, now }) {
+  const committed = record.committedState ?? record.state;
+  const from = committed.v;
+  const result = migrate(committed, { chain });
+  if (!result.ok) return result;
+  const rule = (goods) => walkGoods(goods, from, chain);
+  record.committedState = result.state;
+  record.log = record.log.map(({ n, event }) => ({ n, event: eventGoods(event, rule) }));
+  record.returns = record.returns.map((entry) => ({ ...entry, goods: rule(entry.goods) }));
+  record.state = replay(
+    record.committedState,
+    record.log.map((e) => e.event)
+  ).state;
+  record.committedHash = hashState(record.committedState);
+  const at = await now();
+  for (const kind of Object.keys(BUDGETS)) {
+    if (typeof record.buckets[kind] !== "number") record.buckets[kind] = BUDGETS[kind].capacity;
+    if (typeof record.refillAt[kind] !== "number") record.refillAt[kind] = at;
+  }
+  return null;
+}
+function behind(record) {
+  return (record.committedState ?? record.state).v !== SIM_VERSION;
+}
+
+// packages/ledger/src/books.ts
 var BATCH_RING = 200;
 var LOG_CAP = 500;
-var KINDS = Object.keys(BUDGETS);
+var KINDS = Object.keys(BUDGETS2);
 var recordKey = (accountId) => `pf:acct:${accountId}:record`;
 var tokenKey = (token) => `pf:token:${token}`;
 var linkKey = (code) => `pf:link:${code}`;
@@ -32,11 +91,11 @@ function everyKind(value) {
 }
 function fullBuckets() {
   const out = {};
-  for (const kind of KINDS) out[kind] = BUDGETS[kind].capacity;
+  for (const kind of KINDS) out[kind] = BUDGETS2[kind].capacity;
   return out;
 }
 function isCurrent(record) {
-  return record.state.v === SIM_VERSION;
+  return record.state.v === SIM_VERSION2;
 }
 function publicName(record) {
   const raw = record.account.displayName ?? record.account.linked?.login ?? null;
@@ -56,7 +115,7 @@ function newRecord(account, state, now) {
     cursor: 0,
     committedCursor: 0,
     committedState: state,
-    committedHash: hashState(state),
+    committedHash: hashState2(state),
     log: [],
     returns: []
   };
@@ -68,7 +127,7 @@ function deliveryOf(record) {
 function settle(record) {
   record.committedState = record.state;
   record.committedCursor = record.cursor;
-  record.committedHash = hashState(record.state);
+  record.committedHash = hashState2(record.state);
   record.log = [];
 }
 function author(record, event) {
@@ -85,9 +144,9 @@ function tryAuthor(record, event) {
   while (record.log.length > LOG_CAP) {
     const oldest = record.log.shift();
     if (!oldest) break;
-    record.committedState = replay(record.committedState, [oldest.event]).state;
+    record.committedState = replay2(record.committedState, [oldest.event]).state;
     record.committedCursor = oldest.n;
-    record.committedHash = hashState(record.committedState);
+    record.committedHash = hashState2(record.committedState);
   }
   return null;
 }
@@ -122,13 +181,38 @@ var TrackedKeyValue = class {
   }
 };
 var Books = class {
-  constructor(kv) {
+  constructor(kv, migrator) {
     this.kv = kv;
+    this.migrator = migrator;
   }
   kv;
+  migrator;
+  /** Records refused a migration and already logged, as `<account>:v<version>`: one line each per process. */
+  refused = /* @__PURE__ */ new Set();
+  /**
+   * The one way a record enters the ledger. A record behind the sim version is migrated and saved
+   * here, once; one the chain refuses is answered as stored.
+   */
   async load(accountId) {
     const raw = await this.kv.get(recordKey(accountId));
-    return raw ? raw : null;
+    if (!raw) return null;
+    const record = raw;
+    if (behind(record)) await this.migrate(record);
+    return record;
+  }
+  async migrate(record) {
+    const id = record.account.accountId;
+    const from = (record.committedState ?? record.state).v;
+    const refusal = await migrateRecord(record, this.migrator);
+    if (refusal) {
+      const key = `${id}:v${from}`;
+      if (this.refused.has(key)) return;
+      this.refused.add(key);
+      this.migrator.log(`not migrated account ${id} from v${from}: ${refusalText(refusal)}`);
+      return;
+    }
+    await this.save(record);
+    this.migrator.log(`migrated account ${id} from v${from} to v${SIM_VERSION2}`);
   }
   async save(record) {
     await this.kv.set(recordKey(record.account.accountId), record);
@@ -281,17 +365,18 @@ async function nextLedgerId(kv, prefix) {
 // packages/ledger/src/ledger.ts
 import {
   BatchSchema,
-  BUDGETS as BUDGETS2,
+  BUDGETS as BUDGETS3,
   compareSemver,
   PRESENCE_TTL_MS,
   ServerEventSchema
 } from './protocol.js';
 import {
   createInitialState,
-  hashState as hashState2,
-  replay as replay2,
+  hashState as hashState3,
+  MIGRATIONS,
+  replay as replay3,
   SANDBOX_EVENT_KINDS,
-  SIM_VERSION as SIM_VERSION2
+  SIM_VERSION as SIM_VERSION4
 } from './sim.js';
 
 // packages/ledger/src/boss.ts
@@ -721,11 +806,17 @@ async function offerDamage(kv, now, record, delta) {
 import {
   LISTINGS_PER_PAGE
 } from './protocol.js';
-import { content as content2 } from './sim.js';
+import {
+  content as content2,
+  migrateGoods as migrateGoods2,
+  SIM_VERSION as SIM_VERSION3
+} from './sim.js';
 var LISTINGS_KEY = "pf:listings";
 var ORDERS_KEY = "pf:orders";
 var listingKey = (id) => `pf:listing:${id}`;
 var orderKey = (id) => `pf:order:${id}`;
+var MARK_KEY = "pf:market:v";
+var UNMARKED = 5;
 function refuse(reason) {
   return { ok: false, reason };
 }
@@ -773,6 +864,21 @@ async function closeOrder(ctx, id) {
     (await ids(ctx, ORDERS_KEY)).filter((x) => x !== id)
   );
   await ctx.books.kv.delete(orderKey(id));
+}
+async function normaliseBook(ctx, chain, log) {
+  const raw = await ctx.books.kv.get(MARK_KEY);
+  const from = typeof raw === "number" ? raw : UNMARKED;
+  if (from === SIM_VERSION3) return;
+  const listings = await openListings(ctx);
+  const walked = [];
+  for (const listing of listings) {
+    const r = migrateGoods2(listing.goods, from, { chain });
+    if (!r.ok) return log(`not migrated the market book from v${from}: ${refusalText(r)}`);
+    walked.push({ ...listing, goods: r.goods });
+  }
+  for (const listing of walked) await ctx.books.kv.set(listingKey(listing.id), listing);
+  await ctx.books.kv.set(MARK_KEY, SIM_VERSION3);
+  log(`migrated the market book from v${from} to v${SIM_VERSION3}`);
 }
 async function counterparty(ctx, accountId) {
   const record = await ctx.books.load(accountId);
@@ -1059,7 +1165,11 @@ var Ledger = class {
   constructor(options) {
     this.options = options;
     this.kv = new TrackedKeyValue(options.kv, (key) => this.memo.written(key));
-    this.books = new Books(this.kv);
+    this.books = new Books(this.kv, {
+      chain: options.migrations ?? MIGRATIONS,
+      now: options.now,
+      log: options.log ?? (() => void 0)
+    });
     this.loaded = (async () => {
       this.stored = settable(await options.kv.get(FLAGS_KEY));
     })();
@@ -1086,6 +1196,8 @@ var Ledger = class {
   memo = new WorldMemo();
   /** The flags under `pf:flags`, over the start flags. */
   stored = {};
+  /** Whether this ledger has brought the market book up to the sim version. */
+  bookCurrent = false;
   /** The stored flags read at start; every operation waits on it. */
   loaded;
   /**
@@ -1153,14 +1265,21 @@ var Ledger = class {
   async config() {
     return {
       minClientVersion: this.options.minClientVersion,
-      simVersion: SIM_VERSION2,
+      simVersion: SIM_VERSION4,
       flags: this.flags(),
       serverNow: await this.options.now(),
       speed: this.options.speed ?? 1
     };
   }
+  /** Every market call starts here, so the book is normalised before its first read. */
   async marketContext() {
-    return { books: this.books, now: await this.options.now(), flags: this.flags() };
+    const ctx = { books: this.books, now: await this.options.now(), flags: this.flags() };
+    if (!this.bookCurrent) {
+      const { chain, log } = this.books.migrator;
+      await normaliseBook(ctx, chain, log);
+      this.bookCurrent = true;
+    }
+    return ctx;
   }
   async worldContext(at) {
     const speed = this.options.speed ?? 1;
@@ -1212,7 +1331,7 @@ var Ledger = class {
         config,
         state: record.state,
         seq: record.seq,
-        hash: hashState2(record.state),
+        hash: hashState3(record.state),
         cursor: 0,
         delivery: { cursor: 0, events: [] }
       };
@@ -1276,8 +1395,8 @@ var Ledger = class {
       if (compareSemver(batch.clientVersion, minClientVersion) < 0) {
         return { ok: false, reason: "version_gate", minClientVersion };
       }
-      if (batch.simVersion !== SIM_VERSION2 || !isCurrent(record)) {
-        return { ok: false, reason: "sim_version", simVersion: SIM_VERSION2 };
+      if (batch.simVersion !== SIM_VERSION4 || !isCurrent(record)) {
+        return { ok: false, reason: "sim_version", simVersion: SIM_VERSION4 };
       }
       const seen = record.batches.find((c) => c.batchId === batch.batchId);
       if (seen) {
@@ -1301,7 +1420,7 @@ var Ledger = class {
       const buckets = {};
       const refillAt = {};
       for (const kind of KINDS) {
-        const { refillMs, capacity } = BUDGETS2[kind];
+        const { refillMs, capacity } = BUDGETS3[kind];
         const n = Math.floor(Math.max(0, now - record.refillAt[kind]) / refillMs);
         buckets[kind] = Math.min(capacity, record.buckets[kind] + n);
         refillAt[kind] = record.refillAt[kind] + n * refillMs;
@@ -1315,9 +1434,9 @@ var Ledger = class {
       const events = batch.events.map(
         ({ at: _at, ...event }) => event
       );
-      const result = replay2(record.state, events).state;
+      const result = replay3(record.state, events).state;
       const prevDealt = dealtBefore(record.state, result);
-      const hash = hashState2(result);
+      const hash = hashState3(result);
       const seq = record.seq + 1;
       for (const kind of KINDS) buckets[kind] -= counts[kind];
       record.state = result;

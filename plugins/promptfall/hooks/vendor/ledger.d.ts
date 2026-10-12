@@ -1,5 +1,5 @@
 import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
-import { GameState, ServerEvent, Goods, SandboxEvent, TradeKind } from './sim.js';
+import { GameState, ServerEvent, Goods, SandboxEvent, MigrationChain, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
 declare const BLOCKED_WORDS: readonly string[];
@@ -109,8 +109,10 @@ type LedgerOptions = {
     linkApprover: LinkApprover;
     /** Online means a heartbeat inside this many server-clock ms. Default PRESENCE_TTL_MS × (speed ?? 1): heartbeats arrive at real cadence. */
     presenceTtlMs?: number;
-    /** Ledger notes that are not errors (a disengage with nothing to undo). Default: dropped. */
+    /** Ledger notes that are not errors (a disengage with nothing to undo, a migrated record). Default: dropped. */
     log?: (line: string) => void;
+    /** The migration chain a record behind the sim version walks on load. Default the sim's; tests register a stub. */
+    migrations?: MigrationChain;
 };
 type LedgerHost = {
     /** Mints an account with a given state and name (bots, tests). `bot` marks it off the boards. */
@@ -211,6 +213,8 @@ declare class Ledger implements ServerClient {
     private readonly memo;
     /** The flags under `pf:flags`, over the start flags. */
     private stored;
+    /** Whether this ledger has brought the market book up to the sim version. */
+    private bookCurrent;
     /** The stored flags read at start; every operation waits on it. */
     private readonly loaded;
     constructor(options: LedgerOptions);
@@ -224,6 +228,7 @@ declare class Ledger implements ServerClient {
     private ban;
     private unban;
     private config;
+    /** Every market call starts here, so the book is normalised before its first read. */
     private marketContext;
     private worldContext;
     /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */

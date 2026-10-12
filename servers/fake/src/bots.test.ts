@@ -1,4 +1,5 @@
 import type { AccountRecord, Ledger } from '@promptfall/ledger'
+import { rewindRecord } from '@promptfall/ledger/testing'
 import {
   BOSS_BASE_HP,
   type BoardRow,
@@ -7,7 +8,7 @@ import {
   MemoryKeyValue,
   weekStartOf,
 } from '@promptfall/protocol'
-import { RARITIES, type Rarity, SIM_VERSION } from '@promptfall/sim'
+import { type MigrationChain, RARITIES, type Rarity, SIM_VERSION } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { BOT_NAMES, BOT_TICK_MS, botName } from './bot-config'
 import { rollBotState } from './bot-seed'
@@ -30,24 +31,14 @@ type StoredBoards = {
 type Saved = { accountId: string; deviceToken: string }
 
 /**
- * Points bot 0 at an unmarked account its start will replace, stale by name or by sim version,
- * and gives it and a player a row each on both boards. Answers both ids and the old token.
+ * Points bot 0 at an unmarked account its start will replace, stale by name, and gives it and a
+ * player a row each on both boards. Answers both ids and the old token.
  */
 async function seedReplaced(
   ledger: Ledger,
   kv: MemoryKeyValue,
-  stale: 'name' | 'version',
 ): Promise<{ old: Saved; player: string }> {
-  const state = rollBotState(1, 0)
-  const old = await ledger.host.mint(
-    stale === 'name'
-      ? { state, name: 'Ashgrove', linked: true }
-      : {
-          state: { ...state, v: (SIM_VERSION - 1) as typeof SIM_VERSION },
-          name: botName(0),
-          linked: true,
-        },
-  )
+  const old = await ledger.host.mint({ state: rollBotState(1, 0), name: 'Ashgrove', linked: true })
   await kv.set('pf:bot:0', old)
   const player = (await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null })).account
     .accountId
@@ -75,6 +66,7 @@ async function run(
   start = START,
   /** Runs before the bots start, over the same store, ledger and client. */
   prepare?: (ledger: Ledger, kv: MemoryKeyValue, client: HttpClient) => Promise<void>,
+  migrations?: MigrationChain,
 ) {
   const kv = new MemoryKeyValue()
   let t = start
@@ -88,6 +80,7 @@ async function run(
     tokenSource: () => `tok-${n++}`,
     playerName: 'player',
     seed,
+    ...(migrations && { migrations }),
   })
   const listening = await server.listen(0)
   const client = new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch })
@@ -253,37 +246,66 @@ describe('bots over HTTP', () => {
     expect(records[0]).toMatchObject({ bot: true, account: { displayName: '[bot] Ashgrove' } })
   }, 120_000)
 
-  for (const stale of ['name', 'version'] as const) {
-    it(`a replaced bot's account is deleted, and neither board keeps it (${stale})`, async () => {
-      const seeded: Partial<Awaited<ReturnType<typeof seedReplaced>>> = {}
-      const { boards, stored, records, kv } = await run(1, COUNT, undefined, async (ledger, kv) => {
-        Object.assign(seeded, await seedReplaced(ledger, kv, stale))
-        // Both boards hold it before the start, so its absence after is the delete's.
-        const before = (await kv.get(BOARDS)) as StoredBoards
-        expect(before.zone.map((r) => r.accountId)).toContain(seeded.old?.accountId)
-        expect(Object.keys(before.week.damage)).toContain(seeded.old?.accountId)
-      })
-      const { old, player } = seeded
-      if (!old || !player) throw new Error('not seeded')
-      const fresh = records[0]
-      expect(fresh?.account.accountId).not.toBe(old.accountId)
-      expect(fresh).toMatchObject({ bot: true, account: { displayName: botName(0) } })
-      // The old account's record and token are gone.
-      expect(await kv.get(`pf:acct:${old.accountId}:record`)).toBeUndefined()
-      expect(await kv.get(`pf:token:${old.deviceToken}`)).toBeUndefined()
-      // Neither board keeps it, stored or served; the player's rows stand; the replacement holds none.
-      const ids = (rows: { accountId: string }[]) => rows.map((r) => r.accountId)
-      expect(ids(stored.zone)).toEqual([player])
-      expect(Object.keys(stored.week.damage)).toEqual([player])
-      expect(ids(boards.highestZone)).toEqual([player])
-      expect(ids(boards.damage)).toEqual([player])
-    }, 120_000)
-  }
+  it('a bot behind the sim version is migrated: same account, current state, its listing kept', async () => {
+    const seeded: { saved?: Saved; listingId?: string } = {}
+    const { records, all } = await run(
+      1,
+      COUNT,
+      undefined,
+      async (ledger, kv, client) => {
+        const state = rollBotState(1, 0)
+        const saved = await ledger.host.mint({ state, name: botName(0), linked: true, bot: true })
+        await kv.set('pf:bot:0', saved)
+        const item = state.inventory.find((i) => rarePlus(i.rarity) && i.equippedBy === null)
+        if (!item) throw new Error('no Rare+ item')
+        // Priced past any bot's purse, so no bot buys it while the start runs.
+        const listed = await client.list(
+          { deviceToken: saved.deviceToken },
+          { kind: 'item', id: item.id, price: 1_000_000 },
+        )
+        const event = listed.ok ? listed.delivery.events.at(-1)?.event : undefined
+        if (event?.t !== 'listed') throw new Error('not listed')
+        seeded.saved = saved
+        seeded.listingId = event.listingId
+        await rewindRecord(kv, saved.accountId, SIM_VERSION - 1)
+      },
+      { [SIM_VERSION - 1]: { state: (s) => s } },
+    )
+    expect(records[0]?.account.accountId).toBe(seeded.saved?.accountId)
+    expect(records[0]?.state.v).toBe(SIM_VERSION)
+    expect(records[0]?.bot).toBe(true)
+    expect(all.map((l) => l.id)).toContain(seeded.listingId)
+  }, 120_000)
+
+  it("a replaced bot's account is deleted, and neither board keeps it", async () => {
+    const seeded: Partial<Awaited<ReturnType<typeof seedReplaced>>> = {}
+    const { boards, stored, records, kv } = await run(1, COUNT, undefined, async (ledger, kv) => {
+      Object.assign(seeded, await seedReplaced(ledger, kv))
+      // Both boards hold it before the start, so its absence after is the delete's.
+      const before = (await kv.get(BOARDS)) as StoredBoards
+      expect(before.zone.map((r) => r.accountId)).toContain(seeded.old?.accountId)
+      expect(Object.keys(before.week.damage)).toContain(seeded.old?.accountId)
+    })
+    const { old, player } = seeded
+    if (!old || !player) throw new Error('not seeded')
+    const fresh = records[0]
+    expect(fresh?.account.accountId).not.toBe(old.accountId)
+    expect(fresh).toMatchObject({ bot: true, account: { displayName: botName(0) } })
+    // The old account's record and token are gone.
+    expect(await kv.get(`pf:acct:${old.accountId}:record`)).toBeUndefined()
+    expect(await kv.get(`pf:token:${old.deviceToken}`)).toBeUndefined()
+    // Neither board keeps it, stored or served; the player's rows stand; the replacement holds none.
+    const ids = (rows: { accountId: string }[]) => rows.map((r) => r.accountId)
+    expect(ids(stored.zone)).toEqual([player])
+    expect(Object.keys(stored.week.damage)).toEqual([player])
+    expect(ids(boards.highestZone)).toEqual([player])
+    expect(ids(boards.damage)).toEqual([player])
+  }, 120_000)
 
   it('a delete answered unauthorized is logged once and the bot is minted anyway', async () => {
     const seeded: { old?: Saved } = {}
     const { records, lines } = await run(1, COUNT, undefined, async (ledger, kv, client) => {
-      seeded.old = (await seedReplaced(ledger, kv, 'name')).old
+      seeded.old = (await seedReplaced(ledger, kv)).old
       client.deleteAccount = async () => ({ reason: 'unauthorized' })
     })
     expect(records[0]?.account.accountId).not.toBe(seeded.old?.accountId)
@@ -309,7 +331,7 @@ describe('bots over HTTP', () => {
     it(`a delete that ${how} stops the start and leaves the pointer as it was`, async () => {
       const seeded: { old?: Saved } = {}
       const { records, lines, kv } = await run(1, COUNT, undefined, async (ledger, kv, client) => {
-        seeded.old = (await seedReplaced(ledger, kv, 'name')).old
+        seeded.old = (await seedReplaced(ledger, kv)).old
         client.deleteAccount = answer
       })
       expect(await kv.get('pf:bot:0')).toEqual(seeded.old)
