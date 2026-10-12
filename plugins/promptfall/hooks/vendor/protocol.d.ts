@@ -84,13 +84,13 @@ declare const RefusedBannedSchema: z.ZodObject<{
     reason: z.ZodLiteral<"banned">;
     message: z.ZodString;
 }, "strip", z.ZodTypeAny, {
-    message: string;
-    reason: "banned";
     ok: false;
+    reason: "banned";
+    message: string;
 }, {
-    message: string;
-    reason: "banned";
     ok: false;
+    reason: "banned";
+    message: string;
 }>;
 declare const MarketResultSchema: z.ZodType<MarketResult>;
 /** The price is checked by the ledger (`bad_price`), so the schema only wants an integer. */
@@ -576,15 +576,15 @@ declare const HealthSchema: z.ZodObject<{
     speed: z.ZodNumber;
     now: z.ZodNumber;
 }, "strip", z.ZodTypeAny, {
+    ok: true;
     seed: number;
     simVersion: number;
-    ok: true;
     speed: number;
     now: number;
 }, {
+    ok: true;
     seed: number;
     simVersion: number;
-    ok: true;
     speed: number;
     now: number;
 }>;

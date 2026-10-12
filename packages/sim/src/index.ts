@@ -24,6 +24,15 @@ export { content, LADDER_END, zoneAt } from './content'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
 export { rollRewardItem, vendorValue } from './loot'
+export type {
+  MigrateOptions,
+  MigrateRefusal,
+  MigrateResult,
+  Migration,
+  MigrationChain,
+  VersionedState,
+} from './migrate'
+export { MIGRATIONS, migrate, migrateGoods } from './migrate'
 export { heroStats } from './progression'
 export { createInitialState } from './state'
 export { replay, step } from './step'
