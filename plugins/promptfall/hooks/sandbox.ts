@@ -7,7 +7,7 @@ import {
   type SandboxEvent,
   zoneAt,
 } from './vendor/sim.js'
-import { zoneWords } from './zone-words'
+import { zonePhrase, zoneWords } from './zone-words'
 
 export const SANDBOX_OFF = 'Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.'
 export const SANDBOX_PINS_SERVER =
@@ -206,8 +206,8 @@ async function wipe(game: GameHandle): Promise<string> {
   const zone = (await game.view())?.zone ?? 1
   // Zone 1's third wipe restarts it too: the reply cannot tell it from a wipe, and need not.
   return zone < from
-    ? `Sandbox: the party retreats to zone ${zone}`
-    : `Sandbox: the party fell, back to wave 1 of zone ${zone}`
+    ? `Sandbox: the party retreats to ${zonePhrase(zone)}`
+    : `Sandbox: the party fell, back to wave 1 of ${zonePhrase(zone)}`
 }
 
 /**

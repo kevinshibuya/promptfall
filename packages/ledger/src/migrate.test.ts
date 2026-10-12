@@ -1,4 +1,4 @@
-import { type Bootstrap, BUDGETS, MemoryKeyValue } from '@promptfall/protocol'
+import { type Bootstrap, BUDGETS, type KeyValue, MemoryKeyValue } from '@promptfall/protocol'
 import { Mirror } from '@promptfall/protocol/mirror'
 import {
   createInitialState,
@@ -108,7 +108,7 @@ const pending: ServerEvent[] = [
 ]
 
 describe('a record behind the sim version', () => {
-  it('migrates on load: committed snapshot migrated, log replayed, hash recomputed, saved, one line', async () => {
+  it('migrates on load: committed snapshot migrated, log replayed, hash recomputed, saved by the next write, one line', async () => {
     const kv = new MemoryKeyValue()
     const { ledger, lines } = makeLedger(kv, { migrations: stubChain() })
     const m = await ledger.host.mint({
@@ -132,6 +132,13 @@ describe('a record behind the sim version', () => {
       'iron_sword',
     )
 
+    const mirror = new Mirror(boot)
+    // The load migrated in memory: the first write is what saves it.
+    expect((await stored(kv, m.accountId)).committedState.v).toBe(BEHIND)
+    const ack = await ledger.submit(mirror.batch([{ t: 'tick' }]), { deviceToken: m.deviceToken })
+    expect(ack).toMatchObject({ ok: true, duplicate: false })
+    mirror.commit([{ t: 'tick' }])
+
     const after = await stored(kv, m.accountId)
     expect(after.committedState.v).toBe(SIM_VERSION)
     expect(after.state.v).toBe(SIM_VERSION)
@@ -144,12 +151,8 @@ describe('a record behind the sim version', () => {
     expect(after.state.boss?.bossId).toBe('wbx')
     expect(after.state.inventory.map((i) => i.base)).toContain('iron_sword')
     expect(after.committedHash).toBe(hashState(after.committedState))
-
-    // The client replays the delivery over the bootstrap and lands on the server's effective state.
-    const mirror = new Mirror(boot)
+    // The client replayed the delivery over the bootstrap and lands on the server's effective state.
     expect(hashState(mirror.local)).toBe(hashState(after.state))
-    const ack = await ledger.submit(mirror.batch([{ t: 'tick' }]), { deviceToken: m.deviceToken })
-    expect(ack).toMatchObject({ ok: true, duplicate: false })
 
     // Loaded again, the record is current: still one line.
     await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
@@ -171,6 +174,8 @@ describe('a record behind the sim version', () => {
     })
     advance(60_000)
     await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    // A write saves the migrated record.
+    await ledger.host.credit(m.accountId, 1, 'test')
     const after = await stored(kv, m.accountId)
     expect(after.buckets.turn_end).toBe(BUDGETS.turn_end.capacity)
     expect(after.refillAt.turn_end).toBe(START + 60_000)
@@ -227,11 +232,108 @@ describe('a record behind the sim version', () => {
       base: 'iron_sword',
     })
 
-    // A later start over the same store finds the book current and runs nothing again.
+    // A later start over the same store finds the book and the delivered record current, and runs
+    // nothing again.
+    expect(seen.filter((id) => id === 'listed-1')).toEqual(['listed-1'])
+    expect(seen).toContain('waiting-1')
+    const walked = seen.length
     const third = makeLedger(kv, { migrations: stubChain(seen) })
     await third.ledger.browse(auth, { kind: 'item', sort: 'newest', page: 0 })
-    expect(seen.filter((id) => id === 'listed-1')).toEqual(['listed-1'])
-    expect(seen.filter((id) => id === 'waiting-1')).toEqual(['waiting-1'])
+    await third.ledger.account({ deviceToken: seller.deviceToken })
+    expect(seen).toHaveLength(walked)
+  })
+})
+
+describe('a secondary session over a record behind the sim version', () => {
+  const identity: MigrationChain = { [BEHIND]: { state: (s) => s } }
+
+  it('bootstraps on a known token without writing: the stored record keeps its version', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger, lines } = makeLedger(kv, { migrations: stubChain() })
+    const m = await ledger.host.mint({ state: createInitialState(3), name: 'Fa', linked: false })
+    const before = await rewind(kv, m.accountId, BEHIND, pending)
+
+    const boot = booted(
+      await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken }),
+    )
+    expect(boot.state.v).toBe(SIM_VERSION)
+    expect(await stored(kv, m.accountId)).toEqual(before)
+    // Logged once per process, though the record is migrated again on every load until a write.
+    await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    expect(lines.filter((l) => l.includes(m.accountId))).toEqual([
+      `migrated account ${m.accountId} from v${BEHIND} to v${SIM_VERSION}`,
+    ])
+  })
+
+  it("never overwrites the primary's credit with a stale migration", async () => {
+    const kv = new MemoryKeyValue()
+    const primary = makeLedger(kv, { migrations: identity })
+    const m = await primary.ledger.host.mint({
+      state: createInitialState(3),
+      name: 'Gil',
+      linked: false,
+    })
+    await rewind(kv, m.accountId, BEHIND)
+    // The secondary's read of the record, taken before the primary's save lands.
+    const stale = await kv.get(recordKey(m.accountId))
+    const lagging: KeyValue = {
+      get: async (key) => (key === recordKey(m.accountId) ? stale : kv.get(key)),
+      set: (key, value) => kv.set(key, value),
+      delete: (key) => kv.delete(key),
+    }
+    const secondary = makeLedger(new MemoryKeyValue(), { kv: lagging, migrations: identity })
+
+    await primary.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    await primary.ledger.host.credit(m.accountId, 100, 'test')
+    await secondary.ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+
+    const after = await stored(kv, m.accountId)
+    expect(after.state.v).toBe(SIM_VERSION)
+    expect(after.state.gold).toBe(100)
+    expect(after.cursor).toBe(1)
+  })
+
+  it('browses without persisting leave the book behind', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger, lines } = makeLedger(kv, { migrations: stubChain() })
+    const m = await ledger.host.mint({ state: createInitialState(3), name: 'Hu', linked: true })
+    await kv.set('pf:market:v', BEHIND)
+    const auth = { deviceToken: m.deviceToken }
+    const page = await ledger.browse(
+      auth,
+      { kind: 'item', sort: 'newest', page: 0 },
+      { expire: false, persist: false },
+    )
+    expect('reason' in page).toBe(false)
+    expect(await kv.get('pf:market:v')).toBe(BEHIND)
+    expect(lines.filter((l) => l.includes('market book'))).toEqual([])
+    // A browse that persists walks it.
+    await ledger.browse(auth, { kind: 'item', sort: 'newest', page: 0 })
+    expect(await kv.get('pf:market:v')).toBe(SIM_VERSION)
+  })
+
+  it('retries a refused book walk on the next market call', async () => {
+    const kv = new MemoryKeyValue()
+    const first = makeLedger(kv)
+    const seller = await first.ledger.host.mint({
+      state: { ...createInitialState(5), gold: 1000, inventory: [rareItem('listed-1')] },
+      name: 'Io',
+      linked: true,
+    })
+    const listed = await first.ledger.list(
+      { deviceToken: seller.deviceToken },
+      { kind: 'item', id: 'listed-1', price: 50 },
+    )
+    expect(listed.ok).toBe(true)
+    await kv.set('pf:market:v', BEHIND)
+
+    // An empty chain: no step from the version behind, so the walk is refused.
+    const second = makeLedger(kv, { migrations: {} })
+    const auth = { deviceToken: seller.deviceToken }
+    for (let i = 0; i < 2; i++)
+      await second.ledger.browse(auth, { kind: 'item', sort: 'newest', page: 0 })
+    expect(second.lines.filter((l) => l.startsWith('not migrated the market book'))).toHaveLength(2)
+    expect(await kv.get('pf:market:v')).toBe(BEHIND)
   })
 })
 
@@ -295,6 +397,30 @@ describe('the 7→8 step on the ledger', () => {
     expect(returned?.t === 'returned' && returned.goods).toEqual({
       kind: 'item',
       item: blade('waiting-1'),
+    })
+  })
+})
+
+describe('the 5→6 step on the ledger', () => {
+  it('a v5 hero in a waiting return comes back at its level with 0 xp', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger } = makeLedger(kv)
+    const m = await ledger.host.mint({ state: createInitialState(9), name: 'Jo', linked: false })
+    const [knight] = createInitialState(9).roster
+    if (!knight) throw new Error('no knight')
+    const held = { ...knight, id: 'held-1', level: 25, xp: 50_000 }
+    await rewind(kv, m.accountId, 5, [], {
+      returns: [{ listingId: 'gone', goods: { kind: 'hero', hero: held } }],
+    })
+    await kv.set('pf:returns', [m.accountId])
+
+    await ledger.host.sweep()
+    const info = await ledger.account({ deviceToken: m.deviceToken })
+    if ('reason' in info) throw new Error(info.reason)
+    const returned = info.delivery.events.map((e) => e.event).find((e) => e.t === 'returned')
+    expect(returned?.t === 'returned' && returned.goods).toEqual({
+      kind: 'hero',
+      hero: { ...held, xp: 0 },
     })
   })
 })

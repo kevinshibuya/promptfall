@@ -189,9 +189,12 @@ var Books = class {
   migrator;
   /** Records refused a migration and already logged, as `<account>:v<version>`: one line each per process. */
   refused = /* @__PURE__ */ new Set();
+  /** Records migrated and already logged, keyed the same way: a load migrates until a write saves it. */
+  migrated = /* @__PURE__ */ new Set();
   /**
-   * The one way a record enters the ledger. A record behind the sim version is migrated and saved
-   * here, once; one the chain refuses is answered as stored.
+   * The one way a record enters the ledger. A record behind the sim version is migrated here, in
+   * memory: only an operation that writes anyway saves it, so a secondary session's reads never
+   * write over the primary's record (spec §9). One the chain refuses is answered as stored.
    */
   async load(accountId) {
     const raw = await this.kv.get(recordKey(accountId));
@@ -203,15 +206,16 @@ var Books = class {
   async migrate(record) {
     const id = record.account.accountId;
     const from = (record.committedState ?? record.state).v;
+    const key = `${id}:v${from}`;
     const refusal = await migrateRecord(record, this.migrator);
     if (refusal) {
-      const key = `${id}:v${from}`;
       if (this.refused.has(key)) return;
       this.refused.add(key);
       this.migrator.log(`not migrated account ${id} from v${from}: ${refusalText(refusal)}`);
       return;
     }
-    await this.save(record);
+    if (this.migrated.has(key)) return;
+    this.migrated.add(key);
     this.migrator.log(`migrated account ${id} from v${from} to v${SIM_VERSION2}`);
   }
   async save(record) {
@@ -868,17 +872,21 @@ async function closeOrder(ctx, id) {
 async function normaliseBook(ctx, chain, log) {
   const raw = await ctx.books.kv.get(MARK_KEY);
   const from = typeof raw === "number" ? raw : UNMARKED;
-  if (from === SIM_VERSION3) return;
+  if (from === SIM_VERSION3) return true;
   const listings = await openListings(ctx);
   const walked = [];
   for (const listing of listings) {
     const r = migrateGoods2(listing.goods, from, { chain });
-    if (!r.ok) return log(`not migrated the market book from v${from}: ${refusalText(r)}`);
+    if (!r.ok) {
+      log(`not migrated the market book from v${from}: ${refusalText(r)}`);
+      return false;
+    }
     walked.push({ ...listing, goods: r.goods });
   }
   for (const listing of walked) await ctx.books.kv.set(listingKey(listing.id), listing);
   await ctx.books.kv.set(MARK_KEY, SIM_VERSION3);
   log(`migrated the market book from v${from} to v${SIM_VERSION3}`);
+  return true;
 }
 async function counterparty(ctx, accountId) {
   const record = await ctx.books.load(accountId);
@@ -1271,13 +1279,15 @@ var Ledger = class {
       speed: this.options.speed ?? 1
     };
   }
-  /** Every market call starts here, so the book is normalised before its first read. */
-  async marketContext() {
+  /**
+   * Every market call starts here, so the book is normalised before its first read. A read that
+   * does not persist leaves it as stored; a refused walk is tried again on the next call.
+   */
+  async marketContext({ persist } = {}) {
     const ctx = { books: this.books, now: await this.options.now(), flags: this.flags() };
-    if (!this.bookCurrent) {
+    if (!this.bookCurrent && persist !== false) {
       const { chain, log } = this.books.migrator;
-      await normaliseBook(ctx, chain, log);
-      this.bookCurrent = true;
+      this.bookCurrent = await normaliseBook(ctx, chain, log);
     }
     return ctx;
   }
@@ -1564,9 +1574,9 @@ var Ledger = class {
   }
   // ---------------------------------------------------------------------------
   // Market
-  marketRead(auth, expire, fn) {
+  marketRead(auth, { expire = true, persist = true }, fn) {
     return this.run(async () => {
-      const record = await this.authenticated(auth, expire);
+      const record = await this.authenticated(auth, expire, persist);
       if (!record) return unauthorized;
       if ("message" in record) return record;
       return fn(record.ctx, record.record);
@@ -1585,8 +1595,8 @@ var Ledger = class {
    * for an authenticated caller, and the record is read after it, since
    * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
    */
-  async authenticated(auth, expire) {
-    const ctx = await this.marketContext();
+  async authenticated(auth, expire, persist = true) {
+    const ctx = await this.marketContext({ persist });
     const caller = await this.books.authenticate(auth);
     if (!caller || !isCurrent(caller)) return null;
     const banned = bannedOf(caller);
@@ -1596,8 +1606,8 @@ var Ledger = class {
     const record = await this.books.load(caller.account.accountId);
     return record ? { ctx, record } : null;
   }
-  browse(auth, query, { expire = true } = {}) {
-    return this.marketRead(auth, expire, (ctx, record) => browse(ctx, record, query));
+  browse(auth, query, options = {}) {
+    return this.marketRead(auth, options, (ctx, record) => browse(ctx, record, query));
   }
   list(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => list(ctx, record, input));
@@ -1612,8 +1622,8 @@ var Ledger = class {
   buy(auth, listingId) {
     return this.marketWrite(auth, true, (ctx, record) => buy(ctx, record, listingId));
   }
-  myOrders(auth, { expire = true } = {}) {
-    return this.marketRead(auth, expire, (ctx, record) => myOrders(ctx, record));
+  myOrders(auth, options = {}) {
+    return this.marketRead(auth, options, (ctx, record) => myOrders(ctx, record));
   }
   placeOrder(auth, input) {
     return this.marketWrite(auth, false, (ctx, record) => placeOrder(ctx, record, input));
@@ -1621,10 +1631,10 @@ var Ledger = class {
   cancelOrder(auth, orderId) {
     return this.marketWrite(auth, true, (ctx, record) => cancelOrder(ctx, record, orderId));
   }
-  matchingOrders(auth, itemId, { expire = true } = {}) {
+  matchingOrders(auth, itemId, options = {}) {
     return this.marketRead(
       auth,
-      expire,
+      options,
       (ctx, record) => matchingOrders(ctx, record, itemId)
     );
   }

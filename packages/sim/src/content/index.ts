@@ -13,7 +13,7 @@ import type { Content } from './types'
 import { xpToNext } from './xp'
 import { zones } from './zones'
 
-export { TIER_ENTRY_BP, TIER_GROWTH_BP } from './enemies'
+export { TIER_GROWTH_BP } from './enemies'
 export { ZONES_PER_ITEM_TIER } from './tiers'
 export type {
   AffixDef,

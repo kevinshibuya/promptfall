@@ -25,7 +25,6 @@ export {
   enemyAt,
   LADDER_END,
   oddsAt,
-  TIER_ENTRY_BP,
   TIER_GROWTH_BP,
   zoneAt,
 } from './content'

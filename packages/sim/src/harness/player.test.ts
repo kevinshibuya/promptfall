@@ -3,7 +3,7 @@ import { clone } from '../draft'
 import { createInitialState } from '../state'
 import { step } from '../step'
 import type { Affix, GameState, Hero, Item, Rarity } from '../types'
-import { atTurnEnd, noSpending, reforgeWorn, type Seat, wear } from './player'
+import { atTurnEnd, bestParty, noSpending, reforgeWorn, type Seat, wear } from './player'
 import { runScenario } from './scenario'
 
 // The dedicated player's five habits (#151), each shown happening on a state built for it.
@@ -97,7 +97,8 @@ describe('habit 1 and 2: scoring every stat, wearing a drop where it raises the 
 
 describe('habit 3: gold at a turn’s end, recruit, expand, reforge', () => {
   it('a recruit spends gold and reshapes the party', () => {
-    const seat = seatAt(createInitialState(1))
+    // Seed 2: among its nine recruits is one that beats the starter of its class.
+    const seat = seatAt(createInitialState(2))
     const starters = seat.state.roster.map((h) => h.id)
     gold(seat, 3000)
     const spent = noSpending()
@@ -108,7 +109,12 @@ describe('habit 3: gold at a turn’s end, recruit, expand, reforge', () => {
     expect(seat.state.roster).toHaveLength(13)
     expect(spent.partyChanges).toBe(1)
     expect(seat.state.party.some((id) => !starters.includes(id))).toBe(true)
-    expect(hero(seat.state, seat.state.party[0]).cls).toBe('knight')
+    // One hero a class, the Knight first.
+    expect(seat.state.party.map((id) => hero(seat.state, id).cls)).toEqual([
+      'knight',
+      'black_mage',
+      'white_mage',
+    ])
   })
 
   it('a full roster whose bench is no better than the party dismisses its weakest to recruit', () => {
@@ -180,6 +186,38 @@ describe('habit 3: gold at a turn’s end, recruit, expand, reforge', () => {
       id: 'keen',
       value: 2,
     })
+  })
+})
+
+describe('habit 4: one hero a class', () => {
+  it('fields one Knight, one Black Mage and one White Mage over three stronger Knights', () => {
+    const seat = seatAt(createInitialState(1))
+    const s = clone(seat.state)
+    const knight = hero(s, s.party[0])
+    // Three Legendary Knights at level 30 on the bench; the party's mages stay Commons at level 1.
+    for (let i = 0; i < 3; i++) {
+      s.roster.push({ ...knight, id: `hs${i}`, rarity: 'legendary', level: 30 + i, hp: 1 })
+    }
+    seat.state = s
+    const party = bestParty(seat.state)
+    expect(party?.map((id) => hero(seat.state, id).cls)).toEqual([
+      'knight',
+      'black_mage',
+      'white_mage',
+    ])
+    // The lead is the strongest Knight.
+    expect(party?.[0]).toBe('hs2')
+  })
+
+  it('leads with the Knight the harness names, and no other Knight joins it', () => {
+    const seat = seatAt(createInitialState(1))
+    const s = clone(seat.state)
+    const knight = hero(s, s.party[0])
+    s.roster.push({ ...knight, id: 'hs0', rarity: 'legendary', level: 30, hp: 1 })
+    seat.state = s
+    const party = bestParty(seat.state, knight.id)
+    expect(party?.[0]).toBe(knight.id)
+    expect(party).not.toContain('hs0')
   })
 })
 

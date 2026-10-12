@@ -165,12 +165,14 @@ type LedgerHost = {
 };
 /**
  * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
- * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged. A
- * secondary session reads with both off: those writes are the primary's, under its lease.
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged; `persist` off
+ * leaves the market book at its version mark, unwalked. A secondary session reads with all three
+ * off: those writes are the primary's, under its lease.
  */
 type ReadOptions = {
     expire?: boolean;
     advance?: boolean;
+    persist?: boolean;
 };
 /** A minted name doubles as the GitHub login, which the wire takes at 1 to 64 characters. */
 declare const PLAYER_NAME_MAX = 64;
@@ -228,7 +230,10 @@ declare class Ledger implements ServerClient {
     private ban;
     private unban;
     private config;
-    /** Every market call starts here, so the book is normalised before its first read. */
+    /**
+     * Every market call starts here, so the book is normalised before its first read. A read that
+     * does not persist leaves it as stored; a refused walk is tried again on the next call.
+     */
     private marketContext;
     private worldContext;
     /** A null token always mints; a token mints never, and one the books do not know is `unknown`. */
@@ -266,7 +271,7 @@ declare class Ledger implements ServerClient {
      * expiring the caller's own listing changes the caller's record. A banned caller expires nothing.
      */
     private authenticated;
-    browse(auth: Auth, query: ListingQuery, { expire }?: ReadOptions): Promise<ListingPage | Unauthorized | Banned>;
+    browse(auth: Auth, query: ListingQuery, options?: ReadOptions): Promise<ListingPage | Unauthorized | Banned>;
     list(auth: Auth, input: {
         kind: TradeKind;
         id: string;
@@ -274,10 +279,10 @@ declare class Ledger implements ServerClient {
     }): Promise<MarketResult>;
     cancelListing(auth: Auth, listingId: string): Promise<MarketResult>;
     buy(auth: Auth, listingId: string): Promise<MarketResult>;
-    myOrders(auth: Auth, { expire }?: ReadOptions): Promise<MyOrders | Unauthorized | Banned>;
+    myOrders(auth: Auth, options?: ReadOptions): Promise<MyOrders | Unauthorized | Banned>;
     placeOrder(auth: Auth, input: NewOrder): Promise<MarketResult>;
     cancelOrder(auth: Auth, orderId: string): Promise<MarketResult>;
-    matchingOrders(auth: Auth, itemId: string, { expire }?: ReadOptions): Promise<Order[] | Unauthorized | Banned>;
+    matchingOrders(auth: Auth, itemId: string, options?: ReadOptions): Promise<Order[] | Unauthorized | Banned>;
     fillOrder(auth: Auth, orderId: string, itemId: string): Promise<MarketResult>;
     world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;

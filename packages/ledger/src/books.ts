@@ -208,6 +208,8 @@ export class TrackedKeyValue implements KeyValue {
 export class Books {
   /** Records refused a migration and already logged, as `<account>:v<version>`: one line each per process. */
   private readonly refused = new Set<string>()
+  /** Records migrated and already logged, keyed the same way: a load migrates until a write saves it. */
+  private readonly migrated = new Set<string>()
 
   constructor(
     readonly kv: TrackedKeyValue,
@@ -215,8 +217,9 @@ export class Books {
   ) {}
 
   /**
-   * The one way a record enters the ledger. A record behind the sim version is migrated and saved
-   * here, once; one the chain refuses is answered as stored.
+   * The one way a record enters the ledger. A record behind the sim version is migrated here, in
+   * memory: only an operation that writes anyway saves it, so a secondary session's reads never
+   * write over the primary's record (spec §9). One the chain refuses is answered as stored.
    */
   async load(accountId: string): Promise<AccountRecord | null> {
     const raw = await this.kv.get(recordKey(accountId))
@@ -229,15 +232,16 @@ export class Books {
   private async migrate(record: AccountRecord): Promise<void> {
     const id = record.account.accountId
     const from = (record.committedState ?? record.state).v
+    const key = `${id}:v${from}`
     const refusal = await migrateRecord(record, this.migrator)
     if (refusal) {
-      const key = `${id}:v${from}`
       if (this.refused.has(key)) return
       this.refused.add(key)
       this.migrator.log(`not migrated account ${id} from v${from}: ${refusalText(refusal)}`)
       return
     }
-    await this.save(record)
+    if (this.migrated.has(key)) return
+    this.migrated.add(key)
     this.migrator.log(`migrated account ${id} from v${from} to v${SIM_VERSION}`)
   }
 

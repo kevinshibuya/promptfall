@@ -220,21 +220,29 @@ function buildEnemies(t) {
   });
   return out;
 }
-var TIER_ENTRY_BP = 27800;
-var TIER_GROWTH_BP = 10400;
-function buildTierEnemies(t, entryBp, growthBp, last) {
+var TIER_GROWTH_BP = [11325, 10400];
+function growThrough(value, bps) {
+  let v = value * 1e4;
+  for (const bp of bps) v = Math.floor(v * bp / 1e4);
+  return Math.max(1, Math.floor(v / 1e4));
+}
+function buildTierEnemies(t, growthBp, last) {
   const top = ROSTERS.length;
   const b12 = baseline(t, top - 1);
   const out = {};
+  const steps = [];
   for (let zone = top + 1; zone <= last; zone++) {
-    const k = zone - top;
+    const tier = Math.floor((zone - 1) / top) + 1;
+    const bp = growthBp[tier - 2] ?? growthBp[growthBp.length - 1];
+    if (bp === void 0) throw new Error(`no tier growth for zone ${zone}`);
+    steps.push(bp);
     const b = {
-      hp: grow(scale(b12.hp, entryBp), growthBp, k),
-      atk: grow(scale(b12.atk, entryBp), growthBp, k),
-      def: grow(scale(b12.def, entryBp), growthBp, k),
-      xp: grow(b12.xp, growthBp, k),
-      goldMin: grow(b12.goldMin, growthBp, k),
-      goldMax: grow(b12.goldMax, growthBp, k)
+      hp: growThrough(b12.hp, steps),
+      atk: growThrough(b12.atk, steps),
+      def: growThrough(b12.def, steps),
+      xp: growThrough(b12.xp, steps),
+      goldMin: growThrough(b12.goldMin, steps),
+      goldMax: growThrough(b12.goldMax, steps)
     };
     const at = {};
     for (const roster of ROSTERS)
@@ -629,7 +637,7 @@ function zoneAt(zone) {
   if (!def) return void 0;
   return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
 }
-var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_ENTRY_BP, TIER_GROWTH_BP, LADDER_END);
+var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_GROWTH_BP, LADDER_END);
 function enemyAt(id, zone) {
   const at = zoneAt(zone);
   if (!at || zone > LADDER_END) return void 0;
@@ -719,7 +727,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "50186730cdb9fff6";
+var GOLDEN_HASH = "3d3528f569bd176b";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -1077,9 +1085,9 @@ function pushLog(s, entry) {
   if (s.lootLog.length > 50) s.lootLog.splice(0, s.lootLog.length - 50);
 }
 function rollContract(s, effects) {
-  const zone = zoneAt(s.zone)?.def;
-  if (!zone) return;
-  const rarity2 = drawWeighted(s, zone.bossRarityWeights);
+  const odds = oddsAt(s.zone);
+  if (!odds) return;
+  const rarity2 = drawWeighted(s, odds.bossRarityWeights);
   const hero = generateHero(s, rarity2);
   if (s.roster.length < s.rosterCap) {
     recruitHero(s, hero, "contract", effects);
@@ -1092,7 +1100,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 12;
+var SIM_VERSION = 13;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1299,12 +1307,14 @@ function draft(state, mutate) {
 // packages/sim/src/migrate.ts
 var MIGRATIONS = {
   // 5 → 6: ratio mitigation, gentler enemy growth and the flatter xp curve. Stats are derived, so
-  // every hero keeps its level and starts it again at 0 xp; nothing changes shape.
+  // every hero keeps its level and starts it again at 0 xp, a hero the ledger holds too; nothing
+  // changes shape.
   5: {
     state: (s) => ({
       ...s,
       roster: s.roster.map((h) => ({ ...h, xp: 0 }))
-    })
+    }),
+    goods: (g) => g.kind === "hero" ? { kind: "hero", hero: { ...g.hero, xp: 0 } } : g
   },
   // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
   // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
@@ -1326,7 +1336,10 @@ var MIGRATIONS = {
   10: { state: (s) => s },
   // 11 → 12: the arc retuned for the dedicated harness player (#151). Only content constants moved,
   // and every enemy's numbers are derived from them, so nothing changes shape.
-  11: { state: (s) => s }
+  11: { state: (s) => s },
+  // 12 → 13: boss contracts past tier 1 roll the tier's odds, and tier 2 ramps from zone 12 with no
+  // step at its door (#152). Rules and content moved, and nothing changes shape.
+  12: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -2055,7 +2068,6 @@ export {
   SPAWN_GAUGE_MAX,
   STEP_MS,
   TICK_MS,
-  TIER_ENTRY_BP,
   TIER_GROWTH_BP,
   affixValue,
   baseTier,

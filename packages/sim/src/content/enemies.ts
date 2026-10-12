@@ -231,42 +231,52 @@ export function buildEnemies(t: EnemyTuning): Record<string, EnemyDef> {
 }
 
 /**
- * The step onto the later tiers, in basis points: once, at zone 13, on an enemy's hp, atk and def
- * over zone 12's. The party the feel probe measures there is capped and in tier-5 gear, far past
- * tier 1's zone-12 party, so tier 2 opens on it; xp and gold take no step.
+ * The growth of an enemy's stats, xp and gold per zone past the first tier, in basis points, one
+ * entry per tier from tier 2: zone 12 + k fights at zone 12's numbers grown once per zone, each
+ * zone at its own tier's rate. Tier 2 ramps from zone 12 at ×1.1325, so zone 24 lands where a
+ * ×2.78 step at zone 13 and ×1.04 a zone put it (1.1325¹² = 2.78 × 1.04¹² = 4.45, equal to the
+ * fourth decimal, so a defence or an attack there may sit a point or two off); tier 3 grows ×1.04
+ * from there. Both are tuned to the feel probe at tiers 2 and 3.
  */
-export const TIER_ENTRY_BP = 27800
+export const TIER_GROWTH_BP: readonly number[] = [11325, 10400]
 
 /**
- * The growth of an enemy's stats, xp and gold per zone past the first tier, in basis points:
- * zone 12 + k fights at zone 12's numbers, its stats stepped by TIER_ENTRY_BP, grown k times.
- * Both are tuned to the feel probe at tiers 2 and 3.
+ * A value after one zone of growth per entry of `bps`, carried at four decimal places between
+ * steps and floored once at the end, as `grow` does.
  */
-export const TIER_GROWTH_BP = 10400
+function growThrough(value: number, bps: readonly number[]): number {
+  let v = value * 10000
+  for (const bp of bps) v = Math.floor((v * bp) / 10000)
+  return Math.max(1, Math.floor(v / 10000))
+}
 
 /**
  * Every enemy at every running zone past the first tier, `last` the ladder's end: zone 12's
- * baseline, its stats stepped once by `entryBp`, grown by `growthBp` once per zone past 12,
- * through each enemy's own archetype. Speed stays at zone 12's. Computed once, at load.
+ * baseline, its stats, xp and gold grown once per zone past 12 at that zone's tier's rate in
+ * `growthBp` (tier 2 first), through each enemy's own archetype. Speed stays at zone 12's.
+ * Computed once, at load.
  */
 export function buildTierEnemies(
   t: EnemyTuning,
-  entryBp: number,
-  growthBp: number,
+  growthBp: readonly number[],
   last: number,
 ): Record<number, Record<string, EnemyDef>> {
   const top = ROSTERS.length
   const b12 = baseline(t, top - 1)
   const out: Record<number, Record<string, EnemyDef>> = {}
+  const steps: number[] = []
   for (let zone = top + 1; zone <= last; zone++) {
-    const k = zone - top
+    const tier = Math.floor((zone - 1) / top) + 1
+    const bp = growthBp[tier - 2] ?? growthBp[growthBp.length - 1]
+    if (bp === undefined) throw new Error(`no tier growth for zone ${zone}`)
+    steps.push(bp)
     const b: Baseline = {
-      hp: grow(scale(b12.hp, entryBp), growthBp, k),
-      atk: grow(scale(b12.atk, entryBp), growthBp, k),
-      def: grow(scale(b12.def, entryBp), growthBp, k),
-      xp: grow(b12.xp, growthBp, k),
-      goldMin: grow(b12.goldMin, growthBp, k),
-      goldMax: grow(b12.goldMax, growthBp, k),
+      hp: growThrough(b12.hp, steps),
+      atk: growThrough(b12.atk, steps),
+      def: growThrough(b12.def, steps),
+      xp: growThrough(b12.xp, steps),
+      goldMin: growThrough(b12.goldMin, steps),
+      goldMax: growThrough(b12.goldMax, steps),
     }
     const at: Record<string, EnemyDef> = {}
     for (const roster of ROSTERS)

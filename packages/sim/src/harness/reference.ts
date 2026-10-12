@@ -48,10 +48,10 @@ export const REFERENCE_PARTY: readonly ReferenceRow[] = [
   { zone: 10, level: 27, knightRarity: 'legendary', gearTier: 3, gearRarity: 'uncommon' },
   { zone: 11, level: 32, knightRarity: 'legendary', gearTier: 3, gearRarity: 'uncommon' },
   { zone: 12, level: 37, knightRarity: 'legendary', gearTier: 3, gearRarity: 'uncommon' },
-  // The later tiers (#143): a capped party, the Knight Legendary at 50 and Epics at 45, in the
-  // tier's item tier, from Epic at low rolls on a tier's first zone to Legendary at high on its last.
-  { zone: 13, ...CAPPED, gearTier: 5, gearRarity: 'epic', rollBp: 0 },
-  { zone: 18, ...CAPPED, gearTier: 5, gearRarity: 'epic', rollBp: 5000 },
+  // Tier 2 ramps from zone 12 (#152), so its first zone takes the party that clears zone 12.
+  { zone: 13, level: 37, knightRarity: 'legendary', gearTier: 3, gearRarity: 'uncommon' },
+  // The rest of the later tiers (#143): a capped party, the Knight Legendary at 50 and Epics at 45,
+  // in the tier's item tier, from Epic at low rolls to Legendary at high on a tier's last zone.
   { zone: 24, ...CAPPED, gearTier: 5, gearRarity: 'legendary', rollBp: 10000 },
   // Tier 3 opens in tier 2's last gear: no tier-6 Epic at low rolls beats a tier-5 Legendary at high.
   { zone: 25, ...CAPPED, gearTier: 5, gearRarity: 'legendary', rollBp: 10000 },
