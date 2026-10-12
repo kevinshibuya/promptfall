@@ -50,6 +50,8 @@ function hero(s: GameState, id: string) {
 }
 
 const s0 = createInitialState(1)
+/** The chain starts at version 5: no record below it exists (spec #130). */
+const UNCHAINED = 4
 
 describe('the deep fixture', () => {
   it('holds what a later step has to transform', () => {
@@ -79,14 +81,8 @@ describe('migrate refuses', () => {
   })
 
   it('a version the chain has no step for', () => {
-    const r = migrate({ ...s0, v: SIM_VERSION - 2 })
-    expect(r).toEqual({
-      ok: false,
-      reason: 'gap',
-      from: SIM_VERSION - 2,
-      to: SIM_VERSION,
-      at: SIM_VERSION - 2,
-    })
+    const r = migrate({ ...s0, v: UNCHAINED })
+    expect(r).toEqual({ ok: false, reason: 'gap', from: UNCHAINED, to: SIM_VERSION, at: UNCHAINED })
   })
 
   it('a chain that stops short of the target', () => {
@@ -234,12 +230,12 @@ describe('the goods rule', () => {
   it('refuses goods from a version the chain has no step for', () => {
     const [g] = goods
     if (!g) throw new Error('goods')
-    expect(migrateGoods(g, SIM_VERSION - 2)).toEqual({
+    expect(migrateGoods(g, UNCHAINED)).toEqual({
       ok: false,
       reason: 'gap',
-      from: SIM_VERSION - 2,
+      from: UNCHAINED,
       to: SIM_VERSION,
-      at: SIM_VERSION - 2,
+      at: UNCHAINED,
     })
   })
 })
@@ -284,6 +280,48 @@ describe('the 5→6 step: ratio mitigation and the flatter xp curve', () => {
     expect(golden5.state.encounter).toBeNull()
     expect(deep5.state.boss).not.toBeNull()
     expect(deep5.state.encounter?.enemies[0]?.kind).toBe('world_boss')
+  })
+})
+
+describe('the 6→7 step: hero rarity multiplies base stats and growth', () => {
+  // Stats are derived and the xp curve is unchanged, so the step is the identity: levels and xp
+  // are kept. A higher maximum never lowers HP, so the clamp leaves every hero as it was.
+  const PINNED = { golden: 'affceb5dedb937ff', deep: '05bece3d8ae89243' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v6-deep.json' : 'v6.json')
+    const r = migrate(before, { to: 7 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every hero's level, xp and HP on the ${kind} fixture`, () => {
+      expect(before.roster.some((h) => h.xp > 0)).toBe(true)
+      expect(after.v).toBe(7)
+      expect(after.roster.map((h) => [h.id, h.level, h.xp, h.hp])).toEqual(
+        before.roster.map((h) => [h.id, h.level, h.xp, h.hp]),
+      )
+    })
+
+    it(`copies the ${kind} fixture's items, gold, zone and party untouched`, () => {
+      expect(after.inventory).toEqual(before.inventory)
+      expect(after.gold).toBe(before.gold)
+      expect(after.zone).toBe(before.zone)
+      expect(after.party).toEqual(before.party)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('clears the encounter outside boss mode and keeps the world boss in it', () => {
+    const golden6 = migrate(fixture('v6.json'), { to: 7 })
+    const deep6 = migrate(fixture('v6-deep.json'), { to: 7 })
+    if (!golden6.ok || !deep6.ok) throw new Error('refused')
+    expect(golden6.state.encounter).toBeNull()
+    expect(deep6.state.boss).not.toBeNull()
+    expect(deep6.state.encounter?.enemies[0]?.kind).toBe('world_boss')
   })
 })
 

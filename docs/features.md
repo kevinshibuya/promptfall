@@ -7,7 +7,9 @@ words.
 
 **Heroes.** A hero is one of four classes (Knight, Black Mage, White Mage, Archer) with a
 generated name, a rarity and the traits its rarity rolls. It levels from kill XP up to its
-rarity's cap, from 20 for Common to 50 for Legendary. Each level costs a little more XP than the
+rarity's cap, from 20 for Common to 50 for Legendary. Rarer heroes carry higher base stats and
+growth: the rarity multiplies them by the table items use, from 100% for Common to 150% for
+Legendary, so a Rare recruit outhits and outlasts a Common of its level from level 1. Each level costs a little more XP than the
 last, from 60 for level 2 to about 45 thousand for level 50: about 10 thousand in all to reach
 level 10, 207 thousand to reach 30 and 836 thousand to reach 50. A hit lands its attack scaled
 by 100 / (100 + the target's defence), so 100 defence halves it, never below 1. Its sprite wears

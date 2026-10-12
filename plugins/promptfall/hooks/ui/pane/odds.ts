@@ -13,6 +13,8 @@ import type { PaneBuild } from './types'
 
 const NAME_CELLS = 10
 const COLUMN_CELLS = 8
+/** One table for both: the sim multiplies a hero's base and growth as it does an item's base. */
+const RARITY_NOTE = 'Rarity multiplies base stats, heroes and items alike.'
 
 /** `12.50%`: hundredths, floored. */
 export function percent(weight: number, total: number): string {
@@ -60,6 +62,7 @@ export function oddsPane(input: PaneInput): PaneBuild {
       alt: `${r}: zone ${columns[0]}, boss ${columns[1]}, tavern ${columns[2]}`,
     })
   }
+  rows.push({ spans: [{ text: RARITY_NOTE, rgb: DIM_RGB }], alt: RARITY_NOTE })
   rows.push({ spans: [{ text: 'Expansions' }], rule: true, alt: 'Expansions' })
   const expansion = (
     id: 'inventory' | 'roster',

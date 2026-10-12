@@ -30,6 +30,9 @@ export const MIGRATIONS: MigrationChain = {
       roster: (s.roster as Record<string, unknown>[]).map((h) => ({ ...h, xp: 0 })),
     }),
   },
+  // 6 → 7: a hero's rarity multiplies its base stats and growth. Stats are derived and the xp curve
+  // is unchanged, so nothing changes shape and the xp is kept; the rule applies at read.
+  6: { state: (s) => s },
 }
 
 export type MigrateOptions = { chain?: MigrationChain; to?: number }

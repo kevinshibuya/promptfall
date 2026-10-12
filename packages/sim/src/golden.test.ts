@@ -15,6 +15,8 @@ describe('golden replay', () => {
   // reaches neither path.
   // SIM_VERSION 6 (ratio mitigation, gentler enemy growth, the flatter xp curve) changes every hit
   // and every level-up, so the script lands elsewhere.
+  // SIM_VERSION 7 (hero rarity multiplies base stats and growth) moves it through `v` alone: the
+  // script's heroes are all Common and it never leaves zone 1.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -23,7 +25,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('b232da742e509922')
+    expect(GOLDEN_HASH).toBe('9ac1f3f9fb2dfe77')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)
