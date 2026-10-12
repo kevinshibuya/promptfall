@@ -386,13 +386,13 @@ A wipe or retreat toast can show up to one cadence before the last hero falls on
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
-**Cues.** Six toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
-world boss appearing, a zone arrival (the zone-cleared cue) and a recruit. A burst plays each of
-its cues once, after its toasts; a held toast's cue plays with it, so a drop's lands at the reveal
-and a zone arrival's with the new backdrop. Only the primary session plays them, and hiding the
-band does not silence them. The set holds eight cues, one family written by `pnpm cues` and
-checked in CI; the retreat and goal cues ship ahead of their toast rows and play once a retreat
-and a goal met or achievement toast them.
+**Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
+world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays
+none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
+a drop's lands at the reveal and a zone arrival's with the new backdrop. Only the primary session
+plays them, and hiding the band does not silence them. The set holds eight cues, one family
+written by `pnpm cues` and checked in CI; the goal cue ships ahead of its toast rows and plays once
+a goal met or achievement toasts it.
 
 ## Sound
 

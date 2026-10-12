@@ -882,7 +882,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | legendary drop | rare good news | long | `Legendary drop: Ironwood Staff`, at the reveal | never folds | legendary |
 | recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | recruit |
 | boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
-| retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | none |
+| retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | retreat |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
 | wipe | wants a decision | short | `The party fell, back to wave 1 of zone 4, Old Barrow Hills` | never folds | none |
@@ -895,9 +895,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | returned | money moved | short | `Ironwood Staff returned, unsold` | `3 items returned, unsold` | none |
 | world boss down | rare good news | short | `World boss Gorvax is down` | n/a | none |
 
-  Three rows land with the specs that raise them, each with its cue: the retreat
-  row (Curve) takes retreat, and the goal met and achievement rows (Pull) both
-  take goal. Until then those two cues ship unplayed.
+  Two rows land with the spec that raises them (Pull), each with its cue: the
+  goal met and achievement rows both take goal. Until then that cue ships
+  unplayed.
 
   Three toasts sit outside the table, raised by the session rather than from a
   burst. The welcome: a first launch toasts `Welcome to Promptfall. /promptfall

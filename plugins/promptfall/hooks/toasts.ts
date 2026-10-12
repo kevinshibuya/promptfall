@@ -161,7 +161,7 @@ const TABLE = {
   retreat: {
     purpose: 'wants a decision',
     tier: 'long',
-    cue: null,
+    cue: 'retreat',
     single: ({ effect }: EffectInput) =>
       effect.k === 'retreat' ? `The party retreats to ${zoneWords(effect.zone)}` : null,
   },

@@ -313,8 +313,8 @@ come up to one cadence before the last hero falls on the stage.
 - **Sound** is on by default, at quiet. `/promptfall sound off|quiet|normal|loud` (or `s` on the
   Account tab, which cycles the steps) sets the volume, at a quarter, half or all of the engine's
   default gain; `on` means quiet. The cues ride their toasts: a Rare or Epic drop, a Legendary
-  drop, a level up, a world boss appearing, a zone arrival (the zone-cleared cue) and a recruit,
-  with retreat and goal cues waiting for their toasts. Each plays only in the session that is
+  drop, a level up, a world boss appearing, a zone arrival (the zone-cleared cue), a recruit and
+  a retreat, with a goal cue waiting for its toasts. Each plays only in the session that is
   playing (the primary); a secondary stays quiet. `/promptfall off` hides the band but keeps the
   cues. The engine plays sound on macOS and in the desktop app; a terminal elsewhere has no
   player, so the first cue it skips marks the session, which tries no more, and the Account row
