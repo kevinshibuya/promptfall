@@ -132,6 +132,7 @@ export function paneInput(patch: Partial<PaneInput> = {}): PaneInput {
       settings: SETTINGS_DEFAULT,
       renderer: 'image',
       collapsed: false,
+      soundSilent: false,
     },
     ...patch,
   }

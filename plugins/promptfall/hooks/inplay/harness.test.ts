@@ -4,7 +4,7 @@ import { BAND, sandboxOn, stripText } from './harness'
 
 test('in play, the band mounts over the sandboxed engine and its strip reads as text', async ($, on) => {
   const { view } = await sandboxOn(on, $, {
-    'promptfall:settings': { sound: false, motion: 'full', renderer: 'raster' },
+    'promptfall:settings': { sound: 'off', motion: 'full', renderer: 'raster' },
   })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
   const strip = await stripText(ui)

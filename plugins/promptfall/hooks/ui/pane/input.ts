@@ -41,6 +41,8 @@ export type AccountInput = {
   renderer: Renderer
   /** prefs.collapsed */
   collapsed: boolean
+  /** The session's mark: a play here was skipped, so no cue is tried. */
+  soundSilent: boolean
 }
 
 export type PaneInput = FrameInput & {

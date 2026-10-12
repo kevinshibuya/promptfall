@@ -309,11 +309,12 @@ come up to one cadence before the last hero falls on the stage.
 
 ### Sound and motion
 
-- **Sound** is off by default. `/promptfall sound on` (or `s` on the Account tab) turns on four
-  cues: a Rare or Epic drop, a Legendary drop, a level up, and a world boss appearing. Each plays
-  beside its toast, at a fixed volume, only in the session that is playing (the primary); a
-  secondary stays quiet. `/promptfall off` hides the band but keeps the cues. The engine plays
-  sound on macOS only. The cues in `cues/` come from Juhani Junkala's CC0 pack "512 Sound Effects
+- **Sound** is on by default, at quiet. `/promptfall sound off|quiet|normal|loud` (or `s` on the
+  Account tab, which cycles the steps) sets the volume of four cues: a Rare or Epic drop, a
+  Legendary drop, a level up, and a world boss appearing. Each plays beside its toast, only in the
+  session that is playing (the primary); a secondary stays quiet. `/promptfall off` hides the band
+  but keeps the cues. The engine plays sound on macOS and in the desktop app; a terminal elsewhere
+  has no player, and the Account row then reads "silent here". The cues in `cues/` come from Juhani Junkala's CC0 pack "512 Sound Effects
   (8-bit style)".
 - **Motion**: `/promptfall motion still` (or `n`) stops the idle bob, and at 1.5× the idle pair:
   each actor shows idle A at rest. Attacks, hits, dissolves and drops still play.

@@ -87,7 +87,7 @@ const REAL_SAVE = {
   'promptfall:pf:token:real-token': 'real-acct',
   'promptfall:pf:acct:real-acct:record': { account: { accountId: 'real-acct' }, gold: 123 },
   'promptfall:lease': { owner: 'real-session', until: 9_999_999_999_999 },
-  'promptfall:settings': { sound: true, motion: 'still', renderer: 'auto', probed: null },
+  'promptfall:settings': { sound: 'quiet', motion: 'still', renderer: 'auto', probed: null },
 }
 
 test('the sandbox save lives under its own prefix; the real save is never touched', async ($, on) => {
@@ -108,7 +108,7 @@ test('the sandbox save lives under its own prefix; the real save is never touche
   expect(added.some((k) => k.startsWith('promptfall-sandbox:pf:acct:'))).toBe(true)
   // The settings are per machine: shared, under the real prefix.
   await $.command.run({ ...RUN, command: 'promptfall', args: 'sound off' })
-  expect((data.get('promptfall:settings') as { sound: boolean }).sound).toBe(false)
+  expect((data.get('promptfall:settings') as { sound: string }).sound).toBe('off')
   expect(data.has('promptfall-sandbox:settings')).toBe(false)
 })
 
@@ -143,7 +143,7 @@ test('a stored server URL is ignored while the sandbox is on, and server answers
 })
 
 test('sandbox reset leaves a fresh account; the lease and the settings stay', async ($, on) => {
-  const settings = { sound: true, motion: 'full', renderer: 'auto' }
+  const settings = { sound: 'loud', motion: 'full', renderer: 'auto' }
   const { data, view } = harness(on, ON, { 'promptfall:settings': settings })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const fresh = view()

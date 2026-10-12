@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { DialogState, PaneCursor } from '../../../types'
+import { SETTINGS_DEFAULT } from '../../state'
 import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
 import { tilePositions } from '../../windows/kit'
@@ -31,7 +32,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
   const list = win(b, 'list')
   const lines = linesOf(list)
   expect(lines.map((l) => l.replace(/ {2,}/g, ' | '))).toEqual([
-    '▶ Sound | off',
+    '▶ Sound | quiet',
     ' | Motion | full',
     ' | Renderer | auto (image)',
     ' | Band | shown',
@@ -59,7 +60,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
 test('the actions: settings, the band, off, link, reset and delete opening their Yes/Nos on No', () => {
   const b = accountPane(input({}, { view: unlinked() }))
   expect(cursors(b).map((s) => s.action)).toEqual([
-    { t: 'setting', patch: { sound: true } },
+    { t: 'setting', patch: { sound: 'normal' } },
     { t: 'setting', patch: { motion: 'still' } },
     { t: 'setting', patch: { renderer: 'image' } },
     { t: 'band', collapsed: true },
@@ -73,7 +74,7 @@ test('the actions: settings, the band, off, link, reset and delete opening their
       {},
       {},
       {
-        settings: { sound: true, motion: 'still', renderer: 'raster', probed: null },
+        settings: { sound: 'loud', motion: 'still', renderer: 'raster', probed: null },
         collapsed: true,
       },
     ),
@@ -82,6 +83,44 @@ test('the actions: settings, the band, off, link, reset and delete opening their
   expect(lines[2]?.endsWith('raster (from next start)')).toBe(true)
   expect(lines[3]?.endsWith('collapsed')).toBe(true)
   expect(cursors(forced)[2]?.action).toEqual({ t: 'setting', patch: { renderer: 'auto' } })
+})
+
+test('s cycles the sound off, quiet, normal, loud and back, the row showing the step', () => {
+  const steps = ['off', 'quiet', 'normal', 'loud'] as const
+  for (const [i, sound] of steps.entries()) {
+    const b = accountPane(input({}, {}, { settings: { ...SETTINGS_DEFAULT, sound } }))
+    expect(linesOf(win(b, 'list'))[0]?.endsWith(` ${sound}`)).toBe(true)
+    const next = steps[(i + 1) % steps.length]
+    expect(cursors(b)[0]?.action).toEqual({ t: 'setting', patch: { sound: next } })
+  }
+})
+
+test('a session marked silent says so on the row, whole at 100 columns, and in the detail', () => {
+  const b = accountPane(input({}, { columns: 100 }, { soundSilent: true }))
+  const row = linesOf(win(b, 'list'))[0] ?? ''
+  expect(row.replace(/ {2,}/g, ' | ')).toBe('▶ Sound | quiet, silent here')
+  const detail = linesOf(win(b, 'detail'))
+    .map((l) => l.trim())
+    .join(' ')
+  expect(detail).toContain(
+    'This system has no audio player. Claude Code plays sound on macOS; the setting is kept.',
+  )
+  // The mark changes no step: s still cycles from the stored one.
+  expect(cursors(b)[0]?.action).toEqual({ t: 'setting', patch: { sound: 'normal' } })
+  // Off is off on any system: no note, no explanation.
+  const off = accountPane(
+    input(
+      {},
+      { columns: 100 },
+      { soundSilent: true, settings: { ...SETTINGS_DEFAULT, sound: 'off' } },
+    ),
+  )
+  expect(linesOf(win(off, 'list'))[0]?.trimEnd().endsWith(' off')).toBe(true)
+  expect(linesOf(win(off, 'detail')).join(' ')).not.toContain('no audio player')
+  // An unmarked session has neither.
+  const unmarked = accountPane(input({}, { columns: 100 }))
+  expect(linesOf(win(unmarked, 'list'))[0]).not.toContain('silent here')
+  expect(linesOf(win(unmarked, 'detail')).join(' ')).not.toContain('no audio player')
 })
 
 test('Link GitHub goes when linked, read-only, or while a code is pending', () => {
@@ -103,7 +142,7 @@ test('Link GitHub goes when linked, read-only, or while a code is pending', () =
 
 test('read-only keeps the settings and Reset acting', () => {
   const b = accountPane(input({}, { readOnly: true, mode: 'secondary' }))
-  expect(cursors(b)[0]?.action).toEqual({ t: 'setting', patch: { sound: true } })
+  expect(cursors(b)[0]?.action).toEqual({ t: 'setting', patch: { sound: 'normal' } })
   expect(cursors(b).at(-1)?.key).toBe('row:reset')
   const asking = accountPane(
     input({ menu: { kind: 'confirm', action: 'reset', id: '', at: 1 } }, { readOnly: true }),
