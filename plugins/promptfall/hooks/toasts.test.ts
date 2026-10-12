@@ -154,7 +154,7 @@ const SINGLE: [string, Effect, Toast][] = [
       row: 'zone_arrival',
       text: 'The party reached tier 2, zone 1, Greenmeadow Road',
       timeoutMs: SHORT,
-      cue: null,
+      cue: 'zone_cleared',
       wait: { zone: 12 },
     },
   ],
