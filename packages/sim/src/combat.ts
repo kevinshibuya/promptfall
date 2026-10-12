@@ -14,9 +14,20 @@ import type { Effect, Enemy, GameState, Hero, Stats } from './types'
 
 const STEPS = TICK_MS / STEP_MS
 
+/** The variance roll that changes nothing: the middle of a hit's ±10%. */
+export const NO_VARIANCE_BP = 10000
+
+/**
+ * One hit of this attack on this defence, before the Archer's double: the variance roll in basis
+ * points, the mitigation, then the power scaling. Integer math only. The harness's feel probe
+ * calls it at NO_VARIANCE_BP, so a formula change here moves the probe too.
+ */
+export function hitDamage(atk: number, def: number, varianceBp: number): number {
+  return scaled(Math.max(1, Math.floor((atk * varianceBp) / 10000) - Math.floor(def / 2)))
+}
+
 function damage(s: GameState, atk: number, def: number): number {
-  const v = 9000 + draw(s, 2001)
-  return Math.max(1, Math.floor((atk * v) / 10000) - Math.floor(def / 2))
+  return hitDamage(atk, def, 9000 + draw(s, 2001))
 }
 
 const NO_STATS: Stats = { hp: 1, atk: 1, def: 0, spd: 0 }
@@ -81,7 +92,7 @@ function heroAction(s: GameState, hero: Hero, choice: Choice, effects: Effect[])
     case 'attack': {
       const target = encounter?.enemies.find((e) => e.id === choice.targetId)
       if (!target) return
-      let amount = scaled(damage(s, stats.atk, enemyStats(s, target).def))
+      let amount = damage(s, stats.atk, enemyStats(s, target).def)
       if (hero.cls === 'archer' && drawBp(s) < 2000) amount *= 2
       hitEnemy(s, hero.id, target, amount, effects)
       return
@@ -91,7 +102,7 @@ function heroAction(s: GameState, hero: Hero, choice: Choice, effects: Effect[])
       for (const target of [...(encounter?.enemies ?? [])]) {
         // A kill earlier in the sweep may have closed the encounter (zone boss).
         if (!s.encounter?.enemies.includes(target)) continue
-        hitEnemy(s, hero.id, target, scaled(damage(s, atk, enemyStats(s, target).def)), effects)
+        hitEnemy(s, hero.id, target, damage(s, atk, enemyStats(s, target).def), effects)
       }
       return
     }
@@ -114,7 +125,7 @@ function heroAction(s: GameState, hero: Hero, choice: Choice, effects: Effect[])
 function enemyAction(s: GameState, enemy: Enemy, choice: Choice, effects: Effect[]): void {
   const target = findHero(s, choice.targetId ?? '')
   if (!target || target.hp <= 0) return
-  const amount = scaled(damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def))
+  const amount = damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def)
   target.hp = Math.max(0, target.hp - amount)
   effects.push({ k: 'hit', by: enemy.id, target: target.id, amount })
   if (target.hp === 0) fall(s, target, effects)
