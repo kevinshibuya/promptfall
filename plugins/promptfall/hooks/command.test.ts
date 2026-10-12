@@ -55,6 +55,24 @@ test('/promptfall farm toggles the farm flag', async ($, on) => {
   expect((states.get('view') as { farm: boolean }).farm).toBe(true)
 })
 
+test('/promptfall autovendor on|off sets the setting and answers; a bad word answers the usage', async ($, on) => {
+  const { states } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const autoVendor = () => (states.get('view') as { autoVendor: boolean }).autoVendor
+  expect(autoVendor()).toBe(false)
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'autovendor on' })
+  expect(r.text).toBe('Promptfall auto-vendor is on')
+  expect(autoVendor()).toBe(true)
+  const off = await $.command.run({ ...RUN, command: 'promptfall', args: 'AutoVendor off' })
+  expect(off.text).toBe('Promptfall auto-vendor is off')
+  expect(autoVendor()).toBe(false)
+  for (const args of ['autovendor', 'autovendor maybe']) {
+    const bad = await $.command.run({ ...RUN, command: 'promptfall', args })
+    expect(bad.text).toBe('Usage: /promptfall autovendor on or /promptfall autovendor off')
+  }
+  expect(autoVendor()).toBe(false)
+})
+
 test('/promptfall in a secondary session takes the lease', async ($, on) => {
   const { states } = harness(on, {
     'promptfall:lease': { owner: 'someone-else', until: 9_999_999_999_999 },
@@ -87,7 +105,13 @@ test('a paused primary answers farm and the sandbox verbs as paused, not as anot
   expect(states.get('mode')).toBe('paused')
   const zoneBoss = content.zones[0]?.boss ?? ''
   const base = Object.values(content.itemBases)[0]?.id ?? ''
-  const verbs = ['farm', 'sandbox gold 100', `sandbox boss ${zoneBoss}`, `sandbox item ${base}`]
+  const verbs = [
+    'farm',
+    'autovendor on',
+    'sandbox gold 100',
+    `sandbox boss ${zoneBoss}`,
+    `sandbox item ${base}`,
+  ]
   verbs.push('sandbox level Aria 5', 'sandbox zone 2', 'sandbox recruit', 'sandbox wipe')
   verbs.push('sandbox worldboss')
   for (const args of verbs) {

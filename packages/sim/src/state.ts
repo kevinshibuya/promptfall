@@ -13,6 +13,7 @@ export function createInitialState(seed: number): GameState {
     zone: 1,
     wave: 1,
     farm: false,
+    autoVendor: false,
     highestZone: 1,
     zoneWipes: 0,
     roster: [],

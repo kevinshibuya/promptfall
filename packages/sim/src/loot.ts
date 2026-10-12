@@ -101,15 +101,35 @@ export function rollRewardItem(
   return item ? { ...item, id: '' } : null
 }
 
-/** Takes a dropped item in on a draft: into the inventory, or vendored when it is full. */
+/**
+ * Whether the auto-vendor setting sells this drop: a Common, or an Uncommon past zone 3, unless a
+ * party hero has the item's slot empty and could wear it. A Rare or better never.
+ */
+function autoVendors(s: GameState, item: Item): boolean {
+  if (!s.autoVendor) return false
+  if (item.rarity !== 'common' && !(item.rarity === 'uncommon' && s.zone > 3)) return false
+  const base = content.itemBases[item.base]
+  if (!base) return false
+  return !partyHeroes(s).some(
+    (h) => h.equipment[base.slot] === null && base.classes.includes(h.cls),
+  )
+}
+
+/**
+ * Takes a dropped item in on a draft: into the inventory, or vendored when the inventory is full
+ * or the auto-vendor setting sells it.
+ */
 export function takeDrop(s: GameState, item: Item, effects: Effect[]): void {
-  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item)
-  if (gold === null) {
+  const cause =
+    s.inventory.length >= s.inventoryCap ? 'full' : autoVendors(s, item) ? 'setting' : null
+  let gold: number | null = null
+  if (cause === null) {
     s.inventory.push(item)
     effects.push({ k: 'drop', item })
   } else {
+    gold = vendorValue(item)
     s.gold += gold
-    effects.push({ k: 'drop_vendored', item, gold })
+    effects.push({ k: 'drop_vendored', item, gold, cause })
   }
   pushLog(s, {
     k: 'item',

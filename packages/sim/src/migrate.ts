@@ -43,6 +43,9 @@ export const MIGRATIONS: MigrationChain = {
   // 8 → 9: a wipe restarts the zone and the third is a retreat; rests heal 50%. The state gains
   // the count of wipes in its zone, at zero: no save remembers them, and zero only defers a retreat.
   8: { state: (s) => ({ ...s, zoneWipes: 0 }) },
+  // 9 → 10: the auto-vendor setting. The state gains its flag, off: a save never sells a drop its
+  // player did not ask to sell.
+  9: { state: (s) => ({ ...s, autoVendor: false }) },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

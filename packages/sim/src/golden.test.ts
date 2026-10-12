@@ -21,6 +21,8 @@ describe('golden replay', () => {
   // item's tier: the script's one affix is on a tier-1 charm, so no stat changes.
   // SIM_VERSION 9 (a wipe restarts the zone, the third is a retreat; rests heal 50%) moves it
   // through every rest and the zone's wipe count: the script wipes eight times in zone 1.
+  // SIM_VERSION 10 (the auto-vendor setting) moves it through `v` and the setting's flag: the
+  // script never turns it on, so every drop is kept as before.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -29,7 +31,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('c4b9d7bc0e818a92')
+    expect(GOLDEN_HASH).toBe('806c5e12c6b4b928')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)

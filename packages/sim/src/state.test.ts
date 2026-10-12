@@ -27,9 +27,10 @@ describe('createInitialState', () => {
     expect(s.stats).toEqual({ kills: 0, bosses: 0, wipes: 0 })
   })
 
-  it('is version 9 with an empty battle and no wipes in its zone', () => {
-    expect(s.v).toBe(9)
+  it('is version 10 with an empty battle, no wipes in its zone and auto-vendor off', () => {
+    expect(s.v).toBe(10)
     expect(s.zoneWipes).toBe(0)
+    expect(s.autoVendor).toBe(false)
     expect(s.battle).toEqual({ gauges: [], queue: [], busy: 0 })
   })
 

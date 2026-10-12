@@ -371,8 +371,18 @@ test('a chest lands where the target of the hit before it stood; a vendored drop
   expect(chest?.from).toBe(NOW + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS - 300)
   expect(t.known().find((k) => k.id === 'e3')?.slot).toBe(2)
   const t2 = observed()
-  t2.onEffects([hit('h2', 'e2'), { k: 'drop_vendored', item: item('iron_sword'), gold: 3 }], NOW)
+  t2.onEffects(
+    [hit('h2', 'e2'), { k: 'drop_vendored', item: item('iron_sword'), gold: 3, cause: 'full' }],
+    NOW,
+  )
   expect(of(t2.active(NOW), 'chest')).toEqual([{ ...chest, actor: 'e2' }])
+  // The auto-vendor setting's sale plays the chest a full inventory's does.
+  const t3 = observed()
+  t3.onEffects(
+    [hit('h2', 'e2'), { k: 'drop_vendored', item: item('iron_sword'), gold: 3, cause: 'setting' }],
+    NOW,
+  )
+  expect(of(t3.active(NOW), 'chest')).toEqual([{ ...chest, actor: 'e2' }])
 })
 
 test('a lone drop plays its chest on the front slot from now', () => {
@@ -874,7 +884,7 @@ test('showAt answers the end of the rise and pendingReveals counts the chests st
   t.onEffects(
     [
       { k: 'drop', item: item('iron_sword', 'common', 'i1') },
-      { k: 'drop_vendored', item: item('oak_staff', 'legendary', 'i2'), gold: 3 },
+      { k: 'drop_vendored', item: item('oak_staff', 'legendary', 'i2'), gold: 3, cause: 'full' },
     ],
     NOW,
   )

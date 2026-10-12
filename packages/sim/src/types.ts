@@ -1,4 +1,4 @@
-export const SIM_VERSION = 9 as const
+export const SIM_VERSION = 10 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -87,6 +87,7 @@ export type PlayerEvent =
   | { t: 'recruit' }
   | { t: 'dismiss'; heroId: string }
   | { t: 'set_farm'; on: boolean }
+  | { t: 'set_auto_vendor'; on: boolean }
   | { t: 'expand_inventory' }
   | { t: 'expand_roster' }
 
@@ -165,7 +166,8 @@ export const SERVER_EVENT_KINDS: readonly ServerEventKind[] = [
 
 export type Effect =
   | { k: 'drop'; item: Item }
-  | { k: 'drop_vendored'; item: Item; gold: number }
+  /** A drop sold on pickup: `full` for a full inventory, `setting` for the auto-vendor setting. */
+  | { k: 'drop_vendored'; item: Item; gold: number; cause: 'full' | 'setting' }
   | { k: 'gold'; amount: number }
   | { k: 'level_up'; heroId: string; level: number }
   | { k: 'wave_cleared'; zone: number; wave: number }
@@ -198,6 +200,8 @@ export type GameState = {
   zone: number
   wave: number
   farm: boolean
+  /** The auto-vendor setting, off on every save: Commons, and Uncommons past zone 3, sold on pickup. */
+  autoVendor: boolean
   highestZone: number
   /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
   zoneWipes: number

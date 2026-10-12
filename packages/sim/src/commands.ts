@@ -139,6 +139,12 @@ export function setFarm(state: GameState, event: Of<'set_farm'>): StepResult {
   })
 }
 
+export function setAutoVendor(state: GameState, event: Of<'set_auto_vendor'>): StepResult {
+  return draft(state, (s) => {
+    s.autoVendor = event.on === true
+  })
+}
+
 function expand(
   state: GameState,
   event: Of<'expand_inventory'> | Of<'expand_roster'>,
