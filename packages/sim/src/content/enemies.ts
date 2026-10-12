@@ -22,6 +22,8 @@ export type EnemyTuning = {
   zoneAtkBp: readonly number[]
   zoneHpBp: readonly number[]
   zoneXpBp: readonly number[]
+  /** One entry per base zone, in basis points, on the zone boss's hp alone; the later tiers take zone 12's. */
+  zoneBossHpBp: readonly number[]
 }
 
 // Zones 9 to 12 moved for sim version 7 (#139): the reference Knight there is Legendary, and its
@@ -30,12 +32,21 @@ export type EnemyTuning = {
 // for the dedicated harness player and the halved targets, in one more: every zone gives ×1.3 xp,
 // and enemies hold 0.565 of #143's hp in zones 1 to 6 and 0.45 in zones 7 to 12, so a party kills
 // fast enough to reach the Legendary's cap in time; atk, and so the feel probe, is untouched.
+// Sim version 14 (#153) slowed the tier-1 arc outside the kill rate: every wipe there is a boss
+// wipe, so a zone takes its boss attempts times its ten-wave walk. The zone boss's hp ramps from
+// ×1 at zone 1 to ×4 at zone 12; zones 7 to 12 walk longer (hp ×1.3 rising to ×4.6 over sim 13's)
+// and zones 7 to 10 pay xp to match and more (×1.25 at zone 7, ×1.35 at 8 to 10, over the hp's
+// factor), so the Knight's levels 20 to 30 come at pace; from zone 10 a kill's xp stops growing, so
+// the Legendary's cap waits on zones 11 and 12. Six nine-seed runs, pasted on #153.
 export const ENEMY_TUNING: EnemyTuning = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
-  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 4500, 4500, 3400, 3150, 3850, 4750],
-  zoneXpBp: [13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000],
+  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 5850, 7650, 7140, 7875, 13956, 21945],
+  zoneXpBp: [13000, 13000, 13000, 13000, 13000, 13000, 21125, 29835, 36855, 43875, 38830, 34360],
+  zoneBossHpBp: [
+    10000, 12750, 15500, 18250, 21000, 23750, 26500, 29250, 32000, 34750, 37500, 40000,
+  ],
 }
 
 /**
@@ -189,17 +200,22 @@ function scale(value: number, bp: number): number {
   return Math.max(1, Math.floor((value * bp) / 10000))
 }
 
-/** One enemy at a baseline: its archetype's share of each number, its kind's xp and gold. */
+/**
+ * One enemy at a baseline: its archetype's share of each number, its kind's xp and gold, and a
+ * zone boss's hp scaled by `bossHpBp`.
+ */
 function enemyOf(
   [id, name, archetype]: [string, string, Archetype],
   zone: number,
   b: Baseline,
   spdZone: number,
+  bossHpBp: number,
 ): EnemyDef {
   const a = ARCHETYPES[archetype]
   const kind = kindOf(archetype)
+  const hp = scale(b.hp, a.hpBp)
   const stats: Stats = {
-    hp: scale(b.hp, a.hpBp),
+    hp: kind === 'zone_boss' ? scale(hp, bossHpBp) : hp,
     atk: scale(b.atk, a.atkBp),
     def: scale(b.def, a.defBp),
     spd: a.spd + Math.floor(spdZone / 3),
@@ -225,7 +241,8 @@ export function buildEnemies(t: EnemyTuning): Record<string, EnemyDef> {
   const out: Record<string, EnemyDef> = {}
   ROSTERS.forEach((roster, i) => {
     const b = baseline(t, i)
-    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1)
+    const bossHpBp = t.zoneBossHpBp[i] ?? 10000
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp)
   })
   return out
 }
@@ -263,6 +280,7 @@ export function buildTierEnemies(
 ): Record<number, Record<string, EnemyDef>> {
   const top = ROSTERS.length
   const b12 = baseline(t, top - 1)
+  const bossHpBp = t.zoneBossHpBp[top - 1] ?? 10000
   const out: Record<number, Record<string, EnemyDef>> = {}
   const steps: number[] = []
   for (let zone = top + 1; zone <= last; zone++) {
@@ -280,7 +298,7 @@ export function buildTierEnemies(
     }
     const at: Record<string, EnemyDef> = {}
     for (const roster of ROSTERS)
-      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top)
+      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp)
     out[zone] = at
   }
   return out

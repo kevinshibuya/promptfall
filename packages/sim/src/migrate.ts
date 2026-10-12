@@ -57,6 +57,9 @@ export const MIGRATIONS: MigrationChain = {
   // 12 → 13: boss contracts past tier 1 roll the tier's odds, and tier 2 ramps from zone 12 with no
   // step at its door (#152). Rules and content moved, and nothing changes shape.
   12: { state: (s) => s },
+  // 13 → 14: the tier-1 arc slowed outside the kill rate (#153): zone bosses' hp ramps by zone, and
+  // zones 7 to 12 walk longer and pay more xp. Only content constants moved, and nothing changes shape.
+  13: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
