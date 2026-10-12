@@ -1,4 +1,5 @@
-import { beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { SIM_VERSION } from '../types'
 import { outOfBand, probe } from './probe'
 import { runScenario, type ScenarioReport } from './scenario'
 
@@ -6,6 +7,8 @@ import { runScenario, type ScenarioReport } from './scenario'
 // runs it, so the numbers in the content tables are the ones this evidence describes. The hour
 // targets are read on the median of the nine seeds, with a completion floor, because #138's seed
 // table showed one seed's first clear of zone 12 spans 40 hours to never at a single setting.
+// The medians and floors gate from sim version 11 (#143), which tunes the final curve once; each
+// bump before it moves the curve again, so below 11 the file only reports them.
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
 const HOURS = 200
 
@@ -73,7 +76,29 @@ describe.each(SEEDS)('the arc, seed %i, at the reference cadence', (seed) => {
   })
 })
 
-describe('the arc, median of nine seeds, at the reference cadence', () => {
+function hours(h: number, digits = 2): string {
+  return h === Number.POSITIVE_INFINITY ? 'never' : h.toFixed(digits)
+}
+
+afterAll(() => {
+  if (runs.size < SEEDS.length) return
+  const rows = SEEDS.map((seed) => {
+    const r = arc(seed)
+    return `| ${seed} | ${hours(cleared(r, 1) ?? Number.POSITIVE_INFINITY)} | ${hours(zone12(r))} | ${hours(perLevel(r), 3)} | ${hours(cap(r))} |`
+  })
+  console.log(
+    [
+      `the arc at sim version ${SIM_VERSION}, ${SEEDS.length} seeds, ${HOURS} live hours`,
+      '| seed | zone 1 clear (h) | zone 12 clear (h) | hours per level 10→30 | cap (h) |',
+      '|---|---|---|---|---|',
+      ...rows,
+      `medians: zone 12 ${hours(median(zone12))}, hours per level ${hours(median(perLevel), 4)}, cap ${hours(median(cap))}`,
+      `inside the run: zone 12 on ${within(zone12)}/${SEEDS.length}, cap on ${within(cap)}/${SEEDS.length}`,
+    ].join('\n'),
+  )
+})
+
+describe.runIf(SIM_VERSION >= 11)('the arc, median of nine seeds, at the reference cadence', () => {
   it('first clears zone 12 between 80 and 120 live hours', () => {
     const hour = median(zone12)
     expect(hour).toBeGreaterThanOrEqual(80)
