@@ -129,10 +129,24 @@ Checked against Claude Code v2.1.287's mods API.
 - Wave clear heals every hero 15% and revives fallen heroes at 15%.
 - Party wipe: retreat one zone (never below zone 1), wave 1, full heal, encounter
   and queue cleared. Nothing is lost.
-- Pace target: an active 8 hour coding day (60% of the time inside turns, one
-  tool call every 8 seconds inside turns, drops equipped when they improve a
-  hero, no other play) clears zone 1 and slows afterwards. A headless balance harness in the sim package verifies the
-  target and is the tool for tuning numbers.
+- Arc targets, in live hours at the reference cadence (turns drawn from Kevin's
+  transcripts: a median of 2 tool calls a turn, about 5 prompts an hour, 60% of
+  live time inside turns, a rest on every prompt), for a dedicated player and read
+  on the median of nine seeds: zone 1 first cleared inside the first 30 minutes;
+  zone 12 first cleared between 40 and 60 hours; a level every 0.5 to 1 hour
+  through levels 10 to 30; a Legendary hero at 50 between 75 and 100 hours. The
+  feel target holds at every zone: the reference Knight survives 6 to 10 wave
+  hits and 3 to 4 boss hits.
+- A headless balance harness in the sim package measures the arc and is the tool
+  for tuning numbers. Its player is a dedicated one, with one habit per decision:
+  it scores an item on every stat, weighted by its worth in a fight; it wears a
+  drop on the hero it raises most, party first, and moves the displaced item on
+  to the next hero it beats; at a turn's end it recruits while the roster has
+  room (dismissing its weakest bench hero from a full roster no better than the
+  party), expands a full inventory and reforges a worn item's weakest affix when
+  that costs under a tenth of its gold, and never trades; after a recruit it
+  fields the three heroes of highest score, a Knight first; and it vendors the
+  unworn items no hero would wear. It grants itself a Legendary Knight at hour 9.
 - Difficulty tiers are a later prestige layer on the same ladder, not v1.
 
 ### 4.3 Heroes

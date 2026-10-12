@@ -26,13 +26,16 @@ export type EnemyTuning = {
 
 // Zones 9 to 12 moved for sim version 7 (#139): the reference Knight there is Legendary, and its
 // rarity now multiplies its base and growth by 1.5. Sim version 11 (#143) tuned the tier-1 arc in
-// one bounded search: hp grows ×1.275 per zone (was ×1.19), and zones 10 and 11 give ×1.3 xp.
+// one bounded search: hp grows ×1.275 per zone (was ×1.19). Sim version 12 (#151) tuned it again,
+// for the dedicated harness player and the halved targets, in one more: every zone gives ×1.3 xp,
+// and enemies hold 0.565 of #143's hp in zones 1 to 6 and 0.45 in zones 7 to 12, so a party kills
+// fast enough to reach the Legendary's cap in time; atk, and so the feel probe, is untouched.
 export const ENEMY_TUNING: EnemyTuning = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
-  zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 7500, 7000, 8500, 10500],
-  zoneXpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 13000, 13000, 10000],
+  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 4500, 4500, 3400, 3150, 3850, 4750],
+  zoneXpBp: [13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000, 13000],
 }
 
 /**

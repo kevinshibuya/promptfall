@@ -165,10 +165,10 @@ describe('the clamp', () => {
 
   it("lowers a hero's HP to its new maximum", () => {
     const s = migrated(golden, chainOf(overfull))
-    // Commons with nothing worn: the level-1 Knight at the template's base HP, the level-2 Black
-    // Mage at a base of 36 and one level's growth of 5.
-    expect(hero(s, 'h0').hp).toBe(60)
-    expect(hero(s, 'h1').hp).toBe(41)
+    // Commons with nothing worn: the level-3 Knight at a base of 60 and two levels' growth of 9,
+    // the level-1 Black Mage at the template's base HP.
+    expect(hero(s, 'h0').hp).toBe(78)
+    expect(hero(s, 'h1').hp).toBe(36)
   })
 
   it('never raises HP: wounded heroes stay wounded and the fallen stay down', () => {
@@ -191,7 +191,7 @@ describe('the clamp', () => {
     }
     const s = migrated(golden, chainOf(overfull, record), SIM_VERSION + 2)
     expect(seen).toBe(1_000_000)
-    expect(hero(s, 'h0').hp).toBe(60)
+    expect(hero(s, 'h0').hp).toBe(78)
   })
 })
 
@@ -502,6 +502,40 @@ describe('the 10→11 step: tiers', () => {
     const [item] = v10.inventory
     if (!item) throw new Error('deep fixture')
     expect(migrateGoods({ kind: 'item', item }, 10, { to: 11 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item },
+    })
+  })
+})
+
+describe('the 11→12 step: the arc retuned for the dedicated player', () => {
+  // Content constants moved and nothing else: every field keeps its shape and value.
+  const PINNED = { golden: '4f2c40dd963b883b', deep: '5db7645dbccbf897' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v11-deep.json' : 'v11.json')
+    const r = migrate(before, { to: 12 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version, the encounter and the battle`, () => {
+      expect(after.v).toBe(12)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v11 = fixture('v11-deep.json')
+    const [item] = v11.inventory
+    if (!item) throw new Error('deep fixture')
+    expect(migrateGoods({ kind: 'item', item }, 11, { to: 12 })).toEqual({
       ok: true,
       goods: { kind: 'item', item },
     })

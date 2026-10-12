@@ -60,7 +60,7 @@ export const REFERENCE_PARTY: readonly ReferenceRow[] = [
 ]
 
 /** The live hour a player plausibly holds a Legendary Knight: when the harness grants one. */
-export const LEGENDARY_AT_HOUR = 17
+export const LEGENDARY_AT_HOUR = 9
 
 /** The reference row of a running zone: its own, or the last row below it; zone 1's below zone 1. */
 export function referenceRow(zone: number): ReferenceRow {

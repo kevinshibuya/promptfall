@@ -55,8 +55,8 @@ var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
-  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 7500, 7e3, 8500, 10500],
-  zoneXpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 13e3, 13e3, 1e4]
+  zoneHpBp: [5650, 5650, 5650, 5650, 5650, 5650, 4500, 4500, 3400, 3150, 3850, 4750],
+  zoneXpBp: [13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3, 13e3]
 };
 function grow(value, bp, steps) {
   let v = value * 1e4;
@@ -719,7 +719,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "d903b0fbd669e221";
+var GOLDEN_HASH = "50186730cdb9fff6";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -1092,7 +1092,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 11;
+var SIM_VERSION = 12;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1323,7 +1323,10 @@ var MIGRATIONS = {
   9: { state: (s) => ({ ...s, autoVendor: false }) },
   // 10 → 11: zone 12's boss opens tier 2, and the ladder runs to zone 36. `zone` stays one running
   // number and every tier's numbers are derived from it, so nothing changes shape.
-  10: { state: (s) => s }
+  10: { state: (s) => s },
+  // 11 → 12: the arc retuned for the dedicated harness player (#151). Only content constants moved,
+  // and every enemy's numbers are derived from them, so nothing changes shape.
+  11: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;

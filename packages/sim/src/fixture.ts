@@ -13,9 +13,10 @@ import { SIM_VERSION } from './types'
 const DEEP_SEED = 20261011
 /**
  * Where the deep fixture's Epic and Rare take their wounds: deep enough to touch them, shallow
- * enough not to wipe. Zone 5 until version 8, whose tiered affixes made the kits outgrow it.
+ * enough not to wipe. Zone 5 until version 8, whose tiered affixes made the kits outgrow it; zone 8
+ * until version 12, whose thinner enemies died before they wounded both.
  */
-const WOUND_ZONE = 8
+const WOUND_ZONE = 9
 
 /** Tier-4 weapons and tier-3 armour by class; the accessory is tier 4 for everyone. */
 const KIT: Record<HeroClass, Record<Slot, string>> = {

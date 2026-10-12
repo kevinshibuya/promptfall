@@ -7,7 +7,14 @@ import { createInitialState } from '../state'
 import { step } from '../step'
 import type { Effect, Event, GameState, Hero, HeroClass, Item, Rarity } from '../types'
 import { type CadenceSpec, REFERENCE, turnSource } from './cadence'
+import { atTurnEnd, noSpending, type Seat, type Spending, wear } from './player'
 import { LEGENDARY_AT_HOUR, referenceRow } from './reference'
+
+/**
+ * Who plays: the dedicated player of #151 (scores every stat, spends gold, picks its party), or
+ * the lazy one before it, which only equipped upgrades on atk and def and vendored the rest.
+ */
+export type PlayerKind = 'dedicated' | 'lazy'
 
 export type ScenarioOptions = {
   seed: number
@@ -20,6 +27,8 @@ export type ScenarioOptions = {
   legendaryAtHour?: number | null
   /** The state the run starts from, the seed's initial state when absent. */
   start?: GameState
+  /** The dedicated player when absent. */
+  player?: PlayerKind
 }
 
 export type ZoneTimeline = {
@@ -71,6 +80,8 @@ export type ScenarioReport = {
     /** Equipped after more drops were taken than the starting inventory holds. */
     pastFullInventory: number
   }
+  /** What the player spent its gold on, and how often it changed the party. */
+  spending: Spending
   roundsPerKillZone1: number
   /** Party hero actions ÷ (combat ticks × living party heroes at each tick's start). */
   heroActsPerCombatTick: number
@@ -90,7 +101,7 @@ export type ScenarioReport = {
   legendary: LegendaryTimeline | null
 }
 
-/** atk + def an item adds to its wearer. */
+/** The lazy player's score: atk + def an item adds to its wearer. */
 function itemScore(item: Item): number {
   const base = content.itemBases[item.base]
   if (!base) return 0
@@ -105,7 +116,7 @@ function itemScore(item: Item): number {
   return score
 }
 
-/** The harness player's one habit at a drop: wear it when it beats what a matching hero wears. */
+/** The lazy player's one habit at a drop: wear it when it beats what a matching hero wears. */
 function equipUpgrades(state: GameState, item: Item): Event | null {
   const base = content.itemBases[item.base]
   if (!base) return null
@@ -153,6 +164,7 @@ function grantLegendary(state: GameState, level: number): { state: GameState; he
 export function runScenario(options: ScenarioOptions): ScenarioReport {
   const cadence = options.cadence ?? REFERENCE
   const restEvery = options.restEveryTurns ?? 1
+  const dedicated = (options.player ?? 'dedicated') === 'dedicated'
   const legendaryAt =
     options.legendaryAtHour === undefined ? LEGENDARY_AT_HOUR : options.legendaryAtHour
   let state = options.start ?? createInitialState(options.seed)
@@ -171,6 +183,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     dropsByRarity: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 },
     drops: { taken: 0, vendoredFull: 0, vendoredAtTurnEnd: 0 },
     upgrades: { equipped: 0, pastFullInventory: 0 },
+    spending: noSpending(),
     roundsPerKillZone1: 0,
     heroActsPerCombatTick: 0,
     maxQueue: 0,
@@ -191,6 +204,8 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
   let elapsed = 0
   let inTurn = 0
   let legendaryId: string | null = null
+  // A recruit since the last turn end, the tavern's or a boss contract's: the party is picked again.
+  let recruited = false
 
   const hour = (): number => Math.round(elapsed / 36) / 100
   const zoneLine = (zone: number): ZoneTimeline => {
@@ -209,7 +224,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
       report.levels.push({ level: report.levels.length + 1, hour: hour() })
   }
 
-  const apply = (event: Event): void => {
+  const apply = (event: Event): Effect[] => {
     const before = state
     const r = step(state, event)
     state = r.state
@@ -231,6 +246,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     }
     for (const effect of r.effects) onEffect(effect, before)
     zoneLine(state.zone)
+    return r.effects
   }
 
   const onEffect = (effect: Effect, before: GameState): void => {
@@ -245,10 +261,17 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
       case 'drop': {
         report.dropsByRarity[effect.item.rarity] += 1
         report.drops.taken += 1
+        if (dedicated) {
+          wear(seat, effect.item.id)
+          return
+        }
         const equip = equipUpgrades(state, effect.item)
         if (equip) apply(equip)
         return
       }
+      case 'hero_recruited':
+        recruited = true
+        return
       case 'zone_cleared': {
         const line = zoneLine(effect.zone)
         if (line.firstClearedHour === null) line.firstClearedHour = hour()
@@ -291,8 +314,23 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     noteLevels()
   }
 
-  /** The player's disposal at a turn's end: every item no hero wears is vendored. */
-  const vendorUnworn = (): void => {
+  const seat: Seat = {
+    get state() {
+      return state
+    },
+    play: (event) => apply(event),
+  }
+
+  /** The player at a turn's end. The lazy one vendors every item no hero wears. */
+  const turnEnd = (): void => {
+    if (dedicated) {
+      report.drops.vendoredAtTurnEnd += atTurnEnd(seat, report.spending, {
+        recruited,
+        first: legendaryId,
+      })
+      recruited = false
+      return
+    }
     for (const item of state.inventory) {
       if (item.equippedBy !== null) continue
       apply({ t: 'vendor', itemId: item.id })
@@ -317,7 +355,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
       if (t % 2 === 0) apply({ t: 'tick' })
     }
     apply({ t: 'turn_end' })
-    vendorUnworn()
+    turnEnd()
     for (let t = 0; t < turn.idleSec && elapsed < total; t++, elapsed++) {
       maybeGrant()
       if (t % 5 === 0) apply({ t: 'tick' })
