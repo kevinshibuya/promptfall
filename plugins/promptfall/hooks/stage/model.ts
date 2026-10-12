@@ -4,6 +4,7 @@ import { SPRITES } from '../sprites/generated'
 import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { zoneAt } from '../vendor/sim.js'
+import { zoneHead } from '../zone-words'
 import { GLYPH_HEIGHT, glyphBlock, textWidth } from './font'
 import type { Box } from './layout'
 import {
@@ -569,5 +570,5 @@ export function effectAt(
 export function altText(view: GameView): string {
   const enemies = view.enemies.map((e) => `${e.name} ${e.hp}/${e.maxHp}`).join(', ')
   const heroes = view.heroes.map((h) => `${h.name} L${h.level}${h.alive ? '' : ' down'}`).join(', ')
-  return `Zone ${view.zone}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`
+  return `${zoneHead(view.zone)}, wave ${view.wave}: ${enemies || 'no enemies'} vs ${heroes}`
 }

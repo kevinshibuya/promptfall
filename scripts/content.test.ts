@@ -1,4 +1,4 @@
-import { content } from '@promptfall/sim'
+import { content, LADDER_END } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { contentReference } from './content'
 
@@ -16,6 +16,12 @@ describe('content reference', () => {
     expect(lines).toContain(
       '| 2 | Whisperwood | Bramble Wolf, Moss Golem, Wood Goblin, Whisper Wisp | Elder Treant | Owlbear Cub |',
     )
+  })
+
+  it('lists the ladder’s tiers: their running zones and the item tier they drop', () => {
+    expect(lines).toContain('| 1 | 1 to 12 | the base’s, 1 to 4 |')
+    expect(lines).toContain('| 2 | 13 to 24 | 5 |')
+    expect(lines).toContain('| 3 | 25 to 36 | 6 |')
   })
 
   it('lists enemies and bosses by id, name and archetype', () => {
@@ -52,7 +58,8 @@ describe('content reference', () => {
       Object.keys(content.itemBases).length +
       Object.keys(content.heroTemplates).length +
       Object.keys(content.rarity).length +
-      content.itemTierMultBp.length
+      content.itemTierMultBp.length +
+      LADDER_END / content.zones.length
     expect(rows).toHaveLength(expected)
   })
 })

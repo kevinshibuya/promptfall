@@ -8,8 +8,8 @@ import {
   STEP_MS,
   scaled,
 } from './battle'
-import { scaledBossStats } from './combat'
-import { content } from './content'
+import { enemyStats, scaledBossStats } from './combat'
+import { content, enemyAt } from './content'
 import { heroStats, livingParty } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
@@ -346,6 +346,27 @@ describe('the battle loop', () => {
       return
     }
     throw new Error('nobody fell')
+  })
+
+  it('an enemy past tier 1 fights at its zone’s numbers, not its base zone’s', () => {
+    const slime: Enemy = { id: 'e1', def: 'road_slime', kind: 'wave', hp: 1, maxHp: 1 }
+    const at = (zone: number) => enemyStats({ ...createInitialState(1), zone }, slime)
+    expect(at(1)).toEqual(content.enemies.road_slime?.stats)
+    expect(at(13)).toEqual(enemyAt('road_slime', 13)?.stats)
+    expect(at(25).atk).toBeGreaterThan(at(13).atk)
+  })
+
+  it('the world boss scales through the tiered zone boss, its speed capped at zone 12’s', () => {
+    const carried = { hp: 630, atk: 14, def: 4, spd: 5 }
+    const at = (zone: number) => scaledBossStats({ ...engaged(carried), zone })
+    const z1 = content.enemies.bandit_captain?.stats.atk ?? 1
+    const t2 = enemyAt('bandit_captain', 13)?.stats.atk ?? 0
+    expect(at(13).atk).toBe(Math.floor((carried.atk * t2) / z1))
+    expect(at(13).atk).toBeGreaterThan(at(12).atk)
+    expect(at(36).atk).toBeGreaterThan(at(24).atk)
+    expect(at(3).spd).toBe(carried.spd + 1)
+    expect(at(12).spd).toBe(carried.spd + 4)
+    expect(at(36).spd).toBe(carried.spd + 4)
   })
 
   it('a world-boss hit reports its amount while the boss hp stays put', () => {

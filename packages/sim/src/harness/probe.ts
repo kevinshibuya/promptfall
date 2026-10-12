@@ -1,11 +1,20 @@
 import { enemyStats, hitDamage, NO_VARIANCE_BP } from '../combat'
 import { content, LADDER_END, zoneAt } from '../content'
-import { baseTier } from '../loot'
 import { heroStats } from '../progression'
 import { compareCodeUnits } from '../rng'
 import { createInitialState } from '../state'
-import type { Enemy, EnemyKind, GameState, Hero, Item, Slot } from '../types'
-import { type ReferenceRow, referenceRow } from './reference'
+import type {
+  Affix,
+  Enemy,
+  EnemyKind,
+  GameState,
+  Hero,
+  HeroClass,
+  Item,
+  Rarity,
+  Slot,
+} from '../types'
+import { REFERENCE_PARTY, type ReferenceRow } from './reference'
 
 /** The feel target: hits the reference Knight survives from one wave enemy, and from the zone boss. */
 export const BAND = { wave: [6, 10], boss: [3, 4] } as const
@@ -26,8 +35,12 @@ export type Probe = { tier: number; band: typeof BAND; zones: ProbeZone[] }
 
 const SLOTS: Slot[] = ['weapon', 'armour', 'accessory']
 
-/** The Knight's base for a slot in a gear tier: the highest stat total, ties to the lower id. */
-function gearBase(slot: Slot, gearTier: number): string | null {
+/** The top tier of bases: tiers past it wear its bases, at their own tier. */
+const TOP_BASE_TIER = Math.ceil(content.zones.length / 3)
+
+/** A class's base for a slot in a gear tier: the highest stat total, ties to the lower id. */
+function gearBase(slot: Slot, gearTier: number, cls: HeroClass): string | null {
+  const baseTier = Math.min(gearTier, TOP_BASE_TIER)
   const ids = Object.keys(content.itemBases)
     .sort(compareCodeUnits)
     .filter((id) => {
@@ -35,8 +48,8 @@ function gearBase(slot: Slot, gearTier: number): string | null {
       return (
         b !== undefined &&
         b.slot === slot &&
-        b.classes.includes('knight') &&
-        Math.ceil(b.minZone / 3) === gearTier
+        b.classes.includes(cls) &&
+        Math.ceil(b.minZone / 3) === baseTier
       )
     })
   const total = (id: string) =>
@@ -46,42 +59,78 @@ function gearBase(slot: Slot, gearTier: number): string | null {
   return best
 }
 
-/** A scratch state at the zone holding only the reference Knight, in its reference gear, no affixes. */
-function referenceKnight(zone: number, row: ReferenceRow): { s: GameState; knight: Hero } {
-  const s = createInitialState(0)
-  const knight: Hero = {
-    id: 'probe_knight',
-    template: 'knight_1',
-    cls: 'knight',
-    epithet: '',
-    rarity: row.knightRarity,
-    traits: [],
-    level: row.level,
-    xp: 0,
-    hp: 1,
-    equipment: { weapon: null, armour: null, accessory: null },
-    tradeableAt: null,
-  }
+/**
+ * The affixes of a reference item: its rarity's count of the slot's affixes in id order, each
+ * rolled at `rollBp` of its range. None when the row names no rolls.
+ */
+function gearAffixes(slot: Slot, rarity: Rarity, rollBp: number | undefined): Affix[] {
+  if (rollBp === undefined) return []
+  return Object.keys(content.affixes)
+    .sort(compareCodeUnits)
+    .filter((id) => content.affixes[id]?.slots.includes(slot))
+    .slice(0, content.rarity[rarity].affixCount)
+    .map((id) => {
+      const [min, max] = content.affixes[id]?.range ?? [0, 0]
+      return { id, value: min + Math.floor(((max - min) * rollBp) / 10000) }
+    })
+}
+
+const PARTY: { template: string; cls: HeroClass }[] = [
+  { template: 'knight_1', cls: 'knight' },
+  { template: 'black_mage_1', cls: 'black_mage' },
+  { template: 'white_mage_1', cls: 'white_mage' },
+]
+
+/**
+ * A state at the row's zone holding the reference party, the Knight first, each hero in its
+ * class's reference gear, without traits and at full HP. Its stream is `seed`'s.
+ */
+export function referenceParty(row: ReferenceRow, seed = 0): GameState {
+  const s = createInitialState(seed)
+  const roster: Hero[] = []
   const inventory: Item[] = []
-  for (const slot of SLOTS) {
-    const base = gearBase(slot, row.gearTier)
-    if (!base) continue
-    const item: Item = {
-      id: `probe_${slot}`,
-      base,
-      rarity: row.gearRarity,
-      tier: baseTier(base),
-      affixes: [],
-      equippedBy: knight.id,
+  for (const [i, { template, cls }] of PARTY.entries()) {
+    const id = `ref_${cls}`
+    const hero: Hero = {
+      id,
+      template,
+      cls,
+      epithet: '',
+      rarity: i === 0 ? row.knightRarity : (row.others?.rarity ?? 'common'),
+      traits: [],
+      level: i === 0 ? row.level : (row.others?.level ?? row.level),
+      xp: 0,
+      hp: 1,
+      equipment: { weapon: null, armour: null, accessory: null },
       tradeableAt: null,
     }
-    inventory.push(item)
-    knight.equipment[slot] = item.id
+    for (const slot of SLOTS) {
+      const base = gearBase(slot, row.gearTier, cls)
+      if (!base) continue
+      const item: Item = {
+        id: `ref_${cls}_${slot}`,
+        base,
+        rarity: row.gearRarity,
+        tier: row.gearTier,
+        affixes: gearAffixes(slot, row.gearRarity, row.rollBp),
+        equippedBy: id,
+        tradeableAt: null,
+      }
+      inventory.push(item)
+      hero.equipment[slot] = item.id
+    }
+    roster.push(hero)
   }
-  s.zone = zone
-  s.roster = [knight]
-  s.inventory = inventory
-  return { s, knight }
+  const state: GameState = {
+    ...s,
+    zone: row.zone,
+    highestZone: row.zone,
+    roster,
+    party: [roster[0]?.id ?? '', roster[1]?.id ?? '', roster[2]?.id ?? ''],
+    inventory,
+  }
+  for (const hero of roster) hero.hp = heroStats(state, hero).hp
+  return state
 }
 
 /** How many hits of this enemy the Knight takes and still stands. */
@@ -97,7 +146,10 @@ function hitsSurvived(
   return Math.floor((hp - 1) / hit)
 }
 
-/** The reference Knight against every zone of a tier. Throws for a tier the ladder does not reach. */
+/**
+ * The reference Knight against every zone of a tier that has a reference row: all twelve in tier
+ * 1, the rows' zones past it. Throws for a tier the ladder does not reach.
+ */
 export function probe(tier: number): Probe {
   if (!Number.isInteger(tier) || tier < 1) throw new Error(`tier ${tier} is not a tier`)
   const first = (tier - 1) * 12 + 1
@@ -105,16 +157,16 @@ export function probe(tier: number): Probe {
     throw new Error(`tier ${tier} is past the ladder's end: the ladder ends at zone ${LADDER_END}`)
   }
   const zones: ProbeZone[] = []
-  for (let zone = first; zone < first + 12; zone++) {
-    const at = zoneAt(zone)
-    if (!at) continue
-    const row = referenceRow(at.base)
-    const { s, knight } = referenceKnight(zone, row)
+  for (const row of REFERENCE_PARTY) {
+    const at = zoneAt(row.zone)
+    if (!at || at.tier !== tier) continue
+    const s = referenceParty(row)
+    const knight = s.roster[0]
+    if (!knight) continue
     const { hp, def } = heroStats(s, knight)
     const wave = at.def.enemies.map((id) => hitsSurvived(s, hp, def, id, 'wave'))
     zones.push({
       ...row,
-      zone,
       base: at.base,
       tier: at.tier,
       knight: { hp, def },

@@ -49,7 +49,13 @@ over the small party. Beating it moves the party on to the next of twelve zones,
 Road to The Unwritten Reach. The zone's words arrive with the new backdrop: once the boss's chest
 has played and its row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
-percentage.
+percentage. Zone 12's boss opens tier 2: the same twelve zones again, zone 13 to 24 on the one
+ladder, with each zone's own monsters, boss and backdrop but stronger than zone 12's and stronger
+with every zone, worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity
+odds. Tier 3, zones 25 to 36, drops at item tier 6; the ladder ends there for now, and zone 36's
+boss farms. Past tier 1 the enemy window title, the arrival toast and the log name the tier:
+"Tier 2, zone 1 · Wave 3", "The party reached tier 2, zone 1, Greenmeadow Road". Inside tier 1
+they read as before.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
@@ -167,7 +173,9 @@ the message, naming the rule. The band's World tab shows the latest message as a
 Chat needs a server: the in-process fake (`/promptfall server local`) has it off and says so in place.
 
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
-damage this week, your own rows in gold.
+damage this week, your own rows in gold. The highest zone is the running number, so tier 2's zone 1
+ranks above zone 12; past 12 it reads "T2 Z1", here, on the World tab's records row and on the
+Account tab, and the plain number inside tier 1.
 
 **Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
@@ -321,7 +329,8 @@ server, each of the last two asking Yes or No. A session that is not playing sho
 cannot change it. Its detail window names the server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
-sells the inventory and roster expansions.
+sells the inventory and roster expansions. Past tier 1 its title names the tier ("Odds · tier 2,
+zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at.
 
 **Motion.** Motion is full by default; set to still, the idle bob stops while attacks and hits
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
@@ -412,7 +421,8 @@ between spawns or against a world boss, the item drops alone: against a world bo
 falls on the boss, and between spawns a chest on the empty ground still plays on the front slot,
 the next monster stepping on after it. With the inventory full it is
 vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
-gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
+gold. `zone <n>` moves the party to that zone at wave 1, any zone up to the ladder's end at 36,
+and refuses past it with the range. `recruit [rarity]` recruits a hero, and
 refuses with a full roster. `wipe` makes the party fall now: it restarts the
 zone, and the third in a zone retreats. `boss`, `zone` and `wipe` refuse while
 the party fights a world boss. `reset` throws the sandbox save away and starts a fresh one in

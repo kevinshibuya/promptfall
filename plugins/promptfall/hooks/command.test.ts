@@ -253,8 +253,11 @@ test('sandbox zone moves the party to that zone at wave 1; outside the content a
   expect(view().zone).toBe(4)
   expect(view().wave).toBe(1)
   expect(view().zoneName).toBe('Old Barrow Hills')
-  expect(await run('zone 13')).toBe(`Sandbox: zones run 1 to ${content.zones.length}`)
-  expect(view().zone).toBe(4)
+  expect(await run('zone 36')).toBe('Sandbox: tier 3, zone 12, The Unwritten Reach')
+  expect(view().zone).toBe(36)
+  expect(view().zoneName).toBe('The Unwritten Reach')
+  expect(await run('zone 37')).toBe('Sandbox: zones run 1 to 36')
+  expect(view().zone).toBe(36)
 })
 
 test('sandbox recruit adds a hero of that rarity through the recruit path', async ($, on) => {

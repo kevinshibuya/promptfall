@@ -1,5 +1,5 @@
 import { ACTION_STEPS, fill, GAUGE_FULL, STEP_MS, scaled, TICK_MS } from './battle'
-import { content, zoneAt } from './content'
+import { enemyAt, zoneAt } from './content'
 import { type Choice, pickAction, type Unit } from './picker'
 import {
   checkWipe,
@@ -39,13 +39,14 @@ function damage(s: GameState, atk: number, def: number): number {
 const NO_STATS: Stats = { hp: 1, atk: 1, def: 0, spd: 0 }
 
 function zoneBossStats(zone: number): Stats {
-  return content.enemies[zoneAt(zone)?.def.boss ?? '']?.stats ?? NO_STATS
+  return enemyAt(zoneAt(zone)?.def.boss ?? '', zone)?.stats ?? NO_STATS
 }
 
 /**
  * The world boss at the party's zone: the carried (zone 1 baseline) atk and
  * def scaled by this zone's boss over zone 1's, so it hits as hard as the
- * party's own zone boss. Integer math only.
+ * party's own zone boss, its tier's included; its speed gains what that boss's
+ * gains over zone 1's. Integer math only.
  */
 export function scaledBossStats(s: GameState): Stats {
   const carried = s.boss?.stats ?? NO_STATS
@@ -55,13 +56,13 @@ export function scaledBossStats(s: GameState): Stats {
     hp: carried.hp,
     atk: Math.floor((carried.atk * zb.atk) / Math.max(1, z1.atk)),
     def: Math.floor((carried.def * zb.def) / Math.max(1, z1.def)),
-    spd: carried.spd + Math.floor(s.zone / 3),
+    spd: carried.spd + zb.spd - z1.spd,
   }
 }
 
 export function enemyStats(s: GameState, enemy: Enemy): Stats {
   if (enemy.kind === 'world_boss') return scaledBossStats(s)
-  return content.enemies[enemy.def]?.stats ?? NO_STATS
+  return enemyAt(enemy.def, s.zone)?.stats ?? NO_STATS
 }
 
 function hitEnemy(s: GameState, by: string, enemy: Enemy, amount: number, effects: Effect[]): void {

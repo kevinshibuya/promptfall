@@ -299,6 +299,19 @@ test('a burst more than a tick behind drops hit lines, never a drop or a level-u
   expect(lines.some((l) => l.charMs === CHAR_FAST_MS)).toBe(true)
 })
 
+test('the zone lines carry the tier past zone 12', () => {
+  const { texts } = run([
+    { k: 'zone_cleared', zone: 12, advancedTo: 13 },
+    { k: 'zone_cleared', zone: 36, advancedTo: 36 },
+    { k: 'retreat', zone: 13 },
+  ])
+  expect(texts).toEqual([
+    'The party reached tier 2, zone 1, Greenmeadow Road.',
+    'Tier 3, zone 12 cleared.',
+    'The party retreats to tier 2, zone 1.',
+  ])
+})
+
 test('a wipe or a retreat after a hit that did not kill prints no defeated line', () => {
   for (const [fall, line] of [
     [{ k: 'wipe', zone: 1 }, 'The party fell.'],

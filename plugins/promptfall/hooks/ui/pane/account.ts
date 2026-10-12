@@ -6,6 +6,7 @@ import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
 import type { Line, Span } from '../../windows/kit'
 import { MOVE_HELP } from '../../windows/tuning'
+import { zoneMark } from '../../zone-words'
 import { clip } from '../format'
 import { cursorRow, hotkeySpans, TAB_LABELS } from './frame'
 import type { FrameInput, PaneInput } from './input'
@@ -75,7 +76,10 @@ function accountDetail(input: PaneInput, inner: number): Line[] {
     text(clientLine(), inner),
     text(`Mode ${input.mode}`, inner),
     text(`Session ${account.leaseOwner ?? 'none'}`, inner),
-    text(`Highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}`, inner),
+    text(
+      `Highest zone ${zoneMark(view.highestZone)} · kills ${view.kills} · wipes ${view.wipes}`,
+      inner,
+    ),
     { spans: [] },
     ...link,
   ]

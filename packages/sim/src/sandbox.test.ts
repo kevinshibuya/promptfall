@@ -125,7 +125,7 @@ describe('sandbox events', () => {
 
     it.each([
       [0, 'no_such_zone'],
-      [13, 'no_such_zone'],
+      [37, 'no_such_zone'],
       [1.5, 'no_such_zone'],
     ])('zone %s is unapplicable with %s', (z, detail) => {
       const r = step(fighting, { t: 'sandbox_boss', zone: z, boss: 'zone_boss' })
@@ -303,7 +303,13 @@ describe('sandbox events', () => {
       expect(r.state.highestZone).toBe(3)
     })
 
-    it.each([0, 13, -1, 2.5])('zone %s is unapplicable with no_such_zone', (z) => {
+    it('accepts any zone up to the ladder’s end', () => {
+      const r = step(fighting, { t: 'sandbox_zone', zone: 36 })
+      expect(r.effects).toEqual([])
+      expect(r.state).toMatchObject({ zone: 36, wave: 1, highestZone: 36 })
+    })
+
+    it.each([0, 37, -1, 2.5])('zone %s is unapplicable with no_such_zone', (z) => {
       const r = step(fighting, { t: 'sandbox_zone', zone: z })
       expect(rejectedReason(r.effects)).toBe('server_event_unapplicable:no_such_zone')
       expect(r.state).toBe(fighting)

@@ -1,4 +1,4 @@
-import { content, zoneAt } from '../content'
+import { content } from '../content'
 import { clone } from '../draft'
 import { generateHero } from '../heroes'
 import { affixValue } from '../loot'
@@ -18,6 +18,8 @@ export type ScenarioOptions = {
   restEveryTurns?: number
   /** The live hour a Legendary Knight takes the Knight's place; LEGENDARY_AT_HOUR when absent, never when null. */
   legendaryAtHour?: number | null
+  /** The state the run starts from, the seed's initial state when absent. */
+  start?: GameState
 }
 
 export type ZoneTimeline = {
@@ -153,15 +155,15 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
   const restEvery = options.restEveryTurns ?? 1
   const legendaryAt =
     options.legendaryAtHour === undefined ? LEGENDARY_AT_HOUR : options.legendaryAtHour
-  let state = createInitialState(options.seed)
+  let state = options.start ?? createInitialState(options.seed)
   const startingInventoryCap = state.inventoryCap
   const report: ScenarioReport = {
     ticks: 0,
     toolCalls: 0,
     turnBosses: 0,
-    zone: 1,
-    wave: 1,
-    highestZone: 1,
+    zone: state.zone,
+    wave: state.wave,
+    highestZone: state.highestZone,
     wipes: 0,
     kills: 0,
     gold: 0,
@@ -275,8 +277,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
 
   const maybeGrant = (): void => {
     if (legendaryAt === null || legendaryId !== null || elapsed < legendaryAt * 3600) return
-    const zone = zoneAt(state.zone)
-    const level = referenceRow(zone?.base ?? 1).level
+    const level = referenceRow(state.zone).level
     const granted = grantLegendary(state, level)
     state = granted.state
     legendaryId = granted.hero.id
@@ -299,7 +300,7 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     }
   }
 
-  zoneLine(1)
+  zoneLine(state.zone)
   noteLevels()
   const nextTurn = turnSource(cadence, options.seed)
   const total = options.hours * 3600

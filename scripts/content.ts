@@ -4,7 +4,7 @@
 // tsx scripts/content.ts
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { baseTier, type Content } from '@promptfall/sim'
+import { baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
 
 /** A table cell: pipes escaped so a glyph like `|` stays in its column. */
 const cell = (s: string | number) => String(s).replaceAll('|', '\\|')
@@ -39,6 +39,22 @@ export function contentReference(c: Content): string {
         name(z.boss),
         name(z.turnBoss),
       ]),
+    ),
+    '',
+    '## Tiers',
+    '',
+    'The ladder runs the twelve zones once per tier, as one running zone number: zone 13 is tier 2,',
+    "zone 1, with zone 1's enemies at their tier's numbers. Past tier 1 every base drops, at zone",
+    "12's rarity odds.",
+    '',
+    ...table(
+      ['Tier', 'Zones', 'Item tier dropped'],
+      Array.from({ length: Math.ceil(LADDER_END / c.zones.length) }, (_, i) => {
+        const first = i * c.zones.length + 1
+        const last = Math.min(LADDER_END, first + c.zones.length - 1)
+        const drops = i === 0 ? 'the base’s, 1 to 4' : dropTier(first, '')
+        return [i + 1, `${first} to ${last}`, drops]
+      }),
     ),
     '',
     '## Enemies and bosses',

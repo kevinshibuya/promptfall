@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
 import { clone } from './draft'
-import { rollDrops, vendorValue } from './loot'
+import { rollDrops, rollRewardItem, vendorValue } from './loot'
 import { createInitialState } from './state'
 import { step } from './step'
 import type { Effect, GameState, Rarity } from './types'
@@ -95,6 +95,33 @@ describe('rollDrops', () => {
       }
     }
     expect([...seen].sort()).toEqual([1, 2, 3, 4])
+  })
+
+  it('drops in tier 2 at item tier 5, from every base, at zone 12’s rarity weights', () => {
+    // Zone 12 already admits every base, so the same draws at zone 13 drop the same item a tier up.
+    const bases = new Set<string>()
+    for (let seed = 1; seed <= 60; seed++) {
+      for (const boss of ['goblin_scout', 'bandit_captain']) {
+        const at = (zone: number) => {
+          const s = { ...createInitialState(seed), zone }
+          const drop = dropMany(s, forced(boss), 1).effects.find((e) => e.k === 'drop')
+          if (drop?.k !== 'drop') throw new Error('no drop')
+          return drop.item
+        }
+        const item = at(13)
+        expect(item).toEqual({ ...at(12), tier: 5 })
+        bases.add(item.base)
+      }
+    }
+    expect(bases.size).toBeGreaterThan(20)
+  })
+
+  it('drops in tier 3 at item tier 6, a world boss reward too', () => {
+    const s = { ...createInitialState(3), zone: 25 }
+    const drop = dropMany(s, forced('road_slime'), 1).effects.find((e) => e.k === 'drop')
+    expect(drop?.k === 'drop' && drop.item.tier).toBe(6)
+    expect(rollRewardItem(3, 36, ['knight'])?.tier).toBe(6)
+    expect(rollRewardItem(3, 13, ['knight'])?.tier).toBe(5)
   })
 
   it('contracts recruit a hero from a boss', () => {

@@ -25,13 +25,14 @@ export type EnemyTuning = {
 }
 
 // Zones 9 to 12 moved for sim version 7 (#139): the reference Knight there is Legendary, and its
-// rarity now multiplies its base and growth by 1.5.
+// rarity now multiplies its base and growth by 1.5. Sim version 11 (#143) tuned the tier-1 arc in
+// one bounded search: hp grows ×1.275 per zone (was ×1.19), and zones 10 and 11 give ×1.3 xp.
 export const ENEMY_TUNING: EnemyTuning = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
-  growthBp: { hp: 11900, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
+  growthBp: { hp: 12750, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
   zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 9100, 8100, 7300, 6650],
   zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 7500, 7000, 8500, 10500],
-  zoneXpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000],
+  zoneXpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 13000, 13000, 10000],
 }
 
 /**
@@ -185,37 +186,90 @@ function scale(value: number, bp: number): number {
   return Math.max(1, Math.floor((value * bp) / 10000))
 }
 
+/** One enemy at a baseline: its archetype's share of each number, its kind's xp and gold. */
+function enemyOf(
+  [id, name, archetype]: [string, string, Archetype],
+  zone: number,
+  b: Baseline,
+  spdZone: number,
+): EnemyDef {
+  const a = ARCHETYPES[archetype]
+  const kind = kindOf(archetype)
+  const stats: Stats = {
+    hp: scale(b.hp, a.hpBp),
+    atk: scale(b.atk, a.atkBp),
+    def: scale(b.def, a.defBp),
+    spd: a.spd + Math.floor(spdZone / 3),
+  }
+  const bossMult = kind === 'zone_boss' ? 8 : kind === 'turn_boss' ? 4 : 1
+  return {
+    id,
+    name,
+    glyph: GLYPHS[archetype],
+    zone,
+    kind,
+    archetype,
+    stats,
+    xp: b.xp * bossMult,
+    gold: [b.goldMin * bossMult, b.goldMax * bossMult],
+    dropBp: kind === 'zone_boss' ? 10000 : kind === 'turn_boss' ? 6000 : 1500,
+    contractBp: kind === 'zone_boss' ? 1500 : kind === 'turn_boss' ? 400 : 0,
+  }
+}
+
 /** Every enemy's stats, xp and gold from the tuning: computed once, at load. */
 export function buildEnemies(t: EnemyTuning): Record<string, EnemyDef> {
   const out: Record<string, EnemyDef> = {}
   ROSTERS.forEach((roster, i) => {
-    const zone = i + 1
-    const { hp, atk, def, xp, goldMin, goldMax } = baseline(t, i)
-    for (const [id, name, archetype] of roster) {
-      const a = ARCHETYPES[archetype]
-      const kind = kindOf(archetype)
-      const stats: Stats = {
-        hp: scale(hp, a.hpBp),
-        atk: scale(atk, a.atkBp),
-        def: scale(def, a.defBp),
-        spd: a.spd + Math.floor(zone / 3),
-      }
-      const bossMult = kind === 'zone_boss' ? 8 : kind === 'turn_boss' ? 4 : 1
-      out[id] = {
-        id,
-        name,
-        glyph: GLYPHS[archetype],
-        zone,
-        kind,
-        archetype,
-        stats,
-        xp: xp * bossMult,
-        gold: [goldMin * bossMult, goldMax * bossMult],
-        dropBp: kind === 'zone_boss' ? 10000 : kind === 'turn_boss' ? 6000 : 1500,
-        contractBp: kind === 'zone_boss' ? 1500 : kind === 'turn_boss' ? 400 : 0,
-      }
-    }
+    const b = baseline(t, i)
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1)
   })
+  return out
+}
+
+/**
+ * The step onto the later tiers, in basis points: once, at zone 13, on an enemy's hp, atk and def
+ * over zone 12's. The party the feel probe measures there is capped and in tier-5 gear, far past
+ * tier 1's zone-12 party, so tier 2 opens on it; xp and gold take no step.
+ */
+export const TIER_ENTRY_BP = 27800
+
+/**
+ * The growth of an enemy's stats, xp and gold per zone past the first tier, in basis points:
+ * zone 12 + k fights at zone 12's numbers, its stats stepped by TIER_ENTRY_BP, grown k times.
+ * Both are tuned to the feel probe at tiers 2 and 3.
+ */
+export const TIER_GROWTH_BP = 10400
+
+/**
+ * Every enemy at every running zone past the first tier, `last` the ladder's end: zone 12's
+ * baseline, its stats stepped once by `entryBp`, grown by `growthBp` once per zone past 12,
+ * through each enemy's own archetype. Speed stays at zone 12's. Computed once, at load.
+ */
+export function buildTierEnemies(
+  t: EnemyTuning,
+  entryBp: number,
+  growthBp: number,
+  last: number,
+): Record<number, Record<string, EnemyDef>> {
+  const top = ROSTERS.length
+  const b12 = baseline(t, top - 1)
+  const out: Record<number, Record<string, EnemyDef>> = {}
+  for (let zone = top + 1; zone <= last; zone++) {
+    const k = zone - top
+    const b: Baseline = {
+      hp: grow(scale(b12.hp, entryBp), growthBp, k),
+      atk: grow(scale(b12.atk, entryBp), growthBp, k),
+      def: grow(scale(b12.def, entryBp), growthBp, k),
+      xp: grow(b12.xp, growthBp, k),
+      goldMin: grow(b12.goldMin, growthBp, k),
+      goldMax: grow(b12.goldMax, growthBp, k),
+    }
+    const at: Record<string, EnemyDef> = {}
+    for (const roster of ROSTERS)
+      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top)
+    out[zone] = at
+  }
   return out
 }
 

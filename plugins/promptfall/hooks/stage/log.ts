@@ -7,9 +7,10 @@
 // `release`.
 import type { GameView, Settings } from '../../types'
 import { heroNameById, type Toast, type ToastWait } from '../toasts'
-import { type Effect, type Rarity, zoneAt } from '../vendor/sim.js'
+import type { Effect, Rarity } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
+import { zoneHead, zonePhrase, zoneWords } from '../zone-words'
 import { groups, type StageTimeline } from './timeline'
 import { RARITY_RGB } from './tuning'
 
@@ -178,17 +179,13 @@ export class MessageLog {
         return { text: `${boss?.name ?? e.def} appears!`, key: true }
       }
       case 'zone_cleared': {
-        if (e.advancedTo <= e.zone) return { text: `Zone ${e.zone} cleared.`, key: true }
-        const zone = zoneAt(e.advancedTo)?.def.name
-        return {
-          text: `The party reached zone ${e.advancedTo}${zone ? `, ${zone}` : ''}.`,
-          key: true,
-        }
+        if (e.advancedTo <= e.zone) return { text: `${zoneHead(e.zone)} cleared.`, key: true }
+        return { text: `The party reached ${zoneWords(e.advancedTo)}.`, key: true }
       }
       case 'wipe':
         return { text: 'The party fell.', key: true }
       case 'retreat':
-        return { text: `The party retreats to zone ${e.zone}.`, key: true }
+        return { text: `The party retreats to ${zonePhrase(e.zone)}.`, key: true }
       case 'traded': {
         const t = e.entry
         // Grill 1.16's table has the sale only; purchases and returns print nothing.

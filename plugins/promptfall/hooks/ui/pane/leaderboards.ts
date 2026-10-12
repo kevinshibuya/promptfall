@@ -5,6 +5,7 @@ import type { BoardRow } from '../../../types'
 import { gates } from '../../view'
 import type { Line } from '../../windows/kit'
 import { GAUGE_FULL_RGB, MOVE_HELP, TEXT_RGB, WARN_RGB } from '../../windows/tuning'
+import { zoneMark } from '../../zone-words'
 import { formatCount } from '../format'
 import { onlineLine } from '../leaderboards'
 import { wrap } from '../strip'
@@ -15,7 +16,8 @@ import { capital, listInner, rowSpans } from './inventory'
 import { type ListRow, type ListSpec, listPane } from './list'
 import type { PaneBuild } from './types'
 
-const VALUE_CELLS = 10
+/** Wide enough for the longest highest zone, "zone T3 Z12". */
+const VALUE_CELLS = 11
 
 export function boardsPane(input: PaneInput): PaneBuild {
   const { view, world, boards, dialog } = input
@@ -42,7 +44,7 @@ export function boardsPane(input: PaneInput): PaneBuild {
     const highest = boards.boards?.highestZone ?? []
     const damage = boards.boards?.damage ?? []
     rows.push({ spans: [{ text: 'Highest zone' }], rule: true, alt: 'Highest zone' })
-    rows.push(...board('z', highest, (r) => `zone ${r.value}`))
+    rows.push(...board('z', highest, (r) => `zone ${zoneMark(r.value)}`))
     rows.push({
       spans: [{ text: 'Boss damage this week' }],
       rule: true,

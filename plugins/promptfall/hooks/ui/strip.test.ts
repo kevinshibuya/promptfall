@@ -61,6 +61,8 @@ test('the enemy window titles: a wave, a boss, the world boss with its time left
   expect(titled({ ...rest, view: at(rest.view) })).toBe('Zone 3 · Wave 2')
   const boss = strip('strip-boss')
   expect(titled({ ...boss, view: { ...boss.view, zone: 3 } })).toBe('Zone 3 · Boss')
+  expect(titled({ ...rest, view: { ...at(rest.view), zone: 13 } })).toBe('Tier 2, zone 1 · Wave 2')
+  expect(titled({ ...boss, view: { ...boss.view, zone: 36 } })).toBe('Tier 3, zone 12 · Boss')
   expect(titled(strip('strip-world-boss'))).toBe('World boss · 11m')
 })
 
