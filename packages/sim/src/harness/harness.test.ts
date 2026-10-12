@@ -6,15 +6,15 @@ import { runScenario } from './scenario'
 describe('the early envelope, at the reference cadence on today’s rules', () => {
   // A floor later tickets inherit: a change that breaks the early game fails here.
   it.each([7, 8, 9])(
-    'seed %i clears zone 1 inside the first hour with a handful of wipes',
+    'seed %i clears zone 1 inside the first 30 minutes with a handful of wipes',
     (seed) => {
       const r = runScenario({ seed, hours: 2 })
       const zone1 = r.zones.find((z) => z.zone === 1)
       expect(zone1?.firstClearedHour).not.toBeNull()
-      expect(zone1?.firstClearedHour).toBeLessThan(1)
+      expect(zone1?.firstClearedHour).toBeLessThan(0.5)
       expect(zone1?.wipes).toBeLessThanOrEqual(5)
-      // A wipe restarts the zone and the third retreats: the party climbs to zone 5 or 6 in two
-      // hours, with 15 or 16 wipes across these seeds (7 to 16 when every wipe fell back a zone).
+      // A wipe restarts the zone and the third retreats: the dedicated player climbs to zone 7 to 9
+      // in two hours, with 13 to 19 wipes across these seeds.
       expect(r.wipes).toBeLessThanOrEqual(20)
       expect(r.roundsPerKillZone1).toBeGreaterThanOrEqual(2)
       expect(r.roundsPerKillZone1).toBeLessThanOrEqual(6)
@@ -81,7 +81,7 @@ describe('the feel probe', () => {
 describe('the CLI’s arguments', () => {
   it('defaults to a run at the reference cadence', () => {
     const a = parseArgs([])
-    expect(a).toMatchObject({ mode: 'run', options: { seed: 7, hours: 8 } })
+    expect(a).toMatchObject({ mode: 'run', options: { seed: 7, hours: 8, player: 'dedicated' } })
     if (a.mode !== 'run') return
     expect(a.options.cadence).toMatchObject({ kind: 'distribution', name: 'reference' })
   })
@@ -107,6 +107,7 @@ describe('the CLI’s arguments', () => {
     expect(parseArgs(['--legendary-at', 'off'])).toMatchObject({
       options: { legendaryAtHour: null },
     })
+    expect(parseArgs(['--player', 'lazy'])).toMatchObject({ options: { player: 'lazy' } })
   })
 
   it('refuses an unknown flag, a missing value, and a flag the mode would ignore', () => {
@@ -117,6 +118,7 @@ describe('the CLI’s arguments', () => {
       ['--tool-every', '4'],
       ['--assert'],
       ['--cadence', 'slow'],
+      ['--player', 'idle'],
       ['--cadence', 'fixed', '--cadence-file', 'x.json'],
       ['--probe', '--hours', '2'],
     ]) {

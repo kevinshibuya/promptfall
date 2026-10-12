@@ -1,7 +1,8 @@
 import { type CadenceSpec, loadCadence, REFERENCE } from './cadence'
-import type { ScenarioOptions } from './scenario'
+import type { PlayerKind, ScenarioOptions } from './scenario'
 
 export const USAGE = `usage: harness [--seed N] [--hours N] [--legendary-at HOURS|off] [--rest-every N]
+               [--player dedicated|lazy]
                [--cadence reference | --cadence fixed [--active BP] [--tool-every S] [--turn S]
                 | --cadence-file PATH]
        harness --probe [--assert] [--tier N]`
@@ -14,7 +15,8 @@ export type Parsed =
 const NUMBERS = ['seed', 'hours', 'rest-every', 'active', 'tool-every', 'turn', 'tier'] as const
 const FIXED = ['active', 'tool-every', 'turn'] as const
 const PROBE = ['tier', 'assert'] as const
-const VALUED = [...NUMBERS, 'legendary-at', 'cadence', 'cadence-file'] as const
+const VALUED = [...NUMBERS, 'legendary-at', 'cadence', 'cadence-file', 'player'] as const
+const PLAYERS: readonly PlayerKind[] = ['dedicated', 'lazy']
 const SWITCHES = ['probe', 'assert'] as const
 
 type Valued = (typeof VALUED)[number]
@@ -82,6 +84,9 @@ export function parseArgs(argv: readonly string[]): Parsed {
     }
   }
 
+  const player = values.get('player') ?? 'dedicated'
+  if (!(PLAYERS as readonly string[]).includes(player)) return error(`no player named ${player}`)
+
   const legendary = values.get('legendary-at')
   let legendaryAtHour: number | null | undefined
   if (legendary === 'off') legendaryAtHour = null
@@ -98,6 +103,7 @@ export function parseArgs(argv: readonly string[]): Parsed {
       hours: num('hours', 8),
       cadence,
       restEveryTurns: num('rest-every', 1),
+      player: player as PlayerKind,
       ...(legendaryAtHour === undefined ? {} : { legendaryAtHour }),
     },
   }

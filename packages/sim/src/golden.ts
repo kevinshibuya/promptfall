@@ -70,4 +70,4 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
 }
 
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
-export const GOLDEN_HASH = 'd903b0fbd669e221'
+export const GOLDEN_HASH = '50186730cdb9fff6'

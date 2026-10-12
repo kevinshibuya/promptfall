@@ -7,14 +7,16 @@ import { outOfBand, probe, referenceParty } from './probe'
 import { referenceRow } from './reference'
 import { runScenario, type ScenarioOptions, type ScenarioReport } from './scenario'
 
-// The arc of spec #130 at the reference cadence: nine seeds, 200 live hours each. Every sim bump
-// runs it, so the numbers in the content tables are the ones this evidence describes. The hour
-// targets are read on the median of the nine seeds, because #138's seed table showed one seed's
-// first clear of zone 12 spans 40 hours to never at a single setting. The medians are a report,
-// printed with the seed table and judged by a person on the PR (Kevin, 2026-10-12); the
-// completion floors and the per-seed checks gate at every version.
+// The arc of spec #130 at the reference cadence, played by the dedicated player (#151): nine
+// seeds, 120 live hours each. Every sim bump runs it, so the numbers in the content tables are the
+// ones this evidence describes. The hour targets (zone 12 first cleared in 40 to 60 hours, a level
+// every 0.5 to 1 hour through 10 to 30, the Legendary at 50 in 75 to 100) are read on the median of
+// the nine seeds, because #138's seed table showed one seed's first clear of zone 12 spans 40 hours
+// to never at a single setting. The medians are a report, printed with the seed table and judged
+// by a person on the PR (Kevin, 2026-10-12); the completion floors and the per-seed checks gate at
+// every version.
 const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
-const HOURS = 200
+const HOURS = 120
 
 // The seeds run in child processes, at most four at once: the machine that gates has 8 GB.
 const PROCESSES = 4
@@ -84,10 +86,10 @@ function within(of: (r: ScenarioReport) => number): number {
 }
 
 describe.each(SEEDS)('the arc, seed %i, at the reference cadence', (seed) => {
-  it('first clears zone 1 inside the first hour', () => {
+  it('first clears zone 1 inside the first 30 minutes', () => {
     const hour = cleared(arc(seed), 1)
     expect(hour).not.toBeNull()
-    expect(hour).toBeLessThan(1)
+    expect(hour).toBeLessThan(0.5)
   })
 
   it('first clears each zone it clears later than the one before it', () => {

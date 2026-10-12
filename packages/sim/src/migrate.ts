@@ -49,6 +49,9 @@ export const MIGRATIONS: MigrationChain = {
   // 10 → 11: zone 12's boss opens tier 2, and the ladder runs to zone 36. `zone` stays one running
   // number and every tier's numbers are derived from it, so nothing changes shape.
   10: { state: (s) => s },
+  // 11 → 12: the arc retuned for the dedicated harness player (#151). Only content constants moved,
+  // and every enemy's numbers are derived from them, so nothing changes shape.
+  11: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
