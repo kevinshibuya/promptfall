@@ -8,6 +8,10 @@ test('the leaderboard mark: the plain number inside tier 1, the tier and base zo
   expect(zoneMark(24)).toBe('T2 Z12')
   expect(zoneMark(25)).toBe('T3 Z1')
   expect(zoneMark(36)).toBe('T3 Z12')
+  // A row that words its zone inside tier 1 keeps its word there; past it the mark stands alone.
+  expect(zoneMark(12, 'z')).toBe('z12')
+  expect(zoneMark(13, 'z')).toBe('T2 Z1')
+  expect(zoneMark(4, 'zone ')).toBe('zone 4')
 })
 
 test('a zone in words carries its tier past 12 and is unchanged inside tier 1', () => {

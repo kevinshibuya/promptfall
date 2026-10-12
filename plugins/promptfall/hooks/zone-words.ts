@@ -21,8 +21,11 @@ export function zoneWords(zone: number): string {
   return name ? `${zonePhrase(zone)}, ${name}` : zonePhrase(zone)
 }
 
-/** The highest zone on a board: "12" inside tier 1, "T2 Z1" past it. */
-export function zoneMark(zone: number): string {
+/**
+ * A zone on a board or a row: "12" inside tier 1, "T2 Z1" past it. `word` leads the number
+ * inside tier 1 only, for a row that says "z12" or "zone 12" there.
+ */
+export function zoneMark(zone: number, word = ''): string {
   const at = zoneAt(zone)
-  return at && at.tier > 1 ? `T${at.tier} Z${at.base}` : `${zone}`
+  return at && at.tier > 1 ? `T${at.tier} Z${at.base}` : `${word}${zone}`
 }

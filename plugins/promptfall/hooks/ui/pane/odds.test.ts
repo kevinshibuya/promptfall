@@ -142,6 +142,15 @@ test('the detail of each expansion, and the message', () => {
   ])
 })
 
+test('the message names the tier past tier 1 and reads as today inside it', () => {
+  expect(message(oddsPane(input({ zone: 12 })))[1]).toBe(
+    'Drop odds in zone 12, its boss, and the tavern.',
+  )
+  expect(message(oddsPane(input({ zone: 13 })))[1]).toBe(
+    'Drop odds in tier 2, zone 1, its boss, and the tavern.',
+  )
+})
+
 test('wide and narrow pass tilePositions', () => {
   for (const columns of [120, 60]) {
     const b = oddsPane(input({}, {}, { columns }))

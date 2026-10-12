@@ -1,4 +1,5 @@
 import { type GameHandle, PAUSED_LINE } from './engine'
+import { formatCount } from './ui/format'
 import {
   content,
   LADDER_END,
@@ -7,6 +8,7 @@ import {
   type SandboxEvent,
   zoneAt,
 } from './vendor/sim.js'
+import { vendorValue } from './view'
 import { zonePhrase, zoneWords } from './zone-words'
 
 export const SANDBOX_OFF = 'Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.'
@@ -149,13 +151,17 @@ async function item(game: GameHandle, args: string): Promise<string> {
   const base = pick('item', 'Items', query, ITEM_BASES)
   if (typeof base === 'string') return base
   if (!isRarity(r)) return r
-  const before = new Set((await game.view())?.inventory.map((i) => i.id))
+  const was = await game.view()
+  const before = new Set(was?.inventory.map((i) => i.id))
+  const full = was ? was.inventory.length >= was.inventoryCap : false
   const refused = await grant(game, { t: 'sandbox_item', base: base.id, rarity: r })
   if (refused) return refused
   const added = (await game.view())?.inventory.some((i) => !before.has(i.id)) ?? false
-  return added
-    ? `Sandbox: ${base.name} (${r}) dropped`
-    : `Sandbox: ${base.name} vendored, inventory full`
+  if (added) return `Sandbox: ${base.name} (${r}) dropped`
+  // Not taken in: a full inventory, or the auto-vendor setting sold it with room to spare.
+  return full
+    ? `Sandbox: ${base.name} vendored, inventory full`
+    : `Sandbox: ${base.name} auto-vendored, ${formatCount(vendorValue({ base: base.id, rarity: r }))}G`
 }
 
 async function level(game: GameHandle, args: string): Promise<string> {
