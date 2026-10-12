@@ -22,10 +22,11 @@ You need Windows 10 or 11, Windows Terminal, PowerShell, and a Claude account.
 
    Quit with `/exit` and start `claude` again. A band appears above the prompt with the battle.
    On this first launch a toast says `Welcome to Promptfall. /promptfall heroes to meet your
-   party`, and for 20 seconds the band's message window reads `Welcome to Promptfall. Sound is
-   on; /promptfall sound off silences it. /promptfall heroes to meet your party.`
+   party`, and for 20 seconds the band's message window reads `Sound on; /promptfall sound off
+   silences it. Welcome to Promptfall. /promptfall heroes to meet your party.` (a narrow band
+   clips the end; the opt-out at its start is what matters).
 3. **The versions.** Type `/promptfall account`. The detail window on the right has a line
-   `Client <version> · sim v5`: write down the client version. Write down the Windows version
+   `Client <version> · sim v<n>`: write the whole line down. Write down the Windows version
    (run `winver`) and Windows Terminal's (Settings, About).
 
 ## The band at three widths
