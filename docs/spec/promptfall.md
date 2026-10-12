@@ -805,11 +805,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   Three toasts sit outside the table, raised by the session rather than from a
   burst. The welcome: a first launch toasts `Welcome to Promptfall. /promptfall
   heroes to meet your party` at the host's default length, and the band holds a
-  notice for 20 seconds: `Welcome to Promptfall. Sound is on; /promptfall sound
-  off silences it. /promptfall heroes to meet your party.`, or the toast's text
-  when the sound setting is off. The sound news: a primary that started on a
-  stored boolean sound setting toasts once, at the long tier, `Sound is now on
-  by default. /promptfall sound off silences it.` A boss already up at the first world poll
+  notice for 20 seconds: `Sound on; /promptfall sound off silences it. Welcome
+  to Promptfall. /promptfall heroes to meet your party.`, or the toast's text
+  when the sound setting is off. The sound clause leads so the band's one notice
+  row shows the opt-out whole from 100 columns up. The sound news: the session
+  that rewrites a stored boolean sound setting leaves the news in the store, and
+  the first primary to start after the rewrite toasts it once, at the long tier,
+  `Sound is now on by default. /promptfall sound off silences it.` A boss already up at the first world poll
   toasts the world boss appeared row's text and tier with no cue: the boss is
   news, not a fight starting.
 
@@ -876,7 +878,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   Account tab cycles the steps and `/promptfall sound off|quiet|normal|loud`
   sets one; `on` means quiet. A boolean stored before the steps reads as quiet,
   true or false, since the renderer probe wrote it on every install; the session
-  that reads it rewrites it as quiet and, once primary, toasts the sound news.
+  that reads it rewrites it as quiet and leaves the sound news in the store, and
+  the first primary to start after the rewrite toasts it once.
   The setting survives a reset. Eight cues, each riding a toast row (the table's
   cue column). Only the primary session plays them; `/promptfall off` hides the
   band, not the cues. On a terminal, the first play skipped or rejected marks

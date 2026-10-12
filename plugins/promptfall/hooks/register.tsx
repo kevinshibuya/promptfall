@@ -133,12 +133,17 @@ const FLUSH_MS = 15_000
 const LEASE_RENEW_MS = 10_000
 
 const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
-/** The welcome's notice when sound is not off: the toast keeps WELCOME. */
+/**
+ * The welcome's notice when sound is not off: the toast keeps WELCOME. The sound clause leads, so
+ * the band's one notice row shows `/promptfall sound off` whole from 100 columns up.
+ */
 const WELCOME_SOUND =
-  'Welcome to Promptfall. Sound is on; /promptfall sound off silences it. /promptfall heroes to meet your party.'
+  'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
 const WELCOME_MS = 20_000
 /** Once per machine, for a setting stored before the steps: sound was off by default then. */
 const SOUND_NEWS = 'Sound is now on by default. /promptfall sound off silences it.'
+/** Set with the boolean's rewrite, deleted by the primary that toasts it: news no session lost. */
+const SOUND_NEWS_KEY = `${PREFIX}soundNews`
 
 /**
  * One session's game: the engine, the lease, and the timers. Module state, so
@@ -160,8 +165,6 @@ class GameSession implements GameHandle {
   private timers: Timer[] = []
   private pending: Promise<void> = Promise.resolve()
   private firstRun = false
-  /** The stored sound was a boolean: the next promotion says sound is now on. */
-  private soundNews = false
   /** A play here was skipped or refused: no cue is tried for the rest of the session. */
   private soundSilent = false
   private paneNoticeGen = 0
@@ -341,7 +344,8 @@ class GameSession implements GameHandle {
     // Before anything else writes the settings back, which would turn the boolean into a step.
     const stored = await this.io.store.get(`${PREFIX}${SETTINGS_KEY}`)
     if (soundWasBoolean(stored)) {
-      this.soundNews = true
+      // In the store, not this session: a secondary that rewrites it may close before a promotion.
+      await this.io.store.set(SOUND_NEWS_KEY, true)
       await this.io.store.set(`${PREFIX}${SETTINGS_KEY}`, parseSettings(stored))
     }
     const setting = await this.readSetting()
@@ -720,8 +724,8 @@ class GameSession implements GameHandle {
     await this.engine.start()
     await this.io.publish({ mode: this.mode() })
     await this.poller.start()
-    if (this.soundNews) {
-      this.soundNews = false
+    if ((await this.io.store.get(SOUND_NEWS_KEY)) === true) {
+      await this.io.store.delete(SOUND_NEWS_KEY)
       this.io.toast(SOUND_NEWS, LONG_MS)
     }
     if (this.firstRun) {
@@ -854,6 +858,7 @@ const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SE
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as const, false)
+const surfaceAtom = atom({ plugin: 'promptfall', key: 'surface' } as const, null)
 
 let game: GameSession | null = null
 /** PROMPTFALL_SANDBOX=1, read at session start and at the desktop attach. */
@@ -880,6 +885,10 @@ export const register: Register = (on) => {
     if (e.surface === 'terminal' && settings.renderer !== 'auto') {
       await update($, rendererAtom, () => settings.renderer)
     }
+    const started = e.surface === 'terminal' || e.surface === 'desktop' ? e.surface : null
+    if (started !== null) await update($, surfaceAtom, () => started)
+    // A hot reload starts with no surface: the one it started on before carries on.
+    const surface = started ?? (await read($, surfaceAtom))
     if ((e.isInteractive && e.surface === 'terminal') || hadGame) {
       const session = new GameSession({
         now: () => $.clock.now(),
@@ -947,8 +956,8 @@ export const register: Register = (on) => {
         // Per machine: another session's /promptfall sound|motion writes the store, not our atom.
         settings: async () => parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`)),
         play: (asset, gain) => $.audio.play({ asset }, { gain }),
-        // A hot reload starts with no surface: only a terminal's plays are timed.
-        surface: e.surface === 'terminal' ? 'terminal' : 'desktop',
+        // Only a terminal's plays are timed.
+        surface: surface === 'terminal' ? 'terminal' : 'desktop',
         sandbox,
       })
       game = session
@@ -959,6 +968,7 @@ export const register: Register = (on) => {
 
   on('session.attach', async ($, e, next) => {
     if (e.surface === 'desktop') {
+      await update($, surfaceAtom, () => 'desktop')
       sandbox = (await $.env.get('PROMPTFALL_SANDBOX')) === '1'
       const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
       await update($, settingsAtom, () => settings)

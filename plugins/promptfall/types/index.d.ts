@@ -305,6 +305,8 @@ declare module 'claude-code' {
       renderer: PromptfallRenderer
       /** Per session, never stored: a play here was skipped or refused, so no cue is tried again. */
       soundSilent: boolean
+      /** Per session: the surface it started on, so a hot reload (which starts with none) keeps it. */
+      surface: 'terminal' | 'desktop' | null
     }
   }
 }
