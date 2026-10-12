@@ -54,7 +54,8 @@ describe('the reference cadence', () => {
     expect(r.cadence.inTurnShare).toBeLessThanOrEqual(0.75)
     // A quarter of turns reach 10 tool calls: far fewer turn bosses than prompts.
     expect(r.turnBosses).toBeLessThan(r.cadence.prompts)
-  })
+    // Twenty live hours take 2 to 4 s alone and more beside the arc's seed processes in `pnpm test`.
+  }, 60_000)
 
   it('is reproducible by seed and differs across seeds', () => {
     expect(realise(REFERENCE_CADENCE, 3, 50)).toEqual(realise(REFERENCE_CADENCE, 3, 50))
