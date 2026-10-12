@@ -1,4 +1,4 @@
-export const SIM_VERSION = 8 as const
+export const SIM_VERSION = 9 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -172,7 +172,10 @@ export type Effect =
   | { k: 'zone_cleared'; zone: number; advancedTo: number }
   | { k: 'boss_spawned'; kind: 'zone_boss' | 'turn_boss'; def: string }
   | { k: 'hero_fell'; heroId: string }
-  | { k: 'wipe'; retreatedTo: number }
+  /** The party fell and restarts `zone`, the one it is in, at wave 1. */
+  | { k: 'wipe'; zone: number }
+  /** The party's third wipe in a zone: it fell back to `zone`, one lower, or restarts zone 1. */
+  | { k: 'retreat'; zone: number }
   | { k: 'party_applied'; heroIds: [string, string, string] }
   | { k: 'hero_recruited'; hero: Hero; via: RecruitVia }
   | { k: 'rejected'; event: Event; reason: string }
@@ -196,6 +199,8 @@ export type GameState = {
   wave: number
   farm: boolean
   highestZone: number
+  /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
+  zoneWipes: number
   roster: Hero[]
   party: [string, string, string]
   pendingParty: [string, string, string] | null

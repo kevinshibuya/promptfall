@@ -685,7 +685,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "c36cb20bd3da7b91";
+var GOLDEN_HASH = "c4b9d7bc0e818a92";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -877,7 +877,7 @@ function onTurnEnd(s) {
   s.turnToolCalls = 0;
 }
 function onRest(s) {
-  healParty(s, 3e3);
+  healParty(s, 5e3);
 }
 function refillFromQueue(s) {
   const encounter = s.encounter;
@@ -928,6 +928,7 @@ function grantXp(s, hero, xp, effects) {
 function changeZone(s, zone) {
   s.zone = zone;
   s.wave = 1;
+  s.zoneWipes = 0;
   if (zone > s.highestZone) s.highestZone = zone;
 }
 function onEnemyKilled(s, enemy, effects, drop) {
@@ -972,6 +973,7 @@ function onEnemyKilled(s, enemy, effects, drop) {
   }
   if (current.waveSize === 0) s.encounter = null;
 }
+var RETREAT_AT = 3;
 function checkWipe(s, effects) {
   if (livingParty(s).length > 0) return false;
   s.battle = { gauges: [], queue: [], busy: 0 };
@@ -979,13 +981,19 @@ function checkWipe(s, effects) {
     fullHealParty(s);
     return true;
   }
-  const retreatedTo = Math.max(1, s.zone - 1);
-  effects.push({ k: "wipe", retreatedTo });
   s.encounter = null;
   s.pendingTurnBoss = false;
   s.stats.wipes += 1;
   fullHealParty(s);
-  changeZone(s, retreatedTo);
+  if (s.zoneWipes + 1 < RETREAT_AT) {
+    effects.push({ k: "wipe", zone: s.zone });
+    s.wave = 1;
+    s.zoneWipes += 1;
+  } else {
+    const zone = Math.max(1, s.zone - 1);
+    effects.push({ k: "retreat", zone });
+    changeZone(s, zone);
+  }
   applyPendingParty(s, effects);
   fullHealParty(s);
   return true;
@@ -1050,7 +1058,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 8;
+var SIM_VERSION = 9;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1089,6 +1097,7 @@ function createInitialState(seed) {
     wave: 1,
     farm: false,
     highestZone: 1,
+    zoneWipes: 0,
     roster: [],
     party: ["", "", ""],
     pendingParty: null,
@@ -1254,7 +1263,10 @@ var MIGRATIONS = {
   7: {
     state: (s) => ({ ...s, inventory: s.inventory.map(withBaseTier) }),
     goods: (g) => g.kind === "item" ? { kind: "item", item: withBaseTier(g.item) } : g
-  }
+  },
+  // 8 → 9: a wipe restarts the zone and the third is a retreat; rests heal 50%. The state gains
+  // the count of wipes in its zone, at zero: no save remembers them, and zero only defers a retreat.
+  8: { state: (s) => ({ ...s, zoneWipes: 0 }) }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;

@@ -14,6 +14,7 @@ export function createInitialState(seed: number): GameState {
     wave: 1,
     farm: false,
     highestZone: 1,
+    zoneWipes: 0,
     roster: [],
     party: ['', '', ''],
     pendingParty: null,

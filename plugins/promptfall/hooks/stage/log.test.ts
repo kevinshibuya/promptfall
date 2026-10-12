@@ -97,7 +97,8 @@ test('each row of the wording table prints as written', () => {
       { k: 'boss_spawned', kind: 'zone_boss', def: 'goblin_scout' },
       { k: 'zone_cleared', zone: 3, advancedTo: 4 },
       { k: 'zone_cleared', zone: 3, advancedTo: 3 },
-      { k: 'wipe', retreatedTo: 2 },
+      { k: 'wipe', zone: 3 },
+      { k: 'retreat', zone: 2 },
       traded('sold'),
       {
         k: 'rewarded',
@@ -125,7 +126,8 @@ test('each row of the wording table prints as written', () => {
     'Goblin Scout appears!',
     'The party reached zone 4, Old Barrow Hills.',
     'Zone 3 cleared.',
-    'The party fell, retreating to zone 2.',
+    'The party fell.',
+    'The party retreats to zone 2.',
     'Oak Staff sold for 120G.',
     'Your share of the boss: 120G and Oak Staff.',
     'Your share of the boss: 120G.',
@@ -295,25 +297,30 @@ test('a burst more than a tick behind drops hit lines, never a drop or a level-u
   expect(lines.some((l) => l.charMs === CHAR_FAST_MS)).toBe(true)
 })
 
-test('a wipe after a hit that did not kill prints no defeated line', () => {
-  const v = wave()
-  const h1 = v.heroes[0]?.id ?? ''
-  const e1 = v.enemies[0]
-  // The encounter is cleared by the wipe: every enemy leaves the view alive.
-  const after = { ...v, enemies: [] }
-  const { texts } = run(
-    [
-      act(h1, 0),
-      hit(h1, e1?.id ?? '', 1),
-      act(e1?.id ?? '', 500),
-      hit(e1?.id ?? '', h1, 99),
-      { k: 'hero_fell', heroId: h1 },
-      { k: 'wipe', retreatedTo: 1 },
-    ],
-    { before: v, after },
-  )
-  expect(texts.some((t) => t.includes('defeated'))).toBe(false)
-  expect(texts).toContain('The party fell, retreating to zone 1.')
+test('a wipe or a retreat after a hit that did not kill prints no defeated line', () => {
+  for (const [fall, line] of [
+    [{ k: 'wipe', zone: 1 }, 'The party fell.'],
+    [{ k: 'retreat', zone: 1 }, 'The party retreats to zone 1.'],
+  ] as const) {
+    const v = wave()
+    const h1 = v.heroes[0]?.id ?? ''
+    const e1 = v.enemies[0]
+    // The encounter is cleared by the fall: every enemy leaves the view alive.
+    const after = { ...v, enemies: [] }
+    const { texts } = run(
+      [
+        act(h1, 0),
+        hit(h1, e1?.id ?? '', 1),
+        act(e1?.id ?? '', 500),
+        hit(e1?.id ?? '', h1, 99),
+        { k: 'hero_fell', heroId: h1 },
+        fall,
+      ],
+      { before: v, after },
+    )
+    expect(texts.some((t) => t.includes('defeated'))).toBe(false)
+    expect(texts).toContain(line)
+  }
 })
 
 test('an enemy no view ever held is a Foe, and its kill still prints', () => {

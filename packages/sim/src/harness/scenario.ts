@@ -25,8 +25,9 @@ export type ZoneTimeline = {
   firstReachedHour: number
   /** The live hour its zone boss first fell; null while it has not. */
   firstClearedHour: number | null
+  /** Every wipe in it, its retreats included. */
   wipes: number
-  /** Wipes in it that fell back to a lower zone. */
+  /** Its wipes that were retreats: each third with no boss kill between. */
   retreats: number
 }
 
@@ -251,10 +252,13 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
         if (line.firstClearedHour === null) line.firstClearedHour = hour()
         return
       }
-      case 'wipe': {
+      case 'wipe':
+        zoneLine(before.zone).wipes += 1
+        return
+      case 'retreat': {
         const line = zoneLine(before.zone)
         line.wipes += 1
-        if (effect.retreatedTo < before.zone) line.retreats += 1
+        line.retreats += 1
         return
       }
       case 'level_up': {

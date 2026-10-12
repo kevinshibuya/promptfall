@@ -22,11 +22,11 @@ describe('the per-zone timeline', () => {
     for (const z of run.zones.slice(0, -1)) expect(z.firstClearedHour).not.toBeNull()
   })
 
-  it('counts each wipe in the zone it happened in, and a retreat when it fell back', () => {
+  it('counts each wipe in the zone it happened in, and a retreat as one of them', () => {
     expect(run.wipes).toBeGreaterThan(0)
     expect(run.zones.reduce((n, z) => n + z.wipes, 0)).toBe(run.wipes)
-    // Today every wipe past zone 1 falls back a zone; zone 1 has nowhere to fall to.
-    for (const z of run.zones) expect(z.retreats).toBe(z.zone === 1 ? 0 : z.wipes)
+    // A retreat is a zone's third wipe since it was entered or its boss fell.
+    for (const z of run.zones) expect(z.retreats * 3).toBeLessThanOrEqual(z.wipes)
   })
 })
 

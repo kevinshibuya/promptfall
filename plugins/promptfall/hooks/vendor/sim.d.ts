@@ -17,7 +17,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 8;
+declare const SIM_VERSION: 9;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -289,9 +289,16 @@ type Effect = {
 } | {
     k: 'hero_fell';
     heroId: string;
-} | {
+}
+/** The party fell and restarts `zone`, the one it is in, at wave 1. */
+ | {
     k: 'wipe';
-    retreatedTo: number;
+    zone: number;
+}
+/** The party's third wipe in a zone: it fell back to `zone`, one lower, or restarts zone 1. */
+ | {
+    k: 'retreat';
+    zone: number;
 } | {
     k: 'party_applied';
     heroIds: [string, string, string];
@@ -346,6 +353,8 @@ type GameState = {
     wave: number;
     farm: boolean;
     highestZone: number;
+    /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
+    zoneWipes: number;
     roster: Hero[];
     party: [string, string, string];
     pendingParty: [string, string, string] | null;
@@ -545,7 +554,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "c36cb20bd3da7b91";
+declare const GOLDEN_HASH = "c4b9d7bc0e818a92";
 
 declare function hashState(state: GameState): string;
 

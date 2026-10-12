@@ -13,8 +13,8 @@ describe('the early envelope, at the reference cadence on today’s rules', () =
       expect(zone1?.firstClearedHour).not.toBeNull()
       expect(zone1?.firstClearedHour).toBeLessThan(1)
       expect(zone1?.wipes).toBeLessThanOrEqual(5)
-      // Today a wipe falls back a zone and the party bounces between zones 2 and 3: 7 to 16 wipes
-      // in two hours across seeds. The wipe ticket tightens this.
+      // A wipe restarts the zone and the third retreats: the party climbs to zone 5 or 6 in two
+      // hours, with 15 or 16 wipes across these seeds (7 to 16 when every wipe fell back a zone).
       expect(r.wipes).toBeLessThanOrEqual(20)
       expect(r.roundsPerKillZone1).toBeGreaterThanOrEqual(2)
       expect(r.roundsPerKillZone1).toBeLessThanOrEqual(6)

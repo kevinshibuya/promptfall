@@ -167,7 +167,7 @@ export function onTurnEnd(s: GameState): void {
 }
 
 export function onRest(s: GameState): void {
-  healParty(s, 3000)
+  healParty(s, 5000)
 }
 
 export function refillFromQueue(s: GameState): void {
@@ -226,6 +226,7 @@ export function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[])
 export function changeZone(s: GameState, zone: number): void {
   s.zone = zone
   s.wave = 1
+  s.zoneWipes = 0
   if (zone > s.highestZone) s.highestZone = zone
 }
 
@@ -281,6 +282,9 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
   if (current.waveSize === 0) s.encounter = null
 }
 
+/** A zone's third wipe with no boss kill between them is a retreat. */
+const RETREAT_AT = 3
+
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {
   if (livingParty(s).length > 0) return false
@@ -291,13 +295,19 @@ export function checkWipe(s: GameState, effects: Effect[]): boolean {
     fullHealParty(s)
     return true
   }
-  const retreatedTo = Math.max(1, s.zone - 1)
-  effects.push({ k: 'wipe', retreatedTo })
   s.encounter = null
   s.pendingTurnBoss = false
   s.stats.wipes += 1
   fullHealParty(s)
-  changeZone(s, retreatedTo)
+  if (s.zoneWipes + 1 < RETREAT_AT) {
+    effects.push({ k: 'wipe', zone: s.zone })
+    s.wave = 1
+    s.zoneWipes += 1
+  } else {
+    const zone = Math.max(1, s.zone - 1)
+    effects.push({ k: 'retreat', zone })
+    changeZone(s, zone)
+  }
   applyPendingParty(s, effects)
   fullHealParty(s)
   return true

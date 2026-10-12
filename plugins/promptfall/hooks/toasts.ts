@@ -13,9 +13,10 @@ export type ToastRow =
   | 'legendary_drop'
   | 'recruit'
   | 'reward'
-  | 'wipe'
+  | 'retreat'
   | 'world_boss_appeared'
   | 'revoked'
+  | 'wipe'
   | 'zone_arrival'
   | 'rare_drop'
   | 'vendored'
@@ -79,6 +80,12 @@ function rarityWord(rarity: Rarity): string {
 function andList(names: string[]): string {
   const last = names.at(-1) ?? ''
   return names.length < 2 ? last : `${names.slice(0, -1).join(', ')} and ${last}`
+}
+
+/** ", Old Barrow Hills" after a zone's number, or nothing when the zone has no name. */
+function zoneName(zone: number): string {
+  const name = zoneAt(zone)?.def.name
+  return name ? `, ${name}` : ''
 }
 
 /** The gold a trade moved. */
@@ -156,12 +163,14 @@ const TABLE = {
       return `Your share of ${boss}: ${effect.gold} gold${goods}`
     },
   },
-  wipe: {
+  retreat: {
     purpose: 'wants a decision',
     tier: 'long',
     cue: null,
     single: ({ effect }: EffectInput) =>
-      effect.k === 'wipe' ? `The party fell, retreating to zone ${effect.retreatedTo}` : null,
+      effect.k === 'retreat'
+        ? `The party retreats to zone ${effect.zone}${zoneName(effect.zone)}`
+        : null,
   },
   world_boss_appeared: {
     purpose: 'rare good news',
@@ -179,16 +188,24 @@ const TABLE = {
       return `The server revoked ${names[0] ?? 'an item'}`
     },
   },
+  wipe: {
+    purpose: 'wants a decision',
+    tier: 'short',
+    cue: null,
+    single: ({ effect }: EffectInput) =>
+      effect.k === 'wipe'
+        ? `The party fell, back to wave 1 of zone ${effect.zone}${zoneName(effect.zone)}`
+        : null,
+  },
   zone_arrival: {
     purpose: 'wants a decision',
     tier: 'short',
     cue: null,
-    single: ({ effect }: EffectInput) => {
+    single: ({ effect }: EffectInput) =>
       // A farming clear stays in its zone: only an advance is an arrival.
-      if (effect.k !== 'zone_cleared' || effect.advancedTo <= effect.zone) return null
-      const name = zoneAt(effect.advancedTo)?.def.name
-      return `The party reached zone ${effect.advancedTo}${name ? `, ${name}` : ''}`
-    },
+      effect.k === 'zone_cleared' && effect.advancedTo > effect.zone
+        ? `The party reached zone ${effect.advancedTo}${zoneName(effect.advancedTo)}`
+        : null,
     // An arrival lands when the backdrop changes: the cleared zone's boss row has left.
     wait: ({ effect }: EffectInput) =>
       effect.k === 'zone_cleared' ? { zone: effect.zone } : undefined,
@@ -272,6 +289,7 @@ const EFFECT_ROWS = [
   'legendary_drop',
   'recruit',
   'reward',
+  'retreat',
   'wipe',
   'zone_arrival',
   'rare_drop',

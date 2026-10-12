@@ -165,9 +165,10 @@ describe('the clamp', () => {
 
   it("lowers a hero's HP to its new maximum", () => {
     const s = migrated(golden, chainOf(overfull))
-    // Level-1 Commons with nothing worn: the templates' base HP.
+    // Commons with nothing worn: the level-1 Knight at the template's base HP, the level-2 Black
+    // Mage at a base of 36 and one level's growth of 5.
     expect(hero(s, 'h0').hp).toBe(60)
-    expect(hero(s, 'h1').hp).toBe(36)
+    expect(hero(s, 'h1').hp).toBe(41)
   })
 
   it('never raises HP: wounded heroes stay wounded and the fallen stay down', () => {
@@ -379,6 +380,51 @@ describe('the 7→8 step: an item carries its tier', () => {
     expect(migrateGoods({ kind: 'hero', hero: held }, 7, { to: 8 })).toEqual({
       ok: true,
       goods: { kind: 'hero', hero: held },
+    })
+  })
+})
+
+describe('the 8→9 step: a wipe restarts the zone, the third is a retreat', () => {
+  // The state gains the zone's wipe count, at zero: no save remembers its wipes in a zone, and a
+  // count of zero only defers a retreat. The rest heal is a rule, not a field.
+  const PINNED = { golden: '9d3731860a401b10', deep: '8e2e1be6ce01768c' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v8-deep.json' : 'v8.json')
+    const r = migrate(before, { to: 9 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`starts the ${kind} fixture's wipe count at zero`, () => {
+      expect('zoneWipes' in before).toBe(false)
+      expect(after.v).toBe(9)
+      expect(after.zoneWipes).toBe(0)
+    })
+
+    it(`keeps every hero's level, xp and HP and the items, gold, zone and party of the ${kind} fixture`, () => {
+      expect(after.roster.map((h) => [h.id, h.level, h.xp, h.hp])).toEqual(
+        before.roster.map((h) => [h.id, h.level, h.xp, h.hp]),
+      )
+      expect(after.inventory).toEqual(before.inventory)
+      expect(after.gold).toBe(before.gold)
+      expect(after.zone).toBe(before.zone)
+      expect(after.party).toEqual(before.party)
+      expect(after.stats).toEqual(before.stats)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v8 = fixture('v8-deep.json')
+    const [item] = v8.inventory
+    if (!item) throw new Error('deep fixture')
+    expect(migrateGoods({ kind: 'item', item }, 8, { to: 9 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item },
     })
   })
 })
