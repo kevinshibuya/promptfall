@@ -139,7 +139,7 @@ const TABLE = {
   recruit: {
     purpose: 'rare good news',
     tier: 'long',
-    cue: null,
+    cue: 'recruit',
     single: ({ effect }: EffectInput) =>
       effect.k === 'hero_recruited'
         ? `${rarityWord(effect.hero.rarity)} recruit: ${heroName(effect.hero.template, effect.hero.epithet)}`
@@ -182,7 +182,7 @@ const TABLE = {
   zone_arrival: {
     purpose: 'wants a decision',
     tier: 'short',
-    cue: null,
+    cue: 'zone_cleared',
     single: ({ effect }: EffectInput) => {
       // A farming clear stays in its zone: only an advance is an arrival.
       if (effect.k !== 'zone_cleared' || effect.advancedTo <= effect.zone) return null
