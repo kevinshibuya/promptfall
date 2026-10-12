@@ -134,7 +134,7 @@ const SINGLE: [string, Effect, Toast][] = [
       row: 'retreat',
       text: 'The party retreats to zone 3, Marsh of Sighs',
       timeoutMs: LONG,
-      cue: null,
+      cue: 'retreat',
     },
   ],
   [

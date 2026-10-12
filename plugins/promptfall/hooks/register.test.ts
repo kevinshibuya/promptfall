@@ -2358,14 +2358,20 @@ function sandboxSounding(
   const last = states(on)
   const toasts: string[] = []
   const raised: Raised[] = []
-  engineBottom(on, toasts, env, (toast) => raised.push(toast))
+  /** Toasts and cues in the order the host received them. */
+  const order: string[] = []
+  engineBottom(on, toasts, env, (toast) => {
+    raised.push(toast)
+    order.push(`toast ${toast.text}`)
+  })
   const plays: string[] = []
   on('audio.play', (_$, e) => {
     plays.push(e.clip.asset ?? '')
+    order.push(`cue ${e.clip.asset ?? ''}`)
     return answerPlay(time, answer)
   })
   on('session.attach', (_$, e) => ({ clientId: e.clientId }))
-  return { time, data, last, toasts, plays, raised }
+  return { time, data, last, toasts, plays, raised, order }
 }
 
 test('sandbox worldboss has toasted and cued when it returns; worldboss end has toasted down', async ($, on) => {
@@ -2525,6 +2531,32 @@ test('a sandbox recruit plays the recruit cue', async ($, on) => {
   await $.command.run({ ...RUN, command: 'promptfall', args: 'sandbox recruit epic' })
   await time.settle()
   expect(plays).toEqual(['cues/recruit.wav'])
+})
+
+test('a sandbox retreat plays the retreat cue once, after its long toast; a wipe plays none', async ($, on) => {
+  const { time, plays, raised, order } = sandboxSounding(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const run = async (args: string) =>
+    (await $.command.run({ ...RUN, command: 'promptfall', args: `sandbox ${args}` })).text
+  await run('zone 3')
+  await time.settle()
+  const before = plays.length
+  expect(await run('wipe')).toMatch(/^Sandbox: the party fell, back to wave 1 of zone 3/)
+  await time.settle()
+  expect(raised.filter((t) => t.text.startsWith('The party fell')).map((t) => t.timeoutMs)).toEqual(
+    [4000],
+  )
+  expect(plays.slice(before)).toEqual([])
+  await run('wipe')
+  await time.settle()
+  expect(await run('wipe')).toMatch(/^Sandbox: the party retreats to zone 2/)
+  await time.settle()
+  const retreat = raised.filter((t) => t.text.startsWith('The party retreats'))
+  expect(retreat).toEqual([{ text: retreat[0]?.text, timeoutMs: 8000 }])
+  expect(plays.slice(before)).toEqual(['cues/retreat.wav'])
+  const toastAt = order.indexOf(`toast ${retreat[0]?.text}`)
+  expect(toastAt).toBeGreaterThanOrEqual(0)
+  expect(order.indexOf('cue cues/retreat.wav')).toBeGreaterThan(toastAt)
 })
 
 test('the desktop never marks the session, whatever its plays answer', async ($, on) => {
