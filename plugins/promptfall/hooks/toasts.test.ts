@@ -39,7 +39,15 @@ test('a hero the roster does not hold reads "A hero"; so does any hero with no v
 })
 
 function oakStaff(rarity: Rarity): Item {
-  return { id: 'i1', base: 'oak_staff', rarity, affixes: [], equippedBy: null, tradeableAt: null }
+  return {
+    id: 'i1',
+    base: 'oak_staff',
+    rarity,
+    tier: 1,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
 }
 
 /** Morwen the Bold, a rare recruit. */
@@ -120,9 +128,35 @@ const SINGLE: [string, Effect, Toast][] = [
     },
   ],
   [
+    'a retreat',
+    { k: 'retreat', zone: 3 },
+    {
+      row: 'retreat',
+      text: 'The party retreats to zone 3, Marsh of Sighs',
+      timeoutMs: LONG,
+      cue: null,
+    },
+  ],
+  [
     'a wipe',
-    { k: 'wipe', retreatedTo: 2 },
-    { row: 'wipe', text: 'The party fell, retreating to zone 2', timeoutMs: LONG, cue: null },
+    { k: 'wipe', zone: 4 },
+    {
+      row: 'wipe',
+      text: 'The party fell, back to wave 1 of zone 4, Old Barrow Hills',
+      timeoutMs: SHORT,
+      cue: null,
+    },
+  ],
+  [
+    'a zone arrival past tier 1',
+    { k: 'zone_cleared', zone: 12, advancedTo: 13 },
+    {
+      row: 'zone_arrival',
+      text: 'The party reached tier 2, zone 1, Greenmeadow Road',
+      timeoutMs: SHORT,
+      cue: null,
+      wait: { zone: 12 },
+    },
   ],
   [
     'a zone arrival',
@@ -159,7 +193,7 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   ...(['rare', 'epic', 'legendary'] as const).map((rarity): [string, Effect, Toast] => [
     `${rarity} item vendored`,
-    { k: 'drop_vendored', item: oakStaff(rarity), gold: 40 },
+    { k: 'drop_vendored', item: oakStaff(rarity), gold: 40, cause: 'full' },
     {
       row: 'vendored',
       text: 'Inventory full: Oak Staff vendored for 40 gold',
@@ -200,7 +234,14 @@ const SILENT: [string, Effect][] = [
   ['a farming clear', { k: 'zone_cleared', zone: 4, advancedTo: 4 }],
   ['a common drop', { k: 'drop', item: oakStaff('common') }],
   ['an uncommon drop', { k: 'drop', item: oakStaff('uncommon') }],
-  ['a common item vendored', { k: 'drop_vendored', item: oakStaff('common'), gold: 5 }],
+  [
+    'a common item vendored',
+    { k: 'drop_vendored', item: oakStaff('common'), gold: 5, cause: 'full' },
+  ],
+  [
+    'an uncommon item the setting vendored',
+    { k: 'drop_vendored', item: oakStaff('uncommon'), gold: 8, cause: 'setting' },
+  ],
   ['a hit', { k: 'hit', by: 'h1', target: 'e1', amount: 12 }],
   ['a heal', { k: 'heal', by: 'h1', target: 'h2', amount: 12 }],
   ['an action', { k: 'act', actor: 'h1', action: 'attack', at: 0 }],
@@ -335,10 +376,10 @@ test('one epic and two rare drops: three single forms, the epic first', () => {
 
 test('each vendored item is its own toast, at its own reveal', () => {
   const effects: Effect[] = [
-    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i1' }, gold: 40 },
-    { k: 'drop_vendored', item: { ...oakStaff('epic'), id: 'i2' }, gold: 30 },
-    { k: 'drop_vendored', item: { ...oakStaff('common'), id: 'i3' }, gold: 5 },
-    { k: 'drop_vendored', item: { ...oakStaff('legendary'), id: 'i4' }, gold: 25 },
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i1' }, gold: 40, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('epic'), id: 'i2' }, gold: 30, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('common'), id: 'i3' }, gold: 5, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('legendary'), id: 'i4' }, gold: 25, cause: 'full' },
   ]
   expect(toastsFor(effects, null, BOSSES)).toEqual(
     [
@@ -361,11 +402,12 @@ test('drop and vendored toasts wait for their item, a zone arrival for its zone;
     drop('rune_staff', 'legendary', 'i-l'),
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
     { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
-    { k: 'wipe', retreatedTo: 2 },
+    { k: 'retreat', zone: 3 },
+    { k: 'wipe', zone: 4 },
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
     drop('ember_rod', 'epic', 'i-e'),
     drop('oak_staff', 'rare', 'i-r'),
-    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i-v' }, gold: 40 },
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i-v' }, gold: 40, cause: 'full' },
     { k: 'level_up', heroId: ids[0], level: 6 },
     trade('sold', 'item', 'oak_staff', 120),
     trade('bought', 'item', 'oak_staff', 120),
@@ -375,6 +417,7 @@ test('drop and vendored toasts wait for their item, a zone arrival for its zone;
     ['legendary_drop', { item: 'i-l' }],
     ['recruit', null],
     ['reward', null],
+    ['retreat', null],
     ['wipe', null],
     ['zone_arrival', { zone: 3 }],
     ['rare_drop', { item: 'i-e' }],
@@ -486,8 +529,10 @@ test('rows that never fold give one toast per effect', () => {
     { k: 'hero_recruited', hero: { ...MORWEN, id: 'h-2', epithet: 'the Wise' }, via: 'tavern' },
     { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
     { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80 },
-    { k: 'wipe', retreatedTo: 2 },
-    { k: 'wipe', retreatedTo: 1 },
+    { k: 'retreat', zone: 3 },
+    { k: 'retreat', zone: 2 },
+    { k: 'wipe', zone: 4 },
+    { k: 'wipe', zone: 4 },
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
     { k: 'zone_cleared', zone: 4, advancedTo: 5 },
   ]
@@ -496,6 +541,8 @@ test('rows that never fold give one toast per effect', () => {
     'recruit',
     'reward',
     'reward',
+    'retreat',
+    'retreat',
     'wipe',
     'wipe',
     'zone_arrival',
@@ -513,13 +560,15 @@ test("a burst mixing kinds raises one toast per row's group, in the table's orde
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
     { k: 'level_up', heroId: ids[1], level: 6 },
     drop('rune_staff', 'legendary'),
-    { k: 'wipe', retreatedTo: 2 },
+    { k: 'wipe', zone: 4 },
+    { k: 'retreat', zone: 3 },
     drop('ember_rod', 'epic'),
     trade('returned', 'item', 'storm_rod', 0),
   ]
   expect(toastsFor(effects, view, BOSSES).map((t) => [t.text, t.timeoutMs])).toEqual([
     ['Legendary drop: Rune Staff', LONG],
-    ['The party fell, retreating to zone 2', LONG],
+    ['The party retreats to zone 3, Marsh of Sighs', LONG],
+    ['The party fell, back to wave 1 of zone 4, Old Barrow Hills', SHORT],
     ['The party reached zone 4, Old Barrow Hills', SHORT],
     ['Epic drop: Ember Rod', SHORT],
     ['Rare drop: Willow Staff', SHORT],

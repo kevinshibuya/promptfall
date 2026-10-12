@@ -120,6 +120,7 @@ const DROP: Effect = {
     id: 'i',
     base: 'iron_sword',
     rarity: 'rare',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,

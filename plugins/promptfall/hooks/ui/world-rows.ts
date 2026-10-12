@@ -3,6 +3,7 @@
 import type { GameView, WorldState } from '../../types'
 import { IN_PROCESS } from '../server'
 import { gates } from '../view'
+import { zoneMark } from '../zone-words'
 import { type ShownBoss, shownBoss } from './boss'
 import { formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
@@ -28,7 +29,7 @@ export function recordsRow(
   world: WorldState,
   cells = Number.POSITIVE_INFINITY,
 ): string {
-  const records = `highest zone ${view.highestZone} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  const records = `highest zone ${zoneMark(view.highestZone)} · kills ${view.kills} · wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
   if (gates(world, view.account).bossOpen) return records
   const noted = `${records} · world boss is off`
   return [...noted].length <= cells ? noted : records
@@ -50,7 +51,10 @@ export function worldRows(
   else if (!snapshot) presence = { text: 'connecting to the world…', dim: true }
   else {
     const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
-    presence = { text: `${snapshot.online} online · zone ${view.zone}: ${here}`, dim: world.stale }
+    presence = {
+      text: `${snapshot.online} online · ${zoneMark(view.zone, 'zone ')}: ${here}`,
+      dim: world.stale,
+    }
   }
   const shown = shownBoss(view, world)
   let records = recordsRow(view, world)

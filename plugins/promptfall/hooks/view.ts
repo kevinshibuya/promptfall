@@ -12,12 +12,15 @@ import type {
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
 import {
+  affixValue,
   content,
   fill,
   type GameState,
   heroStats,
   type Item,
   type LootEntry,
+  reforgeCost,
+  zoneAt,
 } from './vendor/sim.js'
 
 const LOOT_LINES = 12
@@ -27,7 +30,7 @@ export function heroName(template: string, epithet: string): string {
   return epithet ? `${name} ${epithet}` : name
 }
 
-export function vendorValue(item: Item): number {
+export function vendorValue(item: Pick<Item, 'base' | 'rarity'>): number {
   const minZone = content.itemBases[item.base]?.minZone ?? 1
   return content.rarity[item.rarity].vendorGoldPerZone * minZone
 }
@@ -54,7 +57,9 @@ export function tradeName(kind: 'item' | 'hero', base: string): string {
 }
 
 function affixLine(item: Item): string {
-  return item.affixes.map((a) => `${content.affixes[a.id]?.name ?? a.id} +${a.value}`).join(', ')
+  return item.affixes
+    .map((a) => `${content.affixes[a.id]?.name ?? a.id} +${affixValue(item, a)}`)
+    .join(', ')
 }
 
 export function listingView(listing: Listing): ListingView {
@@ -156,12 +161,12 @@ function itemView(item: Item): ItemView {
     rarity: item.rarity,
     affixes: item.affixes.map((a) => {
       const def = content.affixes[a.id]
-      return def ? `${def.name} +${a.value} ${def.stat}` : a.id
+      return def ? `${def.name} +${affixValue(item, a)} ${def.stat}` : a.id
     }),
     equippedBy: item.equippedBy,
     classes: base?.classes ?? [],
     vendorValue: vendorValue(item),
-    reforgeCost: content.rarity[item.rarity].reforgeCost,
+    reforgeCost: reforgeCost(item),
     tradeableAt: item.tradeableAt,
   }
 }
@@ -288,10 +293,11 @@ export function toGameView(
     heroes,
     enemies,
     zone: state.zone,
-    zoneName: content.zones[state.zone - 1]?.name ?? `Zone ${state.zone}`,
+    zoneName: zoneAt(state.zone)?.def.name ?? `Zone ${state.zone}`,
     wave: state.wave,
     gold: state.gold,
     farm: state.farm,
+    autoVendor: state.autoVendor,
     lastDrop: loot[loot.length - 1] ?? null,
     loot,
     highestZone: state.highestZone,

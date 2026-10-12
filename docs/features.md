@@ -7,13 +7,18 @@ words.
 
 **Heroes.** A hero is one of four classes (Knight, Black Mage, White Mage, Archer) with a
 generated name, a rarity and the traits its rarity rolls. It levels from kill XP up to its
-rarity's cap, from 20 for Common to 50 for Legendary. Its sprite wears its rarity colour, from
-Common grey to Legendary gold.
+rarity's cap, from 20 for Common to 50 for Legendary. Rarer heroes carry higher base stats and
+growth: the rarity multiplies them by the table items use, from 100% for Common to 150% for
+Legendary, so a Rare recruit outhits and outlasts a Common of its level from level 1. Each level
+costs a little more XP than the last, from 60 for level 2 to about 45 thousand for level 50:
+about 10 thousand in all to reach level 10, 207 thousand to reach 30 and 836 thousand to reach
+50. A hit lands its attack scaled by 100 / (100 + the target's defence), so 100 defence halves
+it, never below 1. Its sprite wears its rarity colour, from Common grey to Legendary gold.
 
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
 Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
-the next zone boss kill or wipe, farm restarts and wipes in zone 1 included (on a fresh save,
+the next zone boss kill, wipe or retreat, farm restarts included (on a fresh save,
 before the first kill, at once), and the stage draws the party in the list's order. A new save
 starts with one Common hero of each class, three of them already in the party.
 
@@ -22,8 +27,8 @@ Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bos
 drop recruit contracts that bring a hero straight into the roster. A contract that finds the
 roster full is vendored for gold.
 
-**Rests.** Each prompt the player submits is a short rest: every hero heals 30% of max HP, and
-fallen heroes get up at 30%.
+**Rests.** Each prompt the player submits is a short rest: every hero heals 50% of max HP, and
+fallen heroes get up at 50%.
 
 ## Combat
 
@@ -40,19 +45,34 @@ ally. The party window shows each hero's gauge filling and turning gold when ful
 the hero who is acting; enemies' gauges never show.
 
 **Zone bosses.** After the tenth wave the zone's boss takes the stage, standing at its full size
-over the small party. Beating it moves the party on to the next of twelve zones, from Greenmeadow
-Road to The Unwritten Reach. The zone's words arrive with the new backdrop: once the boss's chest
-has played and its row has left, the backdrop changes, and only then does the combat log say "The
+over the small party. Beating it moves the party on to the next zone: twelve of them, from
+Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
+all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
+played and its row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
-percentage.
+percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
+zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
+more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
+backdrop, ramping on from zone 12's numbers with no wall at the door, stronger with every zone and
+worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity odds; a boss
+contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the arrival toast
+and the log name the tier in words, "The party reached tier 2, zone 1, Greenmeadow Road", and the
+enemy window's title in the short form that fits it, "T2 Z1 · Wave 3". Inside tier 1 they read as
+before.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
 arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
 
-**Wipe.** When every hero falls, the party retreats one zone (never below zone 1) to wave 1 at
-full health, and nothing is lost. The combat log says so, and a toast names the zone it fell back
-to.
+**Wipe.** When every hero falls, the party restarts the zone it is in at wave 1, at full health,
+and nothing is lost; the game counts the zone's wipes. The combat log says "The party fell.", and
+a short toast reads "The party fell, back to wave 1 of zone 4, Old Barrow Hills".
+
+**Retreat.** The third wipe in a zone with no zone boss kill between them is a retreat: the party
+falls back one zone to wave 1 at full health (in zone 1 it restarts zone 1), and the wipe count
+starts again. A zone boss kill or any change of zone also starts it again. The combat log says
+"The party retreats to zone 3.", and a long toast reads "The party retreats to zone 3, Marsh of
+Sighs".
 
 **Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
@@ -66,16 +86,21 @@ that fall behind are dropped; kills, drops, level-ups, deaths and sales always g
 
 **Drops and rarities.** Kills drop items. An item is a base type, a rarity (Common, Uncommon,
 Rare, Epic, Legendary) and one rolled affix for each rarity step above Common, and rarer items
-carry higher base stats. Deeper zones and bosses roll rarer drops. A kill that drops an item
-leaves a chest where the enemy stood: it falls out of the enemy as it fades, sits closed, opens,
-and the item rises out of it on a glow in its rarity colour, wider the rarer the item. The item
-holds there longer the rarer it is (under a second for a Common, two for a Legendary), then the
-item, its glow and the chest fade; the next enemy steps on after it. An auto-vendored drop plays
-the same chest, and a sandbox item is the drop of the front monster, struck down for it. The combat log's drop
-line, the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits
-for the reveal: they land together once the item has risen, not at the kill, while sales and
-purchases show at once. The Loot tab shows the last two rows, drops and sales
-alike, coloured by rarity.
+carry higher base stats. An item also carries an item tier, set when it drops from its base's
+minimum zone (zones 1 to 3 are tier 1, 4 to 6 tier 2, 7 to 9 tier 3, 10 to 12 tier 4), and every drop in
+the ladder's tier 2 is item tier 5 and in tier 3 item tier 6. An affix keeps its flat roll, and
+what it counts for in stats, in the detail window and in a listing is that roll times the item
+tier's multiplier (×1, ×2, ×3.5, ×6, ×10, ×16), so a deeper item beats a rarer shallow one.
+Deeper zones and bosses roll rarer drops. A kill that drops an item leaves a chest where the
+enemy stood: it falls out of the enemy as it fades, sits closed, opens, and the item rises out of
+it on a glow in its rarity colour, wider the rarer the item. The item holds there longer the
+rarer it is (under a second for a Common, two for a Legendary), then the item, its glow and the
+chest fade; the next enemy steps on after it. An auto-vendored drop plays the same chest, and a
+sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
+the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
+the reveal: they land together once the item has risen, not at the kill, while sales and
+purchases show at once. The Loot tab shows the last two rows, drops and sales alike, coloured by
+rarity.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its
@@ -84,10 +109,15 @@ armour, accessory), items are gated by class, and an equipped item still takes a
 
 **Vendoring.** Vendoring sells an item to the game for gold, after a Yes or No; Common and
 Uncommon items can only be vendored. A drop that finds the inventory full is vendored on the spot,
-and the combat log says so.
+and the combat log says so. The auto-vendor setting, off on every save and kept with the account,
+vendors a Common drop on pickup, and an Uncommon one once the party is past zone 3, unless a party
+hero has the item's slot empty and could wear it; it never touches a Rare or better. Its chest
+plays as a full inventory's does and the combat log says `Oak Staff vendored, 3G.`
 
-**Reforging.** Reforging rerolls one affix of an item for gold, priced by the item's rarity. The
-affix to reroll is chosen in a command window.
+**Reforging.** Reforging rerolls one affix of an item for gold: it rolls the same flat range and
+the item keeps its tier. The price is the rarity's price times the item tier's multiplier, shown on
+the Reforge row of the Inventory command window before the pick, and the Odds tab says reforge is
+priced by rarity and tier. The affix to reroll is chosen in a command window.
 
 **Expansions.** The inventory starts at 30 slots and grows to 90; the roster starts at 24 heroes
 and grows to 48. Each step is bought with gold from the Odds tab, which shows the next step's
@@ -138,8 +168,8 @@ the message window, with a hotkey to the Account tab.
 ## World
 
 **Presence.** The World tab shows how many players are online and the names in your zone, and the
-Leaderboards tab shows who is online by zone. Without fresh news from the server for 45 seconds,
-the World tab dims as stale.
+Leaderboards tab shows who is online by zone. Both name a zone past tier 1 as "T2 Z1" and one
+inside it as today. Without fresh news from the server for 45 seconds, the World tab dims as stale.
 
 **Chat.** One global channel lives in the pane's Chat tab: a row per message, newest at the
 bottom, the ▶ message whole in the detail window. Enter on a row puts the cursor in the compose
@@ -148,7 +178,9 @@ the message, naming the rule. The band's World tab shows the latest message as a
 Chat needs a server: the in-process fake (`/promptfall server local`) has it off and says so in place.
 
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
-damage this week, your own rows in gold.
+damage this week, your own rows in gold. The highest zone is the running number, so tier 2's zone 1
+ranks above zone 12; past 12 it reads "T2 Z1", here, on the World tab's records row and on the
+Account tab, and the plain number inside tier 1.
 
 **Bots.** An HTTP server can run bots (`--bots <n>`): seeded accounts that play, chat, trade and
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
@@ -295,21 +327,26 @@ the foot saying what the keys do. Tab or the arrows move the ▶, Enter runs the
 command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cancels and Reset ask
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
-**Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer), the band
-shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on
-this server, each of the last two asking Yes or No. Its detail window names the server, the client,
-the mode and the session.
+**Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer, and
+Auto-vendor off or on, the one kept with the account rather than the machine), the band shown or
+collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on this
+server, each of the last two asking Yes or No. A session that is not playing shows Auto-vendor and
+cannot change it. Its detail window names the server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
-sells the inventory and roster expansions.
+sells the inventory and roster expansions. Past tier 1 its title and its message name the tier
+("Odds · tier 2, zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
+the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
+priced by rarity and tier.
 
 **Motion.** Motion is full by default; set to still, the idle bob stops while attacks and hits
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
 
 **The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
-and show the band for the session while play goes on, `farm` flips the tactics, and `server <url>`
-or `server local` points the machine at an HTTP server or at the in-process fake, each with its
-own account; `server` alone says which is in force. A fresh install, with no server set, plays on
+and show the band for the session while play goes on, `farm` flips the tactics, `autovendor on`
+and `autovendor off` set the account's auto-vendor setting (any other word answers the usage),
+and `server <url>` or `server local` points the machine at an HTTP server or at the in-process
+fake, each with its own account; `server` alone says which is in force. A fresh install, with no server set, plays on
 the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
@@ -318,14 +355,16 @@ another session makes that one the primary. A prompt goes through at once and th
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
-trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
+trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
 again. The first answer sends everything played during the outage at once. When the server runs a
-newer game than the plugin, the band asks for a plugin update; when this machine's save is from an
-older game, it asks for a reset from the Account tab. When the server will not make this machine
+newer game than the plugin, the band asks for a plugin update. A save from an older game is
+migrated by the server the first time it loads it, heroes, items and gold kept, and the local and
+sandbox saves the same way; the band asks for a reset from the Account tab only when the server
+cannot migrate it, and the server's log says why. When the server will not make this machine
 an account (too many new ones from its address this hour), the band shows the server's message
 and the plugin asks again five minutes later. A banned account's band shows the ban and its reason,
 and play stays paused until a new session asks again.
@@ -333,17 +372,17 @@ and play stays paused until a new session asks again.
 ## Notifications and cues
 
 **Toasts.** Only the primary session toasts, one sentence per event worth a glance: a Rare or
-better drop, a recruit, a level-up, a zone arrival, a wipe, a boss reward, a sale, a purchase, a
+better drop, a recruit, a level-up, a zone arrival, a wipe, a retreat, a boss reward, a sale, a purchase, a
 return, a world boss appearing or going down, a revoked item, and a Rare or better drop vendored
 for lack of room. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
-recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
+recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival keeps
+legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat or a zone arrival keeps
 its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
-A wipe toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
+A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
@@ -387,10 +426,13 @@ strikes the front monster down and the item, common unless a rarity is given, is
 with the kill's XP and gold, and a zone boss's kill clears its zone. With no monster on the field,
 between spawns or against a world boss, the item drops alone: against a world boss its chest
 falls on the boss, and between spawns a chest on the empty ground still plays on the front slot,
-the next monster stepping on after it. With the inventory full it is
-vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
-gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
-refuses with a full roster. `wipe` makes the party fall now. `boss`, `zone` and `wipe` refuse while
+the next monster stepping on after it. With the inventory full, or when the auto-vendor setting
+sells it, it is vendored, as in play, and the reply says which: `vendored, inventory full`, or
+`auto-vendored` with the gold the vendor paid. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
+gold. `zone <n>` moves the party to that zone at wave 1, any zone up to the ladder's end at 36,
+and refuses past it with the range. `recruit [rarity]` recruits a hero, and
+refuses with a full roster. `wipe` makes the party fall now: it restarts the
+zone, and the third in a zone retreats. `boss`, `zone` and `wipe` refuse while
 the party fights a world boss. `reset` throws the sandbox save away and starts a fresh one in
 place. Names match by the start of a name, any word in it or its id, and an ambiguous or unknown
 name answers with the candidates.

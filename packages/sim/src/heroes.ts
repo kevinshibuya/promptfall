@@ -1,4 +1,4 @@
-import { content } from './content'
+import { content, oddsAt } from './content'
 import { draw, drawWeighted, heroStats, newId } from './progression'
 import { compareCodeUnits } from './rng'
 import type { Effect, GameState, Hero, Rarity, RecruitVia, Trait } from './types'
@@ -50,11 +50,14 @@ export function pushLog(s: GameState, entry: GameState['lootLog'][number]): void
   if (s.lootLog.length > 50) s.lootLog.splice(0, s.lootLog.length - 50)
 }
 
-/** A boss contract: recruit, or vendor it when the roster is full. */
+/**
+ * A boss contract: recruit, or vendor it when the roster is full. It rolls the tier's odds, as the
+ * Odds tab shows them; the vendor gold reads the running zone.
+ */
 export function rollContract(s: GameState, effects: Effect[]): void {
-  const zone = content.zones[s.zone - 1]
-  if (!zone) return
-  const rarity = drawWeighted(s, zone.bossRarityWeights)
+  const odds = oddsAt(s.zone)
+  if (!odds) return
+  const rarity = drawWeighted(s, odds.bossRarityWeights)
   const hero = generateHero(s, rarity)
   if (s.roster.length < s.rosterCap) {
     recruitHero(s, hero, 'contract', effects)

@@ -3,6 +3,7 @@ import type { BoardsState, DialogState, GameView, WorldState } from '../../../ty
 import { WORLD_DEFAULT } from '../../state'
 import { tilePositions } from '../../windows/kit'
 import { GAUGE_FULL_RGB, TEXT_RGB, WARN_RGB } from '../../windows/tuning'
+import { onlineLine } from '../leaderboards'
 import { boardsLoaded, paneInput, paneView } from './fixtures'
 import type { PaneInput } from './input'
 import { boardsPane } from './leaderboards'
@@ -54,6 +55,20 @@ test('the 42 lines page by the ▶', () => {
   expect(lines[6]).toBe('  Boss damage this week')
 })
 
+test('the highest zone past tier 1 reads its tier and base zone', () => {
+  const loaded = boardsLoaded().boards
+  const top = [
+    { accountId: 'p0', name: 'player0', value: 36 },
+    { accountId: 'p1', name: 'player1', value: 13 },
+    { accountId: 'a1', name: 'kevin', value: 12 },
+  ]
+  const b = boardsPane(input({ boards: loaded ? { ...loaded, highestZone: top } : null }))
+  const lines = linesOf(win(b, 'list'))
+  expect(lines[1]).toMatch(/^▶ 1\. player0 +zone T3 Z12$/)
+  expect(lines[2]).toMatch(/^ {2}2\. player1 +zone T2 Z1$/)
+  expect(lines[3]).toMatch(/^ {2}3\. kevin +zone 12$/)
+})
+
 test('no boss damage yet, loading, closed', () => {
   const loaded = boardsLoaded().boards
   const none = boardsPane(
@@ -96,6 +111,26 @@ test('the detail: who is online, as a sentence', () => {
     ' Online by zone: z1 3 · z2 5',
   ])
   expect(linesOf(win(boardsPane(input()), 'detail'))[1]).toBe(' Connecting to the world…')
+})
+
+test('Online by zone marks a zone past tier 1 by its tier and leaves tier 1 as today', () => {
+  const world: WorldState = {
+    ...WORLD_DEFAULT,
+    snapshot: {
+      serverNow: 0,
+      speed: 1,
+      online: 3,
+      zones: [
+        { zone: 12, count: 2 },
+        { zone: 13, count: 1 },
+      ],
+      here: [],
+      boss: null,
+      chat: [],
+      flags: {},
+    },
+  }
+  expect(onlineLine(openView(), world)).toBe('Online by zone: z12 2 · T2 Z1 1')
 })
 
 test('wide and narrow pass tilePositions', () => {

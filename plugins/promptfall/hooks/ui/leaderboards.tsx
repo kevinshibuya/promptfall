@@ -1,6 +1,7 @@
 import type { BoardsState, GameView, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { gates } from '../view'
+import { zoneMark } from '../zone-words'
 import { type After, errorText, flash, type Updater } from './trade'
 
 /** Fetches the boards; the zone counts come from the world snapshot, never fetched here. */
@@ -25,5 +26,5 @@ export function onlineLine(view: GameView, world: WorldState | null): string {
   const snapshot = world?.snapshot
   if (!snapshot) return 'connecting to the world…'
   if (snapshot.zones.length === 0) return 'nobody online'
-  return `Online by zone: ${snapshot.zones.map((z) => `z${z.zone} ${z.count}`).join(' · ')}`
+  return `Online by zone: ${snapshot.zones.map((z) => `${zoneMark(z.zone, 'z')} ${z.count}`).join(' · ')}`
 }

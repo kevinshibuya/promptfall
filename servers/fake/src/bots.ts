@@ -9,13 +9,13 @@ import type {
 } from '@promptfall/protocol'
 import { Mirror } from '@promptfall/protocol/mirror'
 import {
+  baseTier,
   content,
   type GameState,
   type Item,
   type PlayerEvent,
   RARITIES,
   type Rarity,
-  SIM_VERSION,
   vendorValue,
 } from '@promptfall/sim'
 import {
@@ -167,11 +167,11 @@ export function startBots(options: BotOptions): Bots {
       let saved = (await options.kv.get(botKey(i))) as Saved | undefined
       if (!saved) saved = await mint(i, name)
       let b = await boot(saved)
-      // A saved bot behind the sim version, a token the store no longer knows, or a name from
-      // before the bot mark (an unmarked account that would hold a rank) is minted again.
+      // A token the store no longer knows, or a name from before the bot mark (an unmarked
+      // account that would hold a rank), is minted again. A bot behind the sim version is not:
+      // its bootstrap migrates it, listings and all, and its first write saves it.
       if (
         'refusal' in b ||
-        b.state.v !== SIM_VERSION ||
         b.account.accountId !== saved.accountId ||
         b.account.displayName !== name
       ) {
@@ -294,6 +294,7 @@ export function startBots(options: BotOptions): Bots {
         id: 'probe',
         base,
         rarity: 'rare',
+        tier: baseTier(base),
         affixes: [],
         equippedBy: null,
         tradeableAt: null,

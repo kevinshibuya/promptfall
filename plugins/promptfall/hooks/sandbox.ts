@@ -1,5 +1,15 @@
 import { type GameHandle, PAUSED_LINE } from './engine'
-import { content, RARITIES, type Rarity, type SandboxEvent } from './vendor/sim.js'
+import { formatCount } from './ui/format'
+import {
+  content,
+  LADDER_END,
+  RARITIES,
+  type Rarity,
+  type SandboxEvent,
+  zoneAt,
+} from './vendor/sim.js'
+import { vendorValue } from './view'
+import { zonePhrase, zoneWords } from './zone-words'
 
 export const SANDBOX_OFF = 'Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.'
 export const SANDBOX_PINS_SERVER =
@@ -141,13 +151,17 @@ async function item(game: GameHandle, args: string): Promise<string> {
   const base = pick('item', 'Items', query, ITEM_BASES)
   if (typeof base === 'string') return base
   if (!isRarity(r)) return r
-  const before = new Set((await game.view())?.inventory.map((i) => i.id))
+  const was = await game.view()
+  const before = new Set(was?.inventory.map((i) => i.id))
+  const full = was ? was.inventory.length >= was.inventoryCap : false
   const refused = await grant(game, { t: 'sandbox_item', base: base.id, rarity: r })
   if (refused) return refused
   const added = (await game.view())?.inventory.some((i) => !before.has(i.id)) ?? false
-  return added
-    ? `Sandbox: ${base.name} (${r}) dropped`
-    : `Sandbox: ${base.name} vendored, inventory full`
+  if (added) return `Sandbox: ${base.name} (${r}) dropped`
+  // Not taken in: a full inventory, or the auto-vendor setting sold it with room to spare.
+  return full
+    ? `Sandbox: ${base.name} vendored, inventory full`
+    : `Sandbox: ${base.name} auto-vendored, ${formatCount(vendorValue({ base: base.id, rarity: r }))}G`
 }
 
 async function level(game: GameHandle, args: string): Promise<string> {
@@ -174,10 +188,10 @@ async function level(game: GameHandle, args: string): Promise<string> {
 async function zone(game: GameHandle, args: string): Promise<string> {
   if (!/^\d+$/.test(args)) return 'Usage: /promptfall sandbox zone <n>'
   const n = Number(args)
-  const def = content.zones[n - 1]
-  if (!def) return `Sandbox: zones run 1 to ${content.zones.length}`
+  const def = zoneAt(n)?.def
+  if (!def || n > LADDER_END) return `Sandbox: zones run 1 to ${LADDER_END}`
   const refused = await grant(game, { t: 'sandbox_zone', zone: n })
-  return refused ?? `Sandbox: zone ${n}, ${def.name}`
+  return refused ?? `Sandbox: ${zoneWords(n)}`
 }
 
 async function recruit(game: GameHandle, args: string): Promise<string> {
@@ -190,10 +204,16 @@ async function recruit(game: GameHandle, args: string): Promise<string> {
   return `Sandbox: ${hero?.name ?? 'a hero'} (${r}) recruited`
 }
 
+/** The wipe path: the zone restarts at wave 1, and its third wipe retreats one zone. */
 async function wipe(game: GameHandle): Promise<string> {
+  const from = (await game.view())?.zone ?? 1
   const refused = await grant(game, { t: 'sandbox_wipe' })
   if (refused) return refused
-  return `Sandbox: the party fell, retreating to zone ${(await game.view())?.zone ?? 1}`
+  const zone = (await game.view())?.zone ?? 1
+  // Zone 1's third wipe restarts it too: the reply cannot tell it from a wipe, and need not.
+  return zone < from
+    ? `Sandbox: the party retreats to ${zonePhrase(zone)}`
+    : `Sandbox: the party fell, back to wave 1 of ${zonePhrase(zone)}`
 }
 
 /**

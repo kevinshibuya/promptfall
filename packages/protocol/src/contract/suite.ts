@@ -1,4 +1,5 @@
 import {
+  baseTier,
   content,
   createInitialState,
   GAUGE_FULL,
@@ -7,6 +8,7 @@ import {
   hashState,
   heroStats,
   type Item,
+  type MigrationChain,
   type PlayerEvent,
   replay,
   type ServerEvent,
@@ -52,12 +54,26 @@ export type ContractHost = {
   /** The ban rules skip a host without bans. */
   ban?(accountId: string, reason: string): Promise<{ reason: string; at: number } | null>
   unban?(login: string): Promise<{ login: string; lifted: string[] } | null>
+  /**
+   * Test hosts only: rewrites the account's stored record as one written at sim version `v`, its
+   * log kept. The migration rules skip a host without it.
+   */
+  rewind?(accountId: string, v: number): Promise<void>
 }
 
 export type ContractMake = (
   clock: ContractClock,
-  /** `kv`: a store shared between two hosts (rule 40); a fresh one when absent. */
-  options: { flags: Record<string, boolean>; kv?: KeyValue },
+  /**
+   * `kv`: a store shared between two hosts (rule 40); a fresh one when absent. `migrations`: the
+   * chain a record behind the sim version walks; the host's own when absent. `log`: the ledger's
+   * notes.
+   */
+  options: {
+    flags: Record<string, boolean>
+    kv?: KeyValue
+    migrations?: MigrationChain
+    log?: (line: string) => void
+  },
 ) => Promise<{ client: ServerClient; host?: ContractHost }>
 
 function makeClock(start = 1_700_000_000_000): ContractClock {
@@ -77,7 +93,17 @@ const DAY = 86_400_000
 const WEEK = 604_800_000
 
 function rareItem(id: string, base = 'steel_longsword', patch: Partial<Item> = {}): Item {
-  return { id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null, ...patch }
+  const tier = baseTier(base)
+  return {
+    id,
+    base,
+    rarity: 'rare',
+    tier,
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+    ...patch,
+  }
 }
 
 function commonItem(id: string): Item {
@@ -85,6 +111,7 @@ function commonItem(id: string): Item {
     id,
     base: 'iron_sword',
     rarity: 'common',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,
@@ -248,9 +275,13 @@ export function runServerContract(name: string, make: ContractMake): void {
   }
 
   /** A market scenario: the server, its host and a clock; skipped without a host. */
-  const market = async (ctx: { skip: () => void }, flags: Record<string, boolean> = {}) => {
+  const market = async (
+    ctx: { skip: () => void },
+    flags: Record<string, boolean> = {},
+    options: Pick<Parameters<ContractMake>[1], 'migrations' | 'log'> = {},
+  ) => {
     const clock = makeClock()
-    const { client, host } = await make(clock, { flags })
+    const { client, host } = await make(clock, { flags, ...options })
     if (!host) {
       ctx.skip()
       throw new Error('skipped')
@@ -1278,7 +1309,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const engaged = await engagedOf(a.auth)
       expect(engaged).toHaveLength(1)
       expect(engaged[0]?.stats).toEqual(ZONE1_BOSS)
-      expect(ZONE1_BOSS).toEqual({ hp: 630, atk: 14, def: 4, spd: 5 })
+      expect(ZONE1_BOSS).toEqual({ hp: 350, atk: 16, def: 4, spd: 5 })
       await snapshot(client, a.auth)
       expect(await engagedOf(a.auth)).toHaveLength(1)
       expect(await engagedOf(b.auth)).toHaveLength(1)
@@ -1536,6 +1567,77 @@ export function runServerContract(name: string, make: ContractMake): void {
       )
       expect((await linkFresh(client)).polled).toMatchObject({ status: 'linked' })
       expect(await host.unban(gone.login)).toBeNull()
+    })
+
+    it('rule 44: a record a version behind migrates on load, its pending log replays, a batch commits', async (ctx) => {
+      const lines: string[] = []
+      // A stub step from the version behind: one gold more, so the migration shows.
+      const migrations: MigrationChain = {
+        [SIM_VERSION - 1]: { state: (s) => ({ ...s, gold: (s.gold as number) + 1 }) },
+      }
+      const { client, clock, host, trader } = await market(
+        ctx,
+        {},
+        {
+          migrations,
+          log: (line) => lines.push(line),
+        },
+      )
+      if (!host.rewind) return ctx.skip()
+      const a = await trader('Ann', traderState(44, { inventory: [rareItem('iM')] }))
+      const b = await trader('Bo', strongState(45))
+      // Pending in Bo's log, never batched: a boss engagement and a purchase.
+      await spawn(client, clock, [b, a])
+      const id = lastListing(ok(await client.list(a.auth, { kind: 'item', id: 'iM', price: 100 })))
+      ok(await client.buy(b.auth, id))
+      await host.rewind(b.accountId, SIM_VERSION - 1)
+
+      const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: b.auth.deviceToken })
+      expect(boot.state.v).toBe(SIM_VERSION)
+      expect(boot.state.gold).toBe(50_000 + 1)
+      expect(boot.state.roster.map((h) => [h.id, h.level])).toEqual(
+        b.mirror.committed.roster.map((h) => [h.id, h.level]),
+      )
+      expect(boot.hash).toBe(hashState(boot.state))
+      expect(kindsOf(boot.delivery)).toEqual(['boss_engaged', 'bought'])
+      // The client replays the delivery over the migrated snapshot, as the server did.
+      const mirror = new Mirror(boot)
+      expect(mirror.local.boss?.bossId).toBe(bossIdAt(NEXT_GRID))
+      expect(mirror.local.inventory.at(-1)?.base).toBe('steel_longsword')
+      const migrated: Trader = { auth: b.auth, accountId: b.accountId, mirror, refresh: b.refresh }
+      await commitTicks(client, migrated, 1)
+      expect(lines.filter((l) => l.includes(b.accountId))).toHaveLength(1)
+    })
+
+    it('rule 45: a record with a gap in the chain bootstraps unchanged, and the log says why', async (ctx) => {
+      const lines: string[] = []
+      // An empty chain: no step from the version behind.
+      const { client, host, trader } = await market(
+        ctx,
+        {},
+        {
+          migrations: {},
+          log: (line) => lines.push(line),
+        },
+      )
+      if (!host.rewind) return ctx.skip()
+      const a = await trader('Ann', traderState(46))
+      await host.rewind(a.accountId, SIM_VERSION - 1)
+      for (let i = 0; i < 2; i++) {
+        const boot = await booted(client, {
+          clientVersion: '0.1.0',
+          deviceToken: a.auth.deviceToken,
+        })
+        expect(boot.state).toEqual({ ...a.mirror.committed, v: SIM_VERSION - 1 })
+        expect(boot.cursor).toBe(0)
+        expect(boot.delivery).toEqual(EMPTY)
+      }
+      // Still there, still refused: neither deleted nor migrated.
+      expect((await infoOf(client, a.auth)).account.accountId).toBe(a.accountId)
+      const refusals = lines.filter((l) => l.includes(a.accountId))
+      expect(refusals).toHaveLength(1)
+      expect(refusals[0]).toContain(`v${SIM_VERSION - 1}`)
+      expect(refusals[0]).toContain('gap')
     })
   })
 }

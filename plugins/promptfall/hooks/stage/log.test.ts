@@ -91,13 +91,15 @@ test('each row of the wording table prints as written', () => {
       { k: 'heal', by: h3, target: h1, amount: 14 },
       { k: 'drop', item: item('oak_staff', 'common') },
       { k: 'drop', item: item('oak_staff', 'rare') },
-      { k: 'drop_vendored', item: item('oak_staff', 'common'), gold: 12 },
+      { k: 'drop_vendored', item: item('oak_staff', 'common'), gold: 12, cause: 'full' },
+      { k: 'drop_vendored', item: item('oak_staff', 'common'), gold: 3, cause: 'setting' },
       { k: 'level_up', heroId: h1, level: 5 },
       { k: 'hero_fell', heroId: h1 },
       { k: 'boss_spawned', kind: 'zone_boss', def: 'goblin_scout' },
       { k: 'zone_cleared', zone: 3, advancedTo: 4 },
       { k: 'zone_cleared', zone: 3, advancedTo: 3 },
-      { k: 'wipe', retreatedTo: 2 },
+      { k: 'wipe', zone: 3 },
+      { k: 'retreat', zone: 2 },
       traded('sold'),
       {
         k: 'rewarded',
@@ -120,12 +122,14 @@ test('each row of the wording table prints as written', () => {
     'Drop: Oak Staff.',
     'Rare drop: Oak Staff.',
     'Inventory full: Oak Staff vendored for 12G.',
+    'Oak Staff vendored, 3G.',
     'Aldric reached level 5.',
     'Aldric falls!',
     'Goblin Scout appears!',
     'The party reached zone 4, Old Barrow Hills.',
     'Zone 3 cleared.',
-    'The party fell, retreating to zone 2.',
+    'The party fell.',
+    'The party retreats to zone 2.',
     'Oak Staff sold for 120G.',
     'Your share of the boss: 120G and Oak Staff.',
     'Your share of the boss: 120G.',
@@ -295,25 +299,43 @@ test('a burst more than a tick behind drops hit lines, never a drop or a level-u
   expect(lines.some((l) => l.charMs === CHAR_FAST_MS)).toBe(true)
 })
 
-test('a wipe after a hit that did not kill prints no defeated line', () => {
-  const v = wave()
-  const h1 = v.heroes[0]?.id ?? ''
-  const e1 = v.enemies[0]
-  // The encounter is cleared by the wipe: every enemy leaves the view alive.
-  const after = { ...v, enemies: [] }
-  const { texts } = run(
-    [
-      act(h1, 0),
-      hit(h1, e1?.id ?? '', 1),
-      act(e1?.id ?? '', 500),
-      hit(e1?.id ?? '', h1, 99),
-      { k: 'hero_fell', heroId: h1 },
-      { k: 'wipe', retreatedTo: 1 },
-    ],
-    { before: v, after },
-  )
-  expect(texts.some((t) => t.includes('defeated'))).toBe(false)
-  expect(texts).toContain('The party fell, retreating to zone 1.')
+test('the zone lines carry the tier past zone 12', () => {
+  const { texts } = run([
+    { k: 'zone_cleared', zone: 12, advancedTo: 13 },
+    { k: 'zone_cleared', zone: 36, advancedTo: 36 },
+    { k: 'retreat', zone: 13 },
+  ])
+  expect(texts).toEqual([
+    'The party reached tier 2, zone 1, Greenmeadow Road.',
+    'Tier 3, zone 12 cleared.',
+    'The party retreats to tier 2, zone 1.',
+  ])
+})
+
+test('a wipe or a retreat after a hit that did not kill prints no defeated line', () => {
+  for (const [fall, line] of [
+    [{ k: 'wipe', zone: 1 }, 'The party fell.'],
+    [{ k: 'retreat', zone: 1 }, 'The party retreats to zone 1.'],
+  ] as const) {
+    const v = wave()
+    const h1 = v.heroes[0]?.id ?? ''
+    const e1 = v.enemies[0]
+    // The encounter is cleared by the fall: every enemy leaves the view alive.
+    const after = { ...v, enemies: [] }
+    const { texts } = run(
+      [
+        act(h1, 0),
+        hit(h1, e1?.id ?? '', 1),
+        act(e1?.id ?? '', 500),
+        hit(e1?.id ?? '', h1, 99),
+        { k: 'hero_fell', heroId: h1 },
+        fall,
+      ],
+      { before: v, after },
+    )
+    expect(texts.some((t) => t.includes('defeated'))).toBe(false)
+    expect(texts).toContain(line)
+  }
 })
 
 test('an enemy no view ever held is a Foe, and its kill still prints', () => {
@@ -348,7 +370,7 @@ test('a drop line prints when its item has risen from the chest, not at the kill
       act(by, 0),
       hit(by, target, 30),
       { k: 'drop', item: item('silk_robe', 'rare', 'i1') },
-      { k: 'drop_vendored', item: item('oak_staff', 'common', 'i2'), gold: 12 },
+      { k: 'drop_vendored', item: item('oak_staff', 'common', 'i2'), gold: 12, cause: 'full' },
     ],
     { before: v, after },
   )
