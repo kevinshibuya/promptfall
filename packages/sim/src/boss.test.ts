@@ -206,8 +206,8 @@ describe('scaledBossStats', () => {
       def: Math.floor((STATS.def * z5.def) / z1.def),
       spd: STATS.spd + Math.floor(5 / 3),
     })
-    expect(z1).toMatchObject({ atk: 14, def: 4 })
-    expect(z5).toMatchObject({ atk: 72, def: 16 })
+    expect(z1).toMatchObject({ atk: 16, def: 4 })
+    expect(z5).toMatchObject({ atk: 30, def: 13 })
   })
 })
 

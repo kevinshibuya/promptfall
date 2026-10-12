@@ -21,7 +21,16 @@ export type Migration = {
 /** One step per version, keyed by the version a step takes a state from. */
 export type MigrationChain = Readonly<Record<number, Migration>>
 
-export const MIGRATIONS: MigrationChain = {}
+export const MIGRATIONS: MigrationChain = {
+  // 5 → 6: ratio mitigation, gentler enemy growth and the flatter xp curve. Stats are derived, so
+  // every hero keeps its level and starts it again at 0 xp; nothing changes shape.
+  5: {
+    state: (s) => ({
+      ...s,
+      roster: (s.roster as Record<string, unknown>[]).map((h) => ({ ...h, xp: 0 })),
+    }),
+  },
+}
 
 export type MigrateOptions = { chain?: MigrationChain; to?: number }
 

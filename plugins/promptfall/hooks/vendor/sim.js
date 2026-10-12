@@ -51,22 +51,28 @@ var ARCHETYPES = {
   boss: { hpBp: 7e4, atkBp: 2e4, defBp: 12e3, spd: 5 },
   turn_boss: { hpBp: 3e4, atkBp: 12e3, defBp: 11e3, spd: 5 }
 };
-var ZONE1 = { hp: 90, atk: 7, def: 4, xp: 4, goldMin: 1, goldMax: 3 };
-var GROWTH_BP = { hp: 14500, atk: 15e3, def: 14500, xp: 14e3, gold: 14e3 };
+var ENEMY_TUNING = {
+  zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
+  growthBp: { hp: 11900, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
+  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 6900, 5700, 5250, 4600],
+  zoneHpBp: [1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 1e4, 10500, 9500]
+};
 function grow(value, bp, steps) {
-  let v = value;
+  let v = value * 1e4;
   for (let i = 0; i < steps; i++) v = Math.floor(v * bp / 1e4);
-  return Math.max(1, v);
+  return Math.max(1, Math.floor(v / 1e4));
 }
-var ZONE_BP = [1e4, 1e4, 13e3, 12e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3, 11e3];
-var BASELINES = ZONE_BP.map((zoneBp, z) => [
-  Math.floor(grow(ZONE1.hp, GROWTH_BP.hp, z) * zoneBp / 1e4),
-  Math.floor(grow(ZONE1.atk, GROWTH_BP.atk, z) * zoneBp / 1e4),
-  grow(ZONE1.def, GROWTH_BP.def, z),
-  grow(ZONE1.xp, GROWTH_BP.xp, z),
-  grow(ZONE1.goldMin, GROWTH_BP.gold, z),
-  grow(ZONE1.goldMax, GROWTH_BP.gold, z)
-]);
+function baseline(t, z) {
+  const { zone1, growthBp } = t;
+  return {
+    hp: Math.floor(grow(zone1.hp, growthBp.hp, z) * (t.zoneHpBp[z] ?? 1e4) / 1e4),
+    atk: Math.floor(grow(zone1.atk, growthBp.atk, z) * (t.zoneAtkBp[z] ?? 1e4) / 1e4),
+    def: grow(zone1.def, growthBp.def, z),
+    xp: grow(zone1.xp, growthBp.xp, z),
+    goldMin: grow(zone1.goldMin, growthBp.gold, z),
+    goldMax: grow(zone1.goldMax, growthBp.gold, z)
+  };
+}
 var ROSTERS = [
   [
     ["road_slime", "Road Slime", "tank"],
@@ -181,11 +187,11 @@ function kindOf(archetype) {
 function scale(value, bp) {
   return Math.max(1, Math.floor(value * bp / 1e4));
 }
-function build() {
+function buildEnemies(t) {
   const out = {};
   ROSTERS.forEach((roster, i) => {
     const zone = i + 1;
-    const [hp, atk, def, xp, goldMin, goldMax] = BASELINES[i] ?? [1, 1, 1, 1, 1, 1];
+    const { hp, atk, def, xp, goldMin, goldMax } = baseline(t, i);
     for (const [id, name, archetype] of roster) {
       const a = ARCHETYPES[archetype];
       const kind = kindOf(archetype);
@@ -213,7 +219,7 @@ function build() {
   });
   return out;
 }
-var enemies = build();
+var enemies = buildEnemies(ENEMY_TUNING);
 var zoneRosters = ROSTERS.map((r) => r.map(([id]) => id));
 
 // packages/sim/src/content/epithets.ts
@@ -482,6 +488,63 @@ var traits = {
   quickened: { id: "quickened", name: "Quickened", stat: "spd", rangeBp: [2e3, 4e3] }
 };
 
+// packages/sim/src/content/xp.ts
+var XP_TO_NEXT = [
+  60,
+  195,
+  388,
+  633,
+  926,
+  1262,
+  1640,
+  2058,
+  2514,
+  3007,
+  3536,
+  4100,
+  4697,
+  5328,
+  5991,
+  6686,
+  7412,
+  8168,
+  8954,
+  9770,
+  10615,
+  11489,
+  12390,
+  13320,
+  14277,
+  15262,
+  16273,
+  17311,
+  18375,
+  19465,
+  20581,
+  21722,
+  22889,
+  24080,
+  25297,
+  26538,
+  27803,
+  29093,
+  30406,
+  31743,
+  33104,
+  34489,
+  35896,
+  37327,
+  38780,
+  40257,
+  41756,
+  43277,
+  44821,
+  46387
+];
+function xpToNext(level) {
+  return XP_TO_NEXT[Math.min(Math.max(level, 1), XP_TO_NEXT.length) - 1] ?? 0;
+}
+
 // packages/sim/src/content/zones.ts
 var NAMES = [
   "Greenmeadow Road",
@@ -552,7 +615,7 @@ var content = {
   tavern,
   expansions,
   tactics,
-  xpToNext: (level) => 110 * level * level
+  xpToNext
 };
 
 // packages/sim/src/golden.ts
@@ -615,7 +678,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "ea7e36dbcb84b67d";
+var GOLDEN_HASH = "b232da742e509922";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -977,7 +1040,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 5;
+var SIM_VERSION = 6;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1143,7 +1206,16 @@ function draft(state, mutate) {
 }
 
 // packages/sim/src/migrate.ts
-var MIGRATIONS = {};
+var MIGRATIONS = {
+  // 5 → 6: ratio mitigation, gentler enemy growth and the flatter xp curve. Stats are derived, so
+  // every hero keeps its level and starts it again at 0 xp; nothing changes shape.
+  5: {
+    state: (s) => ({
+      ...s,
+      roster: s.roster.map((h) => ({ ...h, xp: 0 }))
+    })
+  }
+};
 function walk(from, to, chain) {
   if (!Number.isInteger(from)) return { ok: false, reason: "gap", from, to, at: from };
   if (from > to) return { ok: false, reason: "ahead", from, to };
@@ -1254,8 +1326,11 @@ function pickAction(s, unit) {
 
 // packages/sim/src/combat.ts
 var STEPS = TICK_MS / STEP_MS;
+function mitigationBp(def) {
+  return Math.floor(1e6 / (100 + Math.max(0, def)));
+}
 function hitDamage(atk, def, varianceBp) {
-  return scaled(Math.max(1, Math.floor(atk * varianceBp / 1e4) - Math.floor(def / 2)));
+  return scaled(Math.max(1, Math.floor(atk * mitigationBp(def) * varianceBp / 1e8)));
 }
 function damage(s, atk, def) {
   return hitDamage(atk, def, 9e3 + draw(s, 2001));

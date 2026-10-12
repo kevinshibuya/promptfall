@@ -7,8 +7,11 @@ words.
 
 **Heroes.** A hero is one of four classes (Knight, Black Mage, White Mage, Archer) with a
 generated name, a rarity and the traits its rarity rolls. It levels from kill XP up to its
-rarity's cap, from 20 for Common to 50 for Legendary. Its sprite wears its rarity colour, from
-Common grey to Legendary gold.
+rarity's cap, from 20 for Common to 50 for Legendary. Each level costs a little more XP than the
+last, from 60 for level 2 to about 45 thousand for level 50: about 10 thousand in all to reach
+level 10, 207 thousand to reach 30 and 836 thousand to reach 50. A hit lands its attack scaled
+by 100 / (100 + the target's defence), so 100 defence halves it, never below 1. Its sprite wears
+its rarity colour, from Common grey to Legendary gold.
 
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),

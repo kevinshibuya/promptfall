@@ -1297,7 +1297,7 @@ export function runServerContract(name: string, make: ContractMake): void {
       const engaged = await engagedOf(a.auth)
       expect(engaged).toHaveLength(1)
       expect(engaged[0]?.stats).toEqual(ZONE1_BOSS)
-      expect(ZONE1_BOSS).toEqual({ hp: 630, atk: 14, def: 4, spd: 5 })
+      expect(ZONE1_BOSS).toEqual({ hp: 630, atk: 16, def: 4, spd: 5 })
       await snapshot(client, a.auth)
       expect(await engagedOf(a.auth)).toHaveLength(1)
       expect(await engagedOf(b.auth)).toHaveLength(1)

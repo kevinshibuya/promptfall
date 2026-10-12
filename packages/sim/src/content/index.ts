@@ -9,6 +9,7 @@ import { tactics } from './tactics'
 import { tavern } from './tavern'
 import { traits } from './traits'
 import type { Content } from './types'
+import { xpToNext } from './xp'
 import { zones } from './zones'
 
 export type {
@@ -41,5 +42,5 @@ export const content: Content = {
   tavern,
   expansions,
   tactics,
-  xpToNext: (level: number) => 110 * level * level,
+  xpToNext,
 }

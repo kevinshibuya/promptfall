@@ -79,8 +79,14 @@ describe('migrate refuses', () => {
   })
 
   it('a version the chain has no step for', () => {
-    const r = migrate({ ...s0, v: SIM_VERSION - 1 })
-    expect(r).toEqual({ ok: false, reason: 'gap', from: SIM_VERSION - 1, to: SIM_VERSION, at: 4 })
+    const r = migrate({ ...s0, v: SIM_VERSION - 2 })
+    expect(r).toEqual({
+      ok: false,
+      reason: 'gap',
+      from: SIM_VERSION - 2,
+      to: SIM_VERSION,
+      at: SIM_VERSION - 2,
+    })
   })
 
   it('a chain that stops short of the target', () => {
@@ -174,7 +180,10 @@ describe('the clamp', () => {
       chainOf((x) => x),
     )
     for (const h of deep.roster) expect(hero(s, h.id).hp).toBe(h.hp)
-    expect(hero(s, 'h0').hp).toBe(0)
+    // The v5 deep fixture's Common Knight fell in its zone 5 fight; the v6 rules let it live.
+    const fallen = migrate(fixture('v5-deep.json'))
+    if (!fallen.ok) throw new Error(fallen.reason)
+    expect(hero(fallen.state, 'h0').hp).toBe(0)
   })
 
   it('runs once, at the end of the chain, not between steps', () => {
@@ -225,28 +234,70 @@ describe('the goods rule', () => {
   it('refuses goods from a version the chain has no step for', () => {
     const [g] = goods
     if (!g) throw new Error('goods')
-    expect(migrateGoods(g, SIM_VERSION - 1)).toEqual({
+    expect(migrateGoods(g, SIM_VERSION - 2)).toEqual({
       ok: false,
       reason: 'gap',
-      from: SIM_VERSION - 1,
+      from: SIM_VERSION - 2,
       to: SIM_VERSION,
-      at: SIM_VERSION - 1,
+      at: SIM_VERSION - 2,
     })
   })
 })
 
+describe('the 5→6 step: ratio mitigation and the flatter xp curve', () => {
+  // Stats are derived, so the step only zeroes the xp into each hero's level; the clear and the
+  // clamp run at the chain's end. The hashes pin the step's output on the current rules.
+  const PINNED = { golden: '642c61eb81b0f819', deep: '4260c6f6df3435d4' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v5-deep.json' : 'v5.json')
+    const r = migrate(before, { to: 6 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every hero's level on the ${kind} fixture and zeroes the xp into it`, () => {
+      expect(before.roster.some((h) => h.xp > 0)).toBe(true)
+      expect(after.v).toBe(6)
+      expect(after.roster.map((h) => [h.id, h.level])).toEqual(
+        before.roster.map((h) => [h.id, h.level]),
+      )
+      for (const h of after.roster) expect(h.xp).toBe(0)
+    })
+
+    it(`copies the ${kind} fixture's items, gold, zone and party untouched`, () => {
+      expect(after.inventory).toEqual(before.inventory)
+      expect(after.gold).toBe(before.gold)
+      expect(after.zone).toBe(before.zone)
+      expect(after.party).toEqual(before.party)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('clears the encounter outside boss mode and keeps the world boss in it', () => {
+    const golden5 = migrate(fixture('v5.json'), { to: 6 })
+    const deep5 = migrate(fixture('v5-deep.json'), { to: 6 })
+    if (!golden5.ok || !deep5.ok) throw new Error('refused')
+    expect(golden5.state.encounter).toBeNull()
+    expect(deep5.state.boss).not.toBeNull()
+    expect(deep5.state.encounter?.enemies[0]?.kind).toBe('world_boss')
+  })
+})
+
 describe('the chain', () => {
-  // Today the chain is empty and the oldest fixtures are current: the walk is the identity. The
-  // first bump replaces the identity with the expected hash of each fixture after its step.
   for (const kind of ['golden', 'deep'] as const) {
     it(`takes the oldest ${kind} fixture to the current version`, () => {
-      const state = fixture(oldest(kind))
+      const name = oldest(kind)
+      const state = fixture(name)
       const r = migrate(state)
       if (!r.ok) throw new Error(r.reason)
       expect(r.state.v).toBe(SIM_VERSION)
-      expect(r.steps).toBe(0)
-      expect(r.state).toEqual(state)
-      expect(hashState(r.state)).toBe(hashState(state))
+      expect(r.steps).toBe(SIM_VERSION - state.v)
+      expect(r.state.roster.map((h) => h.level)).toEqual(state.roster.map((h) => h.level))
+      expect(hashState(r.state)).toMatch(/^[0-9a-f]{16}$/)
       expect(step(r.state, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
     })
   }

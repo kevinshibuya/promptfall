@@ -30,22 +30,26 @@ describe('the feel probe', () => {
 
   it('measures the reference Knight at every zone of the tier', () => {
     expect(p.zones.map((z) => z.zone)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-    expect(p.zones[4]).toMatchObject({ knightRarity: 'rare', gearTier: 2 })
-    expect(p.zones[8]).toMatchObject({ knightRarity: 'epic', gearTier: 3 })
+    expect(p.zones[4]).toMatchObject({ knightRarity: 'common', gearTier: 2 })
+    expect(p.zones[8]).toMatchObject({ knightRarity: 'legendary', gearTier: 3 })
   })
 
   it('computes zone 1 from content through the sim’s damage, without variance', () => {
-    // Level 3 Common Knight in Bronze Axe, Chainmail and Bone Charm: 92 HP, 14 def. Every wave
-    // enemy's hit is mitigated to its floor of 1, doubled to 2; the Bandit Captain's 14 lands 14.
+    // Level 4 Common Knight in Bronze Axe, Chainmail and Bone Charm: 101 HP, 16 def. The Hedge
+    // Sprite's 10 atk lands 8 through 100 / 116, doubled to 16: 6 hits survived. The Road Slime's
+    // 6 lands 10: 10 hits. The Bandit Captain's 16 lands 26: 3 hits.
     expect(p.zones[0]).toMatchObject({
-      knight: { hp: 92, def: 14 },
-      knightWaveHits: { min: 45, max: 45 },
-      knightBossHits: 6,
+      knight: { hp: 101, def: 16 },
+      knightWaveHits: { min: 6, max: 10 },
+      knightBossHits: 3,
     })
   })
 
-  it('names every zone outside 6 to 10 wave hits or 3 to 4 boss hits, and today that is zone 1', () => {
-    expect(outOfBand(p).some((line) => line.startsWith('zone 1:'))).toBe(true)
+  it('names every zone outside 6 to 10 wave hits or 3 to 4 boss hits, and today there is none', () => {
+    expect(outOfBand(p)).toEqual([])
+    const out = { ...p, zones: p.zones.map((z) => ({ ...z, knightBossHits: 2 })) }
+    expect(outOfBand(out)).toHaveLength(12)
+    expect(outOfBand(out)[0]).toBe('zone 1: boss hits 2, not 3 to 4')
     const inBand = {
       ...p,
       zones: p.zones.map((z) => ({ ...z, knightWaveHits: { min: 6, max: 10 }, knightBossHits: 3 })),

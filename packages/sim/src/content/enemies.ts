@@ -11,28 +11,56 @@ const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number
   turn_boss: { hpBp: 30000, atkBp: 12000, defBp: 11000, spd: 5 },
 }
 
-// Zone 1 baseline, and how each stat grows per zone in basis points.
-const ZONE1 = { hp: 90, atk: 7, def: 4, xp: 4, goldMin: 1, goldMax: 3 }
-const GROWTH_BP = { hp: 14500, atk: 15000, def: 14500, xp: 14000, gold: 14000 }
-
-function grow(value: number, bp: number, steps: number): number {
-  let v = value
-  for (let i = 0; i < steps; i++) v = Math.floor((v * bp) / 10000)
-  return Math.max(1, v)
+/**
+ * The numbers every enemy is built from: the zone 1 baseline, how each stat grows per zone in
+ * basis points, and a per-zone multiplier on atk and on hp over the growth curve.
+ */
+export type EnemyTuning = {
+  zone1: { hp: number; atk: number; def: number; xp: number; goldMin: number; goldMax: number }
+  growthBp: { hp: number; atk: number; def: number; xp: number; gold: number }
+  /** One entry per base zone, in basis points. */
+  zoneAtkBp: readonly number[]
+  zoneHpBp: readonly number[]
 }
 
-// Per-zone difficulty on top of the growth curve, in basis points on hp and atk.
-const ZONE_BP = [10000, 10000, 13000, 12000, 11000, 11000, 11000, 11000, 11000, 11000, 11000, 11000]
+export const ENEMY_TUNING: EnemyTuning = {
+  zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
+  growthBp: { hp: 11900, atk: 13000, def: 13000, xp: 11300, gold: 11300 },
+  zoneAtkBp: [10800, 8500, 8350, 6750, 7050, 6650, 5500, 6700, 6900, 5700, 5250, 4600],
+  zoneHpBp: [10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10000, 10500, 9500],
+}
 
-// Base zone baselines, one per entry of ZONE_BP: hp, atk, def, xp, gold min, gold max.
-const BASELINES: [number, number, number, number, number, number][] = ZONE_BP.map((zoneBp, z) => [
-  Math.floor((grow(ZONE1.hp, GROWTH_BP.hp, z) * zoneBp) / 10000),
-  Math.floor((grow(ZONE1.atk, GROWTH_BP.atk, z) * zoneBp) / 10000),
-  grow(ZONE1.def, GROWTH_BP.def, z),
-  grow(ZONE1.xp, GROWTH_BP.xp, z),
-  grow(ZONE1.goldMin, GROWTH_BP.gold, z),
-  grow(ZONE1.goldMax, GROWTH_BP.gold, z),
-])
+/**
+ * A value after `steps` zones of growth at `bp`. It carries four decimal places between steps and
+ * floors once at the end, so a small value grows too: 5 at ×1.15 is not floored back to 5.
+ */
+function grow(value: number, bp: number, steps: number): number {
+  let v = value * 10000
+  for (let i = 0; i < steps; i++) v = Math.floor((v * bp) / 10000)
+  return Math.max(1, Math.floor(v / 10000))
+}
+
+type Baseline = {
+  hp: number
+  atk: number
+  def: number
+  xp: number
+  goldMin: number
+  goldMax: number
+}
+
+/** The baseline of base zone z + 1. */
+function baseline(t: EnemyTuning, z: number): Baseline {
+  const { zone1, growthBp } = t
+  return {
+    hp: Math.floor((grow(zone1.hp, growthBp.hp, z) * (t.zoneHpBp[z] ?? 10000)) / 10000),
+    atk: Math.floor((grow(zone1.atk, growthBp.atk, z) * (t.zoneAtkBp[z] ?? 10000)) / 10000),
+    def: grow(zone1.def, growthBp.def, z),
+    xp: grow(zone1.xp, growthBp.xp, z),
+    goldMin: grow(zone1.goldMin, growthBp.gold, z),
+    goldMax: grow(zone1.goldMax, growthBp.gold, z),
+  }
+}
 
 // Per zone: four wave enemies (brute, swift, tank, caster), the zone boss, the turn boss.
 const ROSTERS: [string, string, Archetype][][] = [
@@ -153,11 +181,12 @@ function scale(value: number, bp: number): number {
   return Math.max(1, Math.floor((value * bp) / 10000))
 }
 
-function build(): Record<string, EnemyDef> {
+/** Every enemy's stats, xp and gold from the tuning: computed once, at load. */
+export function buildEnemies(t: EnemyTuning): Record<string, EnemyDef> {
   const out: Record<string, EnemyDef> = {}
   ROSTERS.forEach((roster, i) => {
     const zone = i + 1
-    const [hp, atk, def, xp, goldMin, goldMax] = BASELINES[i] ?? [1, 1, 1, 1, 1, 1]
+    const { hp, atk, def, xp, goldMin, goldMax } = baseline(t, i)
     for (const [id, name, archetype] of roster) {
       const a = ARCHETYPES[archetype]
       const kind = kindOf(archetype)
@@ -186,5 +215,5 @@ function build(): Record<string, EnemyDef> {
   return out
 }
 
-export const enemies: Record<string, EnemyDef> = build()
+export const enemies: Record<string, EnemyDef> = buildEnemies(ENEMY_TUNING)
 export const zoneRosters: string[][] = ROSTERS.map((r) => r.map(([id]) => id))

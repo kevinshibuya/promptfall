@@ -200,6 +200,43 @@ describe('zone boss and pending party', () => {
   })
 })
 
+describe('the xp curve', () => {
+  const table = Array.from({ length: 50 }, (_, i) => content.xpToNext(i + 1))
+  const toReach = (level: number) => table.slice(0, level - 1).reduce((n, xp) => n + xp, 0)
+
+  it('is a table of 50 integers, each level dearer than the last', () => {
+    for (const xp of table) expect(Number.isInteger(xp)).toBe(true)
+    for (let i = 1; i < table.length; i++) expect(table[i]).toBeGreaterThan(table[i - 1] ?? 0)
+  })
+
+  it('takes about 10k, 68k, 207k and 836k xp to reach levels 10, 20, 30 and 50', () => {
+    const near = (level: number, total: number) => {
+      expect(toReach(level)).toBeGreaterThan(total * 0.95)
+      expect(toReach(level)).toBeLessThan(total * 1.05)
+    }
+    near(10, 10000)
+    near(20, 68000)
+    near(30, 207000)
+    near(50, 836000)
+  })
+
+  it("levels a hero when a kill's xp reaches the table's entry for its level", () => {
+    const s0 = createInitialState(1)
+    const knight = s0.roster[0]
+    if (!knight) throw new Error('roster')
+    const roster = s0.roster.map((h) =>
+      h.id === knight.id ? { ...h, level: 10, xp: content.xpToNext(10) - 1 } : h,
+    )
+    let s = injectEnemy({ ...s0, roster }, 'road_slime')
+    const enemy = s.encounter?.enemies[0]
+    if (!s.encounter || !enemy) throw new Error('setup')
+    s = { ...s, encounter: { ...s.encounter, enemies: [{ ...enemy, hp: 1 }] } }
+    const r = run(ready(s), [tick])
+    expect(r.effects).toContainEqual({ k: 'level_up', heroId: knight.id, level: 11 })
+    expect(r.state.roster[0]?.level).toBe(11)
+  })
+})
+
 describe('rest', () => {
   it('heals 30% and revives the fallen at 30%', () => {
     const s0 = createInitialState(1)

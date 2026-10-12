@@ -13,6 +13,8 @@ describe('golden replay', () => {
   // SIM_VERSION 4 (combat flow) changed the draw order of every fight, so the v2 pin is gone.
   // SIM_VERSION 5 (turn boss mid-wave, boss-mode wipe) moves it through `v` alone: the script
   // reaches neither path.
+  // SIM_VERSION 6 (ratio mitigation, gentler enemy growth, the flatter xp curve) changes every hit
+  // and every level-up, so the script lands elsewhere.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -21,7 +23,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('ea7e36dbcb84b67d')
+    expect(GOLDEN_HASH).toBe('b232da742e509922')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)
