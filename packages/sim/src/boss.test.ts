@@ -104,7 +104,7 @@ describe('boss mode', () => {
       roster: base.roster.map((h) => (base.party.includes(h.id) ? { ...h, hp: 0 } : h)),
     }
     const r = step(s, tick)
-    expect(r.effects.some((e) => e.k === 'wipe')).toBe(false)
+    expect(r.effects.some((e) => e.k === 'wipe' || e.k === 'retreat')).toBe(false)
     expect(r.state.zone).toBe(3)
     expect(r.state.stats.wipes).toBe(s.stats.wipes)
     expect(r.state.encounter).toEqual(s.encounter)
@@ -113,7 +113,7 @@ describe('boss mode', () => {
     for (const hero of partyHeroes(r.state)) expect(hero.hp).toBe(heroStats(r.state, hero).hp)
   })
 
-  it('rest heals and revives a fallen hero at 30%', () => {
+  it('rest heals and revives a fallen hero at 50%', () => {
     const base = engaged()
     const fallen = base.party[0]
     const s: GameState = {
@@ -123,7 +123,7 @@ describe('boss mode', () => {
     const after = step(s, { t: 'rest' }).state
     const hero = after.roster.find((h) => h.id === fallen)
     if (!hero) throw new Error('no hero')
-    expect(hero.hp).toBe(Math.max(1, Math.floor((heroStats(after, hero).hp * 3000) / 10000)))
+    expect(hero.hp).toBe(Math.max(1, Math.floor((heroStats(after, hero).hp * 5000) / 10000)))
   })
 
   it('boss_disengaged clears the encounter, and the next tick spawns as usual', () => {

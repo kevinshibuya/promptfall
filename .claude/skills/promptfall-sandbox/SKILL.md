@@ -28,7 +28,7 @@ The sandbox is a separate save on the in-process fake where `/promptfall sandbox
 | `gold` | `<n>` | `credited` with reason `sandbox`; no toast | `Sandbox: 5000 gold added` |
 | `zone` | `<n>`, 1 to 12 | `sandbox_zone`: the zone change (wave 1, highest zone bumped), the encounter ended | `Sandbox: zone 4, Old Barrow Hills`, or `Sandbox: zones run 1 to 12` |
 | `recruit` | `[rarity]`, common by default | `sandbox_recruit`: a hero of that rarity through the recruit path, `hero_recruited` with `via: 'sandbox'`, toast `Epic recruit: <name>` | `Sandbox: <name> (epic) recruited`, or `Sandbox: roster full, nobody recruited` |
-| `wipe` | none | `sandbox_wipe`: the wipe path, as if every party hero hit 0 HP: the `wipe` effect, the retreat one zone, the wipe counted, toast `The party fell, retreating to zone 2` | `Sandbox: the party fell, retreating to zone 2` |
+| `wipe` | none | `sandbox_wipe`: the wipe path, as if every party hero hit 0 HP: the `wipe` effect, the zone restarted at wave 1, the wipe counted, toast `The party fell, back to wave 1 of zone 3, Marsh of Sighs`; the third in a zone is the `retreat` effect, one zone back, toast `The party retreats to zone 2, Whisperwood` | `Sandbox: the party fell, back to wave 1 of zone 3`; the third `Sandbox: the party retreats to zone 2` |
 | `reset` | none | The account reset: books and token go, lease and settings stay, a fresh account bootstraps in the same session | `Sandbox: the save starts over` |
 
 `worldboss` draws its boss from the ledger's `WORLD_BOSSES` (The Promptwyrm, The Context Leviathan and the rest), so the replies and toasts name whichever spawned.
@@ -63,8 +63,8 @@ The raw effects are the sim's: `packages/sim/src/sandbox.test.ts` asserts state 
 ```ts
 const { run, view, toasts } = await sandboxOn(on, $)
 await run('zone 3')
-expect(await run('wipe')).toBe('Sandbox: the party fell, retreating to zone 2')
-expect(toasts).toContain('The party fell, retreating to zone 2')
+expect(await run('wipe')).toBe('Sandbox: the party fell, back to wave 1 of zone 3')
+expect(toasts).toContain('The party fell, back to wave 1 of zone 3, Marsh of Sighs')
 ```
 
 ## The world boss in the sandbox

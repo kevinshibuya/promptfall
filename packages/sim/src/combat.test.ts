@@ -24,12 +24,12 @@ describe('combat', () => {
     expect(r.state.tick).toBeGreaterThan(0)
   })
 
-  it('a zone 12 boss wipes a level 1 party at zone 3 and retreats to zone 2 at full hp', () => {
+  it('a zone 12 boss wipes a level 1 party at zone 3, which restarts it at wave 1 at full hp', () => {
     let s: GameState = { ...createInitialState(3), zone: 3, highestZone: 3, wave: 4 }
     s = injectEnemy(s, 'unwritten_one')
     const r = run(s, times(50, { t: 'tick' } as const))
     const wipe = r.effects.find((e) => e.k === 'wipe')
-    expect(wipe).toEqual({ k: 'wipe', retreatedTo: 2 })
+    expect(wipe).toEqual({ k: 'wipe', zone: 3 })
     // Stop at the wipe: replay up to it.
     let t = s
     for (let i = 0; i < 50; i++) {
@@ -37,7 +37,7 @@ describe('combat', () => {
       t = step.state
       if (step.effects.some((e) => e.k === 'wipe')) break
     }
-    expect(t.zone).toBe(2)
+    expect(t.zone).toBe(3)
     expect(t.wave).toBe(1)
     expect(t.encounter).toBeNull()
     expect(t.stats.wipes).toBe(1)
@@ -115,7 +115,9 @@ describe('combat', () => {
       for (let i = 0; i < 2000; i++) {
         const r = step(s, { t: 'tick' })
         s = r.state
-        const progress = r.effects.some((e) => e.k === 'gold' || e.k === 'wipe') || !s.encounter
+        const progress =
+          r.effects.some((e) => e.k === 'gold' || e.k === 'wipe' || e.k === 'retreat') ||
+          !s.encounter
         since = progress ? 0 : since + 1
         worst = Math.max(worst, since)
       }

@@ -18,7 +18,7 @@ its rarity colour, from Common grey to Legendary gold.
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
 Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
-the next zone boss kill or wipe, farm restarts and wipes in zone 1 included (on a fresh save,
+the next zone boss kill, wipe or retreat, farm restarts included (on a fresh save,
 before the first kill, at once), and the stage draws the party in the list's order. A new save
 starts with one Common hero of each class, three of them already in the party.
 
@@ -27,8 +27,8 @@ Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bos
 drop recruit contracts that bring a hero straight into the roster. A contract that finds the
 roster full is vendored for gold.
 
-**Rests.** Each prompt the player submits is a short rest: every hero heals 30% of max HP, and
-fallen heroes get up at 30%.
+**Rests.** Each prompt the player submits is a short rest: every hero heals 50% of max HP, and
+fallen heroes get up at 50%.
 
 ## Combat
 
@@ -55,9 +55,14 @@ percentage.
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
 arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
 
-**Wipe.** When every hero falls, the party retreats one zone (never below zone 1) to wave 1 at
-full health, and nothing is lost. The combat log says so, and a toast names the zone it fell back
-to.
+**Wipe.** When every hero falls, the party restarts the zone it is in at wave 1, at full health,
+and nothing is lost. The combat log says "The party fell.", and a short toast reads "The party
+fell, back to wave 1 of zone 4, Old Barrow Hills".
+
+**Retreat.** The third wipe in a zone with no zone boss kill between them is a retreat: the party
+falls back one zone to wave 1 at full health (in zone 1 it restarts zone 1), and the count starts
+again. A zone boss kill or any change of zone also starts it again. The combat log says "The party
+retreats to zone 3.", and a long toast names the zone it fell back to.
 
 **Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
@@ -346,17 +351,17 @@ and play stays paused until a new session asks again.
 ## Notifications and cues
 
 **Toasts.** Only the primary session toasts, one sentence per event worth a glance: a Rare or
-better drop, a recruit, a level-up, a zone arrival, a wipe, a boss reward, a sale, a purchase, a
+better drop, a recruit, a level-up, a zone arrival, a wipe, a retreat, a boss reward, a sale, a purchase, a
 return, a world boss appearing or going down, a revoked item, and a Rare or better drop vendored
 for lack of room. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
-recruit, a reward, a wipe, a world boss appearing, a revoked item) eight. Effects of one kind that
+recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
 once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival keeps
+legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat or a zone arrival keeps
 its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
-A wipe toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
+A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
@@ -403,7 +408,8 @@ falls on the boss, and between spawns a chest on the empty ground still plays on
 the next monster stepping on after it. With the inventory full it is
 vendored, as in play. `level <hero> <n>` raises a hero level by level up to its rarity's cap. `gold <n>` adds
 gold. `zone <n>` moves the party to that zone at wave 1. `recruit [rarity]` recruits a hero, and
-refuses with a full roster. `wipe` makes the party fall now. `boss`, `zone` and `wipe` refuse while
+refuses with a full roster. `wipe` makes the party fall now: it restarts the
+zone, and the third in a zone retreats. `boss`, `zone` and `wipe` refuse while
 the party fights a world boss. `reset` throws the sandbox save away and starts a fresh one in
 place. Names match by the start of a name, any word in it or its id, and an ambiguous or unknown
 name answers with the candidates.

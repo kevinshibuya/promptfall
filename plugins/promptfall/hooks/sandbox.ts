@@ -197,10 +197,16 @@ async function recruit(game: GameHandle, args: string): Promise<string> {
   return `Sandbox: ${hero?.name ?? 'a hero'} (${r}) recruited`
 }
 
+/** The wipe path: the zone restarts at wave 1, and its third wipe retreats one zone. */
 async function wipe(game: GameHandle): Promise<string> {
+  const from = (await game.view())?.zone ?? 1
   const refused = await grant(game, { t: 'sandbox_wipe' })
   if (refused) return refused
-  return `Sandbox: the party fell, retreating to zone ${(await game.view())?.zone ?? 1}`
+  const zone = (await game.view())?.zone ?? 1
+  // Zone 1's third wipe restarts it too: the reply cannot tell it from a wipe, and need not.
+  return zone < from
+    ? `Sandbox: the party retreats to zone ${zone}`
+    : `Sandbox: the party fell, back to wave 1 of zone ${zone}`
 }
 
 /**

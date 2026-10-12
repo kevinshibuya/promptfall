@@ -255,14 +255,21 @@ test(
   },
 )
 
-test('sandbox wipe makes the party fall and retreat one zone', async ($, on) => {
+test('sandbox wipe restarts the zone twice, and the third retreats one zone', async ($, on) => {
   const { run, view, toasts } = await sandboxOn(on, $)
   await run('zone 3')
   const wipes = view().wipes
-  expect(await run('wipe')).toBe('Sandbox: the party fell, retreating to zone 2')
+  for (let i = 1; i <= 2; i++) {
+    expect(await run('wipe')).toBe('Sandbox: the party fell, back to wave 1 of zone 3')
+    expect(view().zone).toBe(3)
+    expect(view().wave).toBe(1)
+    expect(view().wipes).toBe(wipes + i)
+  }
+  expect(toasts).toContain('The party fell, back to wave 1 of zone 3, Marsh of Sighs')
+  expect(await run('wipe')).toBe('Sandbox: the party retreats to zone 2')
   expect(view().zone).toBe(2)
-  expect(view().wipes).toBe(wipes + 1)
-  expect(toasts).toContain('The party fell, retreating to zone 2')
+  expect(view().wipes).toBe(wipes + 3)
+  expect(toasts).toContain('The party retreats to zone 2, Whisperwood')
 })
 
 test('sandbox wipe in boss mode says so and changes nothing', async ($, on) => {

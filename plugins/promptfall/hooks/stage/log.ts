@@ -93,8 +93,9 @@ export class MessageLog {
     // An enemy spawned and killed inside one tick is in no view: it is a Foe.
     const name = (id: string) => this.known.get(id)?.name ?? 'Foe'
     const live = new Set(view.enemies.map((e) => e.id))
-    // A wipe clears the encounter: enemies leave the view alive, so only an emptied HP is a kill.
-    const wiped = effects.some((e) => e.k === 'wipe')
+    // A wipe or a retreat clears the encounter: enemies leave the view alive, so only an emptied
+    // HP is a kill.
+    const wiped = effects.some((e) => e.k === 'wipe' || e.k === 'retreat')
     const hpLeft = new Map(hpBefore)
 
     const all = groups(effects)
@@ -182,7 +183,9 @@ export class MessageLog {
         }
       }
       case 'wipe':
-        return { text: `The party fell, retreating to zone ${e.retreatedTo}.`, key: true }
+        return { text: 'The party fell.', key: true }
+      case 'retreat':
+        return { text: `The party retreats to zone ${e.zone}.`, key: true }
       case 'traded': {
         const t = e.entry
         // Grill 1.16's table has the sale only; purchases and returns print nothing.

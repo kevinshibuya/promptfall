@@ -337,15 +337,16 @@ describe('item tiers', () => {
 })
 
 describe('rest', () => {
-  it('heals 30% and revives the fallen at 30%', () => {
+  it('heals 50% and revives the fallen at 50%', () => {
     const s0 = createInitialState(1)
     const roster = s0.roster.map((h, i) =>
       i === 0 ? { ...h, hp: 0 } : i === 1 ? { ...h, hp: 1 } : h,
     )
     const r = run({ ...s0, roster }, [{ t: 'rest' }])
     const [k, b, w] = r.state.roster
-    expect(k?.hp).toBe(Math.floor((60 * 3000) / 10000))
-    expect(b?.hp).toBe(1 + Math.floor((36 * 3000) / 10000))
+    // The Knight's maximum is 60 and the Black Mage's 36.
+    expect(k?.hp).toBe(30)
+    expect(b?.hp).toBe(1 + 18)
     expect(w?.hp).toBe(40)
   })
 })
@@ -434,9 +435,93 @@ describe('wipe', () => {
       injectEnemy({ ...createInitialState(1), zone: 2, highestZone: 2 }, 'field_rat'),
     )
     const r = run(s, [tick])
-    expect(r.effects).toContainEqual({ k: 'wipe', retreatedTo: 1 })
+    expect(r.effects).toContainEqual({ k: 'wipe', zone: 2 })
     expect(r.state.battle).toEqual({ gauges: [], queue: [], busy: 0 })
     expect(r.state.encounter).toBeNull()
+  })
+
+  /** The party falls in the next tick, wherever `s` stands. */
+  const wipeIn = (s: GameState) => run(beaten(injectEnemy(s, 'field_rat')), [tick])
+  const inZone4: GameState = { ...createInitialState(1), zone: 4, highestZone: 4, wave: 7 }
+
+  it('the first two wipes in a zone restart it at wave 1, healed, and raise the count', () => {
+    let s: GameState = { ...inZone4, pendingTurnBoss: true }
+    for (const count of [1, 2]) {
+      const r = wipeIn(s)
+      expect(r.effects).toContainEqual({ k: 'wipe', zone: 4 })
+      expect(r.effects.some((e) => e.k === 'retreat')).toBe(false)
+      expect(r.state.zone).toBe(4)
+      expect(r.state.wave).toBe(1)
+      expect(r.state.zoneWipes).toBe(count)
+      expect(r.state.stats.wipes).toBe(count)
+      expect(r.state.encounter).toBeNull()
+      expect(r.state.pendingTurnBoss).toBe(false)
+      for (const id of r.state.party) {
+        const hero = r.state.roster.find((h) => h.id === id)
+        if (!hero) throw new Error(id)
+        expect(hero.hp).toBe(heroStats(r.state, hero).hp)
+      }
+      s = { ...r.state, wave: 7 }
+    }
+  })
+
+  it('a wipe applies the pending party', () => {
+    const [k, b, , a] = inZone4.roster
+    if (!k || !b || !a) throw new Error('roster')
+    const r = wipeIn({ ...inZone4, pendingParty: [k.id, b.id, a.id] })
+    expect(r.effects).toContainEqual({ k: 'party_applied', heroIds: [k.id, b.id, a.id] })
+    expect(r.state.party).toEqual([k.id, b.id, a.id])
+  })
+
+  it('the third wipe in a zone is a retreat one zone back, and the count starts again', () => {
+    const r = wipeIn({ ...inZone4, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 3 })
+    expect(r.effects.some((e) => e.k === 'wipe')).toBe(false)
+    expect(r.state.zone).toBe(3)
+    expect(r.state.wave).toBe(1)
+    expect(r.state.highestZone).toBe(4)
+    expect(r.state.zoneWipes).toBe(0)
+    expect(r.state.stats.wipes).toBe(1)
+  })
+
+  it('the third wipe in zone 1 restarts zone 1 as a retreat', () => {
+    const r = wipeIn({ ...createInitialState(1), wave: 5, zoneWipes: 2 })
+    expect(r.effects).toContainEqual({ k: 'retreat', zone: 1 })
+    expect(r.state.zone).toBe(1)
+    expect(r.state.wave).toBe(1)
+    expect(r.state.zoneWipes).toBe(0)
+  })
+
+  it('a zone boss kill resets the count, farming included', () => {
+    for (const farm of [false, true]) {
+      let s: GameState = { ...createInitialState(5), wave: 11, farm, zoneWipes: 2 }
+      s = injectEnemy(s, 'bandit_captain')
+      const r = run(finishFront(s), [tick])
+      expect(r.effects.some((e) => e.k === 'zone_cleared')).toBe(true)
+      expect(r.state.zoneWipes).toBe(0)
+    }
+  })
+
+  it('a zone change resets the count', () => {
+    const r = step({ ...inZone4, zoneWipes: 2 }, { t: 'sandbox_zone', zone: 6 })
+    expect(r.state.zone).toBe(6)
+    expect(r.state.zoneWipes).toBe(0)
+  })
+
+  it('a wipe in boss mode counts nothing', () => {
+    const engaged = run({ ...inZone4, zoneWipes: 2 }, [
+      {
+        t: 'boss_engaged',
+        bossId: 'wb1',
+        name: 'The Promptwyrm',
+        glyph: '☠',
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 },
+      },
+    ]).state
+    const r = run(beaten(engaged), [tick])
+    expect(r.state.zone).toBe(4)
+    expect(r.state.zoneWipes).toBe(2)
+    expect(r.effects.some((e) => e.k === 'wipe' || e.k === 'retreat')).toBe(false)
   })
 })
 

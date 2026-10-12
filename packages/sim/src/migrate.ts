@@ -40,6 +40,9 @@ export const MIGRATIONS: MigrationChain = {
     state: (s) => ({ ...s, inventory: (s.inventory as Item[]).map(withBaseTier) }),
     goods: (g) => (g.kind === 'item' ? { kind: 'item', item: withBaseTier(g.item) } : g),
   },
+  // 8 → 9: a wipe restarts the zone and the third is a retreat; rests heal 50%. The state gains
+  // the count of wipes in its zone, at zero: no save remembers them, and zero only defers a retreat.
+  8: { state: (s) => ({ ...s, zoneWipes: 0 }) },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */
