@@ -8,8 +8,8 @@ import {
   STEP_MS,
   scaled,
 } from './battle'
-import { scaledBossStats } from './combat'
-import { content } from './content'
+import { enemyStats, scaledBossStats } from './combat'
+import { content, enemyAt } from './content'
 import { heroStats, livingParty } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
@@ -24,12 +24,12 @@ describe('combat', () => {
     expect(r.state.tick).toBeGreaterThan(0)
   })
 
-  it('a zone 12 boss wipes a level 1 party at zone 3 and retreats to zone 2 at full hp', () => {
+  it('a zone 12 boss wipes a level 1 party at zone 3, which restarts it at wave 1 at full hp', () => {
     let s: GameState = { ...createInitialState(3), zone: 3, highestZone: 3, wave: 4 }
     s = injectEnemy(s, 'unwritten_one')
     const r = run(s, times(50, { t: 'tick' } as const))
     const wipe = r.effects.find((e) => e.k === 'wipe')
-    expect(wipe).toEqual({ k: 'wipe', retreatedTo: 2 })
+    expect(wipe).toEqual({ k: 'wipe', zone: 3 })
     // Stop at the wipe: replay up to it.
     let t = s
     for (let i = 0; i < 50; i++) {
@@ -37,7 +37,7 @@ describe('combat', () => {
       t = step.state
       if (step.effects.some((e) => e.k === 'wipe')) break
     }
-    expect(t.zone).toBe(2)
+    expect(t.zone).toBe(3)
     expect(t.wave).toBe(1)
     expect(t.encounter).toBeNull()
     expect(t.stats.wipes).toBe(1)
@@ -66,6 +66,7 @@ describe('combat', () => {
       id: 'imace',
       base: 'healers_mace',
       rarity: 'common',
+      tier: 1,
       affixes: [],
       equippedBy: mage.id,
       tradeableAt: null,
@@ -114,7 +115,9 @@ describe('combat', () => {
       for (let i = 0; i < 2000; i++) {
         const r = step(s, { t: 'tick' })
         s = r.state
-        const progress = r.effects.some((e) => e.k === 'gold' || e.k === 'wipe') || !s.encounter
+        const progress =
+          r.effects.some((e) => e.k === 'gold' || e.k === 'wipe' || e.k === 'retreat') ||
+          !s.encounter
         since = progress ? 0 : since + 1
         worst = Math.max(worst, since)
       }
@@ -130,6 +133,7 @@ describe('combat', () => {
       id: 'iX',
       base: 'steel_longsword',
       rarity: 'rare',
+      tier: 1,
       affixes: [
         { id: 'brutal', value: 5 },
         { id: 'swift', value: 2 },
@@ -222,6 +226,7 @@ describe('the battle loop', () => {
       id: 'ifast',
       base: base.id,
       rarity: 'common',
+      tier: 1,
       affixes: [{ id: 'swift', value: 9 - heroStats(s0, fast).spd }],
       equippedBy: fast.id,
       tradeableAt: null,
@@ -343,6 +348,27 @@ describe('the battle loop', () => {
     throw new Error('nobody fell')
   })
 
+  it('an enemy past tier 1 fights at its zone’s numbers, not its base zone’s', () => {
+    const slime: Enemy = { id: 'e1', def: 'road_slime', kind: 'wave', hp: 1, maxHp: 1 }
+    const at = (zone: number) => enemyStats({ ...createInitialState(1), zone }, slime)
+    expect(at(1)).toEqual(content.enemies.road_slime?.stats)
+    expect(at(13)).toEqual(enemyAt('road_slime', 13)?.stats)
+    expect(at(25).atk).toBeGreaterThan(at(13).atk)
+  })
+
+  it('the world boss scales through the tiered zone boss, its speed capped at zone 12’s', () => {
+    const carried = { hp: 630, atk: 14, def: 4, spd: 5 }
+    const at = (zone: number) => scaledBossStats({ ...engaged(carried), zone })
+    const z1 = content.enemies.bandit_captain?.stats.atk ?? 1
+    const t2 = enemyAt('bandit_captain', 13)?.stats.atk ?? 0
+    expect(at(13).atk).toBe(Math.floor((carried.atk * t2) / z1))
+    expect(at(13).atk).toBeGreaterThan(at(12).atk)
+    expect(at(36).atk).toBeGreaterThan(at(24).atk)
+    expect(at(3).spd).toBe(carried.spd + 1)
+    expect(at(12).spd).toBe(carried.spd + 4)
+    expect(at(36).spd).toBe(carried.spd + 4)
+  })
+
   it('a world-boss hit reports its amount while the boss hp stays put', () => {
     const s = engaged({ hp: 630, atk: 14, def: 4, spd: 5 })
     const boss = s.encounter?.enemies[0]
@@ -417,6 +443,77 @@ describe('the battle loop', () => {
       return
     }
     throw new Error('no drop in 400 seeds')
+  })
+})
+
+describe('mitigation', () => {
+  type Hit = Extract<Effect, { k: 'hit' }>
+  const hits = (effects: Effect[]): Hit[] => effects.filter((e): e is Hit => e.k === 'hit')
+
+  /** The Knight's hits on a world boss of this defence, the Knight's atk raised to 1000 by an affix. */
+  function knightHits(def: number): number[] {
+    const s0 = engaged({ hp: 100000, atk: 1, def, spd: 0 })
+    const knight = s0.roster.find((h) => h.cls === 'knight')
+    if (!knight) throw new Error('roster')
+    const atk = heroStats(s0, knight).atk
+    const ring: Item = {
+      id: 'iatk',
+      base: 'copper_ring',
+      rarity: 'common',
+      tier: 1,
+      affixes: [{ id: 'mighty', value: 1000 - atk - 1 }],
+      equippedBy: knight.id,
+      tradeableAt: null,
+    }
+    let s: GameState = {
+      ...s0,
+      inventory: [ring],
+      roster: s0.roster.map((h) =>
+        h.id === knight.id ? { ...h, equipment: { ...h.equipment, accessory: 'iatk' } } : h,
+      ),
+    }
+    const armed = s.roster.find((h) => h.id === knight.id)
+    if (!armed) throw new Error('knight')
+    expect(heroStats(s, armed).atk).toBe(1000)
+    const out: number[] = []
+    for (let i = 0; i < 60; i++) {
+      const r = step(s, { t: 'tick' })
+      s = r.state
+      for (const h of hits(r.effects)) if (h.by === knight.id) out.push(h.amount)
+    }
+    expect(out.length).toBeGreaterThan(10)
+    return out
+  }
+
+  it('a hit against a defence of 0 lands the whole attack, ±10%, doubled by power', () => {
+    for (const amount of knightHits(0)) {
+      expect(amount).toBeGreaterThanOrEqual(2 * 900)
+      expect(amount).toBeLessThanOrEqual(2 * 1100)
+    }
+  })
+
+  it('a hit against a defence of 100 lands half the attack, ±10%, doubled by power', () => {
+    const amounts = knightHits(100)
+    for (const amount of amounts) {
+      expect(amount).toBeGreaterThanOrEqual(2 * 450)
+      expect(amount).toBeLessThanOrEqual(2 * 550)
+    }
+    // The variance still spreads the hits: not every hit lands the same.
+    expect(new Set(amounts).size).toBeGreaterThan(1)
+  })
+
+  it('a hit never lands below 1 before the power doubling, whatever the defence', () => {
+    // An atk-1 world boss on heroes with defence above 0: every hit rounds to its floor of 1.
+    let s = engaged({ hp: 100000, atk: 1, def: 0, spd: 20 })
+    const boss = s.encounter?.enemies[0]?.id
+    const amounts: number[] = []
+    for (let i = 0; i < 20; i++) {
+      const r = step(s, { t: 'tick' })
+      s = r.state
+      for (const h of hits(r.effects)) if (h.by === boss) amounts.push(h.amount)
+    }
+    expect(amounts.length).toBeGreaterThan(0)
+    expect(new Set(amounts)).toEqual(new Set([scaled(1)]))
   })
 })
 

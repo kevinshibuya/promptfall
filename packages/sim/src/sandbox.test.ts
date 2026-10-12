@@ -48,6 +48,7 @@ function filler(n: number): Item[] {
     id: `f${i}`,
     base: 'oak_staff',
     rarity: 'common',
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,
@@ -124,7 +125,7 @@ describe('sandbox events', () => {
 
     it.each([
       [0, 'no_such_zone'],
-      [13, 'no_such_zone'],
+      [37, 'no_such_zone'],
       [1.5, 'no_such_zone'],
     ])('zone %s is unapplicable with %s', (z, detail) => {
       const r = step(fighting, { t: 'sandbox_boss', zone: z, boss: 'zone_boss' })
@@ -302,7 +303,13 @@ describe('sandbox events', () => {
       expect(r.state.highestZone).toBe(3)
     })
 
-    it.each([0, 13, -1, 2.5])('zone %s is unapplicable with no_such_zone', (z) => {
+    it('accepts any zone up to the ladder’s end', () => {
+      const r = step(fighting, { t: 'sandbox_zone', zone: 36 })
+      expect(r.effects).toEqual([])
+      expect(r.state).toMatchObject({ zone: 36, wave: 1, highestZone: 36 })
+    })
+
+    it.each([0, 37, -1, 2.5])('zone %s is unapplicable with no_such_zone', (z) => {
       const r = step(fighting, { t: 'sandbox_zone', zone: z })
       expect(rejectedReason(r.effects)).toBe('server_event_unapplicable:no_such_zone')
       expect(r.state).toBe(fighting)
@@ -349,16 +356,17 @@ describe('sandbox events', () => {
   })
 
   describe('sandbox_wipe', () => {
-    it('wipes the party: the wipe effect, the retreat, the wipe counted', () => {
+    it('wipes the party: the wipe effect, the zone restarted at wave 1, the wipe counted', () => {
       const s: GameState = {
         ...fighting,
         pendingTurnBoss: true,
         roster: fighting.roster.map((h) => ({ ...h, hp: 1 })),
       }
       const r = step(s, { t: 'sandbox_wipe' })
-      expect(r.effects).toEqual([{ k: 'wipe', retreatedTo: 2 }])
-      expect(r.state.zone).toBe(2)
+      expect(r.effects).toEqual([{ k: 'wipe', zone: 3 }])
+      expect(r.state.zone).toBe(3)
       expect(r.state.wave).toBe(1)
+      expect(r.state.zoneWipes).toBe(1)
       expect(r.state.stats.wipes).toBe(fighting.stats.wipes + 1)
       expect(r.state.pendingTurnBoss).toBe(false)
       expectEncounterEnded(r.state)
@@ -369,9 +377,28 @@ describe('sandbox events', () => {
       }
     })
 
-    it('in zone 1 stays in zone 1', () => {
-      const r = step(s0, { t: 'sandbox_wipe' })
-      expect(r.effects).toEqual([{ k: 'wipe', retreatedTo: 1 }])
+    it('restarts the zone twice and retreats one zone on the third', () => {
+      const effects: Effect[] = []
+      let s = fighting
+      for (let i = 0; i < 3; i++) {
+        const r = step(s, { t: 'sandbox_wipe' })
+        effects.push(...r.effects)
+        s = r.state
+      }
+      expect(effects).toEqual([
+        { k: 'wipe', zone: 3 },
+        { k: 'wipe', zone: 3 },
+        { k: 'retreat', zone: 2 },
+      ])
+      expect(s.zone).toBe(2)
+      expect(s.zoneWipes).toBe(0)
+    })
+
+    it('in zone 1 retreats to zone 1 on the third', () => {
+      let s = s0
+      for (let i = 0; i < 2; i++) s = step(s, { t: 'sandbox_wipe' }).state
+      const r = step(s, { t: 'sandbox_wipe' })
+      expect(r.effects).toEqual([{ k: 'retreat', zone: 1 }])
       expect(r.state.zone).toBe(1)
     })
 

@@ -4,11 +4,13 @@
 // tsx scripts/content.ts
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import type { Content } from '@promptfall/sim'
+import { baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
 
 /** A table cell: pipes escaped so a glyph like `|` stays in its column. */
 const cell = (s: string | number) => String(s).replaceAll('|', '\\|')
 const code = (s: string) => `\`${cell(s)}\``
+/** `×3.5`: a multiplier in basis points. */
+const times = (bp: number) => `×${bp / 10000}`
 
 function table(head: string[], rows: (string | number)[][]): string[] {
   return [
@@ -39,6 +41,22 @@ export function contentReference(c: Content): string {
       ]),
     ),
     '',
+    '## Tiers',
+    '',
+    'The ladder runs the twelve zones once per tier, as one running zone number: zone 13 is tier 2,',
+    "zone 1, with zone 1's enemies at their tier's numbers. Past tier 1 every base drops, at zone",
+    "12's rarity odds.",
+    '',
+    ...table(
+      ['Tier', 'Zones', 'Item tier dropped'],
+      Array.from({ length: Math.ceil(LADDER_END / c.zones.length) }, (_, i) => {
+        const first = i * c.zones.length + 1
+        const last = Math.min(LADDER_END, first + c.zones.length - 1)
+        const drops = i === 0 ? 'the base’s, 1 to 4' : dropTier(first, '')
+        return [i + 1, `${first} to ${last}`, drops]
+      }),
+    ),
+    '',
     '## Enemies and bosses',
     '',
     ...table(
@@ -49,8 +67,24 @@ export function contentReference(c: Content): string {
     '## Item bases',
     '',
     ...table(
-      ['Id', 'Name', 'Glyph', 'Slot'],
-      Object.values(c.itemBases).map((i) => [code(i.id), cell(i.name), code(i.glyph), i.slot]),
+      ['Id', 'Name', 'Glyph', 'Slot', 'Min zone', 'Tier'],
+      Object.values(c.itemBases).map((i) => [
+        code(i.id),
+        cell(i.name),
+        code(i.glyph),
+        i.slot,
+        i.minZone,
+        baseTier(i.id),
+      ]),
+    ),
+    '',
+    '## Item tiers',
+    '',
+    "An item's tier multiplies its affixes' rolls and its reforge price.",
+    '',
+    ...table(
+      ['Tier', 'Multiplier'],
+      c.itemTierMultBp.map((bp, i) => [i + 1, times(bp)]),
     ),
     '',
     '## Hero templates',

@@ -1,6 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 import type { DialogState, PaneMenu } from '../../../types'
 import { RARITY_RGB } from '../../stage/tuning'
+import { createInitialState, type Item } from '../../vendor/sim.js'
+import { toAccountView, toGameView } from '../../view'
 import { tilePositions } from '../../windows/kit'
 import { DIM_RGB } from '../../windows/tuning'
 import { item, paneInput, paneView } from './fixtures'
@@ -88,6 +90,26 @@ test('the command window, per item, in order, with hotkeys', () => {
   expect(textOf(win(b, 'message')?.lines[0]?.spans ?? [])).toBe(' What will you do with Jade Ring?')
   // While the command window is open only its items are cursor stops.
   expect(b.stops.some((s) => s.key.startsWith('row:'))).toBe(false)
+})
+
+test("a tier-3 item's command window prices Reforge at its tier and its detail reads the affix at it", () => {
+  const blade: Item = {
+    id: 'iT',
+    base: 'mithril_blade',
+    rarity: 'uncommon',
+    tier: 3,
+    affixes: [{ id: 'brutal', value: 4 }],
+    equippedBy: null,
+    tradeableAt: null,
+  }
+  const state = { ...createInitialState(1), inventory: [blade] }
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  const b = inventoryPane(
+    withDialog({ menu: { kind: 'actions', tab: 'inventory', id: 'iT', at: 0 } }, { view }),
+  )
+  // An Uncommon's 25G at tier 3's ×3.5, floored; its Brutal rolled 4 and counts 14.
+  expect(linesOf(win(b, 'menu'))).toContain(' Reforge 87G')
+  expect(linesOf(win(b, 'detail'))).toContain(' Brutal +14 atk')
 })
 
 test('Unequip applies unequip; Vendor opens the Yes/No whose yes vendors', () => {

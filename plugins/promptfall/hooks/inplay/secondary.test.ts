@@ -67,6 +67,7 @@ test('a secondary reads the store without expiring listings or advancing the bos
     id: 'iSword',
     base: 'steel_longsword',
     rarity: 'rare' as const,
+    tier: 1,
     affixes: [],
     equippedBy: null,
     tradeableAt: null,

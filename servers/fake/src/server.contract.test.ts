@@ -1,6 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { rewindRecord } from '@promptfall/ledger/testing'
 import {
   type Auth,
   BOSS_GRID_MS,
@@ -15,6 +16,7 @@ import {
   GAUGE_FULL,
   type GameState,
   heroStats,
+  type MigrationChain,
   type PlayerEvent,
 } from '@promptfall/sim'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -31,7 +33,14 @@ afterAll(async () => {
 
 let counter = 0
 
-async function host(clock: ContractClock, flags: Record<string, boolean>, kv: KeyValue) {
+type Extra = { migrations?: MigrationChain | undefined; log?: ((line: string) => void) | undefined }
+
+async function host(
+  clock: ContractClock,
+  flags: Record<string, boolean>,
+  kv: KeyValue,
+  { migrations, log }: Extra = {},
+) {
   const server = createFakeServer({
     kv,
     now: clock.now,
@@ -41,12 +50,14 @@ async function host(clock: ContractClock, flags: Record<string, boolean>, kv: Ke
     tokenSource: () => crypto.randomUUID(),
     playerName: 'player',
     seed: 1,
+    ...(migrations && { migrations }),
+    ...(log && { ledgerLog: log }),
   })
   const listening = await server.listen(0)
   open.add(listening)
   return {
     client: new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch }),
-    host: server.ledger.host,
+    host: { ...server.ledger.host, rewind: (id: string, v: number) => rewindRecord(kv, id, v) },
     async close() {
       open.delete(listening)
       await listening.close()
@@ -64,20 +75,20 @@ function openStore(path: string): SqliteKeyValue {
   return store
 }
 
-runServerContract('HTTP fake', async (clock, { flags, kv }) =>
-  host(clock, flags, kv ?? new MemoryKeyValue()),
+runServerContract('HTTP fake', async (clock, { flags, kv, ...extra }) =>
+  host(clock, flags, kv ?? new MemoryKeyValue(), extra),
 )
 
 /** The suite's shared store (rule 40) stands for one file: each host on it opens the file anew. */
 const files = new WeakMap<KeyValue, string>()
 
-runServerContract('HTTP fake over SQLite', async (clock, { flags, kv }) => {
+runServerContract('HTTP fake over SQLite', async (clock, { flags, kv, ...extra }) => {
   let path = kv && files.get(kv)
   if (!path) {
     path = tempFile()
     if (kv) files.set(kv, path)
   }
-  return host(clock, flags, openStore(path))
+  return host(clock, flags, openStore(path), extra)
 })
 
 /** A party of level 40 at full HP with full gauges: it deals damage on its first tick. */

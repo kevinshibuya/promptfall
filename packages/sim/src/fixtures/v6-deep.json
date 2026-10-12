@@ -1,0 +1,934 @@
+{
+  "v": 6,
+  "seed": 20261011,
+  "rng": 3780969831,
+  "counter": 53,
+  "tick": 16,
+  "gold": 12376,
+  "zone": 10,
+  "wave": 1,
+  "farm": false,
+  "highestZone": 10,
+  "roster": [
+    {
+      "id": "h0",
+      "template": "knight_1",
+      "cls": "knight",
+      "epithet": "the Ember",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 52,
+      "hp": 69,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1",
+      "template": "black_mage_1",
+      "cls": "black_mage",
+      "epithet": "the Quiet",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 0,
+      "hp": 36,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h2",
+      "template": "white_mage_1",
+      "cls": "white_mage",
+      "epithet": "the Hearthless",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 0,
+      "hp": 40,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h3",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Faithful",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 0,
+      "hp": 44,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h4",
+      "template": "knight_1",
+      "cls": "knight",
+      "epithet": "the Oathkeeper",
+      "rarity": "epic",
+      "traits": [
+        {
+          "id": "hale",
+          "valueBp": 2250
+        },
+        {
+          "id": "berserker",
+          "valueBp": 1830
+        },
+        {
+          "id": "fleet",
+          "valueBp": 2361
+        }
+      ],
+      "level": 35,
+      "xp": 112,
+      "hp": 712,
+      "equipment": {
+        "weapon": "i6",
+        "armour": "i7",
+        "accessory": "i8"
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h5",
+      "template": "white_mage_1",
+      "cls": "white_mage",
+      "epithet": "the Lucky",
+      "rarity": "rare",
+      "traits": [
+        {
+          "id": "warded",
+          "valueBp": 1552
+        },
+        {
+          "id": "fleet",
+          "valueBp": 2132
+        }
+      ],
+      "level": 25,
+      "xp": 112,
+      "hp": 440,
+      "equipment": {
+        "weapon": "i9",
+        "armour": "ia",
+        "accessory": "ib"
+      },
+      "tradeableAt": null
+    }
+  ],
+  "party": [
+    "h0",
+    "h4",
+    "h5"
+  ],
+  "pendingParty": null,
+  "inventory": [
+    {
+      "id": "i6",
+      "base": "dragonfang",
+      "rarity": "epic",
+      "affixes": [
+        {
+          "id": "tempered",
+          "value": 1
+        },
+        {
+          "id": "lifebound",
+          "value": 11
+        },
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": "h4",
+      "tradeableAt": null
+    },
+    {
+      "id": "i7",
+      "base": "mithril_mail",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vital",
+          "value": 9
+        },
+        {
+          "id": "nimble",
+          "value": 1
+        }
+      ],
+      "equippedBy": "h4",
+      "tradeableAt": null
+    },
+    {
+      "id": "i8",
+      "base": "phoenix_pendant",
+      "rarity": "legendary",
+      "affixes": [
+        {
+          "id": "hearty",
+          "value": 17
+        },
+        {
+          "id": "swift",
+          "value": 1
+        },
+        {
+          "id": "guardian",
+          "value": 4
+        },
+        {
+          "id": "mighty",
+          "value": 2
+        }
+      ],
+      "equippedBy": "h4",
+      "tradeableAt": null
+    },
+    {
+      "id": "i9",
+      "base": "seraph_staff",
+      "rarity": "epic",
+      "affixes": [
+        {
+          "id": "lifebound",
+          "value": 14
+        },
+        {
+          "id": "vital",
+          "value": 9
+        },
+        {
+          "id": "tempered",
+          "value": 1
+        }
+      ],
+      "equippedBy": "h5",
+      "tradeableAt": null
+    },
+    {
+      "id": "ia",
+      "base": "sage_robe",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "sturdy",
+          "value": 2
+        },
+        {
+          "id": "bulwark",
+          "value": 6
+        }
+      ],
+      "equippedBy": "h5",
+      "tradeableAt": null
+    },
+    {
+      "id": "ib",
+      "base": "phoenix_pendant",
+      "rarity": "legendary",
+      "affixes": [
+        {
+          "id": "guardian",
+          "value": 2
+        },
+        {
+          "id": "keen",
+          "value": 2
+        },
+        {
+          "id": "hearty",
+          "value": 13
+        },
+        {
+          "id": "hasty",
+          "value": 1
+        }
+      ],
+      "equippedBy": "h5",
+      "tradeableAt": null
+    },
+    {
+      "id": "ip",
+      "base": "willow_staff",
+      "rarity": "common",
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "is",
+      "base": "healers_mace",
+      "rarity": "common",
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iu",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "keen",
+          "value": 2
+        },
+        {
+          "id": "hasty",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iv",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vicious",
+          "value": 4
+        },
+        {
+          "id": "tempered",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iw",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "lucky",
+          "value": 2
+        },
+        {
+          "id": "keen",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ix",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "bulwark",
+          "value": 6
+        },
+        {
+          "id": "sturdy",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iy",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "sturdy",
+          "value": 1
+        },
+        {
+          "id": "bulwark",
+          "value": 6
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iz",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "hasty",
+          "value": 1
+        },
+        {
+          "id": "brutal",
+          "value": 3
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i10",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "brutal",
+          "value": 3
+        },
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i11",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "mighty",
+          "value": 2
+        },
+        {
+          "id": "lucky",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i12",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "bulwark",
+          "value": 6
+        },
+        {
+          "id": "hearty",
+          "value": 20
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i13",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "hearty",
+          "value": 12
+        },
+        {
+          "id": "warded",
+          "value": 5
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i14",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "hasty",
+          "value": 2
+        },
+        {
+          "id": "tempered",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i15",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "lifebound",
+          "value": 13
+        },
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i16",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "hearty",
+          "value": 14
+        },
+        {
+          "id": "hasty",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i17",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vital",
+          "value": 4
+        },
+        {
+          "id": "nimble",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i18",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "thorned",
+          "value": 2
+        },
+        {
+          "id": "hearty",
+          "value": 13
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i19",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "hasty",
+          "value": 2
+        },
+        {
+          "id": "brutal",
+          "value": 3
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1a",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "keen",
+          "value": 2
+        },
+        {
+          "id": "tempered",
+          "value": 2
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1b",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vital",
+          "value": 3
+        },
+        {
+          "id": "hasty",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1c",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vital",
+          "value": 10
+        },
+        {
+          "id": "warded",
+          "value": 3
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1d",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "sturdy",
+          "value": 2
+        },
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1e",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "keen",
+          "value": 1
+        },
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1f",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "affixes": [
+        {
+          "id": "vital",
+          "value": 5
+        },
+        {
+          "id": "lifebound",
+          "value": 14
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    }
+  ],
+  "inventoryCap": 30,
+  "rosterCap": 24,
+  "recruits": 0,
+  "turnToolCalls": 16,
+  "encounter": {
+    "enemies": [
+      {
+        "id": "e1g",
+        "def": "world_boss",
+        "kind": "world_boss",
+        "hp": 900,
+        "maxHp": 900
+      }
+    ],
+    "queue": [],
+    "waveSize": 0,
+    "spawnedInWave": 0
+  },
+  "pendingTurnBoss": false,
+  "lootLog": [
+    {
+      "k": "hero",
+      "heroId": "h4",
+      "template": "knight_1",
+      "rarity": "epic",
+      "via": "sandbox"
+    },
+    {
+      "k": "hero",
+      "heroId": "h5",
+      "template": "white_mage_1",
+      "rarity": "rare",
+      "via": "sandbox"
+    },
+    {
+      "k": "item",
+      "itemId": "i6",
+      "base": "dragonfang",
+      "rarity": "epic",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i7",
+      "base": "mithril_mail",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i8",
+      "base": "phoenix_pendant",
+      "rarity": "legendary",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i9",
+      "base": "seraph_staff",
+      "rarity": "epic",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ia",
+      "base": "sage_robe",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ib",
+      "base": "phoenix_pendant",
+      "rarity": "legendary",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ip",
+      "base": "willow_staff",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "is",
+      "base": "healers_mace",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iu",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iv",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iw",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ix",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iy",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iz",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i10",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i11",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i12",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i13",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i14",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i15",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i16",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i17",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i18",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i19",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1a",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1b",
+      "base": "gold_bangle",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1c",
+      "base": "dragon_plate",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1d",
+      "base": "wind_cloak",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1e",
+      "base": "mithril_blade",
+      "rarity": "rare",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1f",
+      "base": "storm_rod",
+      "rarity": "rare",
+      "vendoredFor": null
+    }
+  ],
+  "stats": {
+    "kills": 14,
+    "bosses": 0,
+    "wipes": 0
+  },
+  "boss": {
+    "bossId": "wbdeep",
+    "name": "Deep Wyrm",
+    "glyph": "☠",
+    "stats": {
+      "hp": 900,
+      "atk": 18,
+      "def": 6,
+      "spd": 5
+    },
+    "dealt": 0
+  },
+  "battle": {
+    "gauges": [
+      {
+        "id": "e1g",
+        "g": 4034
+      }
+    ],
+    "queue": [],
+    "busy": 0
+  }
+}

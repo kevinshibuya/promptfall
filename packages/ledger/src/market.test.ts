@@ -1,5 +1,5 @@
 import { type MarketResult, MemoryKeyValue } from '@promptfall/protocol'
-import { createInitialState, type GameState, type Hero, type Item } from '@promptfall/sim'
+import { baseTier, createInitialState, type GameState, type Hero, type Item } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import type { AccountRecord } from './books'
 import { COOLDOWN_MS, EXPIRY_MS, listingFee, saleFee, saleNet, transfer } from './goods'
@@ -8,7 +8,15 @@ import { approveAs, Ledger } from './ledger'
 const T0 = 1_700_000_000_000
 
 function rare(id: string, base = 'steel_longsword'): Item {
-  return { id, base, rarity: 'rare', affixes: [], equippedBy: null, tradeableAt: null }
+  return {
+    id,
+    base,
+    rarity: 'rare',
+    tier: baseTier(base),
+    affixes: [],
+    equippedBy: null,
+    tradeableAt: null,
+  }
 }
 
 function world(kv = new MemoryKeyValue(), start = T0) {

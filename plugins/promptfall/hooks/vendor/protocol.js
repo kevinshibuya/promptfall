@@ -4084,6 +4084,7 @@ var PlayerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("recruit"), at }),
   external_exports.object({ t: external_exports.literal("dismiss"), heroId: id, at }),
   external_exports.object({ t: external_exports.literal("set_farm"), on: external_exports.boolean(), at }),
+  external_exports.object({ t: external_exports.literal("set_auto_vendor"), on: external_exports.boolean(), at }),
   external_exports.object({ t: external_exports.literal("expand_inventory"), at }),
   external_exports.object({ t: external_exports.literal("expand_roster"), at })
 ]);
@@ -4101,6 +4102,7 @@ var PLAYER_EVENT_KINDS = [
   "recruit",
   "dismiss",
   "set_farm",
+  "set_auto_vendor",
   "expand_inventory",
   "expand_roster"
 ];
@@ -4109,6 +4111,7 @@ var ItemSchema = external_exports.object({
   id,
   base: id,
   rarity: RaritySchema,
+  tier: positive,
   affixes: external_exports.array(external_exports.object({ id, value: int })),
   equippedBy: id.nullable(),
   tradeableAt: count.nullable()

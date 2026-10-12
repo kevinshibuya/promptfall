@@ -7,9 +7,10 @@
 // `release`.
 import type { GameView, Settings } from '../../types'
 import { heroNameById, type Toast, type ToastWait } from '../toasts'
-import { content, type Effect, type Rarity } from '../vendor/sim.js'
+import type { Effect, Rarity } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
+import { zoneHead, zonePhrase, zoneWords } from '../zone-words'
 import { groups, type StageTimeline } from './timeline'
 import { RARITY_RGB } from './tuning'
 
@@ -93,8 +94,9 @@ export class MessageLog {
     // An enemy spawned and killed inside one tick is in no view: it is a Foe.
     const name = (id: string) => this.known.get(id)?.name ?? 'Foe'
     const live = new Set(view.enemies.map((e) => e.id))
-    // A wipe clears the encounter: enemies leave the view alive, so only an emptied HP is a kill.
-    const wiped = effects.some((e) => e.k === 'wipe')
+    // A wipe or a retreat clears the encounter: enemies leave the view alive, so only an emptied
+    // HP is a kill.
+    const wiped = effects.some((e) => e.k === 'wipe' || e.k === 'retreat')
     const hpLeft = new Map(hpBefore)
 
     const all = groups(effects)
@@ -158,7 +160,10 @@ export class MessageLog {
         }
       case 'drop_vendored':
         return {
-          text: `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`,
+          text:
+            e.cause === 'full'
+              ? `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`
+              : `${itemName(e.item.base)} vendored, ${e.gold}G.`,
           key: true,
         }
       case 'level_up':
@@ -174,15 +179,13 @@ export class MessageLog {
         return { text: `${boss?.name ?? e.def} appears!`, key: true }
       }
       case 'zone_cleared': {
-        if (e.advancedTo <= e.zone) return { text: `Zone ${e.zone} cleared.`, key: true }
-        const zone = content.zones[e.advancedTo - 1]?.name
-        return {
-          text: `The party reached zone ${e.advancedTo}${zone ? `, ${zone}` : ''}.`,
-          key: true,
-        }
+        if (e.advancedTo <= e.zone) return { text: `${zoneHead(e.zone)} cleared.`, key: true }
+        return { text: `The party reached ${zoneWords(e.advancedTo)}.`, key: true }
       }
       case 'wipe':
-        return { text: `The party fell, retreating to zone ${e.retreatedTo}.`, key: true }
+        return { text: 'The party fell.', key: true }
+      case 'retreat':
+        return { text: `The party retreats to ${zonePhrase(e.zone)}.`, key: true }
       case 'traded': {
         const t = e.entry
         // Grill 1.16's table has the sale only; purchases and returns print nothing.

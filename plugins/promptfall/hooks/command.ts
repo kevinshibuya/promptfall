@@ -22,14 +22,14 @@ import { PANE_ROWS } from './windows/tuning'
 export const PANE_ID = 'promptfall'
 
 const HINT =
-  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
+  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
 
 /** The command, its hint naming the sandbox verb only while the sandbox is on. */
 export function commandSpec(sandbox: boolean) {
   return {
     name: 'promptfall',
     description:
-      'Promptfall: open the game, or off / on / farm / server / sound / motion / renderer',
+      'Promptfall: open the game, or off / on / farm / autovendor / server / sound / motion / renderer',
     argumentHint: `[${HINT}${sandbox ? '|sandbox <verb>' : ''}]`,
     immediate: true,
   } as const
@@ -54,6 +54,8 @@ const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
+
+const AUTOVENDOR_USAGE = 'Usage: /promptfall autovendor on or /promptfall autovendor off'
 
 const SERVER_USAGE =
   'Usage: /promptfall server, /promptfall server <http(s) URL> or /promptfall server local'
@@ -125,6 +127,17 @@ export function registerCommand(
       running.apply({ t: 'set_farm', on: !view.farm }, await $.clock.now())
       await running.settled()
       return { text: `Promptfall farm is ${view.farm ? 'off' : 'on'}` }
+    }
+
+    if (arg === 'autovendor' || arg.startsWith('autovendor ')) {
+      const word = arg.slice('autovendor'.length).trim()
+      if (word !== 'on' && word !== 'off') return { text: AUTOVENDOR_USAGE }
+      const running = game()
+      if (running?.isPaused()) return { text: PAUSED_LINE }
+      if (!running?.canApply()) return { text: 'Promptfall is not playing in this session' }
+      running.apply({ t: 'set_auto_vendor', on: word === 'on' }, await $.clock.now())
+      await running.settled()
+      return { text: `Promptfall auto-vendor is ${word}` }
     }
 
     const tab = TABS.find((t) => t === arg) ?? 'inventory'

@@ -5,6 +5,7 @@ const GOLDEN_REWARD: Item = {
   id: 'r0',
   base: 'steel_longsword',
   rarity: 'rare',
+  tier: 2,
   affixes: [],
   equippedBy: null,
   tradeableAt: null,
@@ -69,4 +70,4 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
 }
 
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
-export const GOLDEN_HASH = 'ea7e36dbcb84b67d'
+export const GOLDEN_HASH = '42969ddaf82b0564'

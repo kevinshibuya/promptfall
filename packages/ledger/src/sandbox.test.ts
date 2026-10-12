@@ -1,5 +1,5 @@
 import { BOSS_GRID_MS, BOSS_WINDOW_MS, MemoryKeyValue } from '@promptfall/protocol'
-import { createInitialState, type GameState, type SandboxEvent } from '@promptfall/sim'
+import { createInitialState, type GameState, MIGRATIONS, type SandboxEvent } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { type AccountRecord, Books, TrackedKeyValue } from './books'
 import { advanceBoss, BOSS_KEY, type BossRecord, loadBoss, settleBoss } from './boss'
@@ -202,7 +202,11 @@ describe('the world boss on demand', () => {
 describe('the grid beside the sandbox', () => {
   function context(now: number): WorldContext {
     return {
-      books: new Books(new TrackedKeyValue(new MemoryKeyValue())),
+      books: new Books(new TrackedKeyValue(new MemoryKeyValue()), {
+        chain: MIGRATIONS,
+        now: async () => now,
+        log: () => undefined,
+      }),
       now,
       flags: {},
       presence: new Map(),
