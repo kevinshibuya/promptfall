@@ -297,6 +297,7 @@ export function toGameView(
     wave: state.wave,
     gold: state.gold,
     farm: state.farm,
+    autoVendor: state.autoVendor,
     lastDrop: loot[loot.length - 1] ?? null,
     loot,
     highestZone: state.highestZone,

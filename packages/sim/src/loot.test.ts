@@ -2,9 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { content } from './content'
 import type { EnemyDef } from './content/types'
 import { clone } from './draft'
-import { rollDrops } from './loot'
+import { rollDrops, vendorValue } from './loot'
 import { createInitialState } from './state'
-import type { Effect, GameState } from './types'
+import { step } from './step'
+import type { Effect, GameState, Rarity } from './types'
 
 function forced(defId: string): EnemyDef {
   const def = content.enemies[defId]
@@ -103,5 +104,91 @@ describe('rollDrops', () => {
     const recruited = r.effects.find((e) => e.k === 'hero_recruited')
     expect(recruited?.k === 'hero_recruited' && recruited.via).toBe('contract')
     expect(r.state.roster).toHaveLength(5)
+  })
+})
+
+describe('auto-vendor', () => {
+  /** The drop a sandbox grant makes of `base` at `rarity`: no enemy is up, so it drops alone. */
+  function drop(s: GameState, base: string, rarity: Rarity) {
+    const r = step(s, { t: 'sandbox_item', base, rarity })
+    const [effect] = r.effects.filter((e) => e.k === 'drop' || e.k === 'drop_vendored')
+    if (!effect) throw new Error(`no drop of ${base}`)
+    return { state: r.state, effect }
+  }
+
+  /** The starting party with the Black Mage holding an Ember Rod: no party hero who wears a staff has the weapon slot empty. */
+  function armed(autoVendor: boolean): GameState {
+    const s = createInitialState(7)
+    const mage = s.party[1]
+    const rod = drop(s, 'ember_rod', 'common')
+    if (rod.effect.k !== 'drop' || !mage) throw new Error('no rod')
+    const worn = step(rod.state, { t: 'equip', heroId: mage, itemId: rod.effect.item.id }).state
+    return step(worn, { t: 'set_auto_vendor', on: autoVendor }).state
+  }
+
+  it('off keeps every drop', () => {
+    const s = armed(false)
+    expect(s.autoVendor).toBe(false)
+    for (const rarity of ['common', 'uncommon'] as const) {
+      const r = drop({ ...s, zone: 12 }, 'oak_staff', rarity)
+      expect(r.effect.k).toBe('drop')
+      expect(r.state.inventory).toHaveLength(s.inventory.length + 1)
+    }
+  })
+
+  it('on vendors a Common on pickup for its vendor value, the setting the cause', () => {
+    const s = armed(true)
+    const r = drop(s, 'oak_staff', 'common')
+    if (r.effect.k !== 'drop_vendored') throw new Error(`kept: ${r.effect.k}`)
+    expect(r.effect.cause).toBe('setting')
+    expect(r.effect.gold).toBe(vendorValue(r.effect.item))
+    expect(r.state.gold).toBe(s.gold + r.effect.gold)
+    expect(r.state.inventory).toEqual(s.inventory)
+    expect(r.state.lootLog.at(-1)).toEqual({
+      k: 'item',
+      itemId: r.effect.item.id,
+      base: 'oak_staff',
+      rarity: 'common',
+      vendoredFor: r.effect.gold,
+    })
+  })
+
+  it('keeps a Common a party hero has the slot empty for and could wear', () => {
+    const s = createInitialState(7)
+    const on = step(s, { t: 'set_auto_vendor', on: true }).state
+    // The Black Mage's weapon slot is empty and a staff is hers to wear.
+    expect(drop(on, 'oak_staff', 'common').effect.k).toBe('drop')
+  })
+
+  it('vendors it when only a hero who cannot wear it, or one out of the party, has the slot empty', () => {
+    const s = armed(true)
+    // The White Mage's weapon slot is empty, but an Oak Staff is the Black Mage's.
+    expect(drop(s, 'oak_staff', 'common').effect.k).toBe('drop_vendored')
+    // The Archer's weapon slot is empty, but the Archer is not in the party.
+    expect(drop(s, 'oak_bow', 'common').effect.k).toBe('drop_vendored')
+  })
+
+  it('keeps an Uncommon at zone 3 and vendors it at zone 4, under the same exception', () => {
+    const s = armed(true)
+    expect(drop({ ...s, zone: 3 }, 'oak_staff', 'uncommon').effect.k).toBe('drop')
+    expect(drop({ ...s, zone: 4 }, 'oak_staff', 'uncommon').effect.k).toBe('drop_vendored')
+    const open = step(createInitialState(7), { t: 'set_auto_vendor', on: true }).state
+    expect(drop({ ...open, zone: 4 }, 'oak_staff', 'uncommon').effect.k).toBe('drop')
+  })
+
+  it('never touches a Rare or better', () => {
+    const s = armed(true)
+    for (const rarity of ['rare', 'epic', 'legendary'] as const) {
+      expect(drop({ ...s, zone: 12 }, 'oak_staff', rarity).effect.k).toBe('drop')
+    }
+  })
+
+  it('a full inventory vendors with the full inventory the cause, setting on or off', () => {
+    for (const on of [false, true]) {
+      const s = armed(on)
+      const r = drop({ ...s, inventoryCap: s.inventory.length }, 'oak_staff', 'rare')
+      if (r.effect.k !== 'drop_vendored') throw new Error('kept')
+      expect(r.effect.cause).toBe('full')
+    }
   })
 })

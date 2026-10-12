@@ -182,7 +182,7 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   ...(['rare', 'epic', 'legendary'] as const).map((rarity): [string, Effect, Toast] => [
     `${rarity} item vendored`,
-    { k: 'drop_vendored', item: oakStaff(rarity), gold: 40 },
+    { k: 'drop_vendored', item: oakStaff(rarity), gold: 40, cause: 'full' },
     {
       row: 'vendored',
       text: 'Inventory full: Oak Staff vendored for 40 gold',
@@ -223,7 +223,14 @@ const SILENT: [string, Effect][] = [
   ['a farming clear', { k: 'zone_cleared', zone: 4, advancedTo: 4 }],
   ['a common drop', { k: 'drop', item: oakStaff('common') }],
   ['an uncommon drop', { k: 'drop', item: oakStaff('uncommon') }],
-  ['a common item vendored', { k: 'drop_vendored', item: oakStaff('common'), gold: 5 }],
+  [
+    'a common item vendored',
+    { k: 'drop_vendored', item: oakStaff('common'), gold: 5, cause: 'full' },
+  ],
+  [
+    'an uncommon item the setting vendored',
+    { k: 'drop_vendored', item: oakStaff('uncommon'), gold: 8, cause: 'setting' },
+  ],
   ['a hit', { k: 'hit', by: 'h1', target: 'e1', amount: 12 }],
   ['a heal', { k: 'heal', by: 'h1', target: 'h2', amount: 12 }],
   ['an action', { k: 'act', actor: 'h1', action: 'attack', at: 0 }],
@@ -358,10 +365,10 @@ test('one epic and two rare drops: three single forms, the epic first', () => {
 
 test('each vendored item is its own toast, at its own reveal', () => {
   const effects: Effect[] = [
-    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i1' }, gold: 40 },
-    { k: 'drop_vendored', item: { ...oakStaff('epic'), id: 'i2' }, gold: 30 },
-    { k: 'drop_vendored', item: { ...oakStaff('common'), id: 'i3' }, gold: 5 },
-    { k: 'drop_vendored', item: { ...oakStaff('legendary'), id: 'i4' }, gold: 25 },
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i1' }, gold: 40, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('epic'), id: 'i2' }, gold: 30, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('common'), id: 'i3' }, gold: 5, cause: 'full' },
+    { k: 'drop_vendored', item: { ...oakStaff('legendary'), id: 'i4' }, gold: 25, cause: 'full' },
   ]
   expect(toastsFor(effects, null, BOSSES)).toEqual(
     [
@@ -389,7 +396,7 @@ test('drop and vendored toasts wait for their item, a zone arrival for its zone;
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
     drop('ember_rod', 'epic', 'i-e'),
     drop('oak_staff', 'rare', 'i-r'),
-    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i-v' }, gold: 40 },
+    { k: 'drop_vendored', item: { ...oakStaff('rare'), id: 'i-v' }, gold: 40, cause: 'full' },
     { k: 'level_up', heroId: ids[0], level: 6 },
     trade('sold', 'item', 'oak_staff', 120),
     trade('bought', 'item', 'oak_staff', 120),

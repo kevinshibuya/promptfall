@@ -118,7 +118,7 @@ type TimedEvent = PlayerEvent & {
     at: number;
 };
 declare const TimedEventSchema: z.ZodType<TimedEvent>;
-declare const PLAYER_EVENT_KINDS: readonly ["tick", "tool_call", "turn_end", "rest", "equip", "unequip", "vendor", "reforge", "set_party", "recruit", "dismiss", "set_farm", "expand_inventory", "expand_roster"];
+declare const PLAYER_EVENT_KINDS: readonly ["tick", "tool_call", "turn_end", "rest", "equip", "unequip", "vendor", "reforge", "set_party", "recruit", "dismiss", "set_farm", "set_auto_vendor", "expand_inventory", "expand_roster"];
 declare const ItemSchema: z.ZodType<Item>;
 declare const HeroSchema: z.ZodType<Hero>;
 declare const GoodsSchema: z.ZodType<Goods>;

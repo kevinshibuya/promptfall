@@ -17,7 +17,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 9;
+declare const SIM_VERSION: 10;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -157,6 +157,9 @@ type PlayerEvent = {
     t: 'set_farm';
     on: boolean;
 } | {
+    t: 'set_auto_vendor';
+    on: boolean;
+} | {
     t: 'expand_inventory';
 } | {
     t: 'expand_roster';
@@ -263,10 +266,13 @@ declare const SERVER_EVENT_KINDS: readonly ServerEventKind[];
 type Effect = {
     k: 'drop';
     item: Item;
-} | {
+}
+/** A drop sold on pickup: `full` for a full inventory, `setting` for the auto-vendor setting. */
+ | {
     k: 'drop_vendored';
     item: Item;
     gold: number;
+    cause: 'full' | 'setting';
 } | {
     k: 'gold';
     amount: number;
@@ -352,6 +358,8 @@ type GameState = {
     zone: number;
     wave: number;
     farm: boolean;
+    /** The auto-vendor setting, off on every save: Commons, and Uncommons past zone 3, sold on pickup. */
+    autoVendor: boolean;
     highestZone: number;
     /** Wipes in the current zone since it was entered or its zone boss last fell; the third retreats. */
     zoneWipes: number;
@@ -554,7 +562,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "c4b9d7bc0e818a92";
+declare const GOLDEN_HASH = "806c5e12c6b4b928";
 
 declare function hashState(state: GameState): string;
 

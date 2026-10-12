@@ -159,7 +159,10 @@ export class MessageLog {
         }
       case 'drop_vendored':
         return {
-          text: `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`,
+          text:
+            e.cause === 'full'
+              ? `Inventory full: ${itemName(e.item.base)} vendored for ${e.gold}G.`
+              : `${itemName(e.item.base)} vendored, ${e.gold}G.`,
           key: true,
         }
       case 'level_up':

@@ -685,7 +685,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "c4b9d7bc0e818a92";
+var GOLDEN_HASH = "806c5e12c6b4b928";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -1058,7 +1058,7 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 9;
+var SIM_VERSION = 10;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
@@ -1096,6 +1096,7 @@ function createInitialState(seed) {
     zone: 1,
     wave: 1,
     farm: false,
+    autoVendor: false,
     highestZone: 1,
     zoneWipes: 0,
     roster: [],
@@ -1189,14 +1190,25 @@ function rollRewardItem(seed, zone, classes) {
   const item = rollItemFor(scratch, true, classes);
   return item ? { ...item, id: "" } : null;
 }
+function autoVendors(s, item) {
+  if (!s.autoVendor) return false;
+  if (item.rarity !== "common" && !(item.rarity === "uncommon" && s.zone > 3)) return false;
+  const base2 = content.itemBases[item.base];
+  if (!base2) return false;
+  return !partyHeroes(s).some(
+    (h) => h.equipment[base2.slot] === null && base2.classes.includes(h.cls)
+  );
+}
 function takeDrop(s, item, effects) {
-  const gold = s.inventory.length < s.inventoryCap ? null : vendorValue(item);
-  if (gold === null) {
+  const cause = s.inventory.length >= s.inventoryCap ? "full" : autoVendors(s, item) ? "setting" : null;
+  let gold = null;
+  if (cause === null) {
     s.inventory.push(item);
     effects.push({ k: "drop", item });
   } else {
+    gold = vendorValue(item);
     s.gold += gold;
-    effects.push({ k: "drop_vendored", item, gold });
+    effects.push({ k: "drop_vendored", item, gold, cause });
   }
   pushLog(s, {
     k: "item",
@@ -1266,7 +1278,10 @@ var MIGRATIONS = {
   },
   // 8 → 9: a wipe restarts the zone and the third is a retreat; rests heal 50%. The state gains
   // the count of wipes in its zone, at zero: no save remembers them, and zero only defers a retreat.
-  8: { state: (s) => ({ ...s, zoneWipes: 0 }) }
+  8: { state: (s) => ({ ...s, zoneWipes: 0 }) },
+  // 9 → 10: the auto-vendor setting. The state gains its flag, off: a save never sells a drop its
+  // player did not ask to sell.
+  9: { state: (s) => ({ ...s, autoVendor: false }) }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -1668,6 +1683,11 @@ function setFarm(state, event) {
     s.farm = event.on === true;
   });
 }
+function setAutoVendor(state, event) {
+  return draft(state, (s) => {
+    s.autoVendor = event.on === true;
+  });
+}
 function expand(state, event, which) {
   const cost = nextExpansionCost(state, which);
   if (cost === null) return reject(state, event, "at_max");
@@ -1936,6 +1956,7 @@ var handlers = {
   recruit,
   dismiss,
   set_farm: setFarm,
+  set_auto_vendor: setAutoVendor,
   expand_inventory: expandInventory,
   expand_roster: expandRoster,
   listed,

@@ -46,6 +46,7 @@ const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('recruit'), at }),
   z.object({ t: z.literal('dismiss'), heroId: id, at }),
   z.object({ t: z.literal('set_farm'), on: z.boolean(), at }),
+  z.object({ t: z.literal('set_auto_vendor'), on: z.boolean(), at }),
   z.object({ t: z.literal('expand_inventory'), at }),
   z.object({ t: z.literal('expand_roster'), at }),
 ])
@@ -65,6 +66,7 @@ export const PLAYER_EVENT_KINDS = [
   'recruit',
   'dismiss',
   'set_farm',
+  'set_auto_vendor',
   'expand_inventory',
   'expand_roster',
 ] as const satisfies readonly PlayerEvent['t'][]

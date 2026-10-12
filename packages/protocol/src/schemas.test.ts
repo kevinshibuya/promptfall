@@ -61,6 +61,19 @@ describe('BatchSchema', () => {
     expect(TimedEventSchema.safeParse({ t: 'cheat', at: 1 }).success).toBe(false)
   })
 
+  it('accepts the auto-vendor setting on and off, and refuses it without a boolean', () => {
+    for (const on of [true, false]) {
+      const event = { t: 'set_auto_vendor', on, at: 4 }
+      expect(TimedEventSchema.parse(event)).toEqual(event)
+      expect(BatchSchema.safeParse({ ...valid, events: [event] }).success).toBe(true)
+    }
+    expect(TimedEventSchema.safeParse({ t: 'set_auto_vendor', on: 'on', at: 4 }).success).toBe(
+      false,
+    )
+    expect(TimedEventSchema.safeParse({ t: 'set_auto_vendor', at: 4 }).success).toBe(false)
+    expect(PLAYER_EVENT_KINDS).toContain('set_auto_vendor')
+  })
+
   it('rejects a batch without a cursor', () => {
     const { cursor: _cursor, ...rest } = valid
     expect(BatchSchema.safeParse(rest).success).toBe(false)
@@ -170,7 +183,7 @@ describe('sandbox events', () => {
       const batch = { ...valid, events: [{ ...grant, at: 1 }] }
       expect(BatchSchema.safeParse(batch).success).toBe(false)
     }
-    expect(PLAYER_EVENT_KINDS).toHaveLength(14)
+    expect(PLAYER_EVENT_KINDS).toHaveLength(15)
     for (const kind of SANDBOX_EVENT_KINDS) expect(PLAYER_EVENT_KINDS).not.toContain(kind)
   })
 })

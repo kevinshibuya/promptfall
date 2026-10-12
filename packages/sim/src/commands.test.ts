@@ -214,3 +214,13 @@ describe('farm and expansions', () => {
     expect(rejectedReason(step(s0, { t: 'expand_roster' }).effects)).toBe('not_enough_gold')
   })
 })
+
+describe('auto-vendor', () => {
+  it('set_auto_vendor sets the flag on and off; every save starts it off', () => {
+    expect(s0.autoVendor).toBe(false)
+    const on = step(s0, { t: 'set_auto_vendor', on: true })
+    expect(on.state.autoVendor).toBe(true)
+    expect(on.effects.filter((e) => e.k === 'rejected')).toEqual([])
+    expect(step(on.state, { t: 'set_auto_vendor', on: false }).state.autoVendor).toBe(false)
+  })
+})

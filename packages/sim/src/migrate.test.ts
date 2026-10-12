@@ -429,6 +429,51 @@ describe('the 8→9 step: a wipe restarts the zone, the third is a retreat', () 
   })
 })
 
+describe('the 9→10 step: the auto-vendor setting', () => {
+  // The state gains the auto-vendor flag, off: nothing the player did not ask for sells an item.
+  const PINNED = { golden: 'd876160b858cf8cd', deep: 'f7a5ec40c27f192e' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v9-deep.json' : 'v9.json')
+    const r = migrate(before, { to: 10 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`starts the ${kind} fixture's auto-vendor setting off`, () => {
+      expect('autoVendor' in before).toBe(false)
+      expect(after.v).toBe(10)
+      expect(after.autoVendor).toBe(false)
+    })
+
+    it(`keeps every hero's level, xp and HP and the items, gold, zone and party of the ${kind} fixture`, () => {
+      expect(after.roster.map((h) => [h.id, h.level, h.xp, h.hp])).toEqual(
+        before.roster.map((h) => [h.id, h.level, h.xp, h.hp]),
+      )
+      expect(after.inventory).toEqual(before.inventory)
+      expect(after.gold).toBe(before.gold)
+      expect(after.zone).toBe(before.zone)
+      expect(after.zoneWipes).toBe(before.zoneWipes)
+      expect(after.party).toEqual(before.party)
+      expect(after.stats).toEqual(before.stats)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v9 = fixture('v9-deep.json')
+    const [item] = v9.inventory
+    if (!item) throw new Error('deep fixture')
+    expect(migrateGoods({ kind: 'item', item }, 9, { to: 10 })).toEqual({
+      ok: true,
+      goods: { kind: 'item', item },
+    })
+  })
+})
+
 describe('the chain', () => {
   for (const kind of ['golden', 'deep'] as const) {
     it(`takes the oldest ${kind} fixture to the current version`, () => {

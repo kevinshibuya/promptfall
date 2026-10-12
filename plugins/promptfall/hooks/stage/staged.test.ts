@@ -388,7 +388,7 @@ test('a drop row waits for its reveal; a market row never does', () => {
   t.onEffects(
     [
       { k: 'drop', item: item('i1', 'silk_robe') },
-      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3 },
+      { k: 'drop_vendored', item: item('i2', 'oak_staff'), gold: 3, cause: 'full' },
     ],
     NOW,
   )

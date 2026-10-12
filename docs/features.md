@@ -98,7 +98,10 @@ armour, accessory), items are gated by class, and an equipped item still takes a
 
 **Vendoring.** Vendoring sells an item to the game for gold, after a Yes or No; Common and
 Uncommon items can only be vendored. A drop that finds the inventory full is vendored on the spot,
-and the combat log says so.
+and the combat log says so. The auto-vendor setting, off on every save and kept with the account,
+vendors a Common drop on pickup, and an Uncommon one once the party is past zone 3, unless a party
+hero has the item's slot empty and could wear it; it never touches a Rare or better. Its chest
+plays as a full inventory's does and the combat log says `Oak Staff vendored, 3G.`
 
 **Reforging.** Reforging rerolls one affix of an item for gold: it rolls the same flat range and
 the item keeps its tier. The price is the rarity's price times the item tier's multiplier, shown on
@@ -311,10 +314,11 @@ the foot saying what the keys do. Tab or the arrows move the ▶, Enter runs the
 command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cancels and Reset ask
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
-**Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer), the band
-shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on
-this server, each of the last two asking Yes or No. Its detail window names the server, the client,
-the mode and the session.
+**Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer, and
+Auto-vendor off or on, the one kept with the account rather than the machine), the band shown or
+collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on this
+server, each of the last two asking Yes or No. A session that is not playing shows Auto-vendor and
+cannot change it. Its detail window names the server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions.
@@ -323,9 +327,10 @@ sells the inventory and roster expansions.
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
 
 **The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
-and show the band for the session while play goes on, `farm` flips the tactics, and `server <url>`
-or `server local` points the machine at an HTTP server or at the in-process fake, each with its
-own account; `server` alone says which is in force. A fresh install, with no server set, plays on
+and show the band for the session while play goes on, `farm` flips the tactics, `autovendor on`
+and `autovendor off` set the account's auto-vendor setting (any other word answers the usage),
+and `server <url>` or `server local` points the machine at an HTTP server or at the in-process
+fake, each with its own account; `server` alone says which is in force. A fresh install, with no server set, plays on
 the public server. `sound on|off`, `motion full|still` and `renderer auto|image|raster` set the
 machine's settings.
 
@@ -334,7 +339,7 @@ another session makes that one the primary. A prompt goes through at once and th
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
-trades, `farm` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
+trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server

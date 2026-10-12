@@ -114,6 +114,16 @@ export function accountPane(input: PaneInput): PaneBuild {
       { t: 'setting', patch: { renderer: RENDERER_NEXT[settings.renderer] } },
       'x',
     ),
+    // The account's, not the machine's: a secondary shows it and sends nothing.
+    setting(
+      inner,
+      'autovendor',
+      [{ text: 'Auto-vendor' }],
+      view.autoVendor ? 'on' : 'off',
+      input.readOnly
+        ? { t: 'none' }
+        : { t: 'event', event: { t: 'set_auto_vendor', on: !view.autoVendor } },
+    ),
     setting(inner, 'band', [{ text: 'Band' }], account.collapsed ? 'collapsed' : 'shown', {
       t: 'band',
       collapsed: !account.collapsed,
@@ -143,7 +153,10 @@ export function accountPane(input: PaneInput): PaneBuild {
     yesNo: null,
     panel: null,
     error: null,
-    state: [`Enter: change it. ${MOVE_HELP}`, 'Settings are kept per machine.'],
+    state: [
+      `Enter: change it. ${MOVE_HELP}`,
+      'Auto-vendor is kept per account, the rest per machine.',
+    ],
     field: null,
     link: !view.account.linked && dialog.link ? { url: dialog.link.url } : null,
   }
