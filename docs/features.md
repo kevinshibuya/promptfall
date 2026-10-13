@@ -369,6 +369,7 @@ as the backdrop changes. A level-up flashes the hero gold and its gains rise ove
 "+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
 the empty ground for about two seconds after the boss has dissolved, and only then does the
 backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
+At 1.5× each hero raises its weapon in a drawn frame of its own; at 1× it keeps its idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.
