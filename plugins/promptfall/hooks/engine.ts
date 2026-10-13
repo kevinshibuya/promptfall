@@ -15,6 +15,7 @@ import type {
   Boards,
   ChatResult,
   Delivery,
+  Journal,
   KeyValue,
   ListingPage,
   ListingQuery,
@@ -136,6 +137,8 @@ export type GameHandle = {
   chat: (text: string) => Promise<Exclude<ChatResult, Banned>>
   /** The boards, with the stored token. Throws `unreachable`, `not_started` or a ban's message. */
   leaderboards: () => Promise<Boards | Unauthorized>
+  /** The journal, with the stored token: a read that writes nothing, from any session. Throws as `leaderboards` does. */
+  journal: () => Promise<Journal | Unauthorized>
   /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
   host: () => LedgerHost | null
   /** The account the engine plays, once bootstrapped. */

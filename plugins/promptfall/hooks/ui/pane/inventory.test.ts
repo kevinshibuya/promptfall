@@ -71,7 +71,7 @@ test('the command window, per item, in order, with hotkeys', () => {
       .filter((s) => s.key.startsWith('menu:'))
       .map((s) => [s.key, s.hotkey ?? '', s.action.t])
   }
-  expect(items('i1')).toEqual([['menu:0', 'u', 'event']])
+  expect(items('i1')).toEqual([['menu:0', 'n', 'event']])
   expect(items('i2')).toEqual([
     ['menu:0', 'e', 'open'],
     ['menu:1', 's', 'sell'],

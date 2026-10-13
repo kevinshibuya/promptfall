@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   GameView,
   ItemView,
+  JournalState,
   ListingView,
   MarketState,
   OrdersState,
@@ -15,6 +16,7 @@ import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
   DIALOG_DEFAULT,
+  JOURNAL_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   SETTINGS_DEFAULT,
@@ -122,10 +124,12 @@ export function paneInput(patch: Partial<PaneInput> = {}): PaneInput {
     art: true,
     hasInput: true,
     remainingMs: () => 0,
+    serverNow: 1_000_000,
     market: MARKET_DEFAULT,
     orders: ORDERS_DEFAULT,
     chat: CHAT_DEFAULT,
     boards: BOARDS_DEFAULT,
+    journal: JOURNAL_DEFAULT,
     account: {
       server: 'in-process',
       leaseOwner: null,
@@ -257,5 +261,37 @@ export function boardsLoaded(): BoardsState {
     },
     busy: false,
     error: null,
+  }
+}
+
+/**
+ * A loaded journal on day 0: a kills goal at 45 of 150, a streak of 3, the first two kills steps
+ * and the first Epic crossed. Its achievement times fall on 12 and 13 October 2026.
+ */
+export function journalLoaded(): JournalState {
+  return {
+    ...JOURNAL_DEFAULT,
+    journal: {
+      achievements: [
+        {
+          id: 'kills',
+          steps: [
+            { step: 1, at: Date.UTC(2026, 9, 12, 9) },
+            { step: 2, at: Date.UTC(2026, 9, 13, 9) },
+          ],
+        },
+        { id: 'first_epic', steps: [{ step: 1, at: Date.UTC(2026, 9, 12, 18) }] },
+      ],
+      day: {
+        index: 0,
+        goal: { kind: 'kills', target: 150 },
+        progress: 45,
+        met: false,
+        resetsAt: 86_400_000,
+      },
+      goalsMet: 4,
+      streak: { length: 3, lastMet: null },
+      restDays: { current: [6, 7], next: null },
+    },
   }
 }

@@ -191,7 +191,7 @@ for (const surface of SURFACES) {
     await ui.press({ key: 'row:iseed' })
     // Worn: no Vendor in the command window.
     expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(false)
-    await hot(ui, 'u')
+    await hot(ui, 'n')
     expect((states.get('view') as GameView).inventory[0]?.equippedBy).toBeNull()
     await ui.press({ key: 'row:iseed' })
     expect((await ui.findAll({ type: 'Button' })).some((b) => b.props.hotkey === 'v')).toBe(true)
@@ -854,6 +854,56 @@ test('/promptfall chat and /promptfall leaderboards open on those tabs', async (
   await $.command.run({ ...RUN, command: 'promptfall', args: 'leaderboards' })
   expect(states.get('dialogTab')).toBe('leaderboards')
   expect(sent.some((r) => r.method === 'GET' && r.path === '/v1/leaderboards')).toBe(true)
+  await ui.unmount()
+})
+
+// ---------------------------------------------------------------------------
+// Journal
+
+/** Zone 1 with zone 3 reached. */
+function travelled(): GameState {
+  return { ...seeded(), zone: 1, highestZone: 3 }
+}
+
+for (const surface of SURFACES) {
+  test(`u opens the Journal, which loads; a zone page's Travel here moves the party on ${surface}`, async ($, on) => {
+    const { states } = harness(on, travelled())
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...PANE })
+    await hot(ui, 'u')
+    expect(states.get('dialogTab')).toBe('journal')
+    const journal = states.get('journal') as { journal: unknown; busy: boolean }
+    expect(journal.busy).toBe(false)
+    expect(journal.journal).not.toBeNull()
+    const text = await paneText(ui)
+    expect(text).toMatch(/Today/)
+    expect(text).toMatch(/Zone 3, Marsh of Sighs/)
+    await ui.press({ key: 'row:zone-3' })
+    expect(await paneText(ui)).toMatch(/Marsh of Sighs +seen +won/)
+    await hot(ui, 't')
+    const view = states.get('view') as GameView
+    expect({ zone: view.zone, wave: view.wave }).toEqual({ zone: 3, wave: 1 })
+    // Back on the list; the page of the zone the party is in has no Travel here.
+    await ui.press({ key: 'row:zone-3' })
+    expect(await paneText(ui)).not.toMatch(/Travel here/)
+    await ui.press({ key: 'back' })
+    expect(await paneText(ui)).toMatch(/Bestiary/)
+    await ui.unmount()
+  })
+}
+
+test('a secondary session reads the Journal without taking the lease', async ($, on) => {
+  const { states, data } = harness(on, travelled())
+  data.set('promptfall:lease', { owner: 'someone-else', until: 9_999_999_999_999 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(states.get('mode')).toBe('secondary')
+  const before = JSON.stringify(data.get('promptfall:pf:acct:acct-1:record'))
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-journal' })
+  const journal = states.get('journal') as { journal: unknown }
+  expect(journal.journal).not.toBeNull()
+  expect(states.get('mode')).toBe('secondary')
+  expect(JSON.stringify(data.get('promptfall:pf:acct:acct-1:record'))).toBe(before)
   await ui.unmount()
 })
 
