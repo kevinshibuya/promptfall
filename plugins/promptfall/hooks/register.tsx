@@ -150,8 +150,9 @@ const PICK_UP_MS = 60_000
 /**
  * Claude Code's agents view runs conversations in background processes, and keeps a spare one warm
  * for the next new task. `job`: the process a conversation was moved into, the one the player comes
- * back to. `spare`: the warm one, which nobody looks at until a prompt in it. `plain`: anything else.
- * Read from the engine's own environment (2.1.296), which no API exposes: missing, it is `plain`.
+ * back to (`CLAUDE_BG_SOURCE=slash`). `spare`: the warm one, which nobody looks at until a prompt in
+ * it (`spare`, or unset at its launch). `plain`: anything else. Read from the engine's own
+ * environment (2.1.296), which no API exposes: missing, it is `plain`.
  */
 type BgKind = 'plain' | 'job' | 'spare'
 
@@ -1091,7 +1092,9 @@ export const register: Register = (on) => {
         bgKind: async () => {
           try {
             if ((await $.env.get('CLAUDE_CODE_SESSION_KIND')) !== 'bg') return 'plain'
-            return (await $.env.get('CLAUDE_BG_SOURCE')) === undefined ? 'spare' : 'job'
+            const source = await $.env.get('CLAUDE_BG_SOURCE')
+            if (source === 'slash') return 'job'
+            return source === undefined || source === 'spare' ? 'spare' : 'plain'
           } catch {
             return 'plain'
           }
@@ -1191,7 +1194,9 @@ export const register: Register = (on) => {
         bgKind: async () => {
           try {
             if ((await $.env.get('CLAUDE_CODE_SESSION_KIND')) !== 'bg') return 'plain'
-            return (await $.env.get('CLAUDE_BG_SOURCE')) === undefined ? 'spare' : 'job'
+            const source = await $.env.get('CLAUDE_BG_SOURCE')
+            if (source === 'slash') return 'job'
+            return source === undefined || source === 'spare' ? 'spare' : 'plain'
           } catch {
             return 'plain'
           }

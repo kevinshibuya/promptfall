@@ -382,7 +382,9 @@ function session(on: On) {
 
 /** The agents view's background processes, as the engine's environment marks them (2.1.296). */
 const JOB_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'slash' }
-const SPARE_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg' }
+const SPARE_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'spare' }
+/** The spare as `ps` saw its launch, before the engine marks it. */
+const SPARE_AT_LAUNCH_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg' }
 
 /** The machine's save as another process of the plugin reaches it: the same store. */
 function elsewhere(data: Map<string, unknown>): StoreKeyValue {
@@ -473,6 +475,18 @@ test('the spare session never takes a free lease; a prompt in it claims one', as
   await time.advance(30_000)
   expect(last.get('mode')).toBe('primary')
   expect((data.get(LEASE) as { owner: string }).owner).toBe(last.get('leaseOwner'))
+})
+
+test('a spare not yet marked takes no free lease either', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], SPARE_AT_LAUNCH_ENV)
+  session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
 })
 
 test('a resumed conversation in a second terminal stays secondary until a prompt', async ($, on) => {
