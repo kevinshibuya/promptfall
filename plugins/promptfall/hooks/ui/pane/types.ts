@@ -39,6 +39,7 @@ export type PaneAction =
   | { t: 'link' } // game()?.link()
   | { t: 'reset' } // game()?.reset(); closes the menu
   | { t: 'delete' } // game()?.deleteAccount(); closes the menu
+  | { t: 'rest_day'; day: number } // toggles an ISO weekday in the rest-days pick; the second closes it and sends the pair
 
 export type Stop = {
   /** The hidden Button's key: what ui.focus and ui.press name. Unique in the pane. */

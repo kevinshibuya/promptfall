@@ -22,6 +22,7 @@ import type {
   MarketResult,
   MyOrders,
   Order,
+  RestDaysResult,
   ServerClient,
   ServerConfig,
   TimedEvent,
@@ -140,6 +141,8 @@ export type GameHandle = {
   leaderboards: () => Promise<Boards | Unauthorized>
   /** The journal, with the stored token: a read that writes nothing, from any session. Throws as `leaderboards` does. */
   journal: () => Promise<Journal | Unauthorized>
+  /** The rest days from next Monday, with the stored token: answers the journal or a refusal. Throws as `journal` does. */
+  setRestDays: (days: number[]) => Promise<Exclude<RestDaysResult, Banned>>
   /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
   host: () => LedgerHost | null
   /** The account the engine plays, once bootstrapped. */

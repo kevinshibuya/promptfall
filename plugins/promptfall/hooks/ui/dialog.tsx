@@ -169,7 +169,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const serverNow = serverClock
       ? serverClock.serverNow + (clientNow - serverClock.clientNow) * serverClock.speed
       : clientNow
-    /** Opening the Market, Orders, Journal or Leaderboards tab syncs and loads it. */
+    /** Opening the Market, Orders, Journal or Leaderboards tab syncs and loads it; Account loads the journal for its rest days. */
     const openTab = async (next: DialogTab) => {
       await update($, dialogTabAtom, () => next)
       const running = game()
@@ -177,7 +177,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       if (next === 'market') await loadMarket(running, market.query, updMarket, after)
       if (next === 'orders') await loadOrders(running, updOrders, after)
       if (next === 'leaderboards') await loadBoards(running, updBoards, after)
-      if (next === 'journal') await loadJournal(running, updJournal, after)
+      if (next === 'journal' || next === 'account') await loadJournal(running, updJournal, after)
     }
 
     const running = game()
@@ -279,6 +279,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
       updMarket,
       updOrders,
+      updJournal,
       market: async () => (await read($, marketAtom)) ?? MARKET_DEFAULT,
       orders: async () => (await read($, ordersAtom)) ?? ORDERS_DEFAULT,
       setSettings,
