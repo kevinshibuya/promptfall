@@ -2,7 +2,7 @@ import type { On, RenderSurface, SessionUsage, UiBlitArgs } from 'claude-code'
 import { expect, mock, type TestBody } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
-import { acquire, release } from './lease'
+import { release } from './lease'
 import { SANDBOX_PINS_SERVER } from './sandbox'
 import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
@@ -371,15 +371,18 @@ test('a primary that lost the lease between renewals does not flush', async ($, 
 })
 
 /**
- * The session as the engine reports it: when it began, and the surfaces it draws on. In the
- * agents view's log (#185) the process a conversation left draws on none.
+ * The surfaces the session draws on, as the engine reports them. In the agents view's log (#185)
+ * the process a conversation left draws on none.
  */
-function session(on: On, startedAt: number) {
+function session(on: On) {
   const drawn = { surfaces: ['terminal'] as RenderSurface[] }
-  on('session.usage', () => ({ value: { startedAt } as SessionUsage }))
   on('session.surfaces', () => ({ value: drawn.surfaces }))
   return drawn
 }
+
+/** The agents view's background processes, as the engine's environment marks them (2.1.296). */
+const JOB_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'slash' }
+const SPARE_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg' }
 
 /** The machine's save as another process of the plugin reaches it: the same store. */
 function elsewhere(data: Map<string, unknown>): StoreKeyValue {
@@ -408,17 +411,19 @@ test('the agents view sequence from the log keeps the lease and the band primary
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)
   const last = states(on)
-  engineBottom(on)
-  // ← hands the conversation to a new process, this one, which keeps the session's start time.
-  // The process it left fires nothing: it still holds the lease and renews it, drawing nowhere.
-  session(on, 900_000)
-  data.set(LEASE, { owner: 'left-behind', until: 1_020_000, startedAt: 900_000 })
+  engineBottom(on, [], JOB_ENV)
+  // ← hands the conversation to a new process, this one. The process it left fires nothing: it
+  // still holds the lease until its next check finds it draws nowhere.
+  session(on)
+  data.set(LEASE, { owner: 'left-behind', until: 1_020_000 })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  // The process left behind lets the lease go; this one picks it up at its next quick try.
+  await release(elsewhere(data), 'left-behind')
+  await time.advance(2000)
   expect(last.get('mode')).toBe('primary')
   const mine = last.get('leaseOwner')
-  expect(data.get(LEASE)).toMatchObject({ owner: mine, startedAt: 900_000 })
-  // The process left behind renews as it always has, and finds the lease taken.
-  expect(await acquire(elsewhere(data), 'left-behind', 1_005_000, 900_000)).toBe(false)
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
   // Enter attaches the terminal to this process: nothing fires, and the band plays here.
   await time.advance(30_000)
   expect(last.get('mode')).toBe('primary')
@@ -432,17 +437,63 @@ test('a session that lost the lease takes it back on its return', async ($, on) 
   const time = mock.clock(on, { now: 1_000_000 })
   const { data } = store(on)
   const last = states(on)
-  engineBottom(on)
+  engineBottom(on, [], JOB_ENV)
   // An empty conversation: the new process is a new session, and nothing ties it to the old one.
-  session(on, 990_000)
-  data.set(LEASE, { owner: 'left-behind', until: 1_020_000, startedAt: 900_000 })
+  session(on)
+  data.set(LEASE, { owner: 'left-behind', until: 1_020_000 })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   expect(last.get('mode')).toBe('secondary')
-  // The process left behind finds it draws nowhere at its renewal and gives the lease up.
+  // Still held: the quick tries leave it alone.
+  await time.advance(4000)
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe('left-behind')
   await release(elsewhere(data), 'left-behind')
-  await time.advance(10_000)
+  await time.advance(2000)
   expect(last.get('mode')).toBe('primary')
-  expect(data.get(LEASE)).toMatchObject({ owner: last.get('leaseOwner'), startedAt: 990_000 })
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(last.get('leaseOwner'))
+})
+
+test('the spare session never takes a free lease; a prompt in it claims one', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], SPARE_ENV)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
+  // A new task typed in the agents view runs here: its prompt claims, and it plays from then.
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
+  expect(last.get('mode')).toBe('primary')
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('primary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(last.get('leaseOwner'))
+})
+
+test('a resumed conversation in a second terminal stays secondary until a prompt', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  session(on)
+  // The first terminal still plays and is drawn; this one resumed the same conversation, so it
+  // keeps the same start time, and a lease that carried it would match.
+  on('session.usage', () => ({ value: { startedAt: 900_000 } as SessionUsage }))
+  data.set(LEASE, { owner: 'first-terminal', until: 9_999_999_999_999, startedAt: 900_000 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe('first-terminal')
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
+  expect(last.get('mode')).toBe('primary')
 })
 
 test('a terminal that draws nowhere flushes, gives the lease up and stops renewing', async ($, on) => {
@@ -451,12 +502,12 @@ test('a terminal that draws nowhere flushes, gives the lease up and stops renewi
   const last = states(on)
   engineBottom(on)
   on('tool.call', () => ({ result: 'ok', text: 'ok' }))
-  const drawn = session(on, 1_000_000)
+  const drawn = session(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
   // ← unmounts the REPL: from here this process draws on no surface, and no hook says so.
   drawn.surfaces = []
-  await time.advance(10_000)
+  await time.advance(2000)
   expect(writes.some((w) => seqOf(w) === 1)).toBe(true)
   expect(data.has(LEASE)).toBe(false)
   expect(last.get('mode')).toBe('secondary')
@@ -472,12 +523,12 @@ test('a process that still renews after its conversation left flushes nothing on
   const last = states(on)
   engineBottom(on)
   on('tool.call', () => ({ result: 'ok', text: 'ok' }))
-  const drawn = session(on, 1_000_000)
+  const drawn = session(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
-  // The new process claimed at its start, before this one's first renewal.
+  // The new process claimed (a prompt there) before this one's first check.
   drawn.surfaces = []
-  data.set(LEASE, { owner: 'moved-on', until: 9_999_999_999_999, startedAt: 1_000_000 })
+  data.set(LEASE, { owner: 'moved-on', until: 9_999_999_999_999 })
   await time.advance(10_000)
   expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
   expect((data.get(LEASE) as { owner: string }).owner).toBe('moved-on')
