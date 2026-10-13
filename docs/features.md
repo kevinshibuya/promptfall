@@ -84,6 +84,15 @@ starts again. A zone boss kill or any change of zone also starts it again. The c
 "The party retreats to zone 3.", and a long toast reads "The party retreats to zone 3, Marsh of
 Sighs".
 
+**Travel.** The party can travel to any zone it has reached, from that zone's Journal page or
+with `/promptfall travel <zone>`. It travels at once, with no cost and no cooldown. The fight on the
+field ends with no drops and no XP, and the party starts the zone at wave 1. Past tier 1 a zone's
+page offers each tier of it the party has reached. The command answers "The party travels to
+zone 3, Marsh of Sighs." or says why it cannot go: a zone past the highest reached, the zone the
+party is in, a world boss fight, or a zone that is not a number. A session with no game running
+answers that it is not playing. A retreat still drops the party one zone, and travel can take it
+straight back.
+
 **Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
 moving on.
@@ -353,8 +362,8 @@ a tick, the HP bars drop at the moment each hit lands, as the action gauges fill
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
 two drops on Loot and the World rows on World.
 
-**The pane.** `/promptfall` opens the pane on eight tabs: Inventory, Heroes, Market, Orders,
-Account, Odds, Chat and Leaderboards, named in a tab window with each hotkey letter in gold. Each
+**The pane.** `/promptfall` opens the pane on nine tabs: Inventory, Heroes, Market, Orders,
+Account, Odds, Journal, Chat and Leaderboards, named in a tab window with each hotkey letter in gold. Each
 tab is a list window with a ▶ cursor, a detail window beside it, and a two-line message window at
 the foot saying what the keys do. Tab or the arrows move the ▶, Enter runs the row or opens its
 command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cancels and Reset ask
@@ -372,11 +381,27 @@ sells the inventory and roster expansions. Past tier 1 its title and its message
 the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
 priced by rarity and tier.
 
+**Journal tab.** The Journal tab, on `u`, keeps the player's record. Today shows the daily goal
+with its progress, "Resets in 5 h" from the server's clock and the streak in work days. The goal
+shows as soon as the tab opens; the progress, the reset and the streak arrive with the journal read,
+with "Loading…" in their place until then. Bestiary lists one row per zone reached, all twelve
+past tier 1, each with its enemies defeated out of six. Collection and Achievements follow. Enter
+on a zone opens its page: the six enemies with how often each was seen and defeated, a `*` on each
+defeated at least once, the zone boss in orange, and Travel here (`t`), which is left out on the
+zone the party is in. The Collection page lists every item base with five rarity letters,
+`C U R E L`, lit in each rarity the party has held it in. The Achievements page shows each ladder
+as one row of step marks with the next step's gold and the date of the last step crossed, and each
+one-off with its mark and date. `q` backs out of a page. The bestiary and the collection count from
+the version that brought them. A session that is not playing reads the Journal and writes nothing.
+`/promptfall journal` opens the pane on it. Unequip in an item's command window is on `n`, since
+`u` is the Journal's.
+
 **Motion.** Motion is full by default; set to still, the idle bob stops while attacks and hits
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
 
-**The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
-and show the band for the session while play goes on, `farm` flips the tactics, `autovendor on`
+**The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab, `journal` among
+them. `off` and `on` hide and show the band for the session while play goes on, `farm` flips the
+tactics, `travel <zone>` moves the party to a zone it has reached, `autovendor on`
 and `autovendor off` set the account's auto-vendor setting (any other word answers the usage),
 and `server <url>` or `server local` points the machine at an HTTP server or at the in-process
 fake, each with its own account; `server` alone says which is in force. A fresh install, with no server set, plays on
@@ -388,7 +413,7 @@ another session makes that one the primary. A prompt goes through at once and th
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
-trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
+trades, `farm`, `autovendor`, `travel` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.

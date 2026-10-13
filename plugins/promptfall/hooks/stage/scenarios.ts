@@ -6,6 +6,7 @@ import { chatPane } from '../ui/pane/chat'
 import {
   boardsLoaded,
   chatWorld,
+  journalLoaded,
   marketPage,
   ordersMine,
   paneInput,
@@ -14,6 +15,7 @@ import {
 import { heroesPane } from '../ui/pane/heroes'
 import type { PaneInput } from '../ui/pane/input'
 import { inventoryPane } from '../ui/pane/inventory'
+import { journalPane } from '../ui/pane/journal'
 import { boardsPane } from '../ui/pane/leaderboards'
 import { marketPane } from '../ui/pane/market'
 import { oddsPane } from '../ui/pane/odds'
@@ -576,6 +578,8 @@ export const PANE_SCENARIOS = [
   'pane-account',
   'pane-account-link',
   'pane-odds',
+  'pane-journal',
+  'pane-journal-zone',
   'pane-chat',
   'pane-leaderboards',
   'pane-short',
@@ -709,6 +713,30 @@ export function pane(name: PaneScenario): PaneBuild {
           view: { ...paneView(), nextInventoryCost: 500, nextRosterCost: 2000 },
         }),
       )
+    case 'pane-journal':
+    case 'pane-journal-zone':
+      return journalPane({
+        ...withDialog(
+          name === 'pane-journal-zone' ? { menu: { kind: 'journal_zone', zone: 1, at: 6 } } : {},
+          {
+            tab: 'journal',
+            view: {
+              ...paneView(),
+              zone: 2,
+              highestZone: 3,
+              tallies: {
+                ...paneView().tallies,
+                enemies: {
+                  road_slime: { seen: 40, defeated: 31 },
+                  field_rat: { seen: 12, defeated: 9 },
+                },
+              },
+            },
+            remainingMs: (deadline) => deadline - 70_000_000,
+          },
+        ),
+        journal: journalLoaded(),
+      })
     case 'pane-chat':
       return chatPane(
         paneInput({

@@ -30,6 +30,7 @@ import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
   DIALOG_DEFAULT,
+  JOURNAL_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   parseSettings,
@@ -49,6 +50,7 @@ import type {
   Boards,
   ChatResult,
   FetchLike,
+  Journal,
   LinkPoll,
   LinkRefused,
   LinkStart,
@@ -445,6 +447,7 @@ class GameSession implements GameHandle {
       orders: ORDERS_DEFAULT,
       chat: CHAT_DEFAULT,
       boards: BOARDS_DEFAULT,
+      journal: JOURNAL_DEFAULT,
     })
     await this.io.clearDialog()
     if (this.role === 'primary') await this.becomePrimary()
@@ -579,6 +582,17 @@ class GameSession implements GameHandle {
     return this.unbanned(r)
   }
 
+  async journal(): Promise<Journal | Unauthorized> {
+    const auth = await this.storedAuth()
+    let r: Journal | Unauthorized | Banned
+    try {
+      r = await this.server.client.journal(auth)
+    } catch {
+      throw new Error('unreachable')
+    }
+    return this.unbanned(r)
+  }
+
   /** Deletes every Promptfall key but the lease and the settings, then starts over on the same server. */
   reset(): Promise<void> {
     return this.wipe(false)
@@ -677,8 +691,13 @@ class GameSession implements GameHandle {
     const setting = await this.readSetting()
     if (setting === this.setting) return
     this.useServer(setting)
-    // Chat drafts and loaded boards belong to the old server too.
-    await this.io.publish({ server: setting, chat: CHAT_DEFAULT, boards: BOARDS_DEFAULT })
+    // Chat drafts, loaded boards and the journal belong to the old server too.
+    await this.io.publish({
+      server: setting,
+      chat: CHAT_DEFAULT,
+      boards: BOARDS_DEFAULT,
+      journal: JOURNAL_DEFAULT,
+    })
   }
 
   /**
@@ -865,6 +884,7 @@ const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAU
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const journalAtom = atom({ plugin: 'promptfall', key: 'journal' } as const, JOURNAL_DEFAULT)
 const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as const, false)
 const surfaceAtom = atom({ plugin: 'promptfall', key: 'surface' } as const, null)
 
@@ -930,6 +950,9 @@ export const register: Register = (on) => {
           if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
           if (patch.boards !== undefined) {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
+          }
+          if (patch.journal !== undefined) {
+            await update($, journalAtom, () => patch.journal ?? JOURNAL_DEFAULT)
           }
           if (patch.soundSilent !== undefined) {
             await update($, soundSilentAtom, () => patch.soundSilent ?? false)
@@ -1014,6 +1037,9 @@ export const register: Register = (on) => {
           if (patch.chat !== undefined) await update($, chatAtom, () => patch.chat ?? CHAT_DEFAULT)
           if (patch.boards !== undefined) {
             await update($, boardsAtom, () => patch.boards ?? BOARDS_DEFAULT)
+          }
+          if (patch.journal !== undefined) {
+            await update($, journalAtom, () => patch.journal ?? JOURNAL_DEFAULT)
           }
           if (patch.soundSilent !== undefined) {
             await update($, soundSilentAtom, () => patch.soundSilent ?? false)

@@ -251,6 +251,7 @@ test('the no-view pane: one line on Market; on Account with a game, Reset, the s
     'tab-orders',
     'tab-account',
     'tab-odds',
+    'tab-journal',
     'tab-chat',
     'tab-leaderboards',
     'row:empty',
