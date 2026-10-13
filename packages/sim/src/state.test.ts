@@ -27,8 +27,10 @@ describe('createInitialState', () => {
     expect(s.stats).toEqual({ kills: 0, bosses: 0, wipes: 0 })
   })
 
-  it('is version 14 with an empty battle, no wipes in its zone and auto-vendor off', () => {
-    expect(s.v).toBe(14)
+  it('is version 15 with an empty battle, no wipes in its zone, auto-vendor, Haste and Guard off', () => {
+    expect(s.v).toBe(15)
+    expect(s.hasteTicks).toBe(0)
+    expect(s.guardTicks).toBe(0)
     expect(s.zoneWipes).toBe(0)
     expect(s.autoVendor).toBe(false)
     expect(s.battle).toEqual({ gauges: [], queue: [], busy: 0 })

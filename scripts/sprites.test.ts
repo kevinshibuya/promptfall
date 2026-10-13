@@ -508,8 +508,13 @@ describe('sprites build', () => {
       expect(r.drift).toEqual(['enemy:boss frames.strike: the fit shrinks it to 67%'])
     })
 
-    it('expects the three effect sprites', async () => {
-      expect(EFFECT_IDS).toEqual(['effect:fireball', 'effect:light_burst', 'effect:arrow'])
+    it('expects the four effect sprites: the three of an action and the campfire', async () => {
+      expect(EFFECT_IDS).toEqual([
+        'effect:fireball',
+        'effect:light_burst',
+        'effect:arrow',
+        'effect:campfire',
+      ])
       const ids = await expectedIds()
       for (const id of EFFECT_IDS) expect(ids).toContain(id)
     })

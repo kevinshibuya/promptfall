@@ -12,6 +12,15 @@ const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number
 }
 
 /**
+ * The four wave archetypes' mean hp share, 10,750. A wave enemy's xp, gold and drop chance are the
+ * zone's base × its own hp share over this mean (#156): reward per point of hp is the same for
+ * every kind, so a tool kind's hint buys no farming rate (ADR 0014), and the four average the base.
+ */
+const WAVE_HP_MEAN_BP =
+  (['brute', 'swift', 'tank', 'caster'] as const).reduce((sum, a) => sum + ARCHETYPES[a].hpBp, 0) /
+  4
+
+/**
  * The numbers every enemy is built from: the zone 1 baseline, how each stat grows per zone in
  * basis points, and a per-zone multiplier on atk, hp and xp over the growth curve.
  */
@@ -221,6 +230,9 @@ function enemyOf(
     spd: a.spd + Math.floor(spdZone / 3),
   }
   const bossMult = kind === 'zone_boss' ? 8 : kind === 'turn_boss' ? 4 : 1
+  // A wave enemy pays by its hp share; a boss pays its kind's multiple of the base.
+  const pay = (value: number): number =>
+    kind === 'wave' ? Math.max(1, Math.floor((value * a.hpBp) / WAVE_HP_MEAN_BP)) : value * bossMult
   return {
     id,
     name,
@@ -229,9 +241,9 @@ function enemyOf(
     kind,
     archetype,
     stats,
-    xp: b.xp * bossMult,
-    gold: [b.goldMin * bossMult, b.goldMax * bossMult],
-    dropBp: kind === 'zone_boss' ? 10000 : kind === 'turn_boss' ? 6000 : 1500,
+    xp: pay(b.xp),
+    gold: [pay(b.goldMin), pay(b.goldMax)],
+    dropBp: kind === 'zone_boss' ? 10000 : kind === 'turn_boss' ? 6000 : pay(1500),
     contractBp: kind === 'zone_boss' ? 1500 : kind === 'turn_boss' ? 400 : 0,
   }
 }

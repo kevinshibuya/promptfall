@@ -1,7 +1,7 @@
 import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { drawOutlinedText, glyphBlock } from './font'
-import type { StageModel } from './model'
+import type { Mark, StageActor, StageModel } from './model'
 
 /** RGBA, alpha 0 or 255 only. */
 export type Frame = { width: number; height: number; rgba: Uint8ClampedArray }
@@ -118,9 +118,10 @@ function drawBackdrop(frame: Frame, art: SpriteArt): void {
 
 /**
  * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
- * on the bottom two rows, three at scale 1.5), the actors in slot order, the glows, the chests,
- * the items rising from them, the effect sprites, then (when `numbers`) the damage numbers. Raster
- * draws numbers as text cells instead.
+ * on the bottom two rows, three at scale 1.5), the actors in slot order (a hasted hero's streak
+ * under it), Guard's shield, the glows, the chests, the items rising from them, the campfire, the
+ * effect sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells
+ * instead.
  */
 export function composeFrame(model: StageModel, opts: { numbers: boolean }): Frame {
   const { width, height } = frameSize(model)
@@ -132,12 +133,19 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
       for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
     }
   }
+  const mark = (a: StageActor, m: Mark) =>
+    blit(frame, m.art, m.art.palette, a.x + m.dx, a.y + m.dy, false, a.alpha)
   for (const a of model.actors) {
+    // Haste's streak trails the idle pair, under the hero and under the next one along.
+    if (a.streak && (a.pose === 'idle' || a.pose === 'idle_b')) mark(a, a.streak)
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
   }
+  for (const a of model.actors) if (a.shield) mark(a, a.shield)
   for (const g of model.glows) disc(frame, g.x, g.y, g.r, g.rgb, g.alpha)
   for (const c of model.chests) blit(frame, c.art, c.art.palette, c.x, c.y, false, c.alpha)
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)
+  const fire = model.campfire
+  if (fire) blit(frame, fire.art, fire.art.palette, fire.x, fire.y, false, fire.alpha)
   for (const e of model.effects) blit(frame, e.art, e.art.palette, e.x, e.y, e.flipX, 1)
   const block = glyphBlock(model.scale)
   if (opts.numbers) {

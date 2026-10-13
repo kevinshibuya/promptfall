@@ -1,7 +1,10 @@
 import { decode, encode } from './base64'
 import type { SpriteArt } from './types'
 
-/** The derived frames: idle B and the hit frame are fixed transforms of the idle art, never drawn. */
+/**
+ * The derived frames: idle B, the hit frame and Guard's stance are fixed transforms of the idle
+ * art, never drawn.
+ */
 
 export type OpaqueRows = { r0: number; r1: number }
 export type OpaqueBox = { x0: number; y0: number; x1: number; y1: number }
@@ -10,6 +13,7 @@ export type Sheared = { art: SpriteArt; grow: number }
 const boxes = new WeakMap<SpriteArt, OpaqueBox | null>()
 const squashed = new WeakMap<SpriteArt, SpriteArt>()
 const sheared = new WeakMap<SpriteArt, Sheared>()
+const stances = new WeakMap<SpriteArt, Sheared>()
 
 /** The first and last rows holding an opaque pixel; null for an empty art. */
 export function opaqueRows(art: SpriteArt): OpaqueRows | null {
@@ -110,4 +114,31 @@ export function shear(art: SpriteArt): Sheared {
 export function lighten(rgb: number): number {
   const ch = (v: number) => Math.round(255 * (v / 255) ** 0.6)
   return (ch((rgb >> 16) & 0xff) << 16) | (ch((rgb >> 8) & 0xff) << 8) | ch(rgb & 0xff)
+}
+
+/**
+ * Guard's stance: idle B's one-row squash leaned forward, the hit's lean the other way. The top
+ * row moves `grow` columns right and the bottom row keeps its columns, so the head goes toward the
+ * art's facing; a flipped caller places the output `grow` further left to keep the feet.
+ */
+export function stance(art: SpriteArt): Sheared {
+  const hit = stances.get(art)
+  if (hit) return hit
+  const low = squash(art)
+  const s = shearShifts(low)
+  let out: Sheared = { art: low, grow: 0 }
+  if (s) {
+    const src = decode(low.pixels)
+    const w = low.width + s.k
+    const px = new Uint8Array(w * low.height)
+    for (let y = s.r0; y <= s.r1; y++) {
+      px.set(src.subarray(y * low.width, (y + 1) * low.width), y * w + s.k - s.shift(y))
+    }
+    out = {
+      art: { width: w, height: low.height, palette: low.palette, pixels: encode(px) },
+      grow: s.k,
+    }
+  }
+  stances.set(art, out)
+  return out
 }

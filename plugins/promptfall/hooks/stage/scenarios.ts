@@ -48,6 +48,7 @@ import {
   DISSOLVE_MS,
   FLASH_MS,
   FULL_MIN_COLUMNS,
+  HASTE_FRAME_MS,
   HIRES_SCALE,
   LUNGE_MS,
   REVEAL_RISE_MS,
@@ -78,6 +79,10 @@ export const SCENARIOS = [
   'boss-strike',
   'step',
   'step-boss',
+  'haste',
+  'enrage',
+  'camp',
+  'guard',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -112,23 +117,29 @@ const item = {
 }
 /** How far into its hold a `reveal` scenario's item is. */
 const REVEAL_HELD_MS = 400
+/** The wave with every hero patched: hasted, or guarding. */
+const party = (patch: Partial<GameView['heroes'][number]>): GameView => {
+  const v = wave()
+  v.heroes = v.heroes.map((h) => ({ ...h, ...patch }))
+  return v
+}
 const withoutFront = (): GameView => {
   const v = wave()
   v.enemies = v.enemies.filter((e) => e.id !== 'e1')
   return v
 }
 
-/** The scenario's models at scale 1 and at HIRES_SCALE, with its motions at NOW. */
-function staged(view: GameView, t: StageTimeline, box: Box, compact = false): Staged {
+/** The scenario's models at scale 1 and at HIRES_SCALE, with its motions at `now` (NOW). */
+function staged(view: GameView, t: StageTimeline, box: Box, compact = false, now = NOW): Staged {
   const opts = { compact, motion: 'full' as const }
   return {
-    model: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, opts),
-    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, NOW), t, NOW, box, {
+    model: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts),
+    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, {
       ...opts,
       scale: HIRES_SCALE,
     }),
-    motions: t.active(NOW),
-    now: NOW,
+    motions: t.active(now),
+    now,
   }
 }
 
@@ -210,6 +221,47 @@ export function stage(name: Scenario): Staged {
     case 'rest': {
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)
+    }
+    // The reactive events (spec #131). Haste: every hero trails its streak and bobs twice as fast,
+    // a quarter-second in: the heroes in the second half of their bob, the enemies in the first.
+    case 'haste': {
+      const v = party({ hasted: true })
+      t.observe(v, NOW)
+      return staged(v, t, FULL, false, NOW + HASTE_FRAME_MS)
+    }
+    // A mishap 40 ms ago: the goblin scout mid red flash, then tinted until its next hit.
+    case 'enrage': {
+      t.observe(wave(), NOW - 1000)
+      t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW - 40)
+      t.observe(wave(), NOW)
+      return staged(wave(), t, FULL)
+    }
+    // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
+    case 'camp': {
+      const hurt = wave()
+      hurt.heroes = hurt.heroes.map((h) => (h.id === 'h2' ? h : { ...h, hp: h.hp - 25 }))
+      t.observe(hurt, NOW - 1000)
+      t.onEffects(
+        [
+          {
+            k: 'camp',
+            heals: [
+              { heroId: 'h1', amount: 25 },
+              { heroId: 'h2', amount: 0 },
+              { heroId: 'h3', amount: 25 },
+            ],
+          },
+        ],
+        NOW - 300,
+      )
+      t.observe(wave(), NOW)
+      return staged(wave(), t, FULL)
+    }
+    // Guard: every hero in the stance, the bob stopped, the knight under the shield.
+    case 'guard': {
+      const v = party({ guarding: true })
+      t.observe(v, NOW)
+      return staged(v, t, FULL)
     }
     case 'boss': {
       // The boss spawned half a spawn ago.

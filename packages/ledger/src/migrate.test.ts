@@ -183,6 +183,40 @@ describe('a record behind the sim version', () => {
     expect(after.refillAt.tick).toBe(record.refillAt.tick)
   })
 
+  it('starts a new account with eight full buckets, and one from before the reactive events with the four new ones full', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger, advance } = makeLedger(kv, { migrations: stubChain() })
+    const m = await ledger.host.mint({ state: createInitialState(4), name: 'Bo', linked: false })
+    const record = await stored(kv, m.accountId)
+    // A new account starts with all eight full.
+    expect(record.buckets).toEqual({
+      tick: 70,
+      tool_call: 140,
+      rest: 30,
+      turn_end: 30,
+      turn_start: 30,
+      tool_mishap: 30,
+      camp: 5,
+      guard: 60,
+    })
+    const fresh = ['turn_start', 'tool_mishap', 'camp', 'guard'] as const
+    const without = (r: Record<string, number>) =>
+      Object.fromEntries(
+        Object.entries(r).filter(([k]) => !(fresh as readonly string[]).includes(k)),
+      )
+    await rewind(kv, m.accountId, BEHIND, [], {
+      buckets: { ...without(record.buckets), tick: 3 } as AccountRecord['buckets'],
+      refillAt: without(record.refillAt) as AccountRecord['refillAt'],
+    })
+    advance(60_000)
+    await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    await ledger.host.credit(m.accountId, 1, 'test')
+    const after = await stored(kv, m.accountId)
+    expect(after.buckets).toMatchObject({ turn_start: 30, tool_mishap: 30, camp: 5, guard: 60 })
+    for (const kind of fresh) expect(after.refillAt[kind]).toBe(START + 60_000)
+    expect(after.buckets.tick).toBe(3)
+  })
+
   it('normalises the market book and the returns once through the goods rule', async () => {
     const kv = new MemoryKeyValue()
     // Written at the current version: the seller lists a longsword, so the book holds goods.

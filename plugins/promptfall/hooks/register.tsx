@@ -12,6 +12,7 @@ import {
   type TradeCall,
 } from './engine'
 import { acquire, claim, holds, LEASE_KEY, release } from './lease'
+import { type ReactiveEvent, ReactivePacer } from './reactive'
 import {
   LOCAL,
   type ResolvedServer,
@@ -39,6 +40,7 @@ import {
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
 import { LONG_MS, type Toast, toastsFor, worldToast } from './toasts'
+import { toolKind } from './tool-kinds'
 import { registerBand } from './ui/band'
 import { registerDialog } from './ui/dialog'
 import type {
@@ -170,6 +172,7 @@ class GameSession implements GameHandle {
   private paneNoticeGen = 0
   private readonly poller: WorldPoller
   private readonly loops = new Map<RenderSurface, StageLoop>()
+  private readonly pacer = new ReactivePacer()
   /** The last applied event's time: the stage's `now` for effects a delivery brought. */
   private lastAt = 0
   /**
@@ -394,6 +397,11 @@ class GameSession implements GameHandle {
 
   apply(event: PlayerEvent, at: number): void {
     if (this.canApply()) this.engine.apply(event, at)
+  }
+
+  /** A reactive event, on the primary and at its kind's pace. `fresh`: a turn's own start. */
+  react(event: ReactiveEvent, at: number, fresh = false): void {
+    if (this.canApply() && this.pacer.admits(event, at, fresh)) this.engine.apply(event, at)
   }
 
   trade<R extends MarketResult>(fn: TradeCall<R>): Promise<Exclude<R, Banned>> {
@@ -861,6 +869,8 @@ const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as con
 const surfaceAtom = atom({ plugin: 'promptfall', key: 'surface' } as const, null)
 
 let game: GameSession | null = null
+/** The calls the permission-denied hook named, until each resolves: their failure is no mishap. */
+const denied = new Set<string>()
 /** PROMPTFALL_SANDBOX=1, read at session start and at the desktop attach. */
 let sandbox = false
 
@@ -1056,15 +1066,67 @@ export const register: Register = (on) => {
     return next(e)
   })
 
+  // The main loop's by construction: a subagent's run raises no turn.start. Haste starts with it.
   on('turn.start', async ($, e, next) => {
-    await $.clock.now()
+    const at = await $.clock.now()
+    game?.react({ t: 'turn_start' }, at, true)
     game?.setCadence(TURN_CADENCE_MS)
     return next(e)
   })
 
+  // A main-loop step keeps Haste on while Claude works; a subagent's leaves Haste and the cadence.
+  on('turn.step', async function* ($, e, next) {
+    if (!e.agentId) game?.react({ t: 'turn_start' }, await $.clock.now())
+    return yield* next(e)
+  })
+
+  // Only the running main turn can be aborted, and an abort that went through ends it: the party
+  // is not left hasted, nor the cadence at turn speed.
+  on('turn.abort', async ($, e, next) => {
+    const result = await next(e)
+    game?.apply({ t: 'turn_end' }, await $.clock.now())
+    game?.setCadence(IDLE_CADENCE_MS)
+    return result
+  })
+
+  // The hook runs before the permission prompt: `next(e)` asks, runs the tool and settles when the
+  // call resolves, allowed, denied or failed, which answers any prompt the call raised.
   on('tool.call', async ($, e, next) => {
     const at = await $.clock.now()
-    game?.apply({ t: 'tool_call' }, at)
+    game?.apply({ t: 'tool_call', hint: toolKind(e.tool, e.agentId) }, at)
+    try {
+      return await next(e)
+    } finally {
+      denied.delete(e.tool_use_id)
+      game?.react({ t: 'guard', on: false }, await $.clock.now())
+    }
+  })
+
+  // Raised as the permission prompt shows. Its `next(e)` settles only once the person answered,
+  // at times after the call itself resolved (seen live on 2.1.296), so the guard goes up before it.
+  // `tool.check` answering ask is not the signal: the mode settles an ask after it, often unasked.
+  on('classic.PermissionRequest', async ($, e, next) => {
+    game?.react({ t: 'guard', on: true }, await $.clock.now())
+    return next(e)
+  })
+
+  on('classic.PermissionDenied', async ($, e, next) => {
+    denied.add(e.tool_use_id)
+    game?.react({ t: 'guard', on: false }, await $.clock.now())
+    return next(e)
+  })
+
+  // Neither the person's stop nor a refusal is Claude's stumble. A no at the prompt raises no
+  // failure at all (seen live on 2.1.296); a call the permission-denied hook named is filtered here.
+  on('classic.PostToolUseFailure', async ($, e, next) => {
+    const at = await $.clock.now()
+    if (!e.is_interrupt && !denied.has(e.tool_use_id)) game?.react({ t: 'tool_mishap' }, at)
+    return next(e)
+  })
+
+  // Manual and auto alike: the engine raises it for neither its own precompute nor a forked one.
+  on('classic.PostCompact', async ($, e, next) => {
+    game?.react({ t: 'camp' }, await $.clock.now())
     return next(e)
   })
 

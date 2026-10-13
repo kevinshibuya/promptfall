@@ -7,6 +7,7 @@ import type {
   Rarity,
   ServerEvent,
   Stats,
+  WaveArchetype,
 } from '@promptfall/sim'
 import { z } from 'zod'
 
@@ -32,12 +33,23 @@ export const RaritySchema: z.ZodType<Rarity> = z.enum([
 ])
 export const HeroClassSchema = z.enum(['knight', 'black_mage', 'white_mage', 'archer'])
 export const TradeKindSchema = z.enum(['item', 'hero'])
+/** A tool call's hint: the wave archetype it spawns. */
+export const WaveArchetypeSchema: z.ZodType<WaveArchetype> = z.enum([
+  'swift',
+  'brute',
+  'caster',
+  'tank',
+])
 
 const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('tick'), at }),
-  z.object({ t: z.literal('tool_call'), at }),
+  z.object({ t: z.literal('tool_call'), hint: WaveArchetypeSchema.optional(), at }),
+  z.object({ t: z.literal('turn_start'), at }),
   z.object({ t: z.literal('turn_end'), at }),
   z.object({ t: z.literal('rest'), at }),
+  z.object({ t: z.literal('tool_mishap'), at }),
+  z.object({ t: z.literal('camp'), at }),
+  z.object({ t: z.literal('guard'), on: z.boolean(), at }),
   z.object({ t: z.literal('equip'), heroId: id, itemId: id, at }),
   z.object({ t: z.literal('unequip'), heroId: id, slot, at }),
   z.object({ t: z.literal('vendor'), itemId: id, at }),
@@ -51,13 +63,19 @@ const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('expand_roster'), at }),
 ])
 
-export const TimedEventSchema: z.ZodType<TimedEvent> = PlayerEventSchema
+// The tool call's optional hint: zod infers `hint?: T | undefined`, which exactOptionalPropertyTypes
+// will not assign to `hint?: T`; the cast is sound because an absent key is dropped.
+export const TimedEventSchema = PlayerEventSchema as unknown as z.ZodType<TimedEvent>
 
 export const PLAYER_EVENT_KINDS = [
   'tick',
   'tool_call',
+  'turn_start',
   'turn_end',
   'rest',
+  'tool_mishap',
+  'camp',
+  'guard',
   'equip',
   'unequip',
   'vendor',

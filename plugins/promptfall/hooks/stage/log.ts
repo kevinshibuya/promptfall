@@ -201,6 +201,15 @@ export class MessageLog {
           : ` and ${goods.kind === 'item' ? itemName(goods.item.base) : tradeName('hero', goods.hero.template)}`
         return { text: `Your share of the boss: ${e.gold}G${what}.`, key: true }
       }
+      // The reactive events (spec #131): one line each, never toasted.
+      case 'haste':
+        return { text: e.on ? 'The party quickens.' : 'The party slows.', key: true }
+      case 'enraged':
+        return { text: `Claude stumbles. ${name(e.enemyId)} is enraged!`, key: true }
+      case 'camp':
+        return { text: 'The party makes camp while Claude gathers its thoughts.', key: true }
+      case 'guard':
+        return { text: e.on ? 'The party stands guard.' : 'The party lowers its guard.', key: true }
       default:
         return null
     }

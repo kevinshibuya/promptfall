@@ -1,9 +1,14 @@
 export {
   ACTION_STEPS,
+  ENRAGE_BP,
   FILL_BP,
   FILL_K,
   fill,
   GAUGE_FULL,
+  GUARD_DAMAGE_BP,
+  GUARD_TICKS,
+  HASTE_BP,
+  HASTE_TICKS,
   POWER_BP,
   SPAWN_GAUGE_MAX,
   STEP_MS,
@@ -41,6 +46,7 @@ export type {
 } from './migrate'
 export { MIGRATIONS, migrate, migrateGoods } from './migrate'
 export { heroStats } from './progression'
+export { heroFill } from './reactive'
 export { createInitialState } from './state'
 export { replay, step } from './step'
 export type {
@@ -73,5 +79,12 @@ export type {
   StepResult,
   TradeKind,
   Trait,
+  WaveArchetype,
 } from './types'
-export { RARITIES, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION } from './types'
+export {
+  RARITIES,
+  SANDBOX_EVENT_KINDS,
+  SERVER_EVENT_KINDS,
+  SIM_VERSION,
+  WAVE_ARCHETYPES,
+} from './types'

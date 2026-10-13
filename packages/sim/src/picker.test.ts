@@ -7,7 +7,7 @@ import type { Enemy, GameState, Hero, HeroClass } from './types'
 const DRAWS = 1000
 
 function enemy(id: string, def: string, hp: number): Enemy {
-  return { id, def, kind: 'wave', hp, maxHp: hp }
+  return { id, def, kind: 'wave', hp, maxHp: hp, enraged: false }
 }
 
 /** The starting party (knight, black mage, white mage) against three zone 1 enemies. */

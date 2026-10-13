@@ -19,7 +19,13 @@ import { composeBand, composeBandCells, headsOf } from './playfield'
 import { encodeRaster } from './raster'
 import { stagedState } from './staged'
 import type { StageTimeline } from './timeline'
-import { EVENT_FRAME_MS, HIRES_SCALE, IDLE_FRAME_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
+import {
+  EVENT_FRAME_MS,
+  HASTE_FRAME_MS,
+  HIRES_SCALE,
+  IDLE_FRAME_MS,
+  SVG_FALLBACK_FRAME_MS,
+} from './tuning'
 
 export type StageSite = {
   requestId: string
@@ -86,11 +92,19 @@ export function bandKey(box: Box): string {
 const PHASE_SLACK_MS = 15
 
 /**
- * At rest, the delay to just past the next bob boundary. Re-arming a flat IDLE_FRAME_MS let the
- * ticks drift across the boundaries the bob flips on, so the bob sometimes held for a second.
+ * At rest, the delay to just past the next bob boundary, on a clock of `frameMs` frames. Re-arming
+ * a flat IDLE_FRAME_MS let the ticks drift across the boundaries the bob flips on, so the bob
+ * sometimes held for a second.
  */
-export function restDelay(now: number): number {
-  return IDLE_FRAME_MS - (now % IDLE_FRAME_MS) + PHASE_SLACK_MS
+export function restDelay(now: number, frameMs: number = IDLE_FRAME_MS): number {
+  return frameMs - (now % frameMs) + PHASE_SLACK_MS
+}
+
+/** The fastest bob on the stage: Haste's while a hero bobs hasted. */
+function bobFrameMs(view: GameView): number {
+  return view.heroes.some((h) => h.hasted && h.alive && !h.guarding)
+    ? HASTE_FRAME_MS
+    : IDLE_FRAME_MS
 }
 
 function same(a: StageSite, b: StageSite): boolean {
@@ -500,6 +514,7 @@ export class StageLoop {
       this.beat = next
       return next - end
     }
-    return filling ? Math.min(GAUGE_FRAME_MS, restDelay(now)) : restDelay(now)
+    const rest = restDelay(now, bobFrameMs(view))
+    return filling ? Math.min(GAUGE_FRAME_MS, rest) : rest
   }
 }

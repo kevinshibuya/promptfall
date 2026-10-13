@@ -140,11 +140,28 @@ export interface ServerClient {
  */
 export const MIN_CLIENT_VERSION = '0.3.0'
 
-export type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end'
+export type BudgetKind =
+  | 'tick'
+  | 'tool_call'
+  | 'rest'
+  | 'turn_end'
+  | 'turn_start'
+  | 'tool_mishap'
+  | 'camp'
+  | 'guard'
 
+/**
+ * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
+ * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
+ * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
+ */
 export const BUDGETS: Record<BudgetKind, { refillMs: number; capacity: number }> = {
   tick: { refillMs: 2000, capacity: 70 },
   tool_call: { refillMs: 1000, capacity: 140 },
   rest: { refillMs: 5000, capacity: 30 },
   turn_end: { refillMs: 5000, capacity: 30 },
+  turn_start: { refillMs: 5000, capacity: 30 },
+  tool_mishap: { refillMs: 5000, capacity: 30 },
+  camp: { refillMs: 60_000, capacity: 5 },
+  guard: { refillMs: 2000, capacity: 60 },
 }

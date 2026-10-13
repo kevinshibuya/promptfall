@@ -104,8 +104,13 @@ const KINDS: readonly Kind[] = [
   'effect',
   'chest',
 ]
-/** The effect sprites the stage moves during a hero's action; not content, so listed here. */
-export const EFFECT_IDS = ['effect:fireball', 'effect:light_burst', 'effect:arrow'] as const
+/** The effect sprites the stage draws: a hero's action's, and Camp's campfire; not content, so listed here. */
+export const EFFECT_IDS = [
+  'effect:fireball',
+  'effect:light_burst',
+  'effect:arrow',
+  'effect:campfire',
+] as const
 /** The chest a drop leaves, one sprite per state of its reveal; not content, so listed here. */
 export const CHEST_IDS = ['chest:closed', 'chest:opening', 'chest:open'] as const
 const FRAME_DRIFT = 0.2
