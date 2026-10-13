@@ -65,16 +65,16 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-market-narrow': {imageHash: "6b810b052abcb51a", cellsHash: "365f6f532350edb1", svgHash: "0dca80b60cc73826", svgChars: 25360},
   'pane-orders': {imageHash: "9bc3804fccc00665", cellsHash: "163c7d59054dc725", svgHash: "e4ed997bb2dae0da", svgChars: 23122},
   'pane-orders-form': {imageHash: "90745d78e051dd18", cellsHash: "4d46414a508ade22", svgHash: "d97f4b2204a9cc66", svgChars: 23743},
-  'pane-account': {imageHash: "18ecaa05285093bb", cellsHash: "2259f8d8efd402c8", svgHash: "ec4d42cb94595556", svgChars: 28272},
-  'pane-account-link': {imageHash: "4b8afc3f0ad7d4f6", cellsHash: "d41044a59d7a3203", svgHash: "c30154f6d90b1050", svgChars: 29641},
-  'pane-account-rest-days': {imageHash: "e5f41dee77c437d3", cellsHash: "5403fc02e2e0dc63", svgHash: "063dc82c4c8df3c5", svgChars: 28466},
+  'pane-account': {imageHash: "4e145adf9ff9a62e", cellsHash: "247aa1d2c4dc1db8", svgHash: "acf841311f88b594", svgChars: 28285},
+  'pane-account-link': {imageHash: "31f4e7389ab1407b", cellsHash: "e2f02407d909e0f3", svgHash: "1f80e6b464b86fa1", svgChars: 29641},
+  'pane-account-rest-days': {imageHash: "2fb618c4ce608d8a", cellsHash: "31d4f5a974cbef13", svgHash: "ac07c64db35de9d3", svgChars: 28479},
   'pane-odds': {imageHash: "6ab7d59e417ec44a", cellsHash: "c8b67e22f72dbaa4", svgHash: "cd39c7baa08ee397", svgChars: 32547},
   'pane-journal': {imageHash: "71ef9e206b448a53", cellsHash: "a9e61ad6cae3c62b", svgHash: "c6c1c16d6b4fb577", svgChars: 27324},
   'pane-journal-zone': {imageHash: "53271b5d7b28d75f", cellsHash: "19593d63f994fdec", svgHash: "ca0834f51270b9e5", svgChars: 29695},
   'pane-chat': {imageHash: "3ac9d7696328e46b", cellsHash: "f0204c26f4028d35", svgHash: "1a6acbdef2f0cfa5", svgChars: 25260},
   'pane-leaderboards': {imageHash: "d6b744bad0206231", cellsHash: "cb904e7ffa90f329", svgHash: "8f04ae67b1375b99", svgChars: 26892},
   'pane-short': {imageHash: "e68134c378f16623", cellsHash: "b84e798c19e1f5ec", svgHash: "6d514a62425b5490", svgChars: 22782},
-  'pane-no-view': {imageHash: "a56a3ce7b956d79d", cellsHash: "66a68bfff10bc40d", svgHash: "8684b07d447ca07a", svgChars: 15320},
+  'pane-no-view': {imageHash: "f3c63309d6cd1b00", cellsHash: "a1ebe5af7b87fb7d", svgHash: "38aab2671af0649c", svgChars: 15333},
 }
 
 export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
