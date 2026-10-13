@@ -823,16 +823,16 @@ export class StageTimeline {
             rarity: effect.item.rarity,
             spriteId: spriteFor('item', effect.item.base).id,
           } as const
-          if (actor === null) {
-            // No row to fall from: on a stage the band has drawn, the chest falls when it arrived
-            // onto the front slot's ground and holds the slot, a pause after it, as a kill's does.
+          if (actor === null || !this.entries.has(actor)) {
+            // No row to fall from, or its hit's target has left the stage: on a stage the band has
+            // drawn, the chest falls when it arrived onto the front slot's ground and holds the
+            // slot, a pause after it, as a kill's does.
             if (!this.observed) continue
             const until = arrivedAt + chestMs(effect.item.rarity)
             this.motions.push({ ...chest, actor: null, slot: 0, from: arrivedAt, until })
             this.gaps.set(`ground:${effect.item.id}`, until + WAVE_GAP_MS)
             continue
           }
-          if (!this.entries.has(actor)) continue
           // The chest lands as its target's fade ends; a lone drop's falls when it arrived.
           const from = last ? last.flashEnd + DISSOLVE_MS - CHEST_FALL_MS : arrivedAt
           this.motions.push({ ...chest, actor, from, until: from + chestMs(effect.item.rarity) })
