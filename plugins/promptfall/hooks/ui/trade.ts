@@ -39,6 +39,10 @@ export function refusalText(reason: MarketRefusal, remaining?: string): string {
       return "The buyer's inventory is full"
     case 'in_cooldown':
       return remaining ? `Tradeable in ${remaining}` : 'Not tradeable yet'
+    // The listing or order closed before the call: a buy another buyer won, a cancel after a sale,
+    // a fill or an expiry. The bare token read as goods lost (#186).
+    case 'gone':
+      return 'Already sold, filled or expired: the log says which'
     default:
       return reason.replaceAll('_', ' ')
   }

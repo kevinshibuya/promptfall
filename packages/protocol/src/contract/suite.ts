@@ -1006,6 +1006,48 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(await client.cancelListing(a.auth, id)).toEqual({ ok: false, reason: 'gone' })
     })
 
+    // The repro of #186: Kevin's item was not lost, a bot had bought it after the Orders tab
+    // loaded. The ledger was right before the fix, so this rule was green on the tree it was added
+    // to; it pins that a full inventory changes nothing, the sale's gold arrives and nothing waits.
+    it('rule 18b: the cancel of 2026-10-13 is replayed and the goods arrive', async (ctx) => {
+      const { client, trader } = await market(ctx)
+      const a = await trader(
+        'Ann',
+        traderState(91, {
+          inventory: [rareItem('iA'), rareItem('iB'), commonItem('iC')],
+          inventoryCap: 3,
+        }),
+      )
+      const b = await trader('Bob', traderState(92, { inventory: [rareItem('iX')] }))
+      const listed = ok(await client.list(a.auth, { kind: 'item', id: 'iA', price: 300 }))
+      a.mirror.receive(listed)
+      const other = lastListing(
+        ok(await client.list(b.auth, { kind: 'item', id: 'iX', price: 100 })),
+      )
+      a.mirror.receive(ok(await client.buy(a.auth, other)))
+      expect(a.mirror.local.inventory).toHaveLength(3)
+      // The Orders tab's read: the listing open, nothing waiting.
+      expect(await client.myOrders(a.auth)).toMatchObject({
+        listings: [{ id: lastListing(listed) }],
+        returns: 0,
+      })
+      ok(await client.buy(b.auth, lastListing(listed)))
+      expect(await client.cancelListing(a.auth, lastListing(listed))).toEqual({
+        ok: false,
+        reason: 'gone',
+      })
+      expect(await client.myOrders(a.auth)).toMatchObject({ listings: [], returns: 0 })
+      const gold = a.mirror.local.gold
+      const held = a.mirror.local.inventory.map((i) => i.id)
+      const kinds = (await a.refresh()).delivery.events.map((e) => e.event.t)
+      expect(kinds).toContain('sold')
+      expect(kinds).not.toContain('returned')
+      expect(a.mirror.local.gold).toBe(gold + 300 - 15)
+      expect(a.mirror.local.inventory.map((i) => i.id)).toEqual(held)
+      expect(a.mirror.local.lootLog.at(-1)).toMatchObject({ k: 'trade', what: 'sold', gold: 285 })
+      await a.inSync()
+    })
+
     it('rule 19: listings and orders expire at exactly 7 days, with no sweep', async (ctx) => {
       const { client, clock, trader } = await market(ctx)
       const a = await trader('Ann', traderState(43, { inventory: [rareItem('iA')] }))
