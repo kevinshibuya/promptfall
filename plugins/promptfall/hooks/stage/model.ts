@@ -481,6 +481,8 @@ export function stageAt(
   // Bosses draw over their minions, never under.
   actors.push(...bosses)
 
+  // The front of the party is its first hero standing: a fallen one wears no shield.
+  const front = view.heroes.findIndex((h) => h.alive)
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
@@ -503,7 +505,7 @@ export function stageAt(
     // Haste's streak and Guard's shield are the 1.5 stage's: at 1 the bob and the stance alone.
     const marks = !opts.compact && scale !== 1 && !fallen
     const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
-    const shield = marks && rest === 'guard' && index === 0 ? shieldOver(poses.idle.art) : null
+    const shield = marks && rest === 'guard' && index === front ? shieldOver(poses.idle.art) : null
     const flashing = !fallen && isFlashing(hero.id)
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
     const x =

@@ -200,7 +200,7 @@ Checked against Claude Code v2.1.287's mods API.
     ask after it. The plugin sends off when the awaited tool call resolves,
     allowed, denied or failed, or when the classic permission-denied hook
     fires. It keeps a flag of its own so a
-    duplicate on or off sends nothing, and paces pairs at most one per 2
+    duplicate on or off sends nothing, and paces pairs at most one per 4
     seconds. Guard off follows any call that resolves, so a concurrent call
     resolving under a showing prompt lowers the guard early.
   - The plugin drops a reactive event sent faster than its pace, since a
@@ -467,7 +467,7 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   prompts, the plugin paces the reactive events itself, under the buckets: a
   turn's `turn_start` refresh at most once per 60 seconds after its start,
   `tool_mishap` one per 5 seconds, `camp` one per minute and a `guard` pair
-  one per 2 seconds, dropping what comes faster (`hooks/reactive.ts`).
+  one per 4 seconds, its on and off together the guard bucket's rate, dropping what comes faster (`hooks/reactive.ts`).
   Every submission is authenticated by the
   device token and must name its own account. Client timestamps order events
   within a batch and nothing else.
@@ -897,7 +897,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
     one-row squash leaned one column per 12 rows toward the enemies, feet kept,
     no drawn frame, within ADR 0007) and the idle bob stops; a hit still shows
     the hit frame. At 1.5× and in the SMIL picture a small shield drawn in code
-    sits over the party's front hero; at 1× the stance alone.
+    sits over the party's front hero, its first hero standing; at 1× the stance
+    alone.
   - The log prints six lines for four effects, each at its effect's time and
     keyed as a line that is never dropped: "The party quickens." and "The
     party slows." for haste on and off; "Claude stumbles. Wood Goblin is
