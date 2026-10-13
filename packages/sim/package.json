@@ -8,6 +8,7 @@
   },
   "scripts": {
     "test": "vitest run --passWithNoTests",
+    "test:arc": "vitest run --config vitest.arc.config.ts",
     "harness": "tsx src/harness/cli.ts",
     "fixture": "tsx src/fixture.ts"
   },

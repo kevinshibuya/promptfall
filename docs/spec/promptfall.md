@@ -289,9 +289,11 @@ Checked against Claude Code v2.1.287's mods API.
   Mage, each the best of its class by score; and it vendors the unworn items no
   hero would wear. It grants itself a Legendary Knight at hour 9, at the level
   of the Knight it replaces.
-- `arc.test.ts` measures the arc in every gate: nine seeds (1 to 9) of 120 live
-  hours each. What gates: every seed first clears zone 1 inside the first 30
-  minutes and first clears each zone later than the one before; at least seven
+- `pnpm test` excludes the sim's harness folder; `pnpm test:arc` runs that folder
+  alone. No ticket's gate runs the arcs; the closing ticket of a sim-changing
+  batch runs them once (ADR 0017). `arc.test.ts` measures nine seeds (1 to 9) of
+  120 live hours each. Its assertions: every seed first clears zone 1 inside the
+  first 30 minutes and first clears each zone later than the one before; at least seven
   of the nine first clear zone 12, and at least seven take the granted Legendary
   to 50, inside the run (the completion floors); at least seven of the nine
   first clear zone 13 with the arc's own party, inside the run; the feel probe
@@ -299,9 +301,9 @@ Checked against Claude Code v2.1.287's mods API.
   12's first clear, the hours per level through 10 to 30, the Legendary's cap)
   are a report, never a gate: the test prints them with the per-seed table (with
   each zone's first-clear duration, zone 13's first clear, its wipes and its gap
-  over zone 12), each
-  bump ticket pastes that table in its closing comment, and Kevin judges the
-  medians on the PR.
+  over zone 12). The batch's closing ticket pastes that table in its closing
+  comment and reports any failed floors; retuning is Kevin's decision in a
+  follow-up ticket, and Kevin judges the medians on the PR.
 
 ### 4.3 Heroes
 
