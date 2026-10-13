@@ -11,7 +11,7 @@ import {
   NOT_DELETED,
   type TradeCall,
 } from './engine'
-import { acquire, claim, holds, LEASE_KEY, release } from './lease'
+import { acquire, claim, heldBySameSession, holds, LEASE_KEY, release } from './lease'
 import { type ReactiveEvent, ReactivePacer } from './reactive'
 import {
   LOCAL,
@@ -78,6 +78,10 @@ type Io = {
   /** Shows a toast; `timeoutMs` left out is the host's default. */
   toast: (text: string, timeoutMs?: number) => void
   leaseOwner: () => Promise<string | null>
+  /** When the session began, as the engine counts it; undefined when it cannot say. */
+  startedAt: () => Promise<number | undefined>
+  /** No surface draws the session: on a terminal, its REPL is gone (the agents view took it). */
+  drawsNowhere: () => Promise<boolean>
   mode: () => Promise<Mode>
   paneNotice: (text: string | null) => Promise<void>
   /** Shows or clears the device-flow code in the dialog. */
@@ -368,7 +372,10 @@ class GameSession implements GameHandle {
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
     this.off = (await this.io.mode()) === 'off'
     await this.io.publish({ leaseOwner: this.owner })
-    if (await acquire(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+    const startedAt = await this.io.startedAt()
+    if (await acquire(this.kv, this.owner, await this.io.now(), startedAt))
+      await this.becomePrimary()
+    else if (await this.takeBack(startedAt)) await this.becomePrimary()
     else await this.becomeSecondary()
     this.setCadence(IDLE_CADENCE_MS)
     // A demoted primary discards its engine, so nothing it held is ever submitted.
@@ -685,7 +692,8 @@ class GameSession implements GameHandle {
   async claim(): Promise<void> {
     if (this.role === 'primary') return
     await this.followSetting()
-    if (await claim(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+    const now = await this.io.now()
+    if (await claim(this.kv, this.owner, now, await this.io.startedAt())) await this.becomePrimary()
   }
 
   /**
@@ -695,7 +703,7 @@ class GameSession implements GameHandle {
   async prompt(at: number): Promise<void> {
     if (this.role !== 'primary') {
       await this.followSetting()
-      if (await claim(this.kv, this.owner, await this.io.now())) {
+      if (await claim(this.kv, this.owner, await this.io.now(), await this.io.startedAt())) {
         // Not awaited, so nothing reports a rejection: the engine's start rides out a failed
         // bootstrap itself, and a failed publish or poll start leaves the next one to try.
         this.becomePrimary().catch(() => undefined)
@@ -834,9 +842,34 @@ class GameSession implements GameHandle {
     await this.poller.start()
   }
 
+  /**
+   * The agents view moved this session into a new process, and the process it left still holds the
+   * lease and plays where nobody looks. A terminal session that finds its own session holding the
+   * lease takes it back, once, at its start: never at a renewal, where the two would trade it.
+   */
+  private async takeBack(startedAt: number | undefined): Promise<boolean> {
+    if (this.io.surface !== 'terminal' || (await this.io.drawsNowhere())) return false
+    if (!(await heldBySameSession(this.kv, this.owner, startedAt))) return false
+    return claim(this.kv, this.owner, await this.io.now(), startedAt)
+  }
+
+  /**
+   * A terminal session that draws nowhere plays for nobody: it flushes what it holds while the lease
+   * is still its own, steps back and gives the lease up, so the session the player went to takes it.
+   */
+  private async stepAside(): Promise<void> {
+    if (this.role !== 'primary') return
+    const held = await holds(this.kv, this.owner)
+    if (held) await this.engine.flush()
+    await this.becomeSecondary()
+    if (held) await release(this.kv, this.owner)
+  }
+
   private async renew(): Promise<void> {
+    // Nothing here is seen any more: no renewal, and no read-only refresh either.
+    if (this.io.surface === 'terminal' && (await this.io.drawsNowhere())) return this.stepAside()
     if (this.role === 'secondary') await this.followSetting()
-    const ok = await acquire(this.kv, this.owner, await this.io.now())
+    const ok = await acquire(this.kv, this.owner, await this.io.now(), await this.io.startedAt())
     if (ok && this.role === 'secondary') await this.becomePrimary()
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
     else if (!ok) await this.refresh()
@@ -1018,6 +1051,16 @@ export const register: Register = (on) => {
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
+        startedAt: () =>
+          $.session.usage().then(
+            (u) => u.startedAt,
+            () => undefined,
+          ),
+        drawsNowhere: () =>
+          $.session.surfaces().then(
+            (s) => s.length === 0,
+            () => false,
+          ),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))
@@ -1105,6 +1148,16 @@ export const register: Register = (on) => {
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
+        startedAt: () =>
+          $.session.usage().then(
+            (u) => u.startedAt,
+            () => undefined,
+          ),
+        drawsNowhere: () =>
+          $.session.surfaces().then(
+            (s) => s.length === 0,
+            () => false,
+          ),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))
