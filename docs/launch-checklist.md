@@ -37,6 +37,11 @@ built.
       ts6-server repo.
 - [ ] Make the repo public (Settings → General → Danger Zone), after a last look for anything
       that should not be in its history, and turn on Discussions (Settings → General → Features).
+- [ ] Turn on the repo's wiki (Settings → General → Features → Wikis, "Restrict editing to
+      collaborators only" ticked) and write its first pages from `docs/features.md` and
+      `GLOSSARY.md`: Getting started (the two install commands), How a fight works, Classes, Zones,
+      Items and the market, Bosses and world bosses, FAQ. Link it from the README's "Talk to us"
+      and from Discord's #help topic.
 - [ ] Walk `docs/manual-pass/soft-launch.md` on a second machine. Every step green before anyone
       is invited.
 - [ ] Send the wave's invitations, ten to twenty people: the two install commands from the README
