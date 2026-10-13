@@ -1,0 +1,545 @@
+{
+  "v": 17,
+  "seed": 20261002,
+  "rng": 4024912807,
+  "counter": 77,
+  "tick": 153,
+  "gold": 1305,
+  "zone": 1,
+  "wave": 1,
+  "farm": true,
+  "autoVendor": false,
+  "highestZone": 2,
+  "zoneWipes": 0,
+  "roster": [
+    {
+      "id": "h0",
+      "template": "knight_1",
+      "cls": "knight",
+      "epithet": "the Far-Sighted",
+      "rarity": "common",
+      "traits": [],
+      "level": 3,
+      "xp": 8,
+      "hp": 16,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1",
+      "template": "black_mage_1",
+      "cls": "black_mage",
+      "epithet": "the Wry",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 46,
+      "hp": 41,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h2",
+      "template": "white_mage_1",
+      "cls": "white_mage",
+      "epithet": "the Lark",
+      "rarity": "common",
+      "traits": [],
+      "level": 3,
+      "xp": 20,
+      "hp": 52,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h3",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Owl",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 109,
+      "hp": 50,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1q",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Lucky",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 0,
+      "hp": 44,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1r",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Quiet",
+      "rarity": "common",
+      "traits": [],
+      "level": 1,
+      "xp": 0,
+      "hp": 44,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    }
+  ],
+  "party": [
+    "h0",
+    "h1",
+    "h2"
+  ],
+  "pendingParty": null,
+  "inventory": [
+    {
+      "id": "i7",
+      "base": "willow_staff",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ia",
+      "base": "short_bow",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ie",
+      "base": "willow_staff",
+      "rarity": "uncommon",
+      "tier": 1,
+      "affixes": [
+        {
+          "id": "brutal",
+          "value": 2
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ii",
+      "base": "hide_coat",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ij",
+      "base": "short_bow",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ip",
+      "base": "chainmail",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iq",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "it",
+      "base": "bone_charm",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iu",
+      "base": "silk_robe",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "r0",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "tier": 2,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i16",
+      "base": "cloth_robe",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1i",
+      "base": "bone_charm",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i20",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i22",
+      "base": "bone_charm",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    }
+  ],
+  "inventoryCap": 30,
+  "rosterCap": 28,
+  "recruits": 2,
+  "turnToolCalls": 0,
+  "encounter": {
+    "enemies": [
+      {
+        "id": "e23",
+        "def": "field_rat",
+        "kind": "wave",
+        "hp": 40,
+        "maxHp": 40,
+        "enraged": false
+      },
+      {
+        "id": "e24",
+        "def": "goblin_scout",
+        "kind": "wave",
+        "hp": 60,
+        "maxHp": 60,
+        "enraged": false
+      }
+    ],
+    "queue": [],
+    "waveSize": 2,
+    "spawnedInWave": 2
+  },
+  "pendingTurnBoss": false,
+  "hasteTicks": 0,
+  "guardTicks": 0,
+  "lootLog": [
+    {
+      "k": "item",
+      "itemId": "i7",
+      "base": "willow_staff",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ia",
+      "base": "short_bow",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ie",
+      "base": "willow_staff",
+      "rarity": "uncommon",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ii",
+      "base": "hide_coat",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ij",
+      "base": "short_bow",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ip",
+      "base": "chainmail",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iq",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "it",
+      "base": "bone_charm",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iu",
+      "base": "silk_robe",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "reward",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "gold": 45
+    },
+    {
+      "k": "item",
+      "itemId": "i16",
+      "base": "cloth_robe",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1i",
+      "base": "bone_charm",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "hero",
+      "heroId": "h1q",
+      "template": "archer_1",
+      "rarity": "common",
+      "via": "tavern"
+    },
+    {
+      "k": "hero",
+      "heroId": "h1r",
+      "template": "archer_1",
+      "rarity": "common",
+      "via": "tavern"
+    },
+    {
+      "k": "item",
+      "itemId": "i20",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i22",
+      "base": "bone_charm",
+      "rarity": "common",
+      "vendoredFor": null
+    }
+  ],
+  "stats": {
+    "kills": 52,
+    "bosses": 0,
+    "wipes": 1
+  },
+  "tallies": {
+    "enemies": {
+      "goblin_scout": {
+        "seen": 16,
+        "defeated": 15
+      },
+      "field_rat": {
+        "seen": 17,
+        "defeated": 16
+      },
+      "hedge_sprite": {
+        "seen": 14,
+        "defeated": 13
+      },
+      "road_slime": {
+        "seen": 10,
+        "defeated": 8
+      }
+    },
+    "collection": {
+      "willow_staff": {
+        "common": 1,
+        "uncommon": 1,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "short_bow": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "hide_coat": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "chainmail": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "bronze_plate": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "bone_charm": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "silk_robe": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      },
+      "steel_longsword": {
+        "common": 0,
+        "uncommon": 0,
+        "rare": 1,
+        "epic": 0,
+        "legendary": 0
+      },
+      "cloth_robe": {
+        "common": 1,
+        "uncommon": 0,
+        "rare": 0,
+        "epic": 0,
+        "legendary": 0
+      }
+    },
+    "zoneBosses": 0,
+    "cleanZoneBosses": 0,
+    "turnBosses": 0,
+    "drops": {
+      "common": 12,
+      "uncommon": 1,
+      "rare": 0,
+      "epic": 0,
+      "legendary": 0
+    },
+    "recruits": {
+      "common": 2,
+      "uncommon": 0,
+      "rare": 0,
+      "epic": 0,
+      "legendary": 0
+    },
+    "reforges": 0,
+    "goldEarned": 2135
+  },
+  "guarantee": {
+    "rare": 2,
+    "epic": 2,
+    "legendary": 2
+  },
+  "boss": null,
+  "battle": {
+    "gauges": [
+      {
+        "id": "h0",
+        "g": 0
+      },
+      {
+        "id": "h1",
+        "g": 3120
+      },
+      {
+        "id": "h2",
+        "g": 6308
+      },
+      {
+        "id": "e21",
+        "g": 1330
+      },
+      {
+        "id": "e23",
+        "g": 3786
+      },
+      {
+        "id": "e24",
+        "g": 3091
+      }
+    ],
+    "queue": [],
+    "busy": 0
+  }
+}

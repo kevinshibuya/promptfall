@@ -24,9 +24,12 @@ describe('content reference', () => {
     expect(lines).toContain('| 3 | 25 to 36 | 6 |')
   })
 
-  it('lists enemies and bosses by id, name and archetype', () => {
-    expect(lines).toContain('| `elder_treant` | Elder Treant | boss |')
-    expect(lines).toContain("| `will_o_wisp` | Will-o'-Wisp | caster |")
+  it('lists enemies and bosses by id, name, archetype and a zone boss’s move', () => {
+    expect(lines).toContain('| `elder_treant` | Elder Treant | boss | heals itself |')
+    expect(lines).toContain('| `bandit_captain` | Bandit Captain | boss | strikes twice |')
+    expect(lines).toContain('| `sigh_hag` | The Sighing Hag | boss | hits the whole party |')
+    expect(lines).toContain('| `barrow_king` | The Barrow King | boss | rages under half HP |')
+    expect(lines).toContain("| `will_o_wisp` | Will-o'-Wisp | caster |  |")
   })
 
   it('lists item bases by id, name, glyph, slot, minimum zone and tier, escaping a pipe glyph', () => {

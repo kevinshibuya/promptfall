@@ -4,11 +4,15 @@ import {
   fill,
   GAUGE_FULL,
   GUARD_DAMAGE_BP,
+  HIT_ALL_BP,
+  RAGE_BP,
+  SELF_HEAL_BP,
   STEP_MS,
+  STRIKE_TWICE_BP,
   scaled,
   TICK_MS,
 } from './battle'
-import { enemyAt, zoneAt } from './content'
+import { type BossMove, content, enemyAt, zoneAt } from './content'
 import { type Choice, pickAction, type Unit } from './picker'
 import {
   checkWipe,
@@ -48,8 +52,10 @@ function damage(s: GameState, atk: number, def: number): number {
 
 const NO_STATS: Stats = { hp: 1, atk: 1, def: 0, spd: 0 }
 
+/** A zone's boss's stats, its atk before its move's multiplier: the world boss has no move. */
 function zoneBossStats(zone: number): Stats {
-  return enemyAt(zoneAt(zone)?.def.boss ?? '', zone)?.stats ?? NO_STATS
+  const def = enemyAt(zoneAt(zone)?.def.boss ?? '', zone)
+  return def ? { ...def.stats, atk: def.baseAtk ?? def.stats.atk } : NO_STATS
 }
 
 /**
@@ -75,6 +81,16 @@ export function enemyStats(s: GameState, enemy: Enemy): Stats {
   return enemyAt(enemy.def, s.zone)?.stats ?? NO_STATS
 }
 
+/** A zone boss's move, its base zone's in every tier; none for any other enemy. */
+function moveOf(enemy: Enemy): BossMove | undefined {
+  return enemy.kind === 'zone_boss' ? content.enemies[enemy.def]?.move : undefined
+}
+
+/** Under half its HP, read at the hit: no flag and no state. */
+function underHalf(enemy: Enemy): boolean {
+  return enemy.hp * 2 < enemy.maxHp
+}
+
 function hitEnemy(s: GameState, by: string, enemy: Enemy, amount: number, effects: Effect[]): void {
   effects.push({ k: 'hit', by, target: enemy.id, amount })
   // The world boss never dies here: the server tallies what the party dealt.
@@ -82,8 +98,12 @@ function hitEnemy(s: GameState, by: string, enemy: Enemy, amount: number, effect
     if (s.boss) s.boss.dealt += amount
     return
   }
+  const wasUnder = underHalf(enemy)
   enemy.hp = Math.max(0, enemy.hp - amount)
   if (enemy.hp === 0) onEnemyKilled(s, enemy, effects)
+  else if (!wasUnder && underHalf(enemy) && moveOf(enemy) === 'rage') {
+    effects.push({ k: 'raging', enemyId: enemy.id })
+  }
 }
 
 function gaugeOf(s: GameState, id: string): { id: string; g: number } {
@@ -139,21 +159,57 @@ function heroAction(s: GameState, hero: Hero, choice: Choice, effects: Effect[])
   }
 }
 
-function enemyAction(s: GameState, enemy: Enemy, choice: Choice, effects: Effect[]): void {
-  const target = findHero(s, choice.targetId ?? '')
-  if (!target || target.hp <= 0) return
-  // Enrage: this attack from an atk half again as high, then the rage passes.
-  const atk = enemyStats(s, enemy).atk
-  let amount = damage(
-    s,
-    enemy.enraged ? Math.floor((atk * ENRAGE_BP) / 10000) : atk,
-    heroStats(s, target).def,
-  )
+/**
+ * One enemy hit on one hero, from `shareBp` of its atk: a raging boss under half scales it by
+ * RAGE_BP, and an enraged enemy's next hit by ENRAGE_BP, both on one hit, then the enrage passes.
+ */
+function hitHero(
+  s: GameState,
+  enemy: Enemy,
+  target: Hero,
+  shareBp: number,
+  effects: Effect[],
+): void {
+  let atk = Math.floor((enemyStats(s, enemy).atk * shareBp) / 10000)
+  if (moveOf(enemy) === 'rage' && underHalf(enemy)) atk = Math.floor((atk * RAGE_BP) / 10000)
+  if (enemy.enraged) atk = Math.floor((atk * ENRAGE_BP) / 10000)
   enemy.enraged = false
+  let amount = damage(s, atk, heroStats(s, target).def)
   if (s.guardTicks > 0) amount = Math.max(1, Math.floor((amount * GUARD_DAMAGE_BP) / 10000))
   target.hp = Math.max(0, target.hp - amount)
   effects.push({ k: 'hit', by: enemy.id, target: target.id, amount })
   if (target.hp === 0) fall(s, target, effects)
+}
+
+function enemyAction(s: GameState, enemy: Enemy, choice: Choice, effects: Effect[]): void {
+  switch (choice.action) {
+    case 'attack': {
+      const target = findHero(s, choice.targetId ?? '')
+      if (!target || target.hp <= 0) return
+      hitHero(s, enemy, target, 10000, effects)
+      return
+    }
+    case 'attack_twice': {
+      const target = findHero(s, choice.targetId ?? '')
+      for (let i = 0; i < 2 && target && target.hp > 0; i++)
+        hitHero(s, enemy, target, STRIKE_TWICE_BP, effects)
+      return
+    }
+    case 'attack_all': {
+      for (const target of livingParty(s)) hitHero(s, enemy, target, HIT_ALL_BP, effects)
+      return
+    }
+    case 'heal': {
+      const amount = Math.min(
+        Math.max(0, enemy.maxHp - enemy.hp),
+        scaled(Math.floor((enemyStats(s, enemy).atk * SELF_HEAL_BP) / 10000)),
+      )
+      if (amount <= 0) return
+      enemy.hp += amount
+      effects.push({ k: 'heal', by: enemy.id, target: enemy.id, amount })
+      return
+    }
+  }
 }
 
 /** The living unit with this id on the field, or undefined. */

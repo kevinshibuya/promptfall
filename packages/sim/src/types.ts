@@ -1,4 +1,4 @@
-export const SIM_VERSION = 16 as const
+export const SIM_VERSION = 17 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -66,7 +66,8 @@ export type Battle = {
   /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
   busy: number
 }
-export type ActionId = 'attack' | 'attack_all' | 'heal'
+/** `attack_twice` is a zone boss's strike twice: two hits on one target in one act. */
+export type ActionId = 'attack' | 'attack_all' | 'attack_twice' | 'heal'
 export type TradeKind = 'item' | 'hero'
 export type Goods = { kind: 'item'; item: Item } | { kind: 'hero'; hero: Hero }
 
@@ -250,6 +251,8 @@ export type Effect =
   | { k: 'guard'; on: boolean }
   /** A mishap enraged this enemy (an Enemy.id). */
   | { k: 'enraged'; enemyId: string }
+  /** A raging zone boss's HP went under half at this hit: its hits land half again as hard from here. */
+  | { k: 'raging'; enemyId: string }
   /** The party camped: each party hero and the HP it restored. */
   | { k: 'camp'; heals: { heroId: string; amount: number }[] }
 

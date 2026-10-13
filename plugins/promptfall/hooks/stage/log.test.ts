@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
-import type { Toast } from '../toasts'
+import { type Toast, toastsFor } from '../toasts'
 import type { Effect, Item } from '../vendor/sim.js'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS } from '../windows/tuning'
 import { boss, wave } from './fixtures'
@@ -748,6 +748,58 @@ test('each reactive event prints its line at its effect’s time', () => {
     const line = log.upcoming(NOW - 1, 1e9).find((l) => l.text === text)
     expect(line?.at, text).toBe(starts[0])
     expect(line?.key, text).toBe(true)
+  }
+})
+
+test('each boss move prints its line at its effect’s time, and none toasts', () => {
+  // The Bandit Captain as Gorvax: the log names a boss as the view does.
+  const v = boss()
+  const b = v.enemies[0]?.id ?? ''
+  const gorvax = { ...v, enemies: v.enemies.map((e) => ({ ...e, name: 'Gorvax' })) }
+  const [h1, h2, h3] = v.heroes.map((h) => h.id)
+  const [n1, n2] = v.heroes.map((h) => h.shortName)
+  const cases: [Effect[], string[]][] = [
+    [
+      [
+        { k: 'act', actor: b, action: 'attack_twice', at: 0 },
+        hit(b, h1 ?? '', 12),
+        hit(b, h1 ?? '', 13),
+      ],
+      ['Gorvax strikes twice!', `Gorvax hits ${n1} for 12.`, `Gorvax hits ${n1} for 13.`],
+    ],
+    [
+      [
+        { k: 'act', actor: b, action: 'heal', at: 0 },
+        { k: 'heal', by: b, target: b, amount: 40 },
+      ],
+      ['Gorvax heals itself for 40.'],
+    ],
+    [
+      [act(h2 ?? '', 0), hit(h2 ?? '', b, 30), { k: 'raging', enemyId: b }],
+      [`${n2} hits Gorvax for 30.`, "Gorvax's rage grows!"],
+    ],
+    [
+      [
+        { k: 'act', actor: b, action: 'attack_all', at: 0 },
+        hit(b, h1 ?? '', 5),
+        hit(b, h2 ?? '', 6),
+        hit(b, h3 ?? '', 7),
+      ],
+      ['Gorvax hits 3 foes for 5, 6 and 7.'],
+    ],
+  ]
+  for (const [effects, texts] of cases) {
+    const r = run(effects, { before: gorvax })
+    expect(r.texts).toEqual(texts)
+    const move = texts.find((t) => /twice!|itself|rage grows/.test(t))
+    if (move) {
+      // The strike's and the heal's lines open their action; the rage's follows the hit that raised it.
+      const line = r.log.upcoming(NOW - 1, 1e9).find((l) => l.text === move)
+      if (texts[0] === move) expect(line?.at, move).toBe(r.starts[0])
+      else expect(line?.at, move).toBeGreaterThan(r.starts[0] ?? 0)
+      expect(line?.key, move).toBe(true)
+    }
+    expect(toastsFor(effects, gorvax, { bossName: () => null })).toEqual([])
   }
 })
 

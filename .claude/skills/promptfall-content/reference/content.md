@@ -33,80 +33,80 @@ zone 1, with zone 1's enemies at their tier's numbers. Past tier 1 every base dr
 
 ## Enemies and bosses
 
-| Id | Name | Archetype |
-| --- | --- | --- |
-| `road_slime` | Road Slime | tank |
-| `field_rat` | Field Rat | swift |
-| `goblin_scout` | Goblin Scout | brute |
-| `hedge_sprite` | Hedge Sprite | caster |
-| `bandit_captain` | Bandit Captain | boss |
-| `wild_boar` | Wild Boar | turn_boss |
-| `bramble_wolf` | Bramble Wolf | swift |
-| `moss_golem` | Moss Golem | tank |
-| `wood_goblin` | Wood Goblin | brute |
-| `whisper_wisp` | Whisper Wisp | caster |
-| `elder_treant` | Elder Treant | boss |
-| `owlbear_cub` | Owlbear Cub | turn_boss |
-| `bog_lurker` | Bog Lurker | brute |
-| `marsh_leech` | Marsh Leech | swift |
-| `mire_toad` | Mire Toad | tank |
-| `will_o_wisp` | Will-o'-Wisp | caster |
-| `sigh_hag` | The Sighing Hag | boss |
-| `giant_heron` | Giant Heron | turn_boss |
-| `barrow_wight` | Barrow Wight | caster |
-| `grave_hound` | Grave Hound | swift |
-| `bone_soldier` | Bone Soldier | brute |
-| `cairn_crawler` | Cairn Crawler | tank |
-| `barrow_king` | The Barrow King | boss |
-| `crypt_ogre` | Crypt Ogre | turn_boss |
-| `salt_crab` | Salt Crab | tank |
-| `gull_harpy` | Gull Harpy | swift |
-| `drowned_sailor` | Drowned Sailor | brute |
-| `tide_witch` | Tide Witch | caster |
-| `glass_leviathan` | Glass Leviathan | boss |
-| `reef_troll` | Reef Troll | turn_boss |
-| `ember_imp` | Ember Imp | swift |
-| `magma_beetle` | Magma Beetle | tank |
-| `cinder_orc` | Cinder Orc | brute |
-| `flame_adept` | Flame Adept | caster |
-| `emberfall_wyrm` | Emberfall Wyrm | boss |
-| `slag_giant` | Slag Giant | turn_boss |
-| `frost_wolf` | Frost Wolf | swift |
-| `ice_troll` | Ice Troll | brute |
-| `rime_golem` | Rime Golem | tank |
-| `snow_shaman` | Snow Shaman | caster |
-| `frostvein_yeti` | Frostvein Yeti | boss |
-| `avalanche_drake` | Avalanche Drake | turn_boss |
-| `drowned_monk` | Drowned Monk | brute |
-| `abbey_gargoyle` | Abbey Gargoyle | tank |
-| `bell_wraith` | Bell Wraith | caster |
-| `eel_serpent` | Eel Serpent | swift |
-| `sunken_abbot` | The Sunken Abbot | boss |
-| `choir_of_bones` | Choir of Bones | turn_boss |
-| `ash_ghoul` | Ash Ghoul | brute |
-| `dust_stalker` | Dust Stalker | swift |
-| `cinder_colossus` | Cinder Colossus | tank |
-| `ash_oracle` | Ash Oracle | caster |
-| `waste_tyrant` | Tyrant of the Waste | boss |
-| `sand_basilisk` | Sand Basilisk | turn_boss |
-| `star_sentinel` | Star Sentinel | tank |
-| `comet_hound` | Comet Hound | swift |
-| `spire_warden` | Spire Warden | brute |
-| `astral_seer` | Astral Seer | caster |
-| `fallen_star` | The Fallen Star | boss |
-| `void_manta` | Void Manta | turn_boss |
-| `hollow_knight` | Hollow Knight | brute |
-| `court_jester` | Court Jester | swift |
-| `throne_guard` | Throne Guard | tank |
-| `court_mage` | Court Mage | caster |
-| `hollow_king` | The Hollow King | boss |
-| `royal_chimera` | Royal Chimera | turn_boss |
-| `ink_horror` | Ink Horror | brute |
-| `blank_page` | Blank Page | swift |
-| `quill_golem` | Quill Golem | tank |
-| `erased_scribe` | Erased Scribe | caster |
-| `unwritten_one` | The Unwritten One | boss |
-| `margin_beast` | Margin Beast | turn_boss |
+| Id | Name | Archetype | Move |
+| --- | --- | --- | --- |
+| `road_slime` | Road Slime | tank |  |
+| `field_rat` | Field Rat | swift |  |
+| `goblin_scout` | Goblin Scout | brute |  |
+| `hedge_sprite` | Hedge Sprite | caster |  |
+| `bandit_captain` | Bandit Captain | boss | strikes twice |
+| `wild_boar` | Wild Boar | turn_boss |  |
+| `bramble_wolf` | Bramble Wolf | swift |  |
+| `moss_golem` | Moss Golem | tank |  |
+| `wood_goblin` | Wood Goblin | brute |  |
+| `whisper_wisp` | Whisper Wisp | caster |  |
+| `elder_treant` | Elder Treant | boss | heals itself |
+| `owlbear_cub` | Owlbear Cub | turn_boss |  |
+| `bog_lurker` | Bog Lurker | brute |  |
+| `marsh_leech` | Marsh Leech | swift |  |
+| `mire_toad` | Mire Toad | tank |  |
+| `will_o_wisp` | Will-o'-Wisp | caster |  |
+| `sigh_hag` | The Sighing Hag | boss | hits the whole party |
+| `giant_heron` | Giant Heron | turn_boss |  |
+| `barrow_wight` | Barrow Wight | caster |  |
+| `grave_hound` | Grave Hound | swift |  |
+| `bone_soldier` | Bone Soldier | brute |  |
+| `cairn_crawler` | Cairn Crawler | tank |  |
+| `barrow_king` | The Barrow King | boss | rages under half HP |
+| `crypt_ogre` | Crypt Ogre | turn_boss |  |
+| `salt_crab` | Salt Crab | tank |  |
+| `gull_harpy` | Gull Harpy | swift |  |
+| `drowned_sailor` | Drowned Sailor | brute |  |
+| `tide_witch` | Tide Witch | caster |  |
+| `glass_leviathan` | Glass Leviathan | boss | strikes twice |
+| `reef_troll` | Reef Troll | turn_boss |  |
+| `ember_imp` | Ember Imp | swift |  |
+| `magma_beetle` | Magma Beetle | tank |  |
+| `cinder_orc` | Cinder Orc | brute |  |
+| `flame_adept` | Flame Adept | caster |  |
+| `emberfall_wyrm` | Emberfall Wyrm | boss | heals itself |
+| `slag_giant` | Slag Giant | turn_boss |  |
+| `frost_wolf` | Frost Wolf | swift |  |
+| `ice_troll` | Ice Troll | brute |  |
+| `rime_golem` | Rime Golem | tank |  |
+| `snow_shaman` | Snow Shaman | caster |  |
+| `frostvein_yeti` | Frostvein Yeti | boss | hits the whole party |
+| `avalanche_drake` | Avalanche Drake | turn_boss |  |
+| `drowned_monk` | Drowned Monk | brute |  |
+| `abbey_gargoyle` | Abbey Gargoyle | tank |  |
+| `bell_wraith` | Bell Wraith | caster |  |
+| `eel_serpent` | Eel Serpent | swift |  |
+| `sunken_abbot` | The Sunken Abbot | boss | rages under half HP |
+| `choir_of_bones` | Choir of Bones | turn_boss |  |
+| `ash_ghoul` | Ash Ghoul | brute |  |
+| `dust_stalker` | Dust Stalker | swift |  |
+| `cinder_colossus` | Cinder Colossus | tank |  |
+| `ash_oracle` | Ash Oracle | caster |  |
+| `waste_tyrant` | Tyrant of the Waste | boss | strikes twice |
+| `sand_basilisk` | Sand Basilisk | turn_boss |  |
+| `star_sentinel` | Star Sentinel | tank |  |
+| `comet_hound` | Comet Hound | swift |  |
+| `spire_warden` | Spire Warden | brute |  |
+| `astral_seer` | Astral Seer | caster |  |
+| `fallen_star` | The Fallen Star | boss | heals itself |
+| `void_manta` | Void Manta | turn_boss |  |
+| `hollow_knight` | Hollow Knight | brute |  |
+| `court_jester` | Court Jester | swift |  |
+| `throne_guard` | Throne Guard | tank |  |
+| `court_mage` | Court Mage | caster |  |
+| `hollow_king` | The Hollow King | boss | hits the whole party |
+| `royal_chimera` | Royal Chimera | turn_boss |  |
+| `ink_horror` | Ink Horror | brute |  |
+| `blank_page` | Blank Page | swift |  |
+| `quill_golem` | Quill Golem | tank |  |
+| `erased_scribe` | Erased Scribe | caster |  |
+| `unwritten_one` | The Unwritten One | boss | rages under half HP |
+| `margin_beast` | Margin Beast | turn_boss |  |
 
 ## Item bases
 

@@ -686,9 +686,9 @@ async function offerZone(kv, now, row, keep = async () => true) {
 // packages/ledger/src/boss.ts
 var BOSS_KEY = "pf:world:boss";
 function bossStats() {
-  const stats = content.enemies[content.zones[0]?.boss ?? ""]?.stats;
-  if (!stats) throw new Error("content has no zone 1 boss");
-  return { ...stats };
+  const def = content.enemies[content.zones[0]?.boss ?? ""];
+  if (!def) throw new Error("content has no zone 1 boss");
+  return { ...def.stats, atk: def.baseAtk ?? def.stats.atk };
 }
 async function loadBoss(kv) {
   const raw = await kv.get(BOSS_KEY);

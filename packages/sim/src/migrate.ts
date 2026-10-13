@@ -100,6 +100,9 @@ export const MIGRATIONS: MigrationChain = {
       }
     },
   },
+  // 16 → 17: the zone bosses' moves (#169). Rules, tactics and the bosses' atk moved; a move is read
+  // from content and rage from a boss's HP at the hit, so nothing changes shape.
+  16: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

@@ -57,12 +57,31 @@ describe('the feel probe', () => {
   it('computes zone 1 from content through the sim’s damage, without variance', () => {
     // Level 4 Common Knight in Bronze Axe, Chainmail and Bone Charm: 101 HP, 16 def. The Hedge
     // Sprite's 10 atk lands 8 through 100 / 116, doubled to 16: 6 hits survived. The Road Slime's
-    // 6 lands 10: 10 hits. The Bandit Captain's 16 lands 26: 3 hits.
+    // 6 lands 10: 10 hits. The Bandit Captain strikes twice from 12 atk: each hit from 70%, 8,
+    // lands 6, doubled to 12, so an action lands 24: 4 actions survived.
     expect(p.zones[0]).toMatchObject({
       knight: { hp: 101, def: 16 },
       knightWaveHits: { min: 6, max: 10 },
-      knightBossHits: 3,
+      bossMove: 'strike_twice',
+      knightBossHits: 4,
     })
+  })
+
+  it('models each boss move as one boss action on the Knight', () => {
+    // Zones 3 and 4: a level 6 Common Knight, 121 HP and 20 def, so a hit lands 100 / 120 of its atk.
+    // The Sighing Hag hits the whole party from 29 atk: 60%, 17, lands 14, doubled to 28: 4.
+    expect(p.zones[2]).toMatchObject({ bossMove: 'hit_all', knightBossHits: 4 })
+    // The Barrow King rages from 14 atk: 150% under half, 21, lands 17, doubled to 34: 3.
+    expect(p.zones[3]).toMatchObject({ bossMove: 'rage', knightBossHits: 3 })
+    // The Elder Treant's heal is no hit: its 16 atk lands 26, as before the moves: 3.
+    expect(p.zones[1]).toMatchObject({ bossMove: 'heal_self', knightBossHits: 3 })
+  })
+
+  it('reports how many Knight hits a healing boss’s heals add to the fight, and none for another move', () => {
+    const heals = p.zones.filter((z) => z.bossMove === 'heal_self')
+    expect(heals.map((z) => z.zone)).toEqual([2, 6, 10])
+    for (const z of heals) expect(z.healKnightHits).toBeGreaterThan(0)
+    for (const z of p.zones) if (z.bossMove !== 'heal_self') expect(z.healKnightHits).toBe(0)
   })
 
   it('names every zone outside 6 to 10 wave hits or 3 to 4 boss hits, and today there is none', () => {

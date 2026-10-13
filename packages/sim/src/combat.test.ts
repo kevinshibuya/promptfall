@@ -366,8 +366,9 @@ describe('the battle loop', () => {
   it('the world boss scales through the tiered zone boss, its speed capped at zone 12’s', () => {
     const carried = { hp: 630, atk: 14, def: 4, spd: 5 }
     const at = (zone: number) => scaledBossStats({ ...engaged(carried), zone })
-    const z1 = content.enemies.bandit_captain?.stats.atk ?? 1
-    const t2 = enemyAt('bandit_captain', 13)?.stats.atk ?? 0
+    // The zone bosses' atk before their moves' multipliers: the world boss has no move.
+    const z1 = content.enemies.bandit_captain?.baseAtk ?? 1
+    const t2 = enemyAt('bandit_captain', 13)?.baseAtk ?? 0
     expect(at(13).atk).toBe(Math.floor((carried.atk * t2) / z1))
     expect(at(13).atk).toBeGreaterThan(at(12).atk)
     expect(at(36).atk).toBeGreaterThan(at(24).atk)

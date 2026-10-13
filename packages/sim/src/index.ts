@@ -20,6 +20,7 @@ export type {
   AchievementRow,
   AchievementStep,
   AffixDef,
+  BossMove,
   Content,
   EnemyDef,
   GoalKind,

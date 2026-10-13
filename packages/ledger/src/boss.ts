@@ -38,11 +38,14 @@ export type BossRecord = {
   closed: boolean
 }
 
-/** Zone 1's zone boss stats, carried verbatim: the sim scales them to each party's zone. */
+/**
+ * Zone 1's zone boss stats, its atk before its move's multiplier (the world boss has no move),
+ * carried verbatim: the sim scales them to each party's zone.
+ */
 function bossStats(): Stats {
-  const stats = content.enemies[content.zones[0]?.boss ?? '']?.stats
-  if (!stats) throw new Error('content has no zone 1 boss')
-  return { ...stats }
+  const def = content.enemies[content.zones[0]?.boss ?? '']
+  if (!def) throw new Error('content has no zone 1 boss')
+  return { ...def.stats, atk: def.baseAtk ?? def.stats.atk }
 }
 
 export async function loadBoss(kv: KeyValue): Promise<BossRecord | null> {

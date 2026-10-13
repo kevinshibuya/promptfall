@@ -766,7 +766,9 @@ describe('the 15→16 step: the tallies, travel and the tavern guarantee', () =>
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -789,6 +791,43 @@ describe('the 15→16 step: the tallies, travel and the tavern guarantee', () =>
       { kind: 'hero', hero },
     ] as const) {
       expect(migrateGoods(goods, 15, { to: 16 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
+describe('the 16→17 step: the zone bosses’ moves', () => {
+  // Identity in shape: the moves live in content and combat, and rage reads HP at the hit.
+  const PINNED = { golden: 'ce7a2f8f8b62d6b1', deep: '171e4027d61cd4e1' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v16-deep.json' : 'v16.json')
+    const r = migrate(before, { to: 17 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version and the cleared fight`, () => {
+      expect(after.v).toBe(17)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v16 = fixture('v16-deep.json')
+    const [item] = v16.inventory
+    const [hero] = v16.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 16, { to: 17 })).toEqual({ ok: true, goods })
     }
   })
 })

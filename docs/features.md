@@ -68,7 +68,16 @@ worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity
 contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the arrival toast
 and the log name the tier in words, "The party reached tier 2, zone 1, Greenmeadow Road", and the
 enemy window's title in the short form that fits it, "T2 Z1 · Wave 3". Inside tier 1 they read as
-before.
+before. Each zone boss has one of four moves, the same in every tier: zones 1, 5 and 9 strike
+twice, two hits on one hero at 70% each, both numbers landing at the lunge's one impact and the
+log saying "Gorvax strikes twice!"; zones 2, 6 and 10 heal themselves under half HP for half
+their attack, more often the lower they are, with the White Mage's light burst on the boss and
+"Gorvax heals itself for 40."; zones 3, 7 and 11 hit the whole party at 60%, one lunge with every
+hero's hit landing at once and the usual "hits 3 foes" line; zones 4, 8 and 12 rage under half
+HP, every hit from there half again as hard, and "Gorvax's rage grows!" when the hit takes them
+under. A raging boss that is also enraged takes both on that hit. Each move's boss attack is tuned
+so the reference Knight still survives three to four of its actions; turn bosses and the world
+boss keep the single attack. None of it toasts.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
