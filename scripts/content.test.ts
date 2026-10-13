@@ -63,6 +63,11 @@ describe('content reference', () => {
     expect(lines).toContain('| turn_boss | 1 | 0 | 1 |')
   })
 
+  it('lists the weekly hunts in turn with what they count and their target', () => {
+    expect(lines).toContain('| `casters` | casters | caster | 20,000 |')
+    expect(lines).toContain('| `zone_bosses` | zone bosses | zone_boss | 1,000 |')
+  })
+
   it('holds one row per registry entry', () => {
     const rows = lines.filter((l) => /^\| [\d`a-z]/.test(l))
     const expected =
@@ -74,7 +79,8 @@ describe('content reference', () => {
       content.itemTierMultBp.length +
       LADDER_END / content.zones.length +
       content.achievements.length +
-      content.goals.length
+      content.goals.length +
+      content.hunts.length
     expect(rows).toHaveLength(expected)
   })
 })

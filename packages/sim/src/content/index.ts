@@ -5,6 +5,7 @@ import { epithets } from './epithets'
 import { expansions } from './expansions'
 import { goals } from './goals'
 import { heroTemplates } from './heroes'
+import { hunts } from './hunts'
 import { itemBases } from './items'
 import { rarity } from './rarity'
 import { tactics } from './tactics'
@@ -22,6 +23,7 @@ export {
   ONE_OFF_GOLD,
 } from './achievements'
 export { TIER_GROWTH_BP } from './enemies'
+export { huntAt, huntCount } from './hunts'
 export { ZONES_PER_ITEM_TIER } from './tiers'
 export type {
   AchievementMetric,
@@ -34,6 +36,8 @@ export type {
   GoalKind,
   GoalRow,
   HeroTemplate,
+  HuntKind,
+  HuntRow,
   ItemBase,
   RarityRule,
   Tactic,
@@ -62,4 +66,5 @@ export const content: Content = {
   itemTierMultBp,
   achievements,
   goals,
+  hunts,
 }

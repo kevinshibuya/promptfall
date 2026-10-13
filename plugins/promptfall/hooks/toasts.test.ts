@@ -146,6 +146,27 @@ const SINGLE: [string, Effect, Toast][] = [
     },
   ],
   [
+    'a reward from the weekly hunt',
+    {
+      k: 'rewarded',
+      bossId: 'h1a',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'hunt',
+    },
+    {
+      row: 'reward',
+      text: 'Your share of the hunt: 120 gold and Oak Staff',
+      timeoutMs: LONG,
+      cue: null,
+    },
+  ],
+  [
+    'a hunt reward of gold alone, under an id that is also a boss name',
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80, source: 'hunt' },
+    { row: 'reward', text: 'Your share of the hunt: 80 gold', timeoutMs: LONG, cue: null },
+  ],
+  [
     'a retreat',
     { k: 'retreat', zone: 3 },
     {

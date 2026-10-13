@@ -236,6 +236,18 @@ type BossView = {
     /** The caller's tallied contribution. */
     yours: number;
 };
+/** This week's hunt, as the World tab shows it. */
+type HuntView = {
+    /** The row's name, as "casters". */
+    name: string;
+    target: number;
+    /** Everyone's count this week, bots left out; it may pass the target. */
+    count: number;
+    /** Server epoch ms: the next Monday 00:00 UTC. */
+    endsAt: number;
+    /** The caller's contribution. */
+    yours: number;
+};
 type WorldSnapshot = {
     serverNow: number;
     /** The server clock's rate, as `ServerConfig.speed`; a secondary never bootstraps. */
@@ -249,6 +261,8 @@ type WorldSnapshot = {
     /** Names in the caller's zone, caller excluded, at most `HERE_MAX`, most recent heartbeat first. */
     here: string[];
     boss: BossView | null;
+    /** Null with `hunt.enabled` off, or before the first week opens. */
+    hunt: HuntView | null;
     /** Ascending id. */
     chat: ChatMessage[];
     /** The resolved flags, the same object as `ServerConfig.flags`. */
@@ -285,6 +299,9 @@ declare const BOSS_BASE_HP = 4000;
 declare const BOSS_THRESHOLD_BP = 500;
 /** The top contributors of a killed boss each get one bonus roll. */
 declare const BOSS_TOP_BONUS = 3;
+/** A contribution at or above this share of the hunt's target, in basis points, is paid at the week's close. */
+declare const HUNT_THRESHOLD_BP = 50;
+declare const WEEK_MS: number;
 /** Monday 00:00 UTC of the week holding `now` (day 0 was a Thursday). */
 declare function weekStartOf(now: number): number;
 declare const ChatMessageSchema: z.ZodType<ChatMessage>;
@@ -297,6 +314,7 @@ declare const ChatBodySchema: z.ZodObject<{
     text: string;
 }>;
 declare const BossViewSchema: z.ZodType<BossView>;
+declare const HuntViewSchema: z.ZodType<HuntView>;
 declare const WorldSnapshotSchema: z.ZodType<WorldSnapshot>;
 declare const BoardRowSchema: z.ZodType<BoardRow>;
 declare const BoardsSchema: z.ZodType<Boards>;
@@ -712,4 +730,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type AbortSignalLike, type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, DAY_MS, DEFAULT_REST_DAYS, DailyGoalSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type Journal, JournalResponseSchema, JournalSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, RestDaysBodySchema, type RestDaysRefusal, type RestDaysResult, RestDaysResultSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, type Weekday, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, dayOf, nextMonday, weekStartOf, weekdayOf };
+export { type AbortSignalLike, type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, DAY_MS, DEFAULT_REST_DAYS, DailyGoalSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, HUNT_THRESHOLD_BP, type Health, HealthSchema, HeroSchema, HttpClient, type HuntView, HuntViewSchema, ItemSchema, type Journal, JournalResponseSchema, JournalSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, RestDaysBodySchema, type RestDaysRefusal, type RestDaysResult, RestDaysResultSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WEEK_MS, type Weekday, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, dayOf, nextMonday, weekStartOf, weekdayOf };

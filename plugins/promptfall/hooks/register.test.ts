@@ -1105,6 +1105,7 @@ function snap(patch: Partial<WorldSnapshot> = {}): WorldSnapshot {
     zones: [{ zone: 1, count: 3 }],
     here: ['Ashgrove'],
     boss: null,
+    hunt: null,
     chat: [],
     flags: { 'chat.enabled': true, 'presence.enabled': true, 'market.enabled': true },
     ...patch,
