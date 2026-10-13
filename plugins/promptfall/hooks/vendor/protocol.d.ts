@@ -404,7 +404,7 @@ type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end' | 'turn_start' | 't
 /**
  * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
  * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
- * a guard one per 2 seconds with room for every prompt's on and off.
+ * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
  */
 declare const BUDGETS: Record<BudgetKind, {
     refillMs: number;
