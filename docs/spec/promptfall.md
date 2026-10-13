@@ -2,8 +2,8 @@
 
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
 phase 3 on 2026-10-03, for phase 4 on 2026-10-04, for the staged state on
-2026-10-09, for the curve on 2026-10-12, for sound on 2026-10-12 and for the
-reactive events on 2026-10-12. Every
+2026-10-09, for the curve on 2026-10-12, for sound on 2026-10-12, for the
+reactive events on 2026-10-12 and for the pull on 2026-10-13. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -225,6 +225,35 @@ Checked against Claude Code v2.1.287's mods API.
   party falls back one zone to wave 1 (in zone 1 it restarts zone 1) and the
   count resets; its effect is a retreat naming the zone fallen to. Boss mode's
   wipe counts nothing (§4.6), and the farm toggle is unchanged.
+- Travel (spec #132): the player event `travel`, carrying a running zone,
+  moves the party at once to any zone from 1 to the lesser of `highestZone`
+  and the ladder's end, every tier's zones the party has reached included. The
+  sim rejects it, the state unchanged, for a zone that is not an integer, one
+  below 1 or past that bound (`zone_not_reached`), the zone the party is in
+  (`already_in_zone`) and any travel in boss mode (`boss_mode`). A travel ends
+  the encounter and the battle with no drops and no XP (every gauge empty, the
+  action queue cleared), sets wave 1, resets the wipe count as any change of
+  zone does, applies the pending party (§4.3) and emits `traveled` with from
+  and to. The farm toggle is unchanged. It costs nothing and has no cooldown
+  beyond its rate bucket (§7). `highestZone` never falls, so a retreat still
+  drops the party one zone and a travel takes it straight back: a travel
+  undoes a retreat. The Journal's zone pages and `/promptfall travel <zone>`
+  send it (§10).
+- Zone boss moves (spec #132): each zone boss has one of four moves, keyed by
+  its base zone and the same in every tier. Zones 1, 5 and 9 strike twice: two
+  hits on one target at 70% of attack each (`STRIKE_TWICE_BP`), a new action,
+  the second skipped when the first fells its target. Zones 2, 6 and 10 heal
+  themselves for 50% of attack (`SELF_HEAL_BP`), capped at the HP missing,
+  weighed by need under half HP as the White Mage's heal is. Zones 3, 7 and
+  11 hit the whole party, every hero standing at 60% (`HIT_ALL_BP`), about one
+  action in three beside their single attack. Zones 4, 8 and 12 rage: under
+  half HP every hit lands at 150% (`RAGE_BP`), and a `raging` effect marks the
+  hit that first takes them under; a raging boss that is also enraged takes
+  both on that hit. Each move sets the boss's attack multiplier in place of the
+  boss archetype's 20,000 basis points (`MOVE_ATK_BP`: 15,000 strike twice,
+  20,000 heal, 22,000 hit all, 13,500 rage), so the feel probe, which weighs a
+  boss's actions as its tactics do, holds 3 to 4 boss actions at every zone.
+  Turn bosses and the world boss keep the single attack.
 - Tiers: zone 12's boss opens tier 2, the same twelve zones again as zones 13
   to 24, and zone 24's boss opens tier 3, zones 25 to 36. The ladder ends at
   tier 3 for now (`LADDER_END`, 36), where the advance gate farms as the farm
@@ -278,8 +307,8 @@ Checked against Claude Code v2.1.287's mods API.
 
 - Four classes: Knight, Black Mage, White Mage, Archer. Party of three from the
   roster, chosen in the dialog's Heroes tab at any time, applied at the
-  next zone boss kill or wipe (a farm restart and a wipe in zone 1 included), so
-  swaps happen between zones. A pick on a fresh save, before the first kill,
+  next zone boss kill, wipe or travel (a farm restart and a wipe in zone 1
+  included), so swaps happen between zones. A pick on a fresh save, before the first kill,
   applies at once.
 - A hero is a template (class, name, portrait) times a rarity times rolled
   traits. Trait count by rarity: Common 0, Uncommon 1, Rare 2, Epic 3,
@@ -299,17 +328,30 @@ Checked against Claude Code v2.1.287's mods API.
   doubled against the pre-gauge game, since a unit acts about once every two
   ticks. A heal restores 0.8 × attack to the living ally with the lowest HP
   share, capped at max HP, and never revives. Enemies attack a hero, a Knight
-  most often.
+  most often; a zone boss also has its move (§4.2), and combat honours the
+  action the picker chose for an enemy as it does for a hero.
 - A weighted picker chooses each action and its target together: every
   (action, target) pair a unit could take gets a weight from rules about the
   battle, and one seeded draw picks a pair. The rules are content data per hero
-  class and per enemy archetype (`packages/sim/src/content/tactics.ts`), so a
-  later skill or technique is a new entry, not new code. Heal weighs nothing
+  class, per enemy definition (a zone boss's move, looked up first) and per
+  enemy archetype (`packages/sim/src/content/tactics.ts`), so a later skill or
+  technique is a new entry, not new code. Heal weighs nothing
   while every ally is at 50% HP or more and rises the lower the weakest falls
   (about 3 heals in 4 at 25%); a White Mage alone never heals.
 - Acquisition: recruit contracts drop from zone bosses and, at a lower rate,
   turn bosses; a tavern recruits for gold at published odds. Roster cap 24,
   expandable with gold.
+- The tavern guarantee (spec #132): a Rare or better within 20 tavern
+  recruits, an Epic or better within 80, a Legendary within 400
+  (`content.tavern.guarantees`). The state holds three counters
+  (`guarantee`): recruits since the last Rare or better, since the last Epic or
+  better, since the last Legendary. A tavern recruit raises all three, then
+  rolls the odds; the floor is the highest rarity whose counter has reached its
+  threshold, the result is the higher of the roll and the floor, and a result
+  of rarity R resets the counters at R and below. The remaining count to each is
+  the threshold less its counter, at least 1, which is the next recruit.
+  Contracts and sandbox recruits leave the counters alone, though they count
+  in the recruit tallies (§7). Published beside the odds (§5, §10).
 - Starting roster: one Common hero of each class. First launch auto-picks
   Knight, Black Mage and White Mage, and a toast points at the Heroes tab.
 
@@ -343,8 +385,52 @@ Checked against Claude Code v2.1.287's mods API.
 
 ### 4.5 Gold
 
-Sources: kills, vendoring items, dismissing heroes. Sinks: reforge, tavern,
-inventory and roster expansions, market listing fee, 5 percent market sale fee.
+Sources: kills, vendoring items, dismissing heroes, market sales (§5), and
+what the ledger pays as server events: world boss and weekly hunt rewards
+(`rewarded`, §6), and `credited` gold for an achievement step or a daily goal
+met (spec #132). Sinks: reforge, tavern, inventory and roster expansions,
+market listing fee, 5 percent market sale fee.
+
+- Gold earned, the tally the gold ladder and the session summary read (§7,
+  §10), counts kill gold, vendoring (by hand, on pickup, and a contract that
+  finds the roster full), a sale's or a filled order's net, a reward's gold and
+  every credit. It never counts a dismissal, a refund or escrow coming back.
+- Achievements: a content table (`content/achievements.ts`), data no sim rule
+  reads, so a row is no bump. Ladders, one row of up to four steps paying 100,
+  400, 1,500 and 5,000 gold in order: kills 100 / 1k / 10k / 100k; zone bosses
+  10 / 50 / 200 / 1,000; turn bosses 10 / 100 / 1,000; Rare or better drops 10
+  / 100 / 1,000; Legendary drops 1 / 10 / 50; recruits 5 / 25 / 100; reforges
+  10 / 100; gold earned 10k / 100k / 1M; daily goals met 10 / 50 / 200; streak
+  work days 5 / 20 / 60 / 250; zones with every enemy defeated 1 / 4 / 8 / 12;
+  bases held in every rarity 1 / 10 / 35. One-offs at 500 gold: a first Epic
+  and a first Legendary (held, by drop, purchase, reward or recruit), zone 6
+  reached, zone 12 cleared, tier 2 reached, tier 3 reached, a zone boss beaten
+  with no wipe in its zone, all four classes at their cap. A step pays once, on
+  the commit that crosses it; a commit that crosses several, a veteran's first
+  after the bump among them, pays them all. Kills read the existing total and
+  zone bosses start from the bosses beaten, so a veteran's ladders keep their
+  past; the bestiary and collection ladders count from the bump.
+- Daily goal: one pure function (`dailyGoal` in `@promptfall/sim`) draws a row
+  of the goal table (`content/goals.ts`) with the sim's PRNG, seeded from a
+  hash of the UTC day index and the account id, and scales its target to the
+  party's zone at the day's first commit: kill 150 enemies plus 10 a zone past
+  zone 1, beat 2 zone bosses plus 1 every 12 zones, see 3 Rare or better drops
+  plus 1 every 6 zones, or beat one turn boss. The world boss is not in the
+  pool, since its flag can be off. Progress is the tallies' rise since the
+  day's first commit. Met, it pays the zone's mean wave gold midpoint times 300
+  (`goalGold`), about an hour of kills at the reference cadence, from the zone
+  the day opened at. The day is the server clock's UTC day, scaled by speed as
+  everything is, and resets at its end. A missed goal costs nothing but the
+  streak, and no goal pays twice in a day.
+- Streak: the count of consecutive work days with the goal met; it pays
+  nothing itself and feeds the streak ladder. A day is a work day unless it is
+  one of the account's two rest days, Saturday and Sunday by default. A goal
+  met on a work day grows the streak by one when no work day since the last
+  met one went unmet, and starts it at one otherwise; a work day missed sets it
+  to zero, as the next commit or read sees it. A goal met on a rest day pays
+  and counts toward the goals ladder, and neither grows nor breaks the streak.
+  A change of rest days applies from the next Monday, and each day is judged by
+  the set in force on it, so a change never reaches back over a miss.
 
 ### 4.6 Boss mode (phase 3)
 
@@ -390,9 +476,11 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Browsing is open to every account. Listing, buying and ordering need a linked
   GitHub account and `market.enabled`; the dialog says so in place.
 - Published odds: an Odds screen in the dialog shows drop, rarity and tavern
-  tables, at zone 12's rarity odds past tier 1, and says that rarity multiplies
-  base stats, heroes and items alike, and that reforge is priced by rarity and
-  tier.
+  tables, at zone 12's rarity odds past tier 1, then the tavern guarantee
+  (§4.3) as three rows from the save's own counters, "Rare guaranteed in 13
+  recruits", the Epic's and the Legendary's ("on the next recruit" at one),
+  and says that rarity multiplies base stats, heroes and items alike, and that
+  reforge is priced by rarity and tier.
 
 ## 6. Social (phase 3)
 
@@ -432,9 +520,29 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   3 contributors, all as `rewarded` server events, found in the next delivery by
   anyone offline. An expired boss pays the threshold drop and no bonus rolls.
   Goods with no free slot wait in returns, never vendored.
+- Weekly hunt (spec #132): one target a week shared by every account on the
+  server, from Monday 00:00 UTC on the server clock. The ledger keeps one world
+  record beside the boss's (`pf:world:hunt`): the week's start and end, the
+  hunt drawn in turn from a content table (`content/hunts.ts`: casters,
+  brutes, zone bosses, tanks, swifts; 20,000 of an archetype across every zone,
+  or 1,000 zone bosses), the count, the contributions per account, closed. At
+  each batch commit the ledger adds the account's rise in the hunt's tally (the
+  archetype's defeated counts, or the zone bosses) to the count and to its
+  contribution, never a bot's, as bots are kept off the boards. At the first
+  world poll or sweep past the week's end the ledger closes it: every
+  contributor at or above half a percent of the target (`HUNT_THRESHOLD_BP`,
+  50) gets one reward rolled at its zone through the world boss's reward path,
+  whether or not the count reached the target, a `rewarded` event with source
+  `hunt` (§7), goods with no free slot waiting in returns. The next week's
+  record opens in the same pass. The world snapshot gains `hunt` (name,
+  target, count, ends at, yours), null with the flag off or once the week has
+  ended. The World tab's records row shows it with its bar (§10).
 - Flags: one per feature, `chat.enabled`, `worldboss.enabled`, `presence.enabled`,
-  `leaderboards.enabled`. The in-process fake runs with chat and the world boss
-  off, said in place like a closed market.
+  `leaderboards.enabled`, `hunt.enabled`. The in-process fake runs with chat,
+  the world boss and the hunt off, said in place like a closed market; the
+  sandbox turns the world boss on and leaves the hunt off. `hunt.enabled` is on
+  by default on HTTP hosts. Achievements and the daily goal have no flag: they
+  are not social, and they pay from the same gold the world boss pays.
 - Moderation in phase 3: name and chat blocklists and the chat flag. Phase 5
   adds the ban and flag flips over the admin route (§8); there is no mute.
 
@@ -443,9 +551,22 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
 - Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. Any change to the
   sim bumps it, and the plugin's version moves with it; a state behind the
   client's sim version is reset (phase 3 bumps it to 3, the combat flow to 4,
-  the staged-state set to 5). API: create an initial state from a seed, step a state with one
-  event into a new state plus effects, hash a state. Effects are UI notifications
-  and carry no authority.
+  the staged-state set to 5, the pull's tallies, travel and guarantee to 16
+  and its boss moves to 17). API: create an initial state from a seed, step a
+  state with one event into a new state plus effects, hash a state. Effects are
+  UI notifications and carry no authority.
+- Tallies (spec #132): the ledger sees only state on replay, never effects, so
+  what it counts for the journal and the hunt is state. `tallies` holds, per
+  enemy definition, seen (raised at its spawn) and defeated counts; per item
+  base, a mark per rarity held (a drop, a purchase, a reward or a return);
+  counts of zone bosses, turn bosses, zone bosses beaten with the zone's wipe
+  count at zero (`cleanZoneBosses`), drops by rarity (kept or vendored on
+  pickup), recruits by rarity (tavern, contract and sandbox alike), reforges and
+  gold earned (§4.5). Every tally is an integer and in the hash. The migration
+  to 16 starts them at zero, so the bestiary and the collection count from the
+  bump, except the zone bosses, seeded from the bosses already beaten. The
+  plugin's view carries them, so the Journal's bestiary and collection pages
+  read the view with no server read.
 - The client runs the sim locally for instant feedback, buffers the events it
   fed in, and sends them in batches every 15 seconds. A batch carries a client
   generated id (retries are no-ops on the server), a per-account sequence
@@ -461,8 +582,9 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   and `tool_mishap` at one per 5 seconds with the turn ends' capacity of 30,
   `camp` at one per minute with a capacity of 5, and `guard` at one per 2
   seconds with a capacity of 60, since every prompt costs an on and an off
-  (`BUDGETS` in `@promptfall/protocol`). A record from before them gets the
-  four buckets full on its first load. A batch over any bucket is rejected
+  (`BUDGETS` in `@promptfall/protocol`). `travel` (§4.2) has its own bucket,
+  capped as a rest is, one per 5 seconds with a capacity of 30. A record from
+  before a bucket gets it full on its first load. A batch over any bucket is rejected
   whole, and the player sees a resync. Since a human paces only rests and
   prompts, the plugin paces the reactive events itself, under the buckets: a
   turn's `turn_start` refresh at most once per 60 seconds after its start,
@@ -480,7 +602,14 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   authored only by the ledger: the effects of trades on an account's inventory,
   roster and gold (`listed`, `returned`, `sold`, `bought`, `order_placed`,
   `order_refunded`, `order_filled`, `order_sold`, `credited`) and the world boss
-  (`boss_engaged`, `boss_disengaged`, `rewarded`).
+  and the hunt (`boss_engaged`, `boss_disengaged`, `rewarded`).
+  `credited` carries a reason, at most 64 characters, that the sim hands on in
+  the gold effect it emits, so the toasts can tell its kinds apart:
+  `achievement:<id>:<step>` for an achievement step, `goal:<day>` for a daily
+  goal, `sandbox` for the sandbox's gold, `bot_stipend` for a bot's. Kill
+  gold and a vendored contract emit a gold effect with no reason. `rewarded`
+  carries an optional source, `boss` or `hunt`; an absent one reads as boss, as
+  every event logged before it does, and the reward effect always carries it.
   The sim applies a server event without judging it; one it cannot apply is a
   bug caught by the hash check, never a rejection. The batch schema accepts
   player events only.
@@ -496,6 +625,28 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   it once. The client re-steps its buffered player events over server events as
   they arrive, so a locally seen spend can turn into a rejection when a trade
   drained the gold first: the server wins.
+- The journal (spec #132) is a ledger record per account beside its record
+  (`pf:acct:<id>:journal`): the achievement steps paid with their times, the
+  goals met, the day (its index, its goal, the zone it opened at, the tallies it
+  opened with as the baseline, met), the streak (its length and the last work
+  day met) and the rest-day sets. The ledger evaluates it at each batch commit
+  from the committed state, never from a client claim, on the accepted path and
+  the hash mismatch's alike: it opens the day when the day changed, pays the
+  goal on the commit that meets it and grows the streak, then pays each
+  achievement step newly crossed, every payment a `credited` event authored onto
+  the record. Rest days are ISO weekdays, 1 for Monday to 7 for Sunday, two
+  distinct ones, `[6, 7]` by default. Each set is stored with the day index of
+  the Monday it applies from, and a day is judged by the set in force on it. The
+  `journal` read (`GET /v1/journal`) answers the achievements with their steps
+  and times, the day's goal with its progress, met and reset time, the goals
+  met, the streak and the rest days in force with any set still to come, and
+  writes nothing; a streak a missed work day has broken reads zero. The
+  `setRestDays` write (`POST /v1/journal/rest-days`, two days) stores the pair
+  from the next Monday, replacing a set still to come, and refuses a count
+  other than two (`rest_days_count`), a day outside 1 to 7 (`rest_days_range`)
+  and the same day twice (`rest_days_same`). Both go under the account's token,
+  `ServerClient.journal` and `setRestDays`, the in-process fake being the
+  ledger.
 - A market action flushes the client's buffer and waits for the ack before the
   request, so the ledger validates against state at most one round trip old.
   Only the primary session trades.
@@ -577,7 +728,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   five an hour per client address, the last hop of `x-forwarded-for` behind
   Caddy; any other token passes the cap and the ledger stays address-blind.
 - Flags: `chat.enabled`, `market.enabled`, `worldboss.enabled`,
-  `presence.enabled`, `leaderboards.enabled`, `maintenance`. The start flags
+  `presence.enabled`, `leaderboards.enabled`, `hunt.enabled`, `maintenance`. The start flags
   come from `--flag`; a flag set over the admin route is stored under
   `pf:flags`, loaded at start over the start flags, and in force from the next
   call. The version floor is not a flag: the bootstrap's config carries the
@@ -829,11 +980,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   state (GLOSSARY). A drop's show time is its reveal, the item fully risen:
   the drop's log line, its Loot row, its toast and its cue all land then. A
   zone arrival's show time is the backdrop change, when the zone boss's row
-  has left (its dissolve and any chest over, the moment the staged state's zone
-  flips): the arrival's log line and its toast land then. The timeline answers
-  it as the kill's effects arrive, before any draw has departed the boss, as a
-  prediction (the end of the blow shown on the boss plus the dissolve, or its
-  chest's end, whichever is later), and refines it as the draws schedule and
+  has left (its dissolve, any chest and the party's victory pose over, the
+  moment the staged state's zone flips): the arrival's log line and its toast
+  land then. The timeline answers it as the kill's effects arrive, before any
+  draw has departed the boss, as a prediction (the end of the blow shown on the
+  boss plus the dissolve and the victory hold, or its chest's end, whichever is
+  later), and refines it as the draws schedule and
   re-time those motions. The boss's drop reveals before its row leaves, so its
   words land first and the zone's after. The farming line ("Zone N cleared.")
   is not held.
@@ -907,6 +1059,39 @@ flags. No second server program, no Postgres, no Redis, no worker.
     guard." for guard on and off.
   - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
     at both densities and in the SMIL picture, under the size caps.
+- Stage moments and lines of the pull (spec #132). Each has a golden
+  scenario, `travel`, `level-up`, `victory` and `boss_move`, at both densities
+  and in the SMIL picture, under the size caps.
+  - **Travel**: on `traveled` the heroes step off toward the right
+    (`TRAVEL_PX`), fading over 500 ms (`TRAVEL_OFF_MS`); the enemies the travel left
+    stand until the backdrop changes to the destination's at the end of it,
+    then go with no dissolve; the heroes step on from the left over 500 ms
+    (`TRAVEL_ON_MS`). The backdrop change is a travel's show time, answered by
+    the timeline as it answers a zone arrival's, and the log line
+    "The party travels to zone 3, Marsh of Sighs." is a held line that lands
+    then. A
+    travel raises no toast and no cue. A stage never drawn plays nothing.
+  - **Level-up**: the hero flashes gold, the hit flash's mechanism with a gold
+    fill (`LEVEL_RGB`), and its gains rise over it as a gold number, `+3 atk
+    +2 def`, atk, def and spd in that order, zero gains and HP left out. The
+    engine computes the gains from the hero's stats before and after the tick
+    and hands them to the stage with the effect.
+  - **Victory**: when a zone boss falls, after its dissolve, every hero holds
+    the `victory` pose for 2 seconds (`VICTORY_MS`) and the boss's row is held
+    with it, so the backdrop change and the arrival's words move after the hold.
+    The pose is a slot: the drawn 1.5× victory frame of the hero's class where
+    the manifest has one, its idle where it has none, and the idle always at 1×
+    (ADR 0007). A turn boss and the world boss get no hold.
+  - **Boss moves** (§4.2): the log prints "Gorvax strikes twice!" as the act
+    starts, then each hit's own line; "Gorvax heals itself for 40.", the White
+    Mage's light burst playing on the boss, in place; "Gorvax's rage grows!" on
+    the `raging` effect. The whole-party hit has no line of its own: it prints
+    the existing "hits 3 foes" line, and the stage plays it as the Black Mage's
+    spell is played, one lunge and every hit landing at once. Strike twice
+    lands both numbers at the lunge's one impact. These three lines and the
+    travel line are keyed as lines that are never dropped.
+  - The weekly hunt's reward logs "Your share of the hunt: 120G and Oak Staff.";
+    an achievement step and a goal met print no line.
 - The staged state: what the band shows during a fight is the **staged
   state**, the fight as the stage has played it so far: the sim's state less
   every hit, heal and death the stage has not landed yet (GLOSSARY). One
@@ -937,7 +1122,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   names in your zone, you excluded; then the latest chat message as a ticker,
   or highest zone, kills and wipes when chat is closed or quiet, ending in
   `world boss is off` when the server's flag has the boss off and the row has
-  room for it. The world boss shows in the enemy window instead.
+  room for it. The world boss shows in the enemy window instead. The records
+  row (highest zone, kills, wipes) carries the weekly hunt (§6) after the kills:
+  `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left`, the bar eight cells,
+  dropped before the segment when the row is narrow, and `1 day left` or the
+  hours under a day. With its flag off the row ends in `hunt is off`, or `world
+  boss and hunt are off` with the boss off too, as on the in-process fake.
 - World boss display (phase 3): in boss mode the enemy window shows the boss
   with the global HP bar and its percentage, its title the time left, on every
   tab. Under 116 columns, where the Party tab is the compact window and has no
@@ -953,9 +1143,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   bootstrap is an outage. Chat posting during an outage answers the unreachable
   text like a trade.
 - Dialog via `/promptfall [tab]`: Inventory, Heroes, Account, Odds in phase 1;
-  Market and Orders in phase 2; Chat and Leaderboards in phase 3. Opened with
-  focus, closes on Escape, holds toasts.
-- All eight tabs draw as Dragon Quest V windows (UI PR 2 and 3, ADR 0005): a tab
+  Market and Orders in phase 2; Chat and Leaderboards in phase 3; Journal with
+  the pull. Opened with focus, closes on Escape, holds toasts. The tab window
+  reads Inventory `i`, Heroes `h`, Market `m`, Orders `r`, Account `a`, Odds
+  `o`, Journal `u`, Chat `c`, Leaderboards `b`.
+- All nine tabs draw as Dragon Quest V windows (UI PR 2 and 3, ADR 0005): a tab
   window, a list window with a ▶ cursor, a detail window beside it from 96
   columns (under it below that), command, pick and form windows, a Yes/No, and a
   message window. The picture takes at most 24 rows and 120 columns, centred on
@@ -980,6 +1172,29 @@ flags. No second server program, no Postgres, no Redis, no worker.
   damage this week under their headings, 20 rows each, your rows in gold,
   fetched on open, with who is online by zone in the detail window; a closed
   state is said in place.
+- Journal tab (`u`, spec #132): the player's record. Its hotkey is `u`, not
+  `j`, because the rung under the picture on the desktop, VS Code and mobile
+  keeps `j` and `k` for ▼ and ▲, the one way those surfaces' keyboard moves the
+  ▶; Unequip in the Inventory command window moves to `n`, since the tab
+  hotkeys mount on every tab. The list: under a `Today` rule, the day's goal
+  ("Kill 150 enemies") with its progress `n/target` or `met`, then `Resets in
+  5 h · streak 3 work days` from the server's now; under a `Bestiary` rule, one
+  row per base zone reached (all twelve past tier 1), `Zone 3, Marsh of Sighs`
+  with its enemies defeated out of six; then `Collection` with the bases held
+  and `Achievements` with the steps crossed. The goal shows on open, derived by
+  `dailyGoal` from the view; its progress, the reset and the streak come with
+  the `journal` read, loaded on open as the leaderboards load, with the same
+  busy row and error flash, and `…` in their place until it answers. Enter on a
+  zone opens its page: the four wave enemies, the zone boss and the turn boss,
+  each with its seen and defeated counts and a `*` once defeated, then `Travel
+  here` (`t`), or past tier 1 one `Travel to tier 2, zone 3, …` line per tier
+  reached, left out for the zone the party is in and disabled for a secondary.
+  Enter on Collection pages the 35 bases with the five rarity letters `C U R E
+  L`, lit in each rarity held; Enter on Achievements pages each ladder as one
+  row of step marks with the next step's gold and the last step's date, and
+  each one-off with its mark and date. `q` backs out of a page. The tab fits one
+  line at 100 columns and wraps below as the frame does. A session that is not
+  playing reads the Journal and writes nothing.
 - Market tab: a `Filters` row (`f`) opens a filter window for kind (items or
   heroes), sort (cheapest or newest), base type or class and minimum rarity;
   the last two open pick windows. Ten listings a page with `Previous page` and
@@ -997,7 +1212,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   message window, with a hotkey to the Account tab.
 - Account tab: the settings as rows (`s` sound, `n` motion, `x` renderer, and
   "Auto-vendor: off / on", which sends `set_auto_vendor` and is the account's,
-  not the machine's: a secondary session shows it read-only), the band shown or
+  not the machine's: a secondary session shows it read-only), "Rest days: Sat,
+  Sun" (spec #132; the account's too, read from the journal the tab loads on
+  open: Enter opens a pick of the seven days with the two in force marked, the
+  second day picked sends `setRestDays`, the row then reads "Rest days: Sat,
+  Sun (Tue, Thu from Monday)" until that Monday, a refusal flashes in the
+  message window, and a secondary shows it read-only), the band shown or
   collapsed, band off, link GitHub (the device flow: a code in
   the detail window, the URL as a link under the picture, a poll), and a reset
   of this machine's data, which asks Yes or No and opens on No. The detail
@@ -1005,7 +1225,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   view exists the pane says Promptfall has not started, and Account still
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag. `/promptfall autovendor on|off` sets the auto-vendor
+  toggles the farm flag. `/promptfall journal` opens the pane on the Journal.
+  `/promptfall travel <zone>` sends `travel` (§4.2) and answers
+  "The party travels to zone 3, Marsh of Sighs." or the refusal in words: a
+  zone that is not a number answers the usage, one past the highest reached
+  names the highest it can go to, the zone the party is in says it is already there, a
+  world boss fight says travel waits until it ends, and a session not playing
+  or paused says so. `/promptfall autovendor on|off` sets the auto-vendor
   setting. `/promptfall server <url>|local` picks the server.
 - Toasts: one sentence in the game's voice for an event worth a glance away
   from Claude's work: rare good news, a state that wants a decision, or money
@@ -1018,7 +1244,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 |---|---|---|---|---|---|
 | legendary drop | rare good news | long | `Legendary drop: Ironwood Staff`, at the reveal | never folds | legendary |
 | recruit | rare good news | long | `Rare recruit: Mira the Bold` (rarity word from the hero) | never folds | recruit |
-| boss reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known) | never folds | none |
+| reward | rare good news | long | `Your share of Gorvax: 120 gold and Ironwood Staff` (gold alone, or the hero's name for a hero; `the world boss` when the boss's name is not known); a hunt reward, `Your share of the hunt: 120 gold and Oak Staff` | never folds | none |
 | retreat | wants a decision | long | `The party retreats to zone 3, Marsh of Sighs` | never folds | retreat |
 | world boss appeared | rare good news | long | `World boss Gorvax has appeared` | n/a (one at a time) | boss |
 | revoked | wants a decision | long | `The server revoked Ironwood Staff`, or `The server revoked an item` when the name is gone | `The server revoked 3 items` | none |
@@ -1027,16 +1253,18 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
 | vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
 | level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
+| achievement | rare good news | short | `Achievement: a thousand kills, 1,500 gold` (the step's words from the table, on a credit with reason `achievement:<id>:<step>`) | `3 achievements, 2,000 gold` | goal |
+| goal met | rare good news | short | `Daily goal met: 40 gold` (a credit with reason `goal:<day>`) | never folds | goal |
 | sold | money moved | short | `Ironwood Staff sold for 120 gold` | `3 items sold for 410 gold` | none |
 | bought | money moved | short | `Ironwood Staff bought for 120 gold` | `2 items bought for 300 gold` | none |
 | returned | money moved | short | `Ironwood Staff returned, unsold` | `3 items returned, unsold` | none |
 | world boss down | rare good news | short | `World boss Gorvax is down` | n/a | none |
 
-  Two rows land with the spec that raises them (Pull), each with its cue: the
-  goal met and achievement rows both take goal. Until then that cue ships
-  unplayed.
+  The achievement and goal met rows read the reason the gold effect carries
+  (§7); a credit whose reason they do not know, a bot's stipend or the
+  sandbox's gold, toasts nothing.
 
-  Three toasts sit outside the table, raised by the session rather than from a
+  Four toasts sit outside the table, raised by the session rather than from a
   burst. The welcome: a first launch toasts `Welcome to Promptfall. /promptfall
   heroes to meet your party` at the host's default length, and the band holds a
   notice for 20 seconds: `Sound on; /promptfall sound off silences it. Welcome
@@ -1047,7 +1275,24 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the first primary to start after the rewrite toasts it once, at the long tier,
   `Sound is now on by default. /promptfall sound off silences it.` A boss already up at the first world poll
   toasts the world boss appeared row's text and tier with no cue: the boss is
-  news, not a fight starting.
+  news, not a fight starting. The session summary (spec #132), beside the
+  welcome: the plugin keeps two records per server setting beside the shown
+  cursor, each carrying its account id (another account's reads as none), and
+  under the store's prefix, so a reset wipes them. The snapshot holds the
+  counts the summary is a difference from (kills, zone bosses, the sum of the
+  roster's levels, the Rare, Epic and Legendary drops from the tallies, the
+  gold earned, the highest zone) and is taken when a session becomes primary.
+  The stamp is when the account was last seen playing, written by the primary
+  every 5 minutes, as it stops, on a server switch and as it hands over. When
+  a session becomes primary and the stamp is this account's and more than ten
+  minutes old, it toasts at the long tier with no cue and holds the line in
+  the message window for 20 seconds, as the welcome does: `Since Tuesday: 412
+  kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
+  Today's goal: kill 40 enemies.`, the weekday when a day or more has passed
+  and `Since your last session` under a day, parts at zero left out, nothing
+  said when every part is zero. Then it retakes the snapshot. A younger stamp
+  says nothing and keeps the snapshot, so a short break loses nothing. A first
+  launch toasts the welcome and only takes the snapshot.
 
   The toasts read the state, not the staged state, except the drop, vendored
   and zone arrival rows, which are held lines. A drop or vendored toast lands
@@ -1064,7 +1309,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
   and the log show it), a party change the player made, a farming clear, a
   common or uncommon drop, a common item vendored, chat, a reactive event (the
-  stage and the log show it, and it plays no cue).
+  stage and the log show it, and it plays no cue), a travel (the stage and the
+  log show it).
 
   Rules behind the rows:
 
