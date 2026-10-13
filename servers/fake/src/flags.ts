@@ -6,6 +6,7 @@ export const LEDGER_FLAGS: readonly LedgerFlag[] = [
   'worldboss.enabled',
   'presence.enabled',
   'leaderboards.enabled',
+  'hunt.enabled',
   'maintenance',
   'sandbox.enabled',
 ]

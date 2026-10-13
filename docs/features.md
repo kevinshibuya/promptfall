@@ -233,7 +233,8 @@ none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
 takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
-the market, chat, the world boss, presence, the leaderboards and maintenance switch on the next
+the market, chat, the world boss, presence, the leaderboards, the hunt (`hunt.enabled`) and
+maintenance switch on the next
 call, and stay switched after a restart, over the `--flag` values it starts with. The sandbox flag
 is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
 never the token. A server without the token has no admin routes. A server makes at most five new
@@ -287,6 +288,18 @@ records row says so in place when it has room.
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
 "Your share of …", and goods with no free slot wait in returns.
 
+**Weekly hunt.** One target a week shared by everyone on the server, from Monday 00:00 UTC on the
+server's clock: one enemy kind across every zone (casters, brutes, tanks, swifts) or zone bosses,
+in turn from a table, each with a target such as 20,000 casters. The server counts every account's
+kills of that kind as its batches commit, never a bot's, and the World tab's records row shows it
+after the highest zone and the kills, as "Hunt: casters 12,400 / 20,000, 3 days left", with an
+eight-cell bar when the row has room. When the week ends every account that counted at least half
+a percent of the target gets one reward rolled at its zone, whether or not the target was reached:
+it toasts "Your share of the hunt: 120 gold and Oak Staff", the combat log says the same, and goods
+with no free slot wait in returns. The next week's hunt opens then. It needs a server and the
+`hunt.enabled` flag, on by default; with it off the records row says "hunt is off" in place, and
+"world boss and hunt are off" with the boss off too, as on the in-process fake.
+
 ## Servers
 
 **The public server.** Promptfall's own server runs at `https://promptfall.kevinshibuya.com`: the
@@ -297,7 +310,7 @@ paragraph says what it keeps about an account and for how long.
 
 **The default server and `local`.** A fresh install, with no server set, plays on the public
 server. `/promptfall server local` moves this machine to the in-process fake, which plays offline
-with no chat and no world boss; `/promptfall server <url>` moves it to any other server, and
+with no chat, no world boss and no hunt; `/promptfall server <url>` moves it to any other server, and
 `/promptfall server` says which one is in force. Each server has its own account on the machine,
 and nothing moves between them. The sandbox always plays on the in-process fake, whatever the
 setting.
@@ -503,7 +516,7 @@ default. /promptfall sound off silences it."
 
 **The switch.** Starting Claude Code with `PROMPTFALL_SANDBOX=1` turns the sandbox on for that
 session: the game plays on the in-process fake whatever server the machine points at, with chat
-off and the world boss on, and `/promptfall server` answers that the sandbox pins the server.
+and the hunt off and the world boss on, and `/promptfall server` answers that the sandbox pins the server.
 Without the variable the `sandbox` verb is not in the command's hint, and typing it anyway answers
 "Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1."
 

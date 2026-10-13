@@ -408,6 +408,7 @@ test('a world boss at an emptied bar stands whole until the server disengages it
         endsAt: NOW + 660_000,
         yours: 0,
       },
+      hunt: null,
       chat: [],
       flags: {},
     },

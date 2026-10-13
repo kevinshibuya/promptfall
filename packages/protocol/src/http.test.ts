@@ -88,6 +88,7 @@ const snapshot: WorldSnapshot = {
   zones: [{ zone: 1, count: 2 }],
   here: ['Brindle'],
   boss: null,
+  hunt: { name: 'casters', target: 20_000, count: 12_400, endsAt: 1_700_438_400_000, yours: 120 },
   chat: [{ id: 12, name: 'Brindle', text: 'hello', at: 1_699_999_999_000 }],
   flags: { 'chat.enabled': true },
 }

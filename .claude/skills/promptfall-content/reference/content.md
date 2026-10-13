@@ -225,3 +225,17 @@ commit. Met, it pays the zone's wave gold midpoint × 300 with reason `goal:<day
 | zone_bosses | 2 | 1 | 12 |
 | rare_drops | 3 | 1 | 6 |
 | turn_boss | 1 | 0 | 1 |
+
+## Weekly hunts
+
+One row a week in turn, by the week's index from the epoch, counted by the ledger from every
+account's commits but bots'. At the week's close each contributor at 0.5% of the target or
+more gets one reward roll at its zone, the target reached or not.
+
+| Id | Name | Counts | Target |
+| --- | --- | --- | --- |
+| `casters` | casters | caster | 20,000 |
+| `brutes` | brutes | brute | 20,000 |
+| `zone_bosses` | zone bosses | zone_boss | 1,000 |
+| `tanks` | tanks | tank | 20,000 |
+| `swifts` | swifts | swift | 20,000 |

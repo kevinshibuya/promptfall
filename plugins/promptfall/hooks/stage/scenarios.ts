@@ -461,6 +461,7 @@ const WORLD: WorldState = {
     zones: [{ zone: 1, count: 13 }],
     here: ['Bea', 'Kit'],
     boss: null,
+    hunt: null,
     chat: [],
     flags: { 'chat.enabled': true, 'presence.enabled': true },
   },

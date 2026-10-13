@@ -166,6 +166,7 @@ const polled = (hp: number, committed: number): WorldState => ({
       endsAt: NOW + 660_000,
       yours: committed,
     },
+    hunt: null,
     chat: [],
     flags: {},
   },

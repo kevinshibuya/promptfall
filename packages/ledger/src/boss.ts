@@ -13,6 +13,7 @@ import {
   type GameState,
   type Goods,
   type HeroClass,
+  type RewardSource,
   rollRewardItem,
   type Stats,
 } from '@promptfall/sim'
@@ -122,6 +123,41 @@ function rewardGold(rarity: keyof typeof content.rarity, zone: number): number {
 }
 
 /**
+ * One reward roll at the record's zone, authored as `rewarded` under `rewardId` (a boss's id, or
+ * a hunt's with `source` hunt). An item with no free slot waits in returns and arrives as
+ * `returned` when one frees; the caller syncs the returns queue and saves the record.
+ */
+export async function payReward(
+  ctx: WorldContext,
+  record: AccountRecord,
+  rewardId: string,
+  source?: RewardSource,
+): Promise<void> {
+  const tagged = source ? { source } : {}
+  const zone = record.state.zone
+  const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state))
+  if (!rolled) {
+    author(record, {
+      t: 'rewarded',
+      bossId: rewardId,
+      goods: null,
+      gold: rewardGold('rare', zone),
+      ...tagged,
+    })
+    return
+  }
+  const item = { ...rolled, id: await nextLedgerId(ctx.books.kv, 'r') }
+  const goods: Goods = { kind: 'item', item }
+  const gold = rewardGold(item.rarity, zone)
+  if (hasRoom(record.state, goods)) {
+    author(record, { t: 'rewarded', bossId: rewardId, goods, gold, ...tagged })
+  } else {
+    record.returns.push({ listingId: rewardId, goods })
+    author(record, { t: 'rewarded', bossId: rewardId, goods: null, gold, ...tagged })
+  }
+}
+
+/**
  * Pays every contributor and disengages them, then closes the boss. The
  * threshold gates the guaranteed drop (`allPaid`, the sandbox's settle, lifts
  * it for every engaged account); the top contributors of a killed boss get one
@@ -147,29 +183,7 @@ export async function settleBoss(
     const rolls =
       (options.allPaid || contribution >= threshold ? 1 : 0) +
       (!options.expired && top.includes(id) ? 1 : 0)
-    for (let i = 0; i < rolls; i++) {
-      const zone = record.state.zone
-      const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state))
-      if (!rolled) {
-        author(record, {
-          t: 'rewarded',
-          bossId: boss.bossId,
-          goods: null,
-          gold: rewardGold('rare', zone),
-        })
-        continue
-      }
-      const item = { ...rolled, id: await nextLedgerId(kv, 'r') }
-      const goods: Goods = { kind: 'item', item }
-      const gold = rewardGold(item.rarity, zone)
-      if (hasRoom(record.state, goods)) {
-        author(record, { t: 'rewarded', bossId: boss.bossId, goods, gold })
-      } else {
-        // No free slot: the item waits in returns and arrives as `returned` when one frees.
-        record.returns.push({ listingId: boss.bossId, goods })
-        author(record, { t: 'rewarded', bossId: boss.bossId, goods: null, gold })
-      }
-    }
+    for (let i = 0; i < rolls; i++) await payReward(ctx, record, boss.bossId)
     await ctx.books.syncReturnsQueue(record)
     disengage(ctx, record, boss.bossId)
     await ctx.books.save(record)

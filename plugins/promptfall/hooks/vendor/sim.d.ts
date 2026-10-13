@@ -623,6 +623,15 @@ type GoalRow = {
     step: number;
     everyZones: number;
 };
+/** What a weekly hunt counts: kills of one wave archetype across every zone, or zone bosses. */
+type HuntKind = 'brute' | 'swift' | 'tank' | 'caster' | 'zone_boss';
+/** A weekly hunt: its id, the name the World tab shows, what it counts and the server-wide target. */
+type HuntRow = {
+    id: string;
+    name: string;
+    kind: HuntKind;
+    target: number;
+};
 /** What an achievement row reads, from the state or from the account's journal. */
 type AchievementMetric = 'kills' | 'zone_bosses' | 'turn_bosses' | 'rare_drops' | 'legendary_drops' | 'recruits' | 'reforges' | 'gold_earned' | 'goals_met' | 'streak' | 'zones_complete' | 'bases_complete' | 'epic_held' | 'legendary_held' | 'highest_zone' | 'tier' | 'clean_zone_bosses' | 'classes_capped';
 /** A step is crossed when its row's metric reaches `at`; it pays `gold`, and its toast says `words`. */
@@ -674,6 +683,8 @@ type Content = {
     achievements: AchievementRow[];
     /** The daily goal's pool: data no sim rule reads. */
     goals: GoalRow[];
+    /** The weekly hunts, one a week in turn: data no sim rule reads. */
+    hunts: HuntRow[];
 };
 
 /** A ladder's steps pay these, in order: a three-step ladder pays the first three. */
@@ -697,6 +708,11 @@ declare function achievementCount(metric: AchievementMetric, state: GameState, j
  * from there. Both are tuned to the feel probe at tiers 2 and 3.
  */
 declare const TIER_GROWTH_BP: readonly number[];
+
+/** The hunt of a week, by its index from the epoch's week (`⌊weekStart / week⌋`). */
+declare function huntAt(week: number, table?: readonly HuntRow[]): HuntRow;
+/** What a state has counted toward a hunt of this kind: the archetype's defeated counts summed, or the zone bosses. */
+declare function huntCount(kind: HuntKind, state: GameState): number;
 
 /** The last zone of the ladder, tier 3's zone 12: the advance gate farms from here, and no zone past it exists. */
 declare const LADDER_END = 36;
@@ -835,4 +851,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type AchievementMetric, type AchievementRow, type AchievementStep, type ActionId, type Affix, type AffixDef, type Battle, type Content, type DailyGoal, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOAL_GOLD_KILLS, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type GoalKind, type GoalRow, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, type JournalCounts, LADDER_END, LADDER_GOLD, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, ONE_OFF_GOLD, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, achievementCount, affixValue, baseTier, content, createInitialState, dailyGoal, dropTier, enemyAt, fill, goalCount, goalGold, goldenEvents, hashState, heroFill, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };
+export { ACTION_STEPS, type AchievementMetric, type AchievementRow, type AchievementStep, type ActionId, type Affix, type AffixDef, type Battle, type Content, type DailyGoal, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOAL_GOLD_KILLS, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type GoalKind, type GoalRow, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type HuntKind, type HuntRow, type Item, type ItemBase, type JournalCounts, LADDER_END, LADDER_GOLD, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, ONE_OFF_GOLD, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, achievementCount, affixValue, baseTier, content, createInitialState, dailyGoal, dropTier, enemyAt, fill, goalCount, goalGold, goldenEvents, hashState, heroFill, heroStats, huntAt, huntCount, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };

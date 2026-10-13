@@ -8,8 +8,11 @@ import {
   type GoalKind,
   goalGold,
   type Hero,
+  type HuntKind,
   hashState,
   heroStats,
+  huntAt,
+  huntCount,
   type Item,
   type MigrationChain,
   type PlayerEvent,
@@ -37,6 +40,7 @@ import {
   CHAT_SERVE,
   type ChatMessage,
   type ChatResult,
+  HUNT_THRESHOLD_BP,
   PRESENCE_TTL_MS,
   type WorldSnapshot,
   WorldSnapshotSchema,
@@ -51,6 +55,8 @@ export type ContractHost = {
     state: GameState
     name: string
     linked: boolean
+    /** Off the boards and the hunt. */
+    bot?: boolean
   }): Promise<{ accountId: string; deviceToken: string }>
   credit(accountId: string, gold: number, reason: string): Promise<void>
   settle(accountId: string): Promise<void>
@@ -294,6 +300,24 @@ function raise(kind: GoalKind, n: number): (s: GameState) => GameState {
   }
 }
 
+/** Commits `batches` budget-sized batches of ticks, the clock moving a refill's worth before each. */
+async function hunt(client: ServerClient, clock: ContractClock, t: Trader, batches: number) {
+  const n = BUDGETS.tick.capacity
+  for (let i = 0; i < batches; i++) {
+    clock.advance(BUDGETS.tick.refillMs * n)
+    await commitTicks(client, t, n)
+  }
+}
+
+/** Moves the clock into the first week, this one or later, whose hunt's kind passes `wanted`. */
+async function huntWeek(clock: ContractClock, wanted: (kind: HuntKind) => boolean) {
+  const now = await clock.now()
+  let weekStart = weekStartOf(now)
+  while (!wanted(huntAt(Math.floor(weekStart / WEEK)).kind)) weekStart += WEEK
+  if (weekStart > now) clock.advance(weekStart + 3_600_000 - now)
+  return { weekStart, row: huntAt(Math.floor(weekStart / WEEK)) }
+}
+
 const creditReasons = (d: Delivery, prefix: string) =>
   eventsOf(d, 'credited')
     .map((e) => e.reason)
@@ -315,7 +339,7 @@ export function runServerContract(name: string, make: ContractMake): void {
   const market = async (
     ctx: { skip: () => void },
     flags: Record<string, boolean> = {},
-    options: Pick<Parameters<ContractMake>[1], 'migrations' | 'log'> = {},
+    options: Pick<Parameters<ContractMake>[1], 'migrations' | 'log' | 'kv'> = {},
   ) => {
     const clock = makeClock()
     const { client, host } = await make(clock, { flags, ...options })
@@ -323,8 +347,8 @@ export function runServerContract(name: string, make: ContractMake): void {
       ctx.skip()
       throw new Error('skipped')
     }
-    const trader = async (name: string, state: GameState, linked = true) => {
-      const m = await host.mint({ state, name, linked })
+    const trader = async (name: string, state: GameState, linked = true, bot = false) => {
+      const m = await host.mint({ state, name, linked, ...(bot && { bot }) })
       const boot = await booted(client, { clientVersion: '0.1.0', deviceToken: m.deviceToken })
       const auth: Auth = { deviceToken: m.deviceToken }
       const mirror = new Mirror(boot)
@@ -1889,6 +1913,87 @@ export function runServerContract(name: string, make: ContractMake): void {
       const j = await journalOf(g.client, g.auth)
       expect(j.streak).toEqual({ length: 2, lastMet: tuesday + 6 })
       expect(j.goalsMet).toBe(3)
+    })
+
+    it("rule 51: a commit adds its kills of the hunt's kind to the week's count and its part; a bot's adds nothing", async (ctx) => {
+      const flags = { 'worldboss.enabled': false }
+      const kv = new MemoryKeyValue()
+      const { client, clock, trader } = await market(ctx, flags, { kv })
+      const { weekStart, row } = await huntWeek(clock, (kind) => kind !== 'zone_boss')
+      const a = await trader('Ann', strongState(151))
+      const bot = await trader('Bot', strongState(152), true, true)
+      const opened = await snapshot(client, a.auth)
+      expect(opened.flags['hunt.enabled']).toBe(true)
+      expect(opened.hunt).toEqual({
+        name: row.name,
+        target: row.target,
+        count: 0,
+        endsAt: weekStart + WEEK,
+        yours: 0,
+      })
+      const before = huntCount(row.kind, a.mirror.committed)
+      await hunt(client, clock, a, 3)
+      const counted = huntCount(row.kind, a.mirror.committed) - before
+      expect(counted).toBeGreaterThan(0)
+      expect((await snapshot(client, a.auth)).hunt).toMatchObject({
+        count: counted,
+        yours: counted,
+      })
+      await hunt(client, clock, bot, 3)
+      expect(huntCount(row.kind, bot.mirror.committed)).toBeGreaterThan(0)
+      expect((await snapshot(client, bot.auth)).hunt).toMatchObject({ count: counted, yours: 0 })
+      // The record is in the store: a restarted host answers it.
+      const second = await make(clock, { flags, kv })
+      expect((await snapshot(second.client, a.auth)).hunt).toMatchObject({
+        count: counted,
+        yours: counted,
+      })
+    })
+
+    it("rule 52: the week's close pays each contributor at the threshold one hunt reward, met or not, and opens the next", async (ctx) => {
+      const { client, clock, trader } = await market(ctx, { 'worldboss.enabled': false })
+      const { weekStart, row } = await huntWeek(clock, (kind) => kind === 'zone_boss')
+      const threshold = Math.ceil((row.target * HUNT_THRESHOLD_BP) / 10_000)
+      const a = await trader('Ann', strongState(153))
+      const c = await trader('Cy', strongState(154))
+      const yours = async (t: Trader) => (await snapshot(client, t.auth)).hunt?.yours ?? 0
+      for (let i = 0; i < 60 && (await yours(a)) < threshold; i++) await hunt(client, clock, a, 1)
+      expect(await yours(a)).toBeGreaterThanOrEqual(threshold)
+      await hunt(client, clock, c, 1)
+      expect(await yours(c)).toBeLessThan(threshold)
+      expect((await snapshot(client, a.auth)).hunt?.count).toBeLessThan(row.target)
+      expect(eventsOf((await infoOf(client, a.auth)).delivery, 'rewarded')).toEqual([])
+
+      clock.advance(weekStart + WEEK + 1_000 - (await clock.now()))
+      const next = huntAt(Math.floor(weekStart / WEEK) + 1)
+      expect((await snapshot(client, c.auth)).hunt).toEqual({
+        name: next.name,
+        target: next.target,
+        count: 0,
+        endsAt: weekStart + 2 * WEEK,
+        yours: 0,
+      })
+      const paid = eventsOf((await infoOf(client, a.auth)).delivery, 'rewarded')
+      expect(paid).toEqual([expect.objectContaining({ source: 'hunt' })])
+      expect(eventsOf((await infoOf(client, c.auth)).delivery, 'rewarded')).toEqual([])
+      // A later poll pays nobody again.
+      await snapshot(client, a.auth)
+      expect(eventsOf((await infoOf(client, a.auth)).delivery, 'rewarded')).toHaveLength(1)
+    })
+
+    it('rule 53: with the hunt off the snapshot has none, and nothing counts or pays', async (ctx) => {
+      const { client, clock, trader } = await market(ctx, {
+        'hunt.enabled': false,
+        'worldboss.enabled': false,
+      })
+      const a = await trader('Ann', strongState(155))
+      const w = await snapshot(client, a.auth)
+      expect(w.hunt).toBeNull()
+      expect(w.flags['hunt.enabled']).toBe(false)
+      await hunt(client, clock, a, 2)
+      clock.advance(WEEK)
+      expect((await snapshot(client, a.auth)).hunt).toBeNull()
+      expect(eventsOf((await infoOf(client, a.auth)).delivery, 'rewarded')).toEqual([])
     })
   })
 }

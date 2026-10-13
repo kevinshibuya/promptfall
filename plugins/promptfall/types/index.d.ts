@@ -94,6 +94,7 @@ export type AccountView = {
   presenceOpen: boolean
   leaderboardsOpen: boolean
   bossOpen: boolean
+  huntOpen: boolean
   returns: number
   /** The sandbox save: the purse says `Sandbox` and the account never links. */
   sandbox: boolean
@@ -249,7 +250,8 @@ export type DialogState = {
   formAt: number
 }
 
-// The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`):
+// The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`,
+// `HuntView`):
 // the contract imports nothing.
 export type ChatMessage = { id: number; name: string; text: string; at: number }
 export type BossView = {
@@ -262,6 +264,14 @@ export type BossView = {
   endsAt: number
   yours: number
 }
+/** This week's hunt: everyone's count against the target, the end, and the caller's part. */
+export type HuntView = {
+  name: string
+  target: number
+  count: number
+  endsAt: number
+  yours: number
+}
 export type WorldSnapshot = {
   serverNow: number
   speed: number
@@ -269,6 +279,8 @@ export type WorldSnapshot = {
   zones: { zone: number; count: number }[]
   here: string[]
   boss: BossView | null
+  /** Null with the hunt off. */
+  hunt: HuntView | null
   chat: ChatMessage[]
   flags: Record<string, boolean>
 }
