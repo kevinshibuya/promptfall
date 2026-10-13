@@ -717,6 +717,50 @@ test(
   },
 )
 
+// The agents view's log (#185) at 140 columns: the band at 135 before ←, nothing drawn while the
+// REPL is away, the dialog's dock leaving it 72 after `/promptfall`, 135 when the dock closes. The
+// engine reported every width; a terminal that grew meanwhile reports more. The loop's blits follow.
+for (const renderer of ['raster', 'image'] as const) {
+  test(
+    `the band draws at the columns of each render after the agents view (${renderer})`,
+    { timeoutMs: 45_000 },
+    async ($, on) => {
+      const { data, clock, blits } = harness(on)
+      settings(data, { renderer })
+      await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+      const before = await $.ui.mount({
+        plugin: 'promptfall',
+        surface: 'terminal',
+        ...band(135, 34),
+      })
+      expect((await before.find({ key: 'band-135x22' }))?.props.columns).toBe(135)
+      await before.unmount()
+      const docked = await $.ui.mount({
+        plugin: 'promptfall',
+        surface: 'terminal',
+        ...band(72, 34),
+      })
+      expect(await docked.find({ key: 'row-collapsed' })).toBeDefined()
+      await docked.unmount()
+      for (const columns of [135, 160]) {
+        const ui = await $.ui.mount({
+          plugin: 'promptfall',
+          surface: 'terminal',
+          ...band(columns, 34),
+        })
+        const key = `band-${columns}x22`
+        expect((await ui.find({ key }))?.props.columns, `${columns} columns`).toBe(columns)
+        const from = blits.length
+        await clock.advance(1_000)
+        const drawn = blits.slice(from)
+        expect(drawn.length, `${columns} columns: the loop blits`).toBeGreaterThan(0)
+        for (const b of drawn) expect(b).toMatchObject({ key, columns })
+        await ui.unmount()
+      }
+    },
+  )
+}
+
 test('lays out with the remembered renderer while the probe is pending', async ($, on) => {
   const { data, clock } = harness(on)
   settings(data, { probed: 'image' })
