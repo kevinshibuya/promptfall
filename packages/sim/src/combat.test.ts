@@ -349,7 +349,14 @@ describe('the battle loop', () => {
   })
 
   it('an enemy past tier 1 fights at its zone’s numbers, not its base zone’s', () => {
-    const slime: Enemy = { id: 'e1', def: 'road_slime', kind: 'wave', hp: 1, maxHp: 1 }
+    const slime: Enemy = {
+      id: 'e1',
+      def: 'road_slime',
+      kind: 'wave',
+      hp: 1,
+      maxHp: 1,
+      enraged: false,
+    }
     const at = (zone: number) => enemyStats({ ...createInitialState(1), zone }, slime)
     expect(at(1)).toEqual(content.enemies.road_slime?.stats)
     expect(at(13)).toEqual(enemyAt('road_slime', 13)?.stats)
@@ -556,6 +563,7 @@ function injectEnemy(state: GameState, defId: string, kind?: EnemyKind): GameSta
     kind: kind ?? def.kind,
     hp: def.stats.hp,
     maxHp: def.stats.hp,
+    enraged: false,
   }
   const encounter = state.encounter ?? { enemies: [], queue: [], waveSize: 0, spawnedInWave: 0 }
   return {

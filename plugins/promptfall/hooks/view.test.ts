@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { Listing } from './vendor/protocol.js'
-import { createInitialState, type Item } from './vendor/sim.js'
+import { createInitialState, fill, heroFill, heroStats, type Item, step } from './vendor/sim.js'
 import { listingView, toAccountView, toGameView } from './view'
 
 /** An Uncommon tier-3 blade whose Brutal rolled 4: it counts as 14 at ×3.5. */
@@ -54,4 +54,26 @@ test("an inventory item's affixes and reforge price read its tier", () => {
   expect(item?.affixes).toEqual(['Brutal +14 atk'])
   // An Uncommon's 25G at ×3.5, floored.
   expect(item?.reforgeCost).toBe(87)
+})
+
+test('a hero fills at the sim’s own rate, hasted and guarding, and the views carry the states', () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  let s = step(createInitialState(1), { t: 'tool_call' }).state
+  const knight = s.roster[0]
+  if (!knight) throw new Error('no knight')
+  const plain = toGameView(s, 'a1', false, account)
+  expect(plain.heroes[0]).toMatchObject({ hasted: false, guarding: false })
+  expect(plain.heroes[0]?.gaugePerStep).toBe(fill(heroStats(s, knight).spd))
+  expect(plain.enemies[0]?.enraged).toBe(false)
+
+  s = step(step(s, { t: 'turn_start' }).state, { t: 'tool_mishap' }).state
+  const hasted = toGameView(s, 'a1', false, account)
+  expect(hasted.heroes[0]).toMatchObject({ hasted: true, guarding: false })
+  expect(hasted.heroes[0]?.gaugePerStep).toBe(heroFill(s, knight))
+  expect(hasted.heroes[0]?.gaugePerStep).toBeGreaterThan(plain.heroes[0]?.gaugePerStep ?? 0)
+  expect(hasted.enemies[0]?.enraged).toBe(true)
+
+  s = step(s, { t: 'guard', on: true }).state
+  const guarding = toGameView(s, 'a1', false, account)
+  expect(guarding.heroes[0]).toMatchObject({ hasted: true, guarding: true, gaugePerStep: 0 })
 })

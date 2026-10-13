@@ -216,6 +216,7 @@ test('a kill prints after the killing action; a world boss leaving prints none',
         hp: 1,
         maxHp: 9,
         kind: 'world_boss',
+        enraged: false,
       },
     ],
   }

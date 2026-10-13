@@ -14,6 +14,7 @@ import {
 } from './commands'
 import { draft, reject } from './draft'
 import { onRest, onToolCall, onTurnEnd, refillFromQueue, spawnOnEmptyTick } from './progression'
+import { countDown, onCamp, onGuard, onMishap, onTurnStart, stopGuard, stopHaste } from './reactive'
 import {
   bossDisengaged,
   bossEngaged,
@@ -53,10 +54,24 @@ const handlers: Handlers = {
         // A whole tick of battle time passed with nobody fighting.
         s.battle.busy = 0
       }
+      countDown(s, effects)
     }),
-  tool_call: (state) => draft(state, (s) => onToolCall(s)),
-  turn_end: (state) => draft(state, (s) => onTurnEnd(s)),
-  rest: (state) => draft(state, (s) => onRest(s)),
+  tool_call: (state, event) => draft(state, (s) => onToolCall(s, event.hint)),
+  turn_start: (state) => draft(state, (s, effects) => onTurnStart(s, effects)),
+  turn_end: (state) =>
+    draft(state, (s, effects) => {
+      onTurnEnd(s)
+      stopHaste(s, effects)
+    }),
+  rest: (state) =>
+    draft(state, (s, effects) => {
+      onRest(s)
+      stopHaste(s, effects)
+      stopGuard(s, effects)
+    }),
+  tool_mishap: (state) => draft(state, (s, effects) => onMishap(s, effects)),
+  camp: (state) => draft(state, (s, effects) => onCamp(s, effects)),
+  guard: (state, event) => draft(state, (s, effects) => onGuard(s, event.on === true, effects)),
   equip,
   unequip,
   vendor,

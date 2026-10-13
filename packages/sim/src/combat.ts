@@ -1,4 +1,13 @@
-import { ACTION_STEPS, fill, GAUGE_FULL, STEP_MS, scaled, TICK_MS } from './battle'
+import {
+  ACTION_STEPS,
+  ENRAGE_BP,
+  fill,
+  GAUGE_FULL,
+  GUARD_DAMAGE_BP,
+  STEP_MS,
+  scaled,
+  TICK_MS,
+} from './battle'
 import { enemyAt, zoneAt } from './content'
 import { type Choice, pickAction, type Unit } from './picker'
 import {
@@ -10,6 +19,7 @@ import {
   livingParty,
   onEnemyKilled,
 } from './progression'
+import { heroFill } from './reactive'
 import type { Effect, Enemy, GameState, Hero, Stats } from './types'
 
 const STEPS = TICK_MS / STEP_MS
@@ -132,7 +142,15 @@ function heroAction(s: GameState, hero: Hero, choice: Choice, effects: Effect[])
 function enemyAction(s: GameState, enemy: Enemy, choice: Choice, effects: Effect[]): void {
   const target = findHero(s, choice.targetId ?? '')
   if (!target || target.hp <= 0) return
-  const amount = damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def)
+  // Enrage: this attack from an atk half again as high, then the rage passes.
+  const atk = enemyStats(s, enemy).atk
+  let amount = damage(
+    s,
+    enemy.enraged ? Math.floor((atk * ENRAGE_BP) / 10000) : atk,
+    heroStats(s, target).def,
+  )
+  enemy.enraged = false
+  if (s.guardTicks > 0) amount = Math.max(1, Math.floor((amount * GUARD_DAMAGE_BP) / 10000))
   target.hp = Math.max(0, target.hp - amount)
   effects.push({ k: 'hit', by: enemy.id, target: target.id, amount })
   if (target.hp === 0) fall(s, target, effects)
@@ -172,7 +190,7 @@ export function advanceBattle(s: GameState, effects: Effect[]): void {
     const id = unit.side === 'hero' ? unit.hero.id : unit.enemy.id
     let f = perStep.get(id)
     if (f === undefined) {
-      f = fill(unit.side === 'hero' ? heroStats(s, unit.hero).spd : enemyStats(s, unit.enemy).spd)
+      f = unit.side === 'hero' ? heroFill(s, unit.hero) : fill(enemyStats(s, unit.enemy).spd)
       perStep.set(id, f)
     }
     return f
@@ -208,9 +226,12 @@ export function advanceBattle(s: GameState, effects: Effect[]): void {
     // 2. The running action goes on.
     if (battle.busy > 0) battle.busy -= 1
 
-    // 3. Nobody acting: the queue head acts.
+    // 3. Nobody acting: the queue head acts. Guarding heroes hold their place and the first
+    // enemy behind them acts.
     while (battle.busy === 0 && battle.queue.length > 0) {
-      const id = battle.queue.shift() ?? ''
+      const at = s.guardTicks > 0 ? battle.queue.findIndex((q) => unitOf(s, q)?.side !== 'hero') : 0
+      if (at < 0) break
+      const [id = ''] = battle.queue.splice(at, 1)
       const unit = unitOf(s, id)
       if (!unit) continue
       gaugeOf(s, id).g = 0

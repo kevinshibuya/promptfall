@@ -1,0 +1,377 @@
+{
+  "v": 15,
+  "seed": 20261002,
+  "rng": 297839984,
+  "counter": 74,
+  "tick": 156,
+  "gold": 137,
+  "zone": 1,
+  "wave": 2,
+  "farm": true,
+  "autoVendor": false,
+  "highestZone": 1,
+  "zoneWipes": 1,
+  "roster": [
+    {
+      "id": "h0",
+      "template": "knight_1",
+      "cls": "knight",
+      "epithet": "the Far-Sighted",
+      "rarity": "common",
+      "traits": [],
+      "level": 3,
+      "xp": 16,
+      "hp": 78,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h1",
+      "template": "black_mage_1",
+      "cls": "black_mage",
+      "epithet": "the Wry",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 54,
+      "hp": 41,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h2",
+      "template": "white_mage_1",
+      "cls": "white_mage",
+      "epithet": "the Lark",
+      "rarity": "common",
+      "traits": [],
+      "level": 3,
+      "xp": 28,
+      "hp": 46,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    },
+    {
+      "id": "h3",
+      "template": "archer_1",
+      "cls": "archer",
+      "epithet": "the Owl",
+      "rarity": "common",
+      "traits": [],
+      "level": 2,
+      "xp": 109,
+      "hp": 50,
+      "equipment": {
+        "weapon": null,
+        "armour": null,
+        "accessory": null
+      },
+      "tradeableAt": null
+    }
+  ],
+  "party": [
+    "h0",
+    "h1",
+    "h2"
+  ],
+  "pendingParty": null,
+  "inventory": [
+    {
+      "id": "i7",
+      "base": "willow_staff",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ia",
+      "base": "short_bow",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ie",
+      "base": "willow_staff",
+      "rarity": "uncommon",
+      "tier": 1,
+      "affixes": [
+        {
+          "id": "brutal",
+          "value": 2
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ii",
+      "base": "hide_coat",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ij",
+      "base": "short_bow",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "ip",
+      "base": "chainmail",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iq",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "it",
+      "base": "bone_charm",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "iu",
+      "base": "silk_robe",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "r0",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "tier": 2,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i16",
+      "base": "cloth_robe",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1i",
+      "base": "bone_charm",
+      "rarity": "common",
+      "tier": 1,
+      "affixes": [],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1r",
+      "base": "bronze_axe",
+      "rarity": "uncommon",
+      "tier": 1,
+      "affixes": [
+        {
+          "id": "swift",
+          "value": 1
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    },
+    {
+      "id": "i1w",
+      "base": "cloth_robe",
+      "rarity": "rare",
+      "tier": 1,
+      "affixes": [
+        {
+          "id": "hearty",
+          "value": 13
+        },
+        {
+          "id": "warded",
+          "value": 3
+        }
+      ],
+      "equippedBy": null,
+      "tradeableAt": null
+    }
+  ],
+  "inventoryCap": 30,
+  "rosterCap": 24,
+  "recruits": 0,
+  "turnToolCalls": 0,
+  "encounter": {
+    "enemies": [],
+    "queue": [],
+    "waveSize": 3,
+    "spawnedInWave": 2
+  },
+  "pendingTurnBoss": false,
+  "hasteTicks": 0,
+  "guardTicks": 0,
+  "lootLog": [
+    {
+      "k": "item",
+      "itemId": "i7",
+      "base": "willow_staff",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ia",
+      "base": "short_bow",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ie",
+      "base": "willow_staff",
+      "rarity": "uncommon",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ii",
+      "base": "hide_coat",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ij",
+      "base": "short_bow",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "ip",
+      "base": "chainmail",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iq",
+      "base": "bronze_plate",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "it",
+      "base": "bone_charm",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "iu",
+      "base": "silk_robe",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "reward",
+      "base": "steel_longsword",
+      "rarity": "rare",
+      "gold": 45
+    },
+    {
+      "k": "item",
+      "itemId": "i16",
+      "base": "cloth_robe",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1i",
+      "base": "bone_charm",
+      "rarity": "common",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1r",
+      "base": "bronze_axe",
+      "rarity": "uncommon",
+      "vendoredFor": null
+    },
+    {
+      "k": "item",
+      "itemId": "i1w",
+      "base": "cloth_robe",
+      "rarity": "rare",
+      "vendoredFor": null
+    }
+  ],
+  "stats": {
+    "kills": 53,
+    "bosses": 0,
+    "wipes": 1
+  },
+  "boss": null,
+  "battle": {
+    "gauges": [
+      {
+        "id": "h0",
+        "g": 9894
+      },
+      {
+        "id": "h1",
+        "g": 8112
+      },
+      {
+        "id": "h2",
+        "g": 0
+      },
+      {
+        "id": "e21",
+        "g": 1500
+      }
+    ],
+    "queue": [],
+    "busy": 0
+  }
+}

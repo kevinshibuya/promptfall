@@ -150,7 +150,7 @@ export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepRe
     const id = newId(s, 'e')
     // The old encounter and queue go; a pending turn boss and the turn's tool calls stay.
     s.encounter = {
-      enemies: [{ id, def: 'world_boss', kind: 'world_boss', hp, maxHp: hp }],
+      enemies: [{ id, def: 'world_boss', kind: 'world_boss', hp, maxHp: hp, enraged: false }],
       queue: [],
       waveSize: 0,
       spawnedInWave: 0,

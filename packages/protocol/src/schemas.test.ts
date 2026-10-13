@@ -74,6 +74,37 @@ describe('BatchSchema', () => {
     expect(PLAYER_EVENT_KINDS).toContain('set_auto_vendor')
   })
 
+  it('accepts the reactive events and a tool call hinted with one of the four archetypes', () => {
+    const events = [
+      { t: 'turn_start', at: 1 },
+      { t: 'tool_mishap', at: 2 },
+      { t: 'camp', at: 3 },
+      { t: 'guard', on: true, at: 4 },
+      { t: 'guard', on: false, at: 5 },
+      ...['swift', 'brute', 'caster', 'tank'].map((hint, i) => ({
+        t: 'tool_call',
+        hint,
+        at: 6 + i,
+      })),
+      { t: 'tool_call', at: 10 },
+    ]
+    for (const event of events) expect(TimedEventSchema.parse(event)).toEqual(event)
+    expect(BatchSchema.safeParse({ ...valid, events }).success).toBe(true)
+    for (const kind of ['turn_start', 'tool_mishap', 'camp', 'guard']) {
+      expect(PLAYER_EVENT_KINDS).toContain(kind)
+    }
+  })
+
+  it('refuses a hint outside the four words, and a guard without a boolean', () => {
+    for (const hint of ['boss', 'turn_boss', 'Swift', '', 3, null]) {
+      expect(TimedEventSchema.safeParse({ t: 'tool_call', hint, at: 1 }).success).toBe(false)
+      const batch = { ...valid, events: [{ t: 'tool_call', hint, at: 1 }] }
+      expect(BatchSchema.safeParse(batch).success).toBe(false)
+    }
+    expect(TimedEventSchema.safeParse({ t: 'guard', at: 1 }).success).toBe(false)
+    expect(TimedEventSchema.safeParse({ t: 'guard', on: 'on', at: 1 }).success).toBe(false)
+  })
+
   it('rejects a batch without a cursor', () => {
     const { cursor: _cursor, ...rest } = valid
     expect(BatchSchema.safeParse(rest).success).toBe(false)
@@ -183,7 +214,7 @@ describe('sandbox events', () => {
       const batch = { ...valid, events: [{ ...grant, at: 1 }] }
       expect(BatchSchema.safeParse(batch).success).toBe(false)
     }
-    expect(PLAYER_EVENT_KINDS).toHaveLength(15)
+    expect(PLAYER_EVENT_KINDS).toHaveLength(19)
     for (const kind of SANDBOX_EVENT_KINDS) expect(PLAYER_EVENT_KINDS).not.toContain(kind)
   })
 })

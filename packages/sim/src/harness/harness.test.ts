@@ -25,6 +25,26 @@ describe('the early envelope, at the reference cadence on today’s rules', () =
   )
 })
 
+describe('the turn events', () => {
+  // A 150 s turn every 250 s: turn_start at 0, 60 and 120 s, a tick every 2 s inside the turn and
+  // every 5 s in the 100 s idle gap after it.
+  const r = runScenario({
+    seed: 3,
+    hours: 2.5,
+    cadence: { kind: 'fixed', activeShareBp: 6000, toolCallEverySec: 8, turnLengthSec: 150 },
+  })
+
+  it('sends turn_start at each turn’s start and every 60 seconds of it', () => {
+    expect(r.cadence.prompts).toBe(36)
+    expect(r.turnStarts).toBe(3 * 36)
+  })
+
+  it('runs every tick inside a turn hasted and every idle tick plain', () => {
+    expect(r.ticks).toBe(36 * (75 + 20))
+    expect(r.hastedTicks).toBe(36 * 75)
+  })
+})
+
 describe('the feel probe', () => {
   const p = probe(1)
 

@@ -12,6 +12,16 @@ export const FILL_K = 10
 export const FILL_BP = 16667
 /** Every damage and heal amount × POWER_BP / 10000 (grill 1.5). Tunable. */
 export const POWER_BP = 20000
+/** While Haste is on, a hero's per-step fill × HASTE_BP / 10000. Tunable (the arc check of #156). */
+export const HASTE_BP = 12500
+/** Haste's countdown: 90 ticks, 3 minutes of battle time. */
+export const HASTE_TICKS = 90
+/** Guard's countdown: 60 ticks, 2 minutes of battle time. */
+export const GUARD_TICKS = 60
+/** While Guard is on, the damage a hero takes × GUARD_DAMAGE_BP / 10000. */
+export const GUARD_DAMAGE_BP = 5000
+/** An enraged enemy's next attack uses its atk × ENRAGE_BP / 10000. */
+export const ENRAGE_BP = 15000
 /** A spawned enemy's gauge starts at draw(SPAWN_GAUGE_MAX + 1). */
 export const SPAWN_GAUGE_MAX = 5000
 

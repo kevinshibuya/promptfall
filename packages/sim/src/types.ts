@@ -1,4 +1,4 @@
-export const SIM_VERSION = 14 as const
+export const SIM_VERSION = 15 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -39,7 +39,18 @@ export type Hero = {
   tradeableAt: number | null
 }
 export type EnemyKind = 'wave' | 'zone_boss' | 'turn_boss' | 'world_boss'
-export type Enemy = { id: string; def: string; kind: EnemyKind; hp: number; maxHp: number }
+export type Enemy = {
+  id: string
+  def: string
+  kind: EnemyKind
+  hp: number
+  maxHp: number
+  /** Set by a mishap: its next attack lands harder, then it clears. */
+  enraged: boolean
+}
+/** A wave enemy's archetype: what a tool call's hint names. Every zone's wave list holds one of each. */
+export type WaveArchetype = 'swift' | 'brute' | 'caster' | 'tank'
+export const WAVE_ARCHETYPES: readonly WaveArchetype[] = ['swift', 'brute', 'caster', 'tank']
 export type Encounter = {
   enemies: Enemy[]
   queue: { def: string; kind: EnemyKind }[]
@@ -76,9 +87,14 @@ export type LootEntry =
 
 export type PlayerEvent =
   | { t: 'tick' }
-  | { t: 'tool_call' }
+  /** `hint` names the wave enemy the call spawns; absent, the draw is uniform. */
+  | { t: 'tool_call'; hint?: WaveArchetype }
+  | { t: 'turn_start' }
   | { t: 'turn_end' }
   | { t: 'rest' }
+  | { t: 'tool_mishap' }
+  | { t: 'camp' }
+  | { t: 'guard'; on: boolean }
   | { t: 'equip'; heroId: string; itemId: string }
   | { t: 'unequip'; heroId: string; slot: Slot }
   | { t: 'vendor'; itemId: string }
@@ -189,6 +205,14 @@ export type Effect =
   | { k: 'act'; actor: string; action: ActionId; at: number }
   /** Output only: a heal landed; amount is the HP actually restored. */
   | { k: 'heal'; by: string; target: string; amount: number }
+  /** Haste turned on or off: emitted on the change only. */
+  | { k: 'haste'; on: boolean }
+  /** Guard turned on or off: emitted on the change only. */
+  | { k: 'guard'; on: boolean }
+  /** A mishap enraged this enemy (an Enemy.id). */
+  | { k: 'enraged'; enemyId: string }
+  /** The party camped: each party hero and the HP it restored. */
+  | { k: 'camp'; heals: { heroId: string; amount: number }[] }
 
 export type GameState = {
   v: typeof SIM_VERSION
@@ -215,6 +239,10 @@ export type GameState = {
   turnToolCalls: number
   encounter: Encounter | null
   pendingTurnBoss: boolean
+  /** Ticks of Haste left; 0 is off. Set by turn_start, cleared by turn_end and rest. */
+  hasteTicks: number
+  /** Ticks of Guard left; 0 is off. Set by guard on, cleared by guard off and rest. */
+  guardTicks: number
   lootLog: LootEntry[]
   stats: { kills: number; bosses: number; wipes: number }
   /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
