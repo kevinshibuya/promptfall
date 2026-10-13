@@ -147,7 +147,8 @@ Deeper zones and bosses roll rarer drops. A kill that drops an item leaves a che
 enemy stood: it falls out of the enemy as it fades, sits closed, opens, and the item rises out of
 it on a glow in its rarity colour, wider the rarer the item. The item holds there longer the
 rarer it is (under a second for a Common, two for a Legendary), then the item, its glow and the
-chest fade; the next enemy steps on after it. An auto-vendored drop plays the same chest, and a
+chest fade; the next enemy steps on after it. A monster killed in the tick it arrived, before the
+band ever drew it, still leaves its chest, on the ground of the lowest free slot. An auto-vendored drop plays the same chest, and a
 sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
 the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
 the reveal: they land together once the item has risen, not at the kill, while sales and

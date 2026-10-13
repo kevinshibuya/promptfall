@@ -537,6 +537,29 @@ test('a drop whose same-group hit target has left the stage falls on the empty g
   expect(unseen.showAt('i1')).toBeNull()
 })
 
+test('a drop whose hit target has left falls on the lowest free slot while other enemies stand', () => {
+  const ground = (slot: number) => ({
+    kind: 'chest',
+    actor: null,
+    slot,
+    itemId: 'i1',
+    rarity: 'common',
+    spriteId: 'item:iron_sword',
+    from: NOW,
+    until: NOW + 2400,
+  })
+  // e1 stands in the front slot; a monster the band never drew is killed with a drop.
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id === 'e1')
+  const t = observed(v)
+  t.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(t.active(NOW), 'chest')).toEqual([ground(1)])
+  // With every slot held, it falls on the front.
+  const full = observed()
+  full.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(full.active(NOW), 'chest')).toEqual([ground(0)])
+})
+
 test('a hit naming an unknown actor is dropped', () => {
   const t = observed()
   t.onEffects([hit('nobody', 'ghost')], NOW)
