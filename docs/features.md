@@ -204,8 +204,9 @@ in returns and arrives the moment a slot frees; returns are never vendored.
 
 **Linking.** Browsing is open to every account, but listing, buying, ordering and posting to chat
 need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: the
-code the server gives in the detail window, the URL to enter it at under the picture, and a poll
-at the interval the server gives. A server started with `--link github` runs GitHub's own device
+code the server gives at the top of the detail window, so a narrow pane or the dock still shows it,
+the URL to enter it at under the picture, and a poll at the interval the server gives. A resize
+keeps the code, the poll and whatever else the dialog had open. A server started with `--link github` runs GitHub's own device
 flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
 link completing on the first poll after the player authorises, and the GitHub login as the
 account's name. When GitHub asks the server to slow down, the server answers the player's polls
@@ -457,6 +458,13 @@ trades, `farm`, `autovendor`, `travel` and the sandbox verbs with "Promptfall is
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
+Claude Code's agents view (← from an empty prompt) moves the conversation into a background process
+of its own, and coming back attaches the terminal to it: that process takes the lease at its start
+from the one the conversation left, so the band plays on with no command. The process left behind
+draws nowhere, so at its next renewal it flushes, steps back and stops renewing. An empty
+conversation carries nothing to tell it from the spare session the view prepares beside it, so the
+lease goes to whichever renews first once the old process lets go, within about 20 seconds; a prompt
+takes it at once.
 A session that becomes primary more than ten minutes after this account was last seen playing on
 this machine says what the party did since, in a toast and for 20 seconds in the message window:
 "Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
