@@ -459,12 +459,11 @@ what the old one already toasted, nor leaves out what arrived after the old one 
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
 Claude Code's agents view (← from an empty prompt) moves the conversation into a background process
-of its own, and coming back attaches the terminal to it: that process takes the lease at its start
-from the one the conversation left, so the band plays on with no command. The process left behind
-draws nowhere, so at its next renewal it flushes, steps back and stops renewing. An empty
-conversation carries nothing to tell it from the spare session the view prepares beside it, so the
-lease goes to whichever renews first once the old process lets go, within about 20 seconds; a prompt
-takes it at once.
+of its own and keeps a spare one warm beside it; coming back attaches the terminal to the
+conversation's process. The process left behind draws nowhere, so within a couple of seconds it
+flushes, steps back and lets the lease go, and the process the conversation moved to picks it up a
+couple of seconds later: the band plays on with no command. The spare never takes a free lease; it
+plays only once a prompt or a `/promptfall` verb in it claims one.
 A session that becomes primary more than ten minutes after this account was last seen playing on
 this machine says what the party did since, in a toast and for 20 seconds in the message window:
 "Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
