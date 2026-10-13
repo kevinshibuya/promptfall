@@ -10,6 +10,26 @@ Build order: 1 Launch bugs, 2 Launch polish, 3 #179 waves (a ticket, no spec), 4
 5 Reactive revamp, 6 Band polish, 7 Rerolls, 8 Market rules, 9 the closing arc ticket, then #178
 the pane revamp in its own grill session.
 
+## Status
+
+The batch's progress, kept here so a later spec or ticket reads the state of the tree it builds
+on. **Rule:** the session that merges a batch PR into `ai-staging` updates this table in the same
+sitting (the PR, the merge commit, the date) and notes under the spec's section anything the build
+changed in the decisions above. A `/to-spec` for the next section reads this table first.
+
+| # | Spec | Issue | Tickets | Run | PR | State |
+|---|---|---|---|---|---|---|
+| 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | | running |
+| 2 | Launch polish | #188 | drafted 2026-10-13, publishing after the wave | | | tickets in review; the run starts after #182 merges |
+| 3 | #179 waves | #179 | the ticket itself | | | not started |
+| 4 | One stage | | | | | not started |
+| 5 | Reactive revamp | | #174 to #177 | | | not started |
+| 6 | Band polish | | #173 | | | not started |
+| 7 | Rerolls | | | | | not started |
+| 8 | Market rules | | | | | not started |
+| 9 | Closing arc ticket | | | | | not started |
+| — | #178 pane revamp | #178 | | | | own grill session, after 9 |
+
 ## Cross-cutting rules
 
 - **Arcs run once, at the end** (ADR 0017). `pnpm test` excludes `packages/sim/src/harness`;
