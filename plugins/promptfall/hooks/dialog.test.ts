@@ -264,6 +264,8 @@ async function marketHarness(
     botFull?: boolean
     /** Who approves a link; default the first poll as `player`. */
     approver?: LinkApprover
+    /** The player's inventory is filled to its cap with commons besides the rare. */
+    playerFull?: boolean
   } = {},
 ) {
   let now = 1_000_000
@@ -278,7 +280,19 @@ async function marketHarness(
     linkApprover: options.approver ?? approveAs('player'),
   })
   const player = await ledger.host.mint({
-    state: { ...createInitialState(61), gold: 5000, inventory: [rareItem('iR')] },
+    state: {
+      ...createInitialState(61),
+      gold: 5000,
+      inventory: [
+        rareItem('iR'),
+        ...(options.playerFull
+          ? Array.from({ length: 29 }, (_, i) => ({
+              ...rareItem(`iC${i}`),
+              rarity: 'common' as const,
+            }))
+          : []),
+      ],
+    },
     name: 'player',
     linked: options.linked ?? true,
   })
@@ -686,6 +700,36 @@ test('a listing row, then Yes, cancels the listing', async ($, on) => {
     sent.filter((r) => r.method === 'DELETE' && r.path.startsWith('/v1/listings/')),
   ).toHaveLength(1)
   expect(listed).toBeDefined()
+  await ui.unmount()
+})
+
+test('a listing sold before the cancel, with a full inventory, says it sold and nothing waits', async ($, on) => {
+  // Kevin's cancel of 2026-10-13 on the fake: the tab showed the listing, a bot bought it, then
+  // the cancel was refused as gone.
+  const { ledger, player, bot } = await marketHarness(on, { playerFull: true })
+  const listed = await ledger.list(
+    { deviceToken: player.deviceToken },
+    { kind: 'item', id: 'iR', price: 900 },
+  )
+  const { ui, states } = await startOnTest($, on, player)
+  await ui.press({ key: 'tab-orders' })
+  const row = (await ui.findAll({ type: 'Button' })).find((b) => /^row:l-/.test(b.key ?? ''))
+  expect(row).toBeDefined()
+  const event = listed.ok ? listed.delivery.events.at(-1)?.event : undefined
+  const listingId = event?.t === 'listed' ? event.listingId : ''
+  expect(await ledger.buy({ deviceToken: bot.deviceToken }, listingId)).toMatchObject({ ok: true })
+  await ui.press({ key: row?.key ?? '' })
+  await ui.press({ key: 'yes' })
+  const text = await paneText(ui)
+  expect(text).toMatch(/Already sold, filled or expired/)
+  expect(text).not.toMatch(/Returns waiting/)
+  expect((await ui.findAll({ type: 'Button' })).some((b) => /^row:l-/.test(b.key ?? ''))).toBe(
+    false,
+  )
+  // The reload's sync brought the sale home: 5000, less the 18G fee, plus 900 less the 5% fee.
+  const view = states.get('view') as GameView
+  expect(view.gold).toBe(5000 - 18 + 855)
+  expect(view.inventory).toHaveLength(29)
   await ui.unmount()
 })
 

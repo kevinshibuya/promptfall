@@ -106,14 +106,31 @@ function setting(
 }
 
 function accountDetail(input: PaneInput, inner: number, silent: boolean): Line[] {
-  const { view, account, dialog } = input
+  const { view, dialog } = input
+  const silence = silent
+    ? [{ spans: [] }, ...wrap(NO_PLAYER, inner - 1).map((t) => text(t, inner))]
+    : []
+  // A pending code leads: a narrow pane, the dock included, stacks this window under the list and
+  // keeps only its first lines.
+  if (!view.account.linked && dialog.link) {
+    return [
+      head('Account'),
+      text(`Enter ${dialog.link.code} at`, inner),
+      text('the link under this window.', inner),
+      { spans: [] },
+      ...accountLines(input, inner),
+      ...silence,
+    ]
+  }
   const link = view.account.linked
     ? [text(`Linked as ${view.account.linked}`, inner)]
-    : dialog.link
-      ? [text(`Enter ${dialog.link.code} at`, inner), text('the link under this window.', inner)]
-      : [text('Not linked.', inner)]
+    : [text('Not linked.', inner)]
+  return [head('Account'), ...accountLines(input, inner), { spans: [] }, ...link, ...silence]
+}
+
+function accountLines(input: PaneInput, inner: number): Line[] {
+  const { view, account } = input
   return [
-    head('Account'),
     text(serverLine(account.server), inner),
     text(`Account ${view.accountId}`, inner),
     text(clientLine(), inner),
@@ -123,9 +140,6 @@ function accountDetail(input: PaneInput, inner: number, silent: boolean): Line[]
       `Highest zone ${zoneMark(view.highestZone)} · kills ${view.kills} · wipes ${view.wipes}`,
       inner,
     ),
-    { spans: [] },
-    ...link,
-    ...(silent ? [{ spans: [] }, ...wrap(NO_PLAYER, inner - 1).map((t) => text(t, inner))] : []),
   ]
 }
 

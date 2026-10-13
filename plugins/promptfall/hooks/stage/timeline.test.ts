@@ -497,6 +497,69 @@ test('a chest on the empty ground holds the front slot: the next enemy enters af
   ])
 })
 
+test('a drop whose same-group hit target has left the stage falls on the empty ground', () => {
+  const ground = (itemId: string, at: number) => ({
+    kind: 'chest',
+    actor: null,
+    slot: 0,
+    itemId,
+    rarity: 'common',
+    spriteId: 'item:iron_sword',
+    from: at,
+    until: at + 2400,
+  })
+  // e1 is killed, fades and is evicted: a later group's hit still names it.
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id === 'e1')
+  const t = observed(v)
+  t.onEffects([hit('h1', 'e1')], NOW)
+  t.observe({ ...v, enemies: [] }, NOW + 10)
+  const later = NOW + 10_000
+  t.observe({ ...v, enemies: [] }, later)
+  expect(t.known()).toEqual([])
+  t.onEffects(
+    [hit('h1', 'e1'), { k: 'drop', item: item('iron_sword', 'common', 'i2') }],
+    later,
+    5000,
+    later + 3000,
+  )
+  expect(of(t.active(later + 3000), 'chest')).toEqual([ground('i2', later + 3000)])
+  expect(t.showAt('i2')).toBe(later + 3000 + 1400)
+  // A target the band never drew falls the same way.
+  const never = observed(empty())
+  never.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(never.active(NOW), 'chest')).toEqual([ground('i1', NOW)])
+  expect(never.showAt('i1')).toBe(NOW + 1400)
+  // A stage the band has not drawn yet still plays nothing.
+  const unseen = new StageTimeline()
+  unseen.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(unseen.active(NOW), 'chest')).toEqual([])
+  expect(unseen.showAt('i1')).toBeNull()
+})
+
+test('a drop whose hit target has left falls on the lowest free slot while other enemies stand', () => {
+  const ground = (slot: number) => ({
+    kind: 'chest',
+    actor: null,
+    slot,
+    itemId: 'i1',
+    rarity: 'common',
+    spriteId: 'item:iron_sword',
+    from: NOW,
+    until: NOW + 2400,
+  })
+  // e1 stands in the front slot; a monster the band never drew is killed with a drop.
+  const v = wave()
+  v.enemies = v.enemies.filter((e) => e.id === 'e1')
+  const t = observed(v)
+  t.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(t.active(NOW), 'chest')).toEqual([ground(1)])
+  // With every slot held, it falls on the front.
+  const full = observed()
+  full.onEffects([hit('h1', 'ghost'), { k: 'drop', item: item('iron_sword', 'common') }], NOW)
+  expect(of(full.active(NOW), 'chest')).toEqual([ground(0)])
+})
+
 test('a hit naming an unknown actor is dropped', () => {
   const t = observed()
   t.onEffects([hit('nobody', 'ghost')], NOW)
@@ -509,6 +572,39 @@ test('a departed world boss still knows its sprite', () => {
   after.enemies = []
   t.observe(after, NOW)
   expect(t.known()[0]?.spriteId).toBe('world_boss:the_promptwyrm')
+})
+
+test('a drop after a world boss leaves attaches to its dissolving row, and falls on the ground once the row is gone', () => {
+  // `worldboss end`: the boss leaves the view and its row dissolves.
+  const t = observed(worldBoss())
+  const after = worldBoss()
+  after.enemies = []
+  t.observe(after, NOW)
+  // While the row dissolves, a lone drop and a drop after a hit on the boss both fall on it.
+  t.onEffects([{ k: 'drop', item: item('iron_sword', 'common', 'i1') }], NOW + 10)
+  t.onEffects([hit('h1', 'e7'), { k: 'drop', item: item('iron_sword', 'common', 'i2') }], NOW + 20)
+  expect(of(t.active(NOW + 20), 'chest')).toMatchObject([
+    { actor: 'e7', itemId: 'i1' },
+    { actor: 'e7', itemId: 'i2' },
+  ])
+  // Once its fade and chests are over the row is gone: the same group falls on the empty ground.
+  const gone = NOW + 20_000
+  t.observe(after, gone)
+  expect(t.known()).toEqual([])
+  t.onEffects([hit('h1', 'e7'), { k: 'drop', item: item('iron_sword', 'common', 'i3') }], gone)
+  expect(of(t.active(gone), 'chest')).toEqual([
+    {
+      kind: 'chest',
+      actor: null,
+      slot: 0,
+      itemId: 'i3',
+      rarity: 'common',
+      spriteId: 'item:iron_sword',
+      from: gone,
+      until: gone + 2400,
+    },
+  ])
+  expect(t.showAt('i3')).toBe(gone + 1400)
 })
 
 test('isBusy is false once every motion ends', () => {
