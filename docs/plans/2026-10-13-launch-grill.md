@@ -20,7 +20,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 | # | Spec | Issue | Tickets | Run | PR | State |
 |---|---|---|---|---|---|---|
 | 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | | running |
-| 2 | Launch polish | #188 | drafted 2026-10-13, publishing after the wave | | | tickets in review; the run starts after #182 merges |
+| 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | | | tickets published 2026-10-13; `afk run 188` starts after #182 merges |
 | 3 | #179 waves | #179 | the ticket itself | | | not started |
 | 4 | One stage | | | | | not started |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
