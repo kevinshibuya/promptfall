@@ -42,7 +42,7 @@ export function refusalText(reason: MarketRefusal, remaining?: string): string {
     // The listing or order closed before the call: a buy another buyer won, a cancel after a sale,
     // a fill or an expiry. The bare token read as goods lost (#186).
     case 'gone':
-      return 'Already sold, filled or expired: the log says which'
+      return 'Already sold, filled or expired'
     default:
       return reason.replaceAll('_', ' ')
   }

@@ -721,7 +721,7 @@ test('a listing sold before the cancel, with a full inventory, says it sold and 
   await ui.press({ key: row?.key ?? '' })
   await ui.press({ key: 'yes' })
   const text = await paneText(ui)
-  expect(text).toMatch(/Already sold, filled or expired: the log says which/)
+  expect(text).toMatch(/Already sold, filled or expired/)
   expect(text).not.toMatch(/Returns waiting/)
   expect((await ui.findAll({ type: 'Button' })).some((b) => /^row:l-/.test(b.key ?? ''))).toBe(
     false,

@@ -8,5 +8,5 @@ test('a paused refusal says the game is paused, not that it plays in another ses
 })
 
 test('a listing or order already closed says it sold, filled or expired, never the bare token', () => {
-  expect(refusalText('gone')).toBe('Already sold, filled or expired: the log says which')
+  expect(refusalText('gone')).toBe('Already sold, filled or expired')
 })
