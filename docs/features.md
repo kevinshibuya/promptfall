@@ -377,16 +377,24 @@ command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cance
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
 **Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer, and
-Auto-vendor off or on, the one kept with the account rather than the machine), the band shown or
-collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on this
-server, each of the last two asking Yes or No. A session that is not playing shows Auto-vendor and
-cannot change it. Its detail window names the server, the client, the mode and the session.
+Auto-vendor off or on, the one kept with the account rather than the machine), the rest days, the
+band shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my
+account on this server, each of the last two asking Yes or No. The rest-days row, "Rest days: Sat,
+Sun", is the account's too and reads the journal, which the tab loads on open: Enter opens a pick
+of the seven days with the two in force marked, and the second day picked sends the pair to the
+server, which applies it from the next Monday. Until that Monday passes the row reads "Rest days:
+Sat, Sun (Tue, Thu from Monday)"; a refusal flashes in the message window. A session that is not
+playing shows Auto-vendor and the rest days and cannot change them. Its detail window names the
+server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions. Past tier 1 its title and its message name the tier
 ("Odds · tier 2, zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
-the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
-priced by rarity and tier.
+the tables three rows publish the tavern guarantee from the save's own counts, "Rare guaranteed in
+13 recruits", "Epic guaranteed in 61 recruits" and "Legendary guaranteed in 377 recruits" ("on the
+next recruit" at one), then it says that rarity multiplies base stats, heroes and items alike, and
+that reforge is priced by rarity and tier. On the Heroes tab the recruit row's detail gives the
+price and the nearest guarantee in one line ("120G · Rare guaranteed in 13").
 
 **Journal tab.** The Journal tab, on `u`, keeps the player's record. Today shows the daily goal
 with its progress, "Resets in 5 h" from the server's clock and the streak in work days. The goal
@@ -448,13 +456,15 @@ and play stays paused until a new session asks again.
 
 **Toasts.** Only the primary session toasts, one sentence per event worth a glance: a Rare or
 better drop, a recruit, a level-up, a zone arrival, a wipe, a retreat, a boss reward, a sale, a purchase, a
-return, a world boss appearing or going down, a revoked item, and a Rare or better drop vendored
-for lack of room. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
+return, a world boss appearing or going down, a revoked item, a Rare or better drop vendored
+for lack of room, an achievement step ("Achievement: ten thousand kills, 1,500 gold") and the
+daily goal met ("Daily goal met: 40 gold"). A gold credit whose reason is neither, such as a bot's
+stipend, toasts nothing, and neither of the two prints a log line. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
 recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
-once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat or a zone arrival keeps
-its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
+once, fold into one toast with the count and the sum ("3 items sold for 410 gold", "3
+achievements, 2,000 gold"), while a legendary, epic or rare drop, a vendored item, a recruit, a
+reward, a wipe, a retreat, a zone arrival or a goal met keeps its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
@@ -462,13 +472,12 @@ Routine combat, the reactive events, farming clears and chat never toast, the op
 and the session raises two toasts of its own: a first launch's welcome that points at the Heroes tab,
 and the session summary when a session becomes primary after a break (under Primary session).
 
-**Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
-world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays
-none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
+**Cues.** Nine toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
+world boss appearing, a zone arrival (the zone-cleared cue), a recruit, a retreat, an achievement
+and a goal met (both the goal cue); a wipe plays none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
 a drop's lands at the reveal and a zone arrival's with the new backdrop. Only the primary session
 plays them, and hiding the band does not silence them. The set holds eight cues, one family
-written by `pnpm cues` and checked in CI; the goal cue ships ahead of its toast rows and plays once
-a goal met or achievement toasts it.
+written by `pnpm cues` and checked in CI.
 
 ## Sound
 

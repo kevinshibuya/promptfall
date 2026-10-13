@@ -230,6 +230,8 @@ export type PaneMenu =
   | { kind: 'journal_zone'; zone: number; at: number } // a base zone's bestiary page
   | { kind: 'journal_collection'; at: number }
   | { kind: 'journal_achievements'; at: number }
+  /** The Account tab's rest-days pick: the days toggled so far; the second sends the pair. */
+  | { kind: 'rest_days'; picked: number[]; at: number }
 /** The ▶ row of a list: the id it was on, and its index then (for when the id is gone). */
 export type PaneCursor = { id: string; index: number }
 export type DialogState = {
