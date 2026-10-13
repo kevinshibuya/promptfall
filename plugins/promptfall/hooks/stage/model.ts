@@ -1,5 +1,6 @@
 import type { GameView } from '../../types'
-import { lighten, opaqueBox, shear, squash } from '../sprites/derive'
+import { encode } from '../sprites/base64'
+import { lighten, opaqueBox, shear, squash, stance } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
 import { backdropFor, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
@@ -20,12 +21,19 @@ import {
   ACTOR_EDGE,
   ACTOR_PITCH,
   BLINK_MS,
+  CAMPFIRE_FADE_MS,
+  CAMPFIRE_MS,
+  CLASS_RGB,
   COMPACT_PITCH,
   DROP_RISE_PX,
+  ENRAGE_RGB,
+  ENRAGE_TINT,
   FLASH_RGB,
   GLOW_ALPHA,
   GLOW_RADIUS_PX,
+  HASTE_FRAME_MS,
   IDLE_BOB_PX,
+  IDLE_FRAME_MS,
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
@@ -35,8 +43,11 @@ import {
   ZONE_GROUND,
 } from './tuning'
 
-/** The drawing an actor shows: idle A and B, the three drawn frames, and the hit frame. */
-export type Pose = 'idle' | 'idle_b' | 'windup' | 'strike' | 'follow' | 'hit'
+/**
+ * The drawing an actor shows: idle A and B, the three drawn frames, the hit frame, and Guard's
+ * stance (derived, as idle B and the hit are).
+ */
+export type Pose = 'idle' | 'idle_b' | 'windup' | 'strike' | 'follow' | 'hit' | 'guard'
 /** One pose's art, palette (rarity swap and fallen dim, no flash) and its offset from `x`. */
 export type PoseArt = {
   art: SpriteArt
@@ -47,7 +58,18 @@ export type PoseArt = {
 /** An effect sprite in flight or bursting; `x`, `y` the art's top-left in stage pixels. */
 export type StageEffect = { spriteId: string; art: SpriteArt; x: number; y: number; flipX: boolean }
 
-export const POSES: readonly Pose[] = ['idle', 'idle_b', 'windup', 'strike', 'follow', 'hit']
+export const POSES: readonly Pose[] = [
+  'idle',
+  'idle_b',
+  'windup',
+  'strike',
+  'follow',
+  'hit',
+  'guard',
+]
+
+/** An art drawn with an actor, its top-left `dx`, `dy` from the actor's idle top-left. */
+export type Mark = { art: SpriteArt; dx: number; dy: number }
 
 /** Every pose the same art, for hand-built actors (tests and fixtures). */
 export function samePoses(
@@ -56,7 +78,7 @@ export function samePoses(
   raritySlot: number | null = null,
 ): Record<Pose, PoseArt> {
   const one: PoseArt = { art, palette, raritySlot, dx: 0 }
-  return { idle: one, idle_b: one, windup: one, strike: one, follow: one, hit: one }
+  return { idle: one, idle_b: one, windup: one, strike: one, follow: one, hit: one, guard: one }
 }
 
 export type StageActor = {
@@ -88,6 +110,18 @@ export type StageActor = {
   pose: Pose
   /** The art of every pose, so a renderer can schedule poses other than `now`'s. */
   poses: Record<Pose, PoseArt>
+  /** The pose between actions: Guard's stance on a guarding hero, else the idle pair. */
+  rest?: 'idle' | 'guard'
+  /** The bob's frame, twice as fast for a hasted hero; null for an actor holding still. */
+  bobMs?: number | null
+  /** Haste's speed streak behind a hero at rest, drawn under it; 1.5 only. */
+  streak?: Mark | null
+  /** Guard's shield over the front hero; 1.5 only. */
+  shield?: Mark | null
+  /** Enrage's red flash, as `flashing` is the white one. */
+  redFlashing?: boolean
+  /** An enraged enemy's red tint, until its next hit lands; folded into `palette`. */
+  tinted?: boolean
 }
 /** The text's top-left in stage pixels, already clamped inside the frame. */
 export type StageNumber = { text: string; x: number; y: number; rgb: number }
@@ -122,12 +156,16 @@ export type StageModel = {
   drops: StageDrop[]
   /** Drawn after the drops, before the numbers. */
   effects: StageEffect[]
+  /** Camp's campfire between the lines, drawn with the effects; `alpha` 0 before it is lit. */
+  campfire?: { art: SpriteArt; x: number; y: number; alpha: number } | null
   alt: string
   /** Stage pixels per half-block cell: 1, or HIRES_SCALE for the full stage on Image and Svg. */
   scale: 1 | 1.5
 }
 
 const FALLBACK = spriteFor('item', '')
+/** Camp's campfire: an effect sprite, not content. */
+export const CAMPFIRE = spriteFor('effect', 'campfire')
 /** The chest's three drawings, all one size, so each places as the closed one does. */
 export const CHESTS = {
   closed: spriteFor('chest', 'closed'),
@@ -170,6 +208,64 @@ export function actionOffset(
   return stepOffset(step, now, scale) + lungeOffset(lunge, now, scale)
 }
 
+/** `rgb` moved `share` of the way to `to`, per channel. */
+function mix(rgb: number, to: number, share: number): number {
+  const ch = (shift: number) => {
+    const a = (rgb >> shift) & 0xff
+    return Math.round(a + (((to >> shift) & 0xff) - a) * share) << shift
+  }
+  return ch(16) | ch(8) | ch(0)
+}
+
+/** A one-colour art from rows of '#' and '.'. */
+function solid(rows: readonly string[], palette: readonly number[]): SpriteArt {
+  const width = rows[0]?.length ?? 0
+  const px = new Uint8Array(width * rows.length)
+  rows.forEach((row, y) => {
+    for (let x = 0; x < width; x++) px[y * width + x] = '.KSW'.indexOf(row[x] ?? '.')
+  })
+  return { width, height: rows.length, palette: [0, ...palette], pixels: encode(px) }
+}
+
+/** Haste's speed streak: two pixels tall, broken toward its tail. */
+const STREAK_ROWS = ['KKKKK.KK', 'KKKKK.KK']
+const streaks = new Map<number, SpriteArt>()
+
+/**
+ * The streak in `rgb` behind a hero's idle art: a pixel clear of its back (heroes face left, so
+ * their back is on the right), on the middle of its figure.
+ */
+function streakOf(idle: SpriteArt, rgb: number): Mark | null {
+  const box = opaqueBox(idle)
+  if (!box) return null
+  let art = streaks.get(rgb)
+  if (!art) {
+    art = solid(STREAK_ROWS, [rgb])
+    streaks.set(rgb, art)
+  }
+  const mid = Math.round((box.y0 + box.y1 + 1) / 2)
+  return { art, dx: idle.width - box.x0 + 1, dy: mid - 1 }
+}
+
+/** Guard's shield mark: steel with a light rib and a dark outline, at 1.5. */
+export const SHIELD = solid(
+  ['.KKKKK.', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', '.KSWSK.', '..KSK..', '...K...'],
+  [0x101018, 0x5070c0, 0xe0e8f0],
+)
+
+/** The shield centred over a hero's idle figure, a pixel above its head. */
+function shieldOver(idle: SpriteArt): Mark | null {
+  const box = opaqueBox(idle)
+  if (!box) return null
+  // Heroes are drawn flipped: the figure's centre mirrors with the art.
+  const centre = idle.width - (box.x0 + box.x1 + 1) / 2
+  return {
+    art: SHIELD,
+    dx: Math.round(centre - SHIELD.width / 2),
+    dy: box.y0 - SHIELD.height - 1,
+  }
+}
+
 function halve(rgb: number): number {
   return ((rgb >> 1) & 0x7f0000) | ((rgb >> 1) & 0x007f00) | ((rgb >> 1) & 0x00007f)
 }
@@ -207,11 +303,24 @@ function posesOf(
   }
   const idleArt = variant(sprite, compact, scale)
   const idle = pose(idleArt, slotOf(sprite, compact, scale))
+  /** The stance leans toward the art's facing; flipped, it moves left to keep the feet. */
+  const guardOf = (): PoseArt => {
+    const lean = stance(idleArt)
+    return pose(lean.art, idle.raritySlot, flipX ? -lean.grow : 0)
+  }
   if (compact || scale === 1) {
     const act = attack
       ? pose(variant(attack, compact, scale), slotOf(attack, compact, scale))
       : idle
-    return { idle, idle_b: idle, windup: act, strike: act, follow: idle, hit: idle }
+    return {
+      idle,
+      idle_b: idle,
+      windup: act,
+      strike: act,
+      follow: idle,
+      hit: idle,
+      guard: guardOf(),
+    }
   }
   const f = sprite.frames
   const strike = f
@@ -227,6 +336,7 @@ function posesOf(
     strike,
     follow: f?.follow ? pose(f.follow.art, f.follow.raritySlot) : strike,
     hit: pose(leaned.art, idle.raritySlot, flipX ? 0 : -leaned.grow, true),
+    guard: guardOf(),
   }
 }
 
@@ -251,25 +361,40 @@ export function stageAt(
   const edge = opts.compact ? 0 : px(ACTOR_EDGE)
   const started = timeline.active(now).filter((m) => m.from <= now)
   const all = timeline.active(now)
-  const bob = opts.motion === 'full' ? timeline.bobbing(now) * px(IDLE_BOB_PX) : 0
   const motionOf = (actor: string, kind: Motion['kind']) =>
     started.find((m) => m.actor === actor && m.kind === kind)
-  /** Hit wins, then the follow-through, the strike and the wind-up; at rest the idle pair. */
-  const poseOf = (actor: string, fallen: boolean): Pose => {
+  /** The bob's frame: twice as fast while hasted; none under still. */
+  const bobOf = (hasted: boolean): number | null =>
+    opts.motion === 'full' ? (hasted ? HASTE_FRAME_MS : IDLE_FRAME_MS) : null
+  /** The bob: at 1 the 1-pixel lift on the actor's clock; at 1.5 the idle pair replaces it. */
+  const liftOf = (bobMs: number | null): number =>
+    scale === 1 && bobMs !== null ? bobbingAt(now, bobMs) * px(IDLE_BOB_PX) : 0
+  /**
+   * Hit wins, then the follow-through, the strike and the wind-up; at rest Guard's stance, or the
+   * idle pair on the actor's bob.
+   */
+  const poseOf = (
+    actor: string,
+    fallen: boolean,
+    rest: 'idle' | 'guard',
+    bobMs: number | null,
+  ): Pose => {
     if (fallen) return 'idle'
     for (const kind of ['hit', 'follow', 'strike', 'windup'] as const) {
       if (motionOf(actor, kind)) return kind
     }
-    return opts.motion === 'full' && bobbingAt(now) === 1 ? 'idle_b' : 'idle'
+    if (rest === 'guard') return 'guard'
+    return bobMs !== null && bobbingAt(now, bobMs) === 1 ? 'idle_b' : 'idle'
   }
-  /** At 1.5 the white is a blink at the flash's start; at 1 it holds for the whole flash. */
-  const isFlashing = (actor: string): boolean => {
-    const flash = motionOf(actor, 'flash')
+  /** At 1.5 a flash is a blink at its start; at 1 it holds for the whole flash. */
+  const isFlashing = (actor: string, kind: 'flash' | 'red_flash' = 'flash'): boolean => {
+    const flash = motionOf(actor, kind)
     return flash !== undefined && (scale === 1 || now < flash.from + BLINK_MS)
   }
-  const white = (palette: readonly number[]) => palette.map((c, i) => (i === 0 ? c : FLASH_RGB))
-  // The bob: at 1 the 1-pixel lift; at 1.5 the idle pair replaces it.
-  const lift = scale === 1 ? bob : 0
+  const fill = (rgb: number) => (palette: readonly number[]) =>
+    palette.map((c, i) => (i === 0 ? c : rgb))
+  const white = fill(FLASH_RGB)
+  const red = fill(ENRAGE_RGB)
 
   const actors: StageActor[] = []
   const bosses: StageActor[] = []
@@ -311,10 +436,20 @@ export function stageAt(
     const lunge = motionOf(known.id, 'lunge')
     const step = motionOf(known.id, 'step')
     const flashing = isFlashing(known.id)
+    const redFlashing = !flashing && isFlashing(known.id, 'red_flash')
+    const tinted = motionOf(known.id, 'enraged') !== undefined
     const boss = known.kind !== 'wave'
     const poses = posesOf(sprite, null, opts.compact, scale, false, (p) => p)
-    const pose = poseOf(known.id, false)
+    const bobMs = bobOf(false)
+    const pose = poseOf(known.id, false, 'idle', bobMs)
     const shown = poses[pose]
+    const palette = flashing
+      ? white(shown.palette)
+      : redFlashing
+        ? red(shown.palette)
+        : tinted
+          ? shown.palette.map((c, i) => (i === 0 ? c : mix(c, ENRAGE_RGB, ENRAGE_TINT)))
+          : shown.palette
     const x = baseX + actionOffset(step, lunge, now, scale)
     const ground = { y: height - art.height, width: art.width, height: art.height }
     grounded.set(known.id, { ...ground, x })
@@ -323,9 +458,9 @@ export function stageAt(
       key: known.id,
       spriteId: sprite.id,
       art: shown.art,
-      palette: flashing ? white(shown.palette) : shown.palette,
+      palette,
       x,
-      y: height - art.height - lift,
+      y: height - art.height - liftOf(bobMs),
       flipX: false,
       alpha,
       fallen: false,
@@ -334,8 +469,14 @@ export function stageAt(
       raritySlot: null,
       pose,
       poses,
+      rest: 'idle',
+      bobMs,
+      redFlashing,
+      tinted,
     })
   }
+  // The right edge of the enemies' line: where the campfire's ground starts.
+  const enemyRight = view.enemies.length > 0 ? nextFree - gap : edge
 
   // Bosses draw over their minions, never under.
   actors.push(...bosses)
@@ -355,8 +496,14 @@ export function stageAt(
       return palette
     }
     const poses = posesOf(sprite, attack, opts.compact, scale, true, recolour)
-    const pose = poseOf(hero.id, fallen)
+    const rest = hero.guarding && !fallen ? 'guard' : 'idle'
+    const bobMs = fallen || rest === 'guard' ? null : bobOf(hero.hasted)
+    const pose = poseOf(hero.id, fallen, rest, bobMs)
     const shown = poses[pose]
+    // Haste's streak and Guard's shield are the 1.5 stage's: at 1 the bob and the stance alone.
+    const marks = !opts.compact && scale !== 1 && !fallen
+    const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
+    const shield = marks && rest === 'guard' && index === 0 ? shieldOver(poses.idle.art) : null
     const flashing = !fallen && isFlashing(hero.id)
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
     const x =
@@ -372,7 +519,7 @@ export function stageAt(
       art: shown.art,
       palette: flashing ? white(shown.palette) : shown.palette,
       x,
-      y: height - art.height - (fallen ? 0 : lift),
+      y: height - art.height - liftOf(bobMs),
       flipX: true,
       alpha: 1,
       fallen,
@@ -381,6 +528,10 @@ export function stageAt(
       raritySlot: shown.raritySlot,
       pose,
       poses,
+      rest,
+      bobMs,
+      streak,
+      shield,
     })
   })
 
@@ -422,6 +573,7 @@ export function stageAt(
       })
       continue
     }
+    if (m.kind === 'campfire') continue
     const actor = at.get(m.actor)
     if (!actor) continue
     // Numbers measure from the idle art, whatever the pose.
@@ -451,6 +603,21 @@ export function stageAt(
     }
   }
 
+  let campfire: StageModel['campfire'] = null
+  const camp = all.find((m) => m.kind === 'campfire')
+  if (camp) {
+    // Centred on the ground between the enemies' line and the party, in the frame.
+    const art = variant(CAMPFIRE, opts.compact, scale)
+    const x = clamp(
+      Math.round((enemyRight + heroLeft - art.width) / 2),
+      0,
+      Math.max(0, width - art.width),
+    )
+    const lit = camp.from + CAMPFIRE_MS
+    const alpha = now < camp.from ? 0 : now < lit ? 1 : 1 - (now - lit) / CAMPFIRE_FADE_MS
+    campfire = { art, x, y: height - art.height, alpha }
+  }
+
   // Ground and backdrop are the base zone's: tier 2's zone 1 stands on zone 1's.
   const base = zoneAt(view.zone)?.base
   return {
@@ -463,6 +630,7 @@ export function stageAt(
     chests,
     drops,
     effects,
+    campfire,
     alt: altText(view),
     scale,
   }

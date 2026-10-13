@@ -1740,3 +1740,12 @@ Closed, the lid sits on the box; opening, it is raised over a dark gap with a go
 stands upright behind the box, its inner face showing, over gold. The grids are `pnpm grid` of the
 committed PNGs, so `pnpm grid art/sprites/chest/<state>.png` rebuilds a lost one. The 1× uses
 black, `#c84c0c` wood, `#747474` iron and `#f0bc3c` gold; the 1.5× snaps to 8 master colours.
+
+## campfire (hand-drawn)
+
+2026-10-12, spec #131 (ticket #158): Camp's campfire, `effect:campfire`, an ordinary `nes` effect
+sprite with no frames. No sheet and no image run: both arts are hand-placed pixels in the dense
+sheet's idiom, a one-pixel black outline around a flame over two crossed logs, bottom-anchored on
+its canvas. The 1× is 16 × 16 in black, `#7c0800` logs, `#d82800` flame and `#f0bc3c` core; the
+1.5× is 24 × 24 with a darker log knot and a pale `#fcf0a0` heart, snapped to the master like any
+1.5× art. `pnpm grid art/sprites/effect/campfire.png` gives the 1× as a grid for a redraw.

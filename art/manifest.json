@@ -1150,6 +1150,12 @@
       "style": "nes"
     },
     {
+      "id": "effect:campfire",
+      "file": "sprites/effect/campfire.png",
+      "fileHires": "sprites-hires/effect/campfire.png",
+      "style": "nes"
+    },
+    {
       "id": "chest:closed",
       "file": "sprites/chest/closed.png",
       "fileHires": "sprites-hires/chest/closed.png",
