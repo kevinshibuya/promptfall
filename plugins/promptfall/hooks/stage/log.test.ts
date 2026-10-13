@@ -216,6 +216,7 @@ test('a kill prints after the killing action; a world boss leaving prints none',
         hp: 1,
         maxHp: 9,
         kind: 'world_boss',
+        enraged: false,
       },
     ],
   }
@@ -705,4 +706,42 @@ test('at the idle cadence a drop line slots into the gap and moves nothing', () 
   expect(at('Rat hits Bo for 1.')).toBe(starts[1])
   expect(at('Rat hits Cy for 1.')).toBe(starts[2])
   expect(at('Bo hits Rat for 2.')).toBe(starts[3])
+})
+
+test('each reactive event prints its line at its effect’s time', () => {
+  const v = wave()
+  const h1 = v.heroes[0]?.id ?? ''
+  const e1 = v.enemies[0]?.id ?? ''
+  const cases: [Effect, string][] = [
+    [{ k: 'haste', on: true }, 'The party quickens.'],
+    [{ k: 'haste', on: false }, 'The party slows.'],
+    [{ k: 'enraged', enemyId: e1 }, 'Claude stumbles. Goblin Scout is enraged!'],
+    [
+      { k: 'camp', heals: [{ heroId: h1, amount: 25 }] },
+      'The party makes camp while Claude gathers its thoughts.',
+    ],
+    [{ k: 'guard', on: true }, 'The party stands guard.'],
+    [{ k: 'guard', on: false }, 'The party lowers its guard.'],
+  ]
+  for (const [effect, text] of cases) {
+    const { log, starts } = run([effect])
+    const line = log.upcoming(NOW - 1, 1e9).find((l) => l.text === text)
+    expect(line?.at, text).toBe(starts[0])
+    expect(line?.key, text).toBe(true)
+  }
+})
+
+test('a reactive line behind a burst more than a tick long is never dropped', () => {
+  const v = wave()
+  const h1 = v.heroes[0]?.id ?? ''
+  const e1 = v.enemies[0]?.id ?? ''
+  const effects: Effect[] = []
+  for (let i = 0; i < 12; i++)
+    effects.push(act(h1, i * 10), hit(h1, e1, 1), { k: 'drop', item: item('silk_robe') })
+  effects.push({ k: 'enraged', enemyId: e1 }, { k: 'guard', on: true }, { k: 'haste', on: true })
+  const { texts } = run(effects)
+  expect(texts.filter((t) => t.includes(' hits ')).length).toBeLessThan(12)
+  expect(texts).toContain('Claude stumbles. Goblin Scout is enraged!')
+  expect(texts).toContain('The party stands guard.')
+  expect(texts).toContain('The party quickens.')
 })

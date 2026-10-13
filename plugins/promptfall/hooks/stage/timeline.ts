@@ -6,6 +6,8 @@ import {
   BOLT_MS,
   BOSS_MIN_ROWS,
   BURST_MS,
+  CAMPFIRE_FADE_MS,
+  CAMPFIRE_MS,
   CHEST_FALL_MS,
   CHEST_OPEN_MS,
   CHEST_SIT_MS,
@@ -39,6 +41,13 @@ export type Motion =
   | { kind: 'step'; actor: string; from: number; until: number; dir: 1 | -1 }
   | { kind: 'lunge'; actor: string; from: number; until: number; dir: 1 | -1 }
   | { kind: 'flash'; actor: string; from: number; until: number }
+  /** Enrage's red flash at the mishap: the white flash's mechanism in red. */
+  | { kind: 'red_flash'; actor: string; from: number; until: number }
+  /**
+   * An enraged enemy's red tint, from the mishap to the show time of its next hit; `until` is
+   * infinite while that hit has not come in.
+   */
+  | { kind: 'enraged'; actor: string; from: number; until: number }
   | { kind: 'windup'; actor: string; from: number; until: number }
   | { kind: 'strike'; actor: string; from: number; until: number; shape: AttackShape }
   | { kind: 'follow'; actor: string; from: number; until: number }
@@ -58,6 +67,8 @@ export type Motion =
   | ({ kind: 'chest'; actor: string } & ChestFields)
   /** A drop with no row to fall from: its chest on the ground of the slot it holds (`slot`). */
   | ({ kind: 'chest'; actor: null; slot: number } & ChestFields)
+  /** Camp's campfire between the lines: it sits CAMPFIRE_MS, then fades over CAMPFIRE_FADE_MS. */
+  | { kind: 'campfire'; actor: null; from: number; until: number }
 
 type ChestFields = {
   /** The dropped item's id, its rarity and its sprite's id. */
@@ -189,9 +200,9 @@ export function groups(effects: readonly Effect[]): Group[] {
   return out
 }
 
-/** The idle bob's phase: floor(now / IDLE_FRAME_MS) % 2. */
-export function bobbingAt(now: number): 0 | 1 {
-  return Math.floor(now / IDLE_FRAME_MS) % 2 === 0 ? 0 : 1
+/** The idle bob's phase on a clock of `frameMs` frames: floor(now / frameMs) % 2. */
+export function bobbingAt(now: number, frameMs: number = IDLE_FRAME_MS): 0 | 1 {
+  return Math.floor(now / frameMs) % 2 === 0 ? 0 : 1
 }
 
 /** An enemy's sprite: the world boss's by name, any other by its content id. */
@@ -256,6 +267,8 @@ export class StageTimeline {
       // It fades once the last action shown on it is over: its death flash, or its own blow.
       const from = this.lastShownEnd(id, now)
       this.motions.push({ kind: 'dissolve', actor: id, from, until: from + DISSOLVE_MS })
+      // Gone before its hit: the tint fades with it.
+      this.calm(id, from)
     }
     // A kill plays out before the next enemy enters: its fade, its chest, then a pause.
     for (const [id, until] of this.gaps) if (until <= now) this.gaps.delete(id)
@@ -309,6 +322,8 @@ export class StageTimeline {
       })
     }
     for (const id of this.seen.keys()) if (!this.entries.has(id)) this.seen.delete(id)
+    // A row no longer enraged whose hit never came in (a resync): its tint ends now.
+    for (const enemy of view.enemies) if (!enemy.enraged) this.calm(enemy.id, now)
     this.reconcile(view, now, predicted)
     this.observed = true
     this.settlePlaces(now)
@@ -631,6 +646,15 @@ export class StageTimeline {
       let last: { target: string; flashEnd: number } | null = null
       for (const effect of group.effects) {
         if (effect.k === 'hit' || effect.k === 'heal') this.land(effect, impact, hp)
+        if (effect.k === 'hit') this.calm(effect.by, impact)
+        if (effect.k === 'enraged') {
+          this.enrage(effect.enemyId, start)
+          continue
+        }
+        if (effect.k === 'camp') {
+          this.camp(effect.heals, start, hp)
+          continue
+        }
         if (effect.k === 'hit') {
           if (this.isActor(effect.target)) {
             effectOn(effect.target)
@@ -699,10 +723,49 @@ export class StageTimeline {
     return starts
   }
 
-  /**
-   * The hero or enemy whose action is playing: from its start until the next action starts or its
-   * `until`, whichever is first.
-   */
+  /** A red flash on `actor` at `at`, and its tint from then until its next hit lands. */
+  private enrage(actor: string, at: number): void {
+    if (!this.entries.has(actor) || this.departed.has(actor)) return
+    this.motions.push({ kind: 'red_flash', actor, from: at, until: at + FLASH_MS })
+    if (this.motions.some((m) => m.kind === 'enraged' && m.actor === actor && m.until > at)) return
+    this.motions.push({ kind: 'enraged', actor, from: at, until: Number.POSITIVE_INFINITY })
+  }
+
+  /** Ends `actor`'s open tint at `at`: its hit lands, or it leaves. */
+  private calm(actor: string, at: number): void {
+    this.motions = this.motions.map((m) =>
+      m.kind === 'enraged' && m.actor === actor && m.until === Number.POSITIVE_INFINITY
+        ? { ...m, until: Math.max(m.from, at) }
+        : m,
+    )
+  }
+
+  /** The campfire between the lines from `at`, and each hero's heal rising green as it lands. */
+  private camp(
+    heals: readonly { heroId: string; amount: number }[],
+    at: number,
+    hp: Map<string, number>,
+  ): void {
+    this.motions.push({
+      kind: 'campfire',
+      actor: null,
+      from: at,
+      until: at + CAMPFIRE_MS + CAMPFIRE_FADE_MS,
+    })
+    for (const { heroId, amount } of heals) {
+      if (amount <= 0 || !this.heroes.has(heroId)) continue
+      this.land({ k: 'heal', by: heroId, target: heroId, amount }, at, hp)
+      this.motions.push({
+        kind: 'number',
+        actor: heroId,
+        text: String(amount),
+        rgb: NUMBER_RGB_HEAL,
+        from: at,
+        until: at + NUMBER_MS,
+      })
+    }
+  }
+
   /** Records a hit's or heal's HP change, as far as the actor's HP allows, to land at `at`. */
   private land(
     effect: Extract<Effect, { k: 'hit' } | { k: 'heal' }>,
@@ -726,6 +789,10 @@ export class StageTimeline {
     return this.landing.filter((l) => l.at > now)
   }
 
+  /**
+   * The hero or enemy whose action is playing: from its start until the next action starts or its
+   * `until`, whichever is first.
+   */
   acting(now: number): string | null {
     let current: Action | null = null
     for (const a of this.actions_) {
@@ -855,10 +922,7 @@ export class StageTimeline {
     // Through the pause after a kill too, so the next enemy steps on at its time.
     if (now < this.enterAfter()) return true
     if ([...this.places.values()].some((p) => p.until > now)) return true
-    return this.motions.some((m) => m.until > now)
-  }
-
-  bobbing(now: number): 0 | 1 {
-    return bobbingAt(now)
+    // A tint holds still until its hit, whose own motions keep the stage busy.
+    return this.motions.some((m) => m.until > now && m.kind !== 'enraged')
   }
 }

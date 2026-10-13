@@ -6,6 +6,11 @@ var ACTION_STEPS = 5;
 var FILL_K = 10;
 var FILL_BP = 16667;
 var POWER_BP = 2e4;
+var HASTE_BP = 12500;
+var HASTE_TICKS = 90;
+var GUARD_TICKS = 60;
+var GUARD_DAMAGE_BP = 5e3;
+var ENRAGE_BP = 15e3;
 var SPAWN_GAUGE_MAX = 5e3;
 function fill(spd) {
   return Math.max(1, Math.floor((spd + FILL_K) * FILL_BP / 1e3));
@@ -51,6 +56,7 @@ var ARCHETYPES = {
   boss: { hpBp: 7e4, atkBp: 2e4, defBp: 12e3, spd: 5 },
   turn_boss: { hpBp: 3e4, atkBp: 12e3, defBp: 11e3, spd: 5 }
 };
+var WAVE_HP_MEAN_BP = ["brute", "swift", "tank", "caster"].reduce((sum, a) => sum + ARCHETYPES[a].hpBp, 0) / 4;
 var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
@@ -213,6 +219,7 @@ function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
     spd: a.spd + Math.floor(spdZone / 3)
   };
   const bossMult = kind === "zone_boss" ? 8 : kind === "turn_boss" ? 4 : 1;
+  const pay = (value) => kind === "wave" ? Math.max(1, Math.floor(value * a.hpBp / WAVE_HP_MEAN_BP)) : value * bossMult;
   return {
     id,
     name,
@@ -221,9 +228,9 @@ function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
     kind,
     archetype,
     stats,
-    xp: b.xp * bossMult,
-    gold: [b.goldMin * bossMult, b.goldMax * bossMult],
-    dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : 1500,
+    xp: pay(b.xp),
+    gold: [pay(b.goldMin), pay(b.goldMax)],
+    dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : pay(1500),
     contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
   };
 }
@@ -695,6 +702,7 @@ var GOLDEN_REWARD = {
   tradeableAt: null
 };
 var GOLDEN_SEED = 20261002;
+var HINTS = ["swift", null, "brute", "caster", null, "tank"];
 function goldenEvents(options = {}) {
   const boss = options.boss ?? true;
   const events = [
@@ -704,11 +712,19 @@ function goldenEvents(options = {}) {
   ];
   for (let turn = 0; events.length < 300; turn++) {
     events.push({ t: "rest" });
+    events.push({ t: "turn_start" });
     for (let i = 0; i < 12 && events.length < 296; i++) {
       events.push({ t: "tick" });
-      if (i % 3 === 0) events.push({ t: "tool_call" });
+      if (i % 3 === 0) {
+        const hint = HINTS[(turn + i / 3) % HINTS.length] ?? null;
+        events.push(hint ? { t: "tool_call", hint } : { t: "tool_call" });
+      }
+      if (i === 4 && turn % 2 === 1) events.push({ t: "tool_mishap" });
+      if (i === 6 && turn === 8) events.push({ t: "guard", on: true });
+      if (i === 10 && turn === 8) events.push({ t: "guard", on: false });
     }
     events.push({ t: "turn_end" });
+    if (turn === 5 || turn === 9) events.push({ t: "camp" });
     if (boss && turn === 3) {
       events.push({
         t: "boss_engaged",
@@ -744,7 +760,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "42969ddaf82b0564";
+var GOLDEN_HASH = "62144fd6f78c2048";
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -913,21 +929,23 @@ function openEncounter(s, waveSize) {
 function spawnEnemy(s, encounter, defId, kind) {
   const def = enemyAt(defId, s.zone);
   const hp = def ? def.stats.hp : 1;
-  const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp };
+  const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp, enraged: false };
   encounter.enemies.push(enemy);
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
 }
-function pickWaveEnemy(s) {
+function pickWaveEnemy(s, hint) {
   const zone = zoneAt(s.zone)?.def;
+  const hinted = hint ? zone?.enemies.find((id) => enemyAt(id, s.zone)?.archetype === hint) : void 0;
+  if (hinted) return hinted;
   const weights2 = {};
   for (const id of zone?.enemies ?? []) weights2[id] = 1;
   return drawWeighted(s, weights2);
 }
-function onToolCall(s) {
+function onToolCall(s, hint) {
   s.turnToolCalls += 1;
   if (s.boss) return;
   const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3));
-  const defId = pickWaveEnemy(s);
+  const defId = pickWaveEnemy(s, hint);
   if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, "wave");
   else if (encounter.queue.length < 10) encounter.queue.push({ def: defId, kind: "wave" });
 }
@@ -1117,8 +1135,9 @@ function rollContract(s, effects) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 14;
+var SIM_VERSION = 15;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
+var WAVE_ARCHETYPES = ["swift", "brute", "caster", "tank"];
 var SANDBOX_EVENT_KINDS = [
   "sandbox_boss",
   "sandbox_item",
@@ -1168,6 +1187,8 @@ function createInitialState(seed) {
     turnToolCalls: 0,
     encounter: null,
     pendingTurnBoss: false,
+    hasteTicks: 0,
+    guardTicks: 0,
     lootLog: [],
     stats: { kills: 0, bosses: 0, wipes: 0 },
     boss: null,
@@ -1359,7 +1380,23 @@ var MIGRATIONS = {
   12: { state: (s) => s },
   // 13 → 14: the tier-1 arc slowed outside the kill rate (#153): zone bosses' hp ramps by zone, and
   // zones 7 to 12 walk longer and pay more xp. Only content constants moved, and nothing changes shape.
-  13: { state: (s) => s }
+  13: { state: (s) => s },
+  // 14 → 15: the reactive events (#156). The state gains Haste's and Guard's countdowns at zero,
+  // and every enemy on the field its enraged flag, off: a save never starts mid-effect.
+  14: {
+    state: (s) => {
+      const encounter = s.encounter;
+      return {
+        ...s,
+        hasteTicks: 0,
+        guardTicks: 0,
+        encounter: encounter && {
+          ...encounter,
+          enemies: encounter.enemies.map((e) => ({ ...e, enraged: false }))
+        }
+      };
+    }
+  }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -1401,6 +1438,52 @@ function migrateGoods(goods, from, options = {}) {
   let current = goods;
   for (const step2 of steps) current = step2.goods ? step2.goods(clone(current)) : current;
   return { ok: true, goods: current };
+}
+
+// packages/sim/src/reactive.ts
+function heroFill(s, hero) {
+  if (s.guardTicks > 0) return 0;
+  const base2 = fill(heroStats(s, hero).spd);
+  return s.hasteTicks > 0 ? Math.max(1, Math.floor(base2 * HASTE_BP / 1e4)) : base2;
+}
+function onTurnStart(s, effects) {
+  if (s.hasteTicks === 0) effects.push({ k: "haste", on: true });
+  s.hasteTicks = HASTE_TICKS;
+}
+function stopHaste(s, effects) {
+  if (s.hasteTicks === 0) return;
+  s.hasteTicks = 0;
+  effects.push({ k: "haste", on: false });
+}
+function onGuard(s, on, effects) {
+  if (!on) stopGuard(s, effects);
+  if (!on || s.guardTicks > 0) return;
+  s.guardTicks = GUARD_TICKS;
+  effects.push({ k: "guard", on: true });
+}
+function stopGuard(s, effects) {
+  if (s.guardTicks === 0) return;
+  s.guardTicks = 0;
+  effects.push({ k: "guard", on: false });
+}
+function countDown(s, effects) {
+  if (s.hasteTicks > 0 && --s.hasteTicks === 0) effects.push({ k: "haste", on: false });
+  if (s.guardTicks > 0 && --s.guardTicks === 0) effects.push({ k: "guard", on: false });
+}
+function onMishap(s, effects) {
+  const enemy = s.encounter?.enemies[0];
+  if (!enemy || enemy.enraged) return;
+  enemy.enraged = true;
+  effects.push({ k: "enraged", enemyId: enemy.id });
+}
+function onCamp(s, effects) {
+  const before = partyHeroes(s).map((h) => ({ heroId: h.id, hp: h.hp }));
+  onRest(s);
+  const heals = before.map(({ heroId, hp }) => ({
+    heroId,
+    amount: (s.roster.find((h) => h.id === heroId)?.hp ?? hp) - hp
+  }));
+  effects.push({ k: "camp", heals });
 }
 
 // packages/sim/src/picker.ts
@@ -1563,7 +1646,14 @@ function heroAction(s, hero, choice, effects) {
 function enemyAction(s, enemy, choice, effects) {
   const target = findHero(s, choice.targetId ?? "");
   if (!target || target.hp <= 0) return;
-  const amount = damage(s, enemyStats(s, enemy).atk, heroStats(s, target).def);
+  const atk = enemyStats(s, enemy).atk;
+  let amount = damage(
+    s,
+    enemy.enraged ? Math.floor(atk * ENRAGE_BP / 1e4) : atk,
+    heroStats(s, target).def
+  );
+  enemy.enraged = false;
+  if (s.guardTicks > 0) amount = Math.max(1, Math.floor(amount * GUARD_DAMAGE_BP / 1e4));
   target.hp = Math.max(0, target.hp - amount);
   effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
   if (target.hp === 0) fall(s, target, effects);
@@ -1592,7 +1682,7 @@ function advanceBattle(s, effects) {
     const id = unit.side === "hero" ? unit.hero.id : unit.enemy.id;
     let f = perStep.get(id);
     if (f === void 0) {
-      f = fill(unit.side === "hero" ? heroStats(s, unit.hero).spd : enemyStats(s, unit.enemy).spd);
+      f = unit.side === "hero" ? heroFill(s, unit.hero) : fill(enemyStats(s, unit.enemy).spd);
       perStep.set(id, f);
     }
     return f;
@@ -1622,7 +1712,9 @@ function advanceBattle(s, effects) {
     for (const f of filled) battle.queue.push(f.id);
     if (battle.busy > 0) battle.busy -= 1;
     while (battle.busy === 0 && battle.queue.length > 0) {
-      const id = battle.queue.shift() ?? "";
+      const at = s.guardTicks > 0 ? battle.queue.findIndex((q) => unitOf(s, q)?.side !== "hero") : 0;
+      if (at < 0) break;
+      const [id = ""] = battle.queue.splice(at, 1);
       const unit = unitOf(s, id);
       if (!unit) continue;
       gaugeOf(s, id).g = 0;
@@ -1895,7 +1987,7 @@ function bossEngaged(state, event) {
     const { hp } = event.stats;
     const id = newId(s, "e");
     s.encounter = {
-      enemies: [{ id, def: "world_boss", kind: "world_boss", hp, maxHp: hp }],
+      enemies: [{ id, def: "world_boss", kind: "world_boss", hp, maxHp: hp, enraged: false }],
       queue: [],
       waveSize: 0,
       spawnedInWave: 0
@@ -2022,10 +2114,22 @@ var handlers = {
       spawnOnEmptyTick(s, effects);
       s.battle.busy = 0;
     }
+    countDown(s, effects);
   }),
-  tool_call: (state) => draft(state, (s) => onToolCall(s)),
-  turn_end: (state) => draft(state, (s) => onTurnEnd(s)),
-  rest: (state) => draft(state, (s) => onRest(s)),
+  tool_call: (state, event) => draft(state, (s) => onToolCall(s, event.hint)),
+  turn_start: (state) => draft(state, (s, effects) => onTurnStart(s, effects)),
+  turn_end: (state) => draft(state, (s, effects) => {
+    onTurnEnd(s);
+    stopHaste(s, effects);
+  }),
+  rest: (state) => draft(state, (s, effects) => {
+    onRest(s);
+    stopHaste(s, effects);
+    stopGuard(s, effects);
+  }),
+  tool_mishap: (state) => draft(state, (s, effects) => onMishap(s, effects)),
+  camp: (state) => draft(state, (s, effects) => onCamp(s, effects)),
+  guard: (state, event) => draft(state, (s, effects) => onGuard(s, event.on === true, effects)),
   equip,
   unequip,
   vendor,
@@ -2073,11 +2177,16 @@ function replay(state, events) {
 }
 export {
   ACTION_STEPS,
+  ENRAGE_BP,
   FILL_BP,
   FILL_K,
   GAUGE_FULL,
   GOLDEN_HASH,
   GOLDEN_SEED,
+  GUARD_DAMAGE_BP,
+  GUARD_TICKS,
+  HASTE_BP,
+  HASTE_TICKS,
   LADDER_END,
   MIGRATIONS,
   POWER_BP,
@@ -2089,6 +2198,7 @@ export {
   STEP_MS,
   TICK_MS,
   TIER_GROWTH_BP,
+  WAVE_ARCHETYPES,
   affixValue,
   baseTier,
   content,
@@ -2098,6 +2208,7 @@ export {
   fill,
   goldenEvents,
   hashState,
+  heroFill,
   heroStats,
   migrate,
   migrateGoods,

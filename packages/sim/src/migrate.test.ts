@@ -72,6 +72,14 @@ describe('the deep fixture', () => {
     expect(minZones).toContain(7)
     expect(minZones).toContain(10)
   })
+
+  it('holds a reactive event in play: Haste and Guard on, the world boss enraged', () => {
+    expect(deep.hasteTicks).toBeGreaterThan(0)
+    expect(deep.guardTicks).toBeGreaterThan(0)
+    expect(deep.encounter?.enemies.filter((e) => e.enraged).map((e) => e.kind)).toEqual([
+      'world_boss',
+    ])
+  })
 })
 
 describe('migrate refuses', () => {
@@ -134,10 +142,12 @@ describe('migrate walks a stub step', () => {
 
 describe('the clear', () => {
   it('empties the encounter and the battle outside boss mode, so the next tick spawns', () => {
-    expect(golden.boss).toBeNull()
-    expect(golden.encounter?.enemies.length).toBeGreaterThan(0)
+    // The golden script ends between turns on an empty field: a tool call puts an enemy on it.
+    const fighting = step(golden, { t: 'tool_call' }).state
+    expect(fighting.boss).toBeNull()
+    expect(fighting.encounter?.enemies.length).toBeGreaterThan(0)
     const s = migrated(
-      golden,
+      fighting,
       chainOf((x) => x),
     )
     expect(s.encounter).toBeNull()
@@ -166,9 +176,9 @@ describe('the clamp', () => {
   it("lowers a hero's HP to its new maximum", () => {
     const s = migrated(golden, chainOf(overfull))
     // Commons with nothing worn: the level-3 Knight at a base of 60 and two levels' growth of 9,
-    // the level-1 Black Mage at the template's base HP.
+    // the level-2 Black Mage at a base of 36 and one level's growth of 5.
     expect(hero(s, 'h0').hp).toBe(78)
-    expect(hero(s, 'h1').hp).toBe(36)
+    expect(hero(s, 'h1').hp).toBe(41)
   })
 
   it('never raises HP: wounded heroes stay wounded and the fallen stay down', () => {
@@ -627,6 +637,58 @@ describe('the 13→14 step: the tier-1 arc slowed outside the kill rate', () => 
       { kind: 'hero', hero },
     ] as const) {
       expect(migrateGoods(goods, 13, { to: 14 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
+describe('the 14→15 step: the reactive events', () => {
+  // The state gains Haste's and Guard's countdowns at zero and every enemy its enraged flag, off.
+  const PINNED = { golden: '0d8fad39b4f3bdc7', deep: '0c8d8999fbd8c08f' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v14-deep.json' : 'v14.json')
+    const r = migrate(before, { to: 15 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`starts the ${kind} fixture with both countdowns at zero and no enemy enraged`, () => {
+      expect(after.v).toBe(15)
+      expect(after.hasteTicks).toBe(0)
+      expect(after.guardTicks).toBe(0)
+      expect(after.encounter?.enemies.some((e) => e.enraged !== false) ?? false).toBe(false)
+    })
+
+    it(`keeps every other field of the ${kind} fixture`, () => {
+      const { v: _v, encounter: _e, battle: _b, hasteTicks: _h, guardTicks: _g, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it("keeps the deep fixture's world boss, enraged off", () => {
+    const before = fixture('v14-deep.json')
+    const r = migrate(before, { to: 15 })
+    if (!r.ok) throw new Error(r.reason)
+    expect(r.state.encounter?.enemies).toEqual(
+      before.encounter?.enemies.map((e) => ({ ...e, enraged: false })),
+    )
+  })
+
+  it('leaves goods alone', () => {
+    const v14 = fixture('v14-deep.json')
+    const [item] = v14.inventory
+    const [hero] = v14.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 14, { to: 15 })).toEqual({ ok: true, goods })
     }
   })
 })

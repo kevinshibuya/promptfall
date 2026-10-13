@@ -15,7 +15,7 @@ import {
   SIM_VERSION,
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
-import type { Auth, BatchAck, Delivery, ServerClient } from '../client'
+import { type Auth, type BatchAck, BUDGETS, type Delivery, type ServerClient } from '../client'
 import { type KeyValue, MemoryKeyValue } from '../kv'
 import type { MarketResult } from '../market'
 import { Mirror } from '../mirror'
@@ -535,6 +535,71 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(await client.submit(mirror.batch(over), mirror.auth())).toMatchObject({ ok: false })
       const full = Array.from({ length: 70 }, () => tick)
       expect(await client.submit(mirror.batch(full), mirror.auth())).toMatchObject({ ok: true })
+    })
+
+    // The reactive events' buckets (#156): each kind is capped at its own capacity, by name.
+    for (const [kind, event] of [
+      ['camp', { t: 'camp' }],
+      ['turn_start', { t: 'turn_start' }],
+      ['tool_mishap', { t: 'tool_mishap' }],
+      ['guard', { t: 'guard', on: true }],
+    ] as const) {
+      it(`rule 8: a batch over the ${kind} bucket is capped naming it, and a full one passes`, async () => {
+        const { client, boot, mirror } = await setup()
+        const capacity = BUDGETS[kind].capacity
+        const over = Array.from({ length: capacity + 1 }, (): PlayerEvent => event)
+        expect(await client.submit(mirror.batch(over), mirror.auth())).toEqual({
+          ok: false,
+          reason: 'rate_capped',
+          seq: 0,
+          state: boot.state,
+          hash: boot.hash,
+          cursor: 0,
+          kind,
+        })
+        const full = Array.from({ length: capacity }, (): PlayerEvent => event)
+        expect(await client.submit(mirror.batch(full), mirror.auth())).toMatchObject({ ok: true })
+      })
+    }
+
+    it('rule 8: five camps in a minute pass, the sixth waits for the next minute', async () => {
+      const { client, clock, mirror } = await setup()
+      const five: PlayerEvent[] = Array.from({ length: 5 }, () => ({ t: 'camp' }))
+      expect(await client.submit(mirror.batch(five), mirror.auth())).toMatchObject({ ok: true })
+      mirror.commit(five)
+      clock.advance(30_000)
+      const one: PlayerEvent[] = [{ t: 'camp' }]
+      expect(await client.submit(mirror.batch(one), mirror.auth())).toMatchObject({
+        ok: false,
+        reason: 'rate_capped',
+        kind: 'camp',
+      })
+      clock.advance(30_000)
+      expect(await client.submit(mirror.batch(one), mirror.auth())).toMatchObject({ ok: true })
+    })
+
+    it('rule 9: a batch of reactive events and hinted calls commits', async () => {
+      const { client, mirror } = await setup()
+      const events: PlayerEvent[] = [
+        { t: 'turn_start' },
+        { t: 'tool_call', hint: 'tank' },
+        { t: 'tool_call', hint: 'swift' },
+        tick,
+        { t: 'tool_mishap' },
+        { t: 'guard', on: true },
+        tick,
+        { t: 'guard', on: false },
+        { t: 'camp' },
+        { t: 'turn_end' },
+      ]
+      const batch = mirror.batch(events)
+      expect(await client.submit(batch, mirror.auth())).toEqual({
+        ok: true,
+        duplicate: false,
+        seq: 1,
+        hash: batch.resultHash,
+        delivery: EMPTY,
+      })
     })
 
     it('rule 9: a matching batch commits', async () => {

@@ -96,6 +96,11 @@ export const GLOW_RADIUS_PX: Readonly<Record<Rarity, number>> = {
 }
 export const GLOW_ALPHA = 0.5
 export const IDLE_FRAME_MS = 500
+/** The idle bob's frame while Haste is on: twice the rate. */
+export const HASTE_FRAME_MS = IDLE_FRAME_MS / 2
+/** Camp's campfire: it sits between the lines this long, then fades. */
+export const CAMPFIRE_MS = 4000
+export const CAMPFIRE_FADE_MS = 400
 export const EVENT_FRAME_MS = 83
 export const IDLE_BOB_PX = 1
 
@@ -174,6 +179,17 @@ export const ZONE_GROUND: readonly number[] = [
   0xe8e4d8, // The Unwritten Reach
 ]
 export const FLASH_RGB = 0xffffff
+/** Each class's colour, from its sprite's accent: Haste's speed streak behind the hero. */
+export const CLASS_RGB: Readonly<Record<string, number>> = {
+  knight: 0xe04030,
+  black_mage: 0x9050e0,
+  white_mage: 0x70e0f0,
+  archer: 0xf0c040,
+}
+/** Enrage's red: the flash at the mishap, and the tint an enraged enemy holds until its hit. */
+export const ENRAGE_RGB = 0xe02010
+/** How far an enraged enemy's palette is mixed toward ENRAGE_RGB (the Svg overlay's opacity). */
+export const ENRAGE_TINT = 0.4
 /** Damage taken by a hero. */
 export const NUMBER_RGB_HERO = 0xff5050
 export const NUMBER_RGB_ENEMY = 0xffffff

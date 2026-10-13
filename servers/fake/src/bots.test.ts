@@ -67,6 +67,8 @@ async function run(
   /** Runs before the bots start, over the same store, ledger and client. */
   prepare?: (ledger: Ledger, kv: MemoryKeyValue, client: HttpClient) => Promise<void>,
   migrations?: MigrationChain,
+  /** Each bot polls the world once more after the last round: its presence stamps its zone. */
+  heartbeat = false,
 ) {
   const kv = new MemoryKeyValue()
   let t = start
@@ -110,6 +112,10 @@ async function run(
       t += Math.floor(BOT_TICK_MS / COUNT)
     }
     bots.stop()
+    for (let i = 0; heartbeat && i < COUNT; i++) {
+      const saved = (await kv.get(`pf:bot:${i}`)) as { deviceToken: string } | undefined
+      if (saved) await client.world({ deviceToken: saved.deviceToken }, 0)
+    }
     const viewer = await booted(client, { clientVersion: '0.1.0', deviceToken: null })
     const auth = { deviceToken: viewer.deviceToken }
     const world = await client.world(auth, 0)
@@ -166,7 +172,9 @@ describe('bot population', () => {
 
 describe('bots over HTTP', () => {
   it('after three rounds every bot has committed batches and shows as online', async () => {
-    const { records, world, calls } = await run(1, 3 * COUNT)
+    // A bot polls before it plays, so a batch that clears a zone leaves its presence a zone
+    // behind its record until its next poll: one more poll each, and the two agree.
+    const { records, world, calls } = await run(1, 3 * COUNT, START, undefined, undefined, true)
     for (let i = 0; i < COUNT; i++) {
       const record = records[i]
       expect(record?.seq).toBeGreaterThanOrEqual(3)

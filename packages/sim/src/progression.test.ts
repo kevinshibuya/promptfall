@@ -615,6 +615,7 @@ function injectEnemy(state: GameState, defId: string, kind?: EnemyKind): GameSta
     kind: kind ?? def.kind,
     hp: def.stats.hp,
     maxHp: def.stats.hp,
+    enraged: false,
   }
   const encounter = state.encounter ?? { enemies: [], queue: [], waveSize: 0, spawnedInWave: 0 }
   return {

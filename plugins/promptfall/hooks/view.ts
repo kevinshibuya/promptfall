@@ -14,8 +14,8 @@ import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js
 import {
   affixValue,
   content,
-  fill,
   type GameState,
+  heroFill,
   heroStats,
   type Item,
   type LootEntry,
@@ -245,7 +245,9 @@ export function toGameView(
       rarity: hero.rarity,
       gauge: battle.gauges.find((g) => g.id === hero.id)?.g ?? 0,
       queued: battle.queue.includes(hero.id),
-      gaugePerStep: fill(stats.spd),
+      gaugePerStep: heroFill(state, hero),
+      hasted: (state.hasteTicks ?? 0) > 0,
+      guarding: (state.guardTicks ?? 0) > 0,
     })
   }
   const enemies: EnemyView[] = (state.encounter?.enemies ?? []).map((e) => {
@@ -259,6 +261,7 @@ export function toGameView(
         hp: e.hp,
         maxHp: e.maxHp,
         kind: e.kind,
+        enraged: e.enraged === true,
       }
     }
     const def = content.enemies[e.def]
@@ -270,6 +273,7 @@ export function toGameView(
       hp: e.hp,
       maxHp: e.maxHp,
       kind: e.kind,
+      enraged: e.enraged === true,
     }
   })
   const loot = state.lootLog.slice(-LOOT_LINES).map(lootLine)

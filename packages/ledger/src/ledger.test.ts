@@ -598,8 +598,26 @@ describe('Ledger with a v1 record', () => {
       account: { accountId: 'old', seed: 3, createdAt: 1, displayName: null, linked: null },
       state: old,
       seq: 4,
-      refillAt: { tick: 0, tool_call: 0, rest: 0, turn_end: 0 },
-      buckets: { tick: 70, tool_call: 140, rest: 30, turn_end: 30 },
+      refillAt: {
+        tick: 0,
+        tool_call: 0,
+        rest: 0,
+        turn_end: 0,
+        turn_start: 0,
+        tool_mishap: 0,
+        camp: 0,
+        guard: 0,
+      },
+      buckets: {
+        tick: 70,
+        tool_call: 140,
+        rest: 30,
+        turn_end: 30,
+        turn_start: 30,
+        tool_mishap: 30,
+        camp: 5,
+        guard: 60,
+      },
       committed: [],
     }
     await mem.set('pf:acct:old:record', v1)

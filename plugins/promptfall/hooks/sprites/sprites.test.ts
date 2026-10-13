@@ -62,8 +62,8 @@ test('one sprite per content id, plus the effects, the chests and the fallback',
       Object.keys(content.enemies).length +
       WORLD_BOSSES.length +
       Object.keys(content.itemBases).length +
-      // EFFECT_IDS in scripts/sprites.ts: the fireball, the light burst and the arrow
-      3 +
+      // EFFECT_IDS in scripts/sprites.ts: the fireball, the light burst, the arrow and the campfire
+      4 +
       // CHEST_IDS in scripts/sprites.ts: closed, opening and open
       3 +
       1,

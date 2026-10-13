@@ -10,7 +10,11 @@ var BUDGETS = {
   tick: { refillMs: 2e3, capacity: 70 },
   tool_call: { refillMs: 1e3, capacity: 140 },
   rest: { refillMs: 5e3, capacity: 30 },
-  turn_end: { refillMs: 5e3, capacity: 30 }
+  turn_end: { refillMs: 5e3, capacity: 30 },
+  turn_start: { refillMs: 5e3, capacity: 30 },
+  tool_mishap: { refillMs: 5e3, capacity: 30 },
+  camp: { refillMs: 6e4, capacity: 5 },
+  guard: { refillMs: 2e3, capacity: 60 }
 };
 
 // node_modules/.pnpm/zod@3.25.76/node_modules/zod/v3/external.js
@@ -4071,11 +4075,21 @@ var RaritySchema = external_exports.enum([
 ]);
 var HeroClassSchema = external_exports.enum(["knight", "black_mage", "white_mage", "archer"]);
 var TradeKindSchema = external_exports.enum(["item", "hero"]);
+var WaveArchetypeSchema = external_exports.enum([
+  "swift",
+  "brute",
+  "caster",
+  "tank"
+]);
 var PlayerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("tick"), at }),
-  external_exports.object({ t: external_exports.literal("tool_call"), at }),
+  external_exports.object({ t: external_exports.literal("tool_call"), hint: WaveArchetypeSchema.optional(), at }),
+  external_exports.object({ t: external_exports.literal("turn_start"), at }),
   external_exports.object({ t: external_exports.literal("turn_end"), at }),
   external_exports.object({ t: external_exports.literal("rest"), at }),
+  external_exports.object({ t: external_exports.literal("tool_mishap"), at }),
+  external_exports.object({ t: external_exports.literal("camp"), at }),
+  external_exports.object({ t: external_exports.literal("guard"), on: external_exports.boolean(), at }),
   external_exports.object({ t: external_exports.literal("equip"), heroId: id, itemId: id, at }),
   external_exports.object({ t: external_exports.literal("unequip"), heroId: id, slot, at }),
   external_exports.object({ t: external_exports.literal("vendor"), itemId: id, at }),
@@ -4092,8 +4106,12 @@ var TimedEventSchema = PlayerEventSchema;
 var PLAYER_EVENT_KINDS = [
   "tick",
   "tool_call",
+  "turn_start",
   "turn_end",
   "rest",
+  "tool_mishap",
+  "camp",
+  "guard",
   "equip",
   "unequip",
   "vendor",

@@ -25,8 +25,12 @@ export type HeroView = {
   gauge: number
   /** True while the hero waits in the action queue. */
   queued: boolean
-  /** fill(spd): gauge gained per 100 ms of battle time, so a renderer can fill smoothly. */
+  /** The sim's heroFill: gauge gained per 100 ms of battle time, Haste and Guard applied, so a renderer can fill smoothly. */
   gaugePerStep: number
+  /** Haste is on: the gauge fills at the hasted rate. */
+  hasted: boolean
+  /** Guard is on: the gauge holds and the hero acts on nobody. */
+  guarding: boolean
 }
 export type EnemyView = {
   id: string
@@ -37,6 +41,8 @@ export type EnemyView = {
   hp: number
   maxHp: number
   kind: string
+  /** A mishap enraged it: its next hit lands harder. */
+  enraged: boolean
 }
 /**
  * What wrote a Loot row: a kill's drop or its auto-vendoring, which wait for the chest's reveal,

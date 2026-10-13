@@ -10,7 +10,13 @@ import { layoutFor } from './layout'
 import { MessageLog } from './log'
 import { bandKey, type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
 import { StageTimeline } from './timeline'
-import { EVENT_FRAME_MS, IDLE_FRAME_MS, SPAWN_MS, SVG_FALLBACK_FRAME_MS } from './tuning'
+import {
+  EVENT_FRAME_MS,
+  HASTE_FRAME_MS,
+  IDLE_FRAME_MS,
+  SPAWN_MS,
+  SVG_FALLBACK_FRAME_MS,
+} from './tuning'
 
 type Harness = {
   loop: StageLoop
@@ -366,6 +372,19 @@ test('at rest each blit draws the next bob phase, never the same one twice', asy
   h.loop.mount(site())
   await clock.advance(6_000)
   const phases = h.times.map((t) => Math.floor(t / IDLE_FRAME_MS) % 2)
+  expect(phases.length).toBeGreaterThanOrEqual(10)
+  for (let i = 1; i < phases.length; i++) expect(phases[i]).not.toBe(phases[i - 1])
+})
+
+test('hasted, at rest each blit draws the next phase of the twice-as-fast bob', async () => {
+  const clock = fakeClock(1_000_037)
+  const h = harness(clock, 20)
+  const v = wave()
+  for (const hero of v.heroes) hero.hasted = true
+  h.state.view = v
+  h.loop.mount(site())
+  await clock.advance(3_000)
+  const phases = h.times.map((t) => Math.floor(t / HASTE_FRAME_MS) % 2)
   expect(phases.length).toBeGreaterThanOrEqual(10)
   for (let i = 1; i < phases.length; i++) expect(phases[i]).not.toBe(phases[i - 1])
 })

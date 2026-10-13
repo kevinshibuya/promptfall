@@ -60,6 +60,22 @@ export const MIGRATIONS: MigrationChain = {
   // 13 → 14: the tier-1 arc slowed outside the kill rate (#153): zone bosses' hp ramps by zone, and
   // zones 7 to 12 walk longer and pay more xp. Only content constants moved, and nothing changes shape.
   13: { state: (s) => s },
+  // 14 → 15: the reactive events (#156). The state gains Haste's and Guard's countdowns at zero,
+  // and every enemy on the field its enraged flag, off: a save never starts mid-effect.
+  14: {
+    state: (s) => {
+      const encounter = s.encounter as { enemies: Record<string, unknown>[] } | null
+      return {
+        ...s,
+        hasteTicks: 0,
+        guardTicks: 0,
+        encounter: encounter && {
+          ...encounter,
+          enemies: encounter.enemies.map((e) => ({ ...e, enraged: false })),
+        },
+      }
+    },
+  },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

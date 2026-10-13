@@ -201,27 +201,29 @@ _Avoid_: item level, tier (that is the ladder's)
 
 **Reactive event**:
 A change in the fight that answers what Claude is doing: Haste while a turn runs, Enrage on a
-failed tool call, Camp on compaction, Guard while a permission waits, and the enemy kind a tool
-kind spawns. Every one is seen on the stage and read in the combat log. None changes what an
-enemy drops.
+failed tool call, Camp on compaction, Guard while a permission prompt waits, and the enemy kind a
+tool kind spawns (swift, brute, caster or tank). Every one is seen on the stage and read in the
+combat log, and none toasts. None changes what a kill pays: a wave enemy pays by its toughness,
+whatever spawned it (ADR 0014).
 _Avoid_: trigger, integration, buff (that is one kind), bonus
 
 **Haste**:
-The reactive event of a running turn: every hero's gauge fills faster while Claude works, speed
-streaks on the party.
+The reactive event of a running turn: every hero's gauge fills a quarter faster while Claude
+works, with speed streaks behind the heroes and a faster bob.
 _Avoid_: speed-up, boost, turbo, frenzy
 
 **Enrage**:
-The reactive event of a failed tool call: the front enemy's next hit lands harder, a red flash
-on it.
+The reactive event of a failed tool call: the front enemy's next hit lands half again as hard,
+a red flash on it and a red tint until that hit lands.
 _Avoid_: rage, berserk, punishment, penalty
 
 **Camp**:
-The reactive event of a compaction: the party camps and heals, a campfire on the stage.
+The reactive event of a compaction: the party camps and heals half its HP as a rest does, a
+campfire on the stage.
 _Avoid_: rest (that is a prompt), inn, respite, break
 
 **Guard**:
-The reactive event of a waiting permission prompt: the heroes hold a guard stance, take less
+The reactive event of a waiting permission prompt: the heroes hold a guard stance, take half
 damage and attack nobody until the player answers.
 _Avoid_: defend, pause, block, shield wall
 
