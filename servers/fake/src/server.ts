@@ -20,6 +20,7 @@ import {
   MIN_CLIENT_VERSION,
   NewListingSchema,
   NewOrderSchema,
+  RestDaysBodySchema,
   ROUTES,
 } from '@promptfall/protocol'
 import { type MigrationChain, SIM_VERSION } from '@promptfall/sim'
@@ -311,6 +312,8 @@ export function createFakeServer(options: FakeServerOptions): FakeServer {
     world: (r) => ledger.world(r.auth, sinceOf(r.query)),
     chat: (r) => ledger.chat(r.auth, parse(ChatBodySchema, r.body).text),
     leaderboards: (r) => ledger.leaderboards(r.auth),
+    journal: (r) => ledger.journal(r.auth),
+    setRestDays: (r) => ledger.setRestDays(r.auth, parse(RestDaysBodySchema, r.body).days),
   }
 
   const table = (Object.keys(ROUTES) as (keyof typeof ROUTES)[]).map((name) => ({

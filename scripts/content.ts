@@ -107,6 +107,32 @@ export function contentReference(c: Content): string {
       }),
     ),
     '',
+    '## Achievements',
+    '',
+    'Paid by the ledger once per step, with reason `achievement:<id>:<step>`; steps count from 1.',
+    '',
+    ...table(
+      ['Id', 'Name', 'Reads', 'Steps'],
+      c.achievements.map((a) => [
+        code(a.id),
+        cell(a.name),
+        a.reads,
+        a.steps
+          .map((s) => `${s.at.toLocaleString('en-US')} (${s.gold.toLocaleString('en-US')} gold)`)
+          .join(', '),
+      ]),
+    ),
+    '',
+    '## Daily goals',
+    '',
+    "One row a day per account, its target `base + step × ⌊(zone − 1) / every⌋` at the day's first",
+    "commit. Met, it pays the zone's wave gold midpoint × 300 with reason `goal:<day>`.",
+    '',
+    ...table(
+      ['Kind', 'Base', 'Step', 'Every (zones)'],
+      c.goals.map((g) => [g.kind, g.base, g.step, g.everyZones]),
+    ),
+    '',
   ].join('\n')
 }
 

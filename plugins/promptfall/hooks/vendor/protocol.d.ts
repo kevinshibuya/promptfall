@@ -1,4 +1,4 @@
-import { TradeKind, HeroClass, Rarity, Goods, PlayerEvent, GameState, Hero, Item, ServerEvent, Stats, PlayerEventKind } from './sim.js';
+import { TradeKind, HeroClass, Rarity, Goods, DailyGoal, PlayerEvent, GameState, Hero, Item, ServerEvent, Stats, PlayerEventKind } from './sim.js';
 declare namespace z {
   type SafeParse<T> = { success: true; data: T } | { success: false; error: Error }
   interface ZodType<T> {
@@ -110,6 +110,72 @@ declare const NewListingSchema: z.ZodObject<{
     id: string;
     kind: "item" | "hero";
     price: number;
+}>;
+
+/** A day of the week, ISO: 1 is Monday, 7 is Sunday. */
+type Weekday = number;
+type Journal = {
+    /** Each achievement with a step crossed, its crossed steps (numbered from 1) with the server time of each. */
+    achievements: {
+        id: string;
+        steps: {
+            step: number;
+            at: number;
+        }[];
+    }[];
+    /** Today: its UTC day index, its goal, the progress since the day's first commit, met, and when it resets. */
+    day: {
+        index: number;
+        goal: DailyGoal;
+        progress: number;
+        met: boolean;
+        resetsAt: number;
+    };
+    /** Days a goal was met, rest days included. */
+    goalsMet: number;
+    /** Work days met in a row; `lastMet` is the last work day met, a day index. */
+    streak: {
+        length: number;
+        lastMet: number | null;
+    };
+    /** The rest days in force, and the set to come with the day index of the Monday it applies from. */
+    restDays: {
+        current: Weekday[];
+        next: {
+            days: Weekday[];
+            from: number;
+        } | null;
+    };
+};
+type RestDaysRefusal = 'rest_days_count' | 'rest_days_same' | 'rest_days_range';
+type RestDaysResult = {
+    ok: true;
+    journal: Journal;
+} | {
+    ok: false;
+    reason: RestDaysRefusal | 'unauthorized';
+} | ({
+    ok: false;
+} & Banned);
+declare const DAY_MS = 86400000;
+/** A fresh journal rests on Saturday and Sunday. */
+declare const DEFAULT_REST_DAYS: readonly Weekday[];
+/** The UTC day index holding `now`: day 0 began at the epoch. */
+declare function dayOf(now: number): number;
+/** The ISO weekday of a day index: day 0 was a Thursday. */
+declare function weekdayOf(day: number): Weekday;
+/** The day index of the first Monday after `day`: a Monday's next Monday is a week on. */
+declare function nextMonday(day: number): number;
+declare const DailyGoalSchema: z.ZodType<DailyGoal>;
+declare const JournalSchema: z.ZodType<Journal>;
+declare const RestDaysResultSchema: z.ZodType<RestDaysResult>;
+/** Loose on purpose: the ledger refuses a bad set with its reason, never the schema. */
+declare const RestDaysBodySchema: z.ZodObject<{
+    days: z.ZodArray<z.ZodNumber, "many">;
+}, "strip", z.ZodTypeAny, {
+    days: number[];
+}, {
+    days: number[];
 }>;
 
 declare const HEX16: z.ZodString;
@@ -394,6 +460,10 @@ interface ServerClient {
     world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
+    /** The caller's journal: a read that writes nothing. */
+    journal(auth: Auth): Promise<Journal | Unauthorized | Banned>;
+    /** Two distinct weekdays, stored as the rest days from next Monday; answers the journal. */
+    setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>;
 }
 /**
  * The lowest client version a server lets submit: the launch version, so a pre-launch build is
@@ -508,6 +578,14 @@ declare const ROUTES: {
         readonly method: "GET";
         readonly path: "/v1/leaderboards";
     };
+    readonly journal: {
+        readonly method: "GET";
+        readonly path: "/v1/journal";
+    };
+    readonly setRestDays: {
+        readonly method: "POST";
+        readonly path: "/v1/journal/rest-days";
+    };
 };
 /**
  * The ServerClient over HTTP. It never retries: the engine owns retries. Ledger
@@ -547,6 +625,8 @@ declare class HttpClient implements ServerClient {
     world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
+    journal(auth: Auth): Promise<Journal | Unauthorized | Banned>;
+    setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>;
 }
 
 interface KeyValue {
@@ -604,6 +684,7 @@ declare const MyOrdersResponseSchema: z.ZodType<MyOrders | Unauthorized | Banned
 declare const MatchingOrdersResponseSchema: z.ZodType<Order[] | Unauthorized | Banned>;
 declare const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized | Banned>;
 declare const BoardsResponseSchema: z.ZodType<Boards | Unauthorized | Banned>;
+declare const JournalResponseSchema: z.ZodType<Journal | Unauthorized | Banned>;
 
 /** The error bodies of non-200 answers. */
 declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
@@ -631,4 +712,4 @@ declare const ErrorBodySchema: z.ZodUnion<[z.ZodObject<{
 
 declare const PROTOCOL_VERSION: 1;
 
-export { type AbortSignalLike, type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, weekStartOf };
+export { type AbortSignalLike, type Account, type AccountDeleted, AccountDeletedResponseSchema, type AccountInfo, AccountInfoSchema, AccountResponseSchema, AccountSchema, type AdoptReason, type Auth, BOARD_ROWS, BOSS_BASE_HP, BOSS_GRID_MS, BOSS_THRESHOLD_BP, BOSS_TOP_BONUS, BOSS_WINDOW_MS, BUDGETS, type Banned, BannedSchema, type Batch, type BatchAck, BatchAckSchema, BatchSchema, type BoardRow, BoardRowSchema, type Boards, BoardsResponseSchema, BoardsSchema, type Bootstrap, type BootstrapRefused, BootstrapRefusedSchema, BootstrapResponseSchema, BootstrapSchema, type BossView, BossViewSchema, type BudgetKind, CHAT_BUCKET_CAPACITY, CHAT_KEEP, CHAT_MAX_CHARS, CHAT_REFILL_MS, CHAT_SERVE, ChatBodySchema, type ChatMessage, ChatMessageSchema, type ChatRefusal, type ChatResult, ChatResultSchema, DAY_MS, DEFAULT_REST_DAYS, DailyGoalSchema, type Delivery, DeliverySchema, ErrorBodySchema, type FetchLike, GameStateSchema, GoodsSchema, HERE_MAX, HEX16, type Health, HealthSchema, HeroSchema, HttpClient, ItemSchema, type Journal, JournalResponseSchema, JournalSchema, type KeyValue, LISTINGS_PER_PAGE, type LinkEnd, type LinkPoll, LinkPollResponseSchema, LinkPollSchema, type LinkRefused, LinkRefusedSchema, type LinkStart, LinkStartResponseSchema, LinkStartSchema, type Listing, type ListingPage, ListingPageResponseSchema, ListingPageSchema, type ListingQuery, ListingQuerySchema, ListingSchema, MARKET_REFUSALS, MIN_CLIENT_VERSION, type MarketRefusal, type MarketResult, MarketResultSchema, MatchingOrdersResponseSchema, MemoryKeyValue, type MyOrders, MyOrdersResponseSchema, MyOrdersSchema, NewListingSchema, type NewOrder, NewOrderSchema, type Order, OrderSchema, PLAYER_EVENT_KINDS, PRESENCE_TTL_MS, PROTOCOL_VERSION, ROUTES, RefusedBannedSchema, RestDaysBodySchema, type RestDaysRefusal, type RestDaysResult, RestDaysResultSchema, type ServerClient, type ServerConfig, ServerConfigSchema, ServerEventSchema, StatsSchema, type TimedEvent, TimedEventSchema, type Unauthorized, UnauthorizedSchema, type Weekday, WorldResponseSchema, type WorldSnapshot, WorldSnapshotSchema, compareSemver, dayOf, nextMonday, weekStartOf, weekdayOf };

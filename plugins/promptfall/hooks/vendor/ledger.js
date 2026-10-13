@@ -806,12 +806,159 @@ async function offerDamage(kv, now, record, delta) {
   });
 }
 
+// packages/ledger/src/journal.ts
+import {
+  DAY_MS as DAY_MS2,
+  DEFAULT_REST_DAYS,
+  dayOf,
+  nextMonday,
+  weekdayOf
+} from './protocol.js';
+import {
+  achievementCount,
+  content as content2,
+  dailyGoal,
+  goalCount,
+  goalGold
+} from './sim.js';
+var journalKey = (accountId) => `pf:acct:${accountId}:journal`;
+function emptyJournal() {
+  return {
+    achievements: {},
+    goalsMet: 0,
+    day: null,
+    streak: { length: 0, lastMet: null },
+    rest: [{ from: 0, days: [...DEFAULT_REST_DAYS] }]
+  };
+}
+async function loadJournal(kv, accountId) {
+  const raw = await kv.get(journalKey(accountId));
+  return raw ?? emptyJournal();
+}
+function restDaysOn(journal, day) {
+  let days = [...DEFAULT_REST_DAYS];
+  for (const entry of journal.rest) if (entry.from <= day) days = entry.days;
+  return days;
+}
+function isWorkDay(journal, day) {
+  return !restDaysOn(journal, day).includes(weekdayOf(day));
+}
+function missedSince(journal, lastMet, today) {
+  if (today - lastMet > 8) return true;
+  for (let day = lastMet + 1; day < today; day++) if (isWorkDay(journal, day)) return true;
+  return false;
+}
+function streakOn(journal, today) {
+  const { length, lastMet } = journal.streak;
+  return lastMet !== null && missedSince(journal, lastMet, today) ? 0 : length;
+}
+function baselineOf(state) {
+  return {
+    kills: goalCount("kills", state),
+    zone_bosses: goalCount("zone_bosses", state),
+    rare_drops: goalCount("rare_drops", state),
+    turn_boss: goalCount("turn_boss", state)
+  };
+}
+function pruneRest(journal, today) {
+  const { lastMet } = journal.streak;
+  const pivot = lastMet !== null && today - lastMet <= 8 ? Math.min(lastMet, today) : today;
+  let keep = 0;
+  journal.rest.forEach((entry, i) => {
+    if (entry.from <= pivot) keep = i;
+  });
+  journal.rest = journal.rest.slice(keep);
+}
+async function onCommit(kv, record, now) {
+  const accountId = record.account.accountId;
+  const state = record.committedState;
+  const journal = await loadJournal(kv, accountId);
+  const today = dayOf(now);
+  journal.streak.length = streakOn(journal, today);
+  if (journal.day?.index !== today) {
+    journal.day = {
+      index: today,
+      goal: dailyGoal(today, accountId, state.zone),
+      zone: state.zone,
+      baseline: baselineOf(state),
+      met: false
+    };
+  }
+  const day = journal.day;
+  if (!day.met && progressOf(day, state) >= day.goal.target) {
+    day.met = true;
+    journal.goalsMet += 1;
+    author(record, { t: "credited", gold: goalGold(day.zone), reason: `goal:${today}` });
+    if (isWorkDay(journal, today)) {
+      const { lastMet } = journal.streak;
+      const follows = lastMet !== null && lastMet < today && !missedSince(journal, lastMet, today);
+      journal.streak = { length: follows ? journal.streak.length + 1 : 1, lastMet: today };
+    }
+  }
+  const counts = { goalsMet: journal.goalsMet, streak: journal.streak.length };
+  for (const row of content2.achievements) {
+    const value = achievementCount(row.reads, state, counts);
+    const crossed = journal.achievements[row.id] ?? [];
+    row.steps.forEach((step2, i) => {
+      const n = i + 1;
+      if (value < step2.at || crossed.some((c) => c.step === n)) return;
+      author(record, { t: "credited", gold: step2.gold, reason: `achievement:${row.id}:${n}` });
+      crossed.push({ step: n, at: now });
+    });
+    if (crossed.length > 0) journal.achievements[row.id] = crossed;
+  }
+  pruneRest(journal, today);
+  await kv.set(journalKey(accountId), journal);
+}
+function progressOf(day, state) {
+  return Math.max(0, goalCount(day.goal.kind, state) - day.baseline[day.goal.kind]);
+}
+function journalView(journal, record, now) {
+  const state = record.committedState;
+  const today = dayOf(now);
+  const open2 = journal.day?.index === today ? journal.day : null;
+  const pending2 = journal.rest.filter((e) => e.from > today).at(-1);
+  return {
+    achievements: Object.entries(journal.achievements).map(([id, steps]) => ({
+      id,
+      steps: steps.map((s) => ({ ...s }))
+    })),
+    day: {
+      index: today,
+      goal: open2?.goal ?? dailyGoal(today, record.account.accountId, state.zone),
+      progress: open2 ? progressOf(open2, state) : 0,
+      met: open2?.met ?? false,
+      resetsAt: (today + 1) * DAY_MS2
+    },
+    goalsMet: journal.goalsMet,
+    streak: { length: streakOn(journal, today), lastMet: journal.streak.lastMet },
+    restDays: {
+      current: [...restDaysOn(journal, today)],
+      next: pending2 ? { days: [...pending2.days], from: pending2.from } : null
+    }
+  };
+}
+function restDaysRefusal(days) {
+  if (days.length !== 2) return "rest_days_count";
+  if (!days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) return "rest_days_range";
+  if (days[0] === days[1]) return "rest_days_same";
+  return null;
+}
+function setRestDays(journal, days, now) {
+  const today = dayOf(now);
+  journal.rest = [
+    ...journal.rest.filter((e) => e.from <= today),
+    { from: nextMonday(today), days: [...days].sort((a, b) => a - b) }
+  ];
+  pruneRest(journal, today);
+}
+
 // packages/ledger/src/market.ts
 import {
   LISTINGS_PER_PAGE
 } from './protocol.js';
 import {
-  content as content2,
+  content as content3,
   migrateGoods as migrateGoods2,
   SIM_VERSION as SIM_VERSION3
 } from './sim.js';
@@ -1059,8 +1206,8 @@ async function placeOrder(ctx, record, input) {
   if (gate) return refuse(gate);
   if (!validPrice(input.maxPrice)) return refuse("bad_price");
   if (!tradeableRarity(input.minRarity)) return refuse("not_tradeable_rarity");
-  if (!Object.hasOwn(content2.itemBases, input.base)) return refuse("unknown_goods");
-  if (input.affixId !== null && !Object.hasOwn(content2.affixes, input.affixId)) {
+  if (!Object.hasOwn(content3.itemBases, input.base)) return refuse("unknown_goods");
+  if (input.affixId !== null && !Object.hasOwn(content3.affixes, input.affixId)) {
     return refuse("unknown_goods");
   }
   if (record.state.gold < input.maxPrice) return refuse("not_enough_gold");
@@ -1386,6 +1533,7 @@ var Ledger = class {
       await dropFromBoards(this.kv, id);
       if (this.presence.delete(id)) this.memo.presenceChanged();
       if (record.linkCode) await this.books.dropLink(record.linkCode);
+      await this.kv.delete(journalKey(id));
       await this.books.remove(record, auth.deviceToken);
       return { deleted: true };
     });
@@ -1457,6 +1605,7 @@ var Ledger = class {
       settle(record);
       await contribute(await this.worldContext(now), record, prevDealt);
       await this.books.deliverReturns(record);
+      await onCommit(this.kv, record, now);
       await this.offerZone(record, now);
       if (hash === batch.resultHash) {
         await this.books.save(record);
@@ -1676,6 +1825,34 @@ var Ledger = class {
       const banned = bannedOf(record);
       if (banned) return banned;
       return leaderboards(ctx);
+    });
+  }
+  // ---------------------------------------------------------------------------
+  // Journal
+  /** The caller's journal from its committed state: a read that never writes. */
+  journal(auth) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || !isCurrent(record)) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
+      const stored = await loadJournal(this.kv, record.account.accountId);
+      return journalView(stored, record, await this.options.now());
+    });
+  }
+  setRestDays(auth, days) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || !isCurrent(record)) return { ok: false, reason: "unauthorized" };
+      const banned = refusedBanned(record);
+      if (banned) return banned;
+      const refusal = restDaysRefusal(days);
+      if (refusal) return { ok: false, reason: refusal };
+      const now = await this.options.now();
+      const stored = await loadJournal(this.kv, record.account.accountId);
+      setRestDays(stored, days, now);
+      await this.kv.set(journalKey(record.account.accountId), stored);
+      return { ok: true, journal: journalView(stored, record, now) };
     });
   }
   // ---------------------------------------------------------------------------

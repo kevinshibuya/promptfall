@@ -18,3 +18,23 @@ export async function rewindRecord(kv: KeyValue, accountId: string, v: number): 
     committedHash: hashState(committedState),
   })
 }
+
+/**
+ * For test hosts only: rewrites a stored record's state through `patch`, the effective and the
+ * committed state alike, so a rule can stand an account anywhere play could take it.
+ */
+export async function patchRecord(
+  kv: KeyValue,
+  accountId: string,
+  patch: (state: GameState) => GameState,
+): Promise<void> {
+  const record = (await kv.get(recordKey(accountId))) as AccountRecord | undefined
+  if (!record) throw new Error(`patch: no account ${accountId}`)
+  const committedState = patch(record.committedState)
+  await kv.set(recordKey(accountId), {
+    ...record,
+    state: patch(record.state),
+    committedState,
+    committedHash: hashState(committedState),
+  })
+}

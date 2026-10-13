@@ -92,6 +92,41 @@ export type Tactics = {
   heroes: Record<HeroClass, Tactic[]>
   enemies: Record<Archetype | 'world_boss', Tactic[]>
 }
+/** What a daily goal counts: kills, zone bosses, Rare or better drops, or one turn boss. */
+export type GoalKind = 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss'
+/** A goal row: its target is `base`, plus `step` for every `everyZones` zones past zone 1. */
+export type GoalRow = { kind: GoalKind; base: number; step: number; everyZones: number }
+
+/** What an achievement row reads, from the state or from the account's journal. */
+export type AchievementMetric =
+  | 'kills'
+  | 'zone_bosses'
+  | 'turn_bosses'
+  | 'rare_drops'
+  | 'legendary_drops'
+  | 'recruits'
+  | 'reforges'
+  | 'gold_earned'
+  | 'goals_met'
+  | 'streak'
+  | 'zones_complete'
+  | 'bases_complete'
+  | 'epic_held'
+  | 'legendary_held'
+  | 'highest_zone'
+  | 'tier'
+  | 'clean_zone_bosses'
+  | 'classes_capped'
+/** A step is crossed when its row's metric reaches `at`; it pays `gold`, and its toast says `words`. */
+export type AchievementStep = { at: number; gold: number; words: string }
+/** A ladder has two to four steps, a one-off one. Steps are numbered from 1. */
+export type AchievementRow = {
+  id: string
+  name: string
+  reads: AchievementMetric
+  steps: AchievementStep[]
+}
+
 export type Content = {
   zones: ZoneDef[]
   enemies: Record<string, EnemyDef>
@@ -116,4 +151,8 @@ export type Content = {
   xpToNext: (level: number) => number
   /** An item tier's multiplier in basis points, tier 1 first. */
   itemTierMultBp: readonly number[]
+  /** The ledger's achievement table: data no sim rule reads. */
+  achievements: AchievementRow[]
+  /** The daily goal's pool: data no sim rule reads. */
+  goals: GoalRow[]
 }

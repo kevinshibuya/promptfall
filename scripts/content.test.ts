@@ -51,6 +51,18 @@ describe('content reference', () => {
     expect(lines).toContain('| legendary | 50 | 0.5% | 400 |')
   })
 
+  it('lists the achievements with what each reads and every step with its gold', () => {
+    expect(lines).toContain(
+      '| `kills` | Kills | kills | 100 (100 gold), 1,000 (400 gold), 10,000 (1,500 gold), 100,000 (5,000 gold) |',
+    )
+    expect(lines).toContain('| `zone_6` | zone 6 reached | highest_zone | 6 (500 gold) |')
+  })
+
+  it('lists the daily goals with their base and how they scale with the zone', () => {
+    expect(lines).toContain('| kills | 150 | 10 | 1 |')
+    expect(lines).toContain('| turn_boss | 1 | 0 | 1 |')
+  })
+
   it('holds one row per registry entry', () => {
     const rows = lines.filter((l) => /^\| [\d`a-z]/.test(l))
     const expected =
@@ -60,7 +72,9 @@ describe('content reference', () => {
       Object.keys(content.heroTemplates).length +
       Object.keys(content.rarity).length +
       content.itemTierMultBp.length +
-      LADDER_END / content.zones.length
+      LADDER_END / content.zones.length +
+      content.achievements.length +
+      content.goals.length
     expect(rows).toHaveLength(expected)
   })
 })
