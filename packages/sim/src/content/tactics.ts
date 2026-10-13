@@ -73,8 +73,11 @@ const MOVE_TACTICS: Record<BossMove, Tactic[]> = {
       target: { kind: 'self' },
     },
   ],
+  // A sweep is a moment, not the whole fight: 75 against the single attack's 150 over three heroes
+  // standing is one action in three. The single attack comes first, as the picker draws in order.
   hit_all: [
-    { action: 'attack_all', weight: { kind: 'fixed', weight: 10 }, target: { kind: 'none' } },
+    ...ENEMY_ATTACK,
+    { action: 'attack_all', weight: { kind: 'fixed', weight: 75 }, target: { kind: 'none' } },
   ],
   rage: ENEMY_ATTACK,
 }

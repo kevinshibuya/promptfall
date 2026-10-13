@@ -72,8 +72,9 @@ before. Each zone boss has one of four moves, the same in every tier: zones 1, 5
 twice, two hits on one hero at 70% each, both numbers landing at the lunge's one impact and the
 log saying "Gorvax strikes twice!"; zones 2, 6 and 10 heal themselves under half HP for half
 their attack, more often the lower they are, with the White Mage's light burst on the boss and
-"Gorvax heals itself for 40."; zones 3, 7 and 11 hit the whole party at 60%, one lunge with every
-hero's hit landing at once and the usual "hits 3 foes" line; zones 4, 8 and 12 rage under half
+"Gorvax heals itself for 40."; zones 3, 7 and 11 sweep the whole party at 60% about one action
+in three, beside their single attack, one lunge with every hero's hit landing at once and the
+usual "hits 3 foes" line; zones 4, 8 and 12 rage under half
 HP, every hit from there half again as hard, and "Gorvax's rage grows!" when the hit takes them
 under. A raging boss that is also enraged takes both on that hit. Each move's boss attack is tuned
 so the reference Knight still survives three to four of its actions; turn bosses and the world

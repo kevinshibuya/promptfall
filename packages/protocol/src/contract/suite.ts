@@ -187,7 +187,12 @@ const CLOCK_START = 1_700_000_000_000
 /** The first grid point after the suite's clock start, which is 73 minutes past one (and its window). */
 const NEXT_GRID = CLOCK_START + BOSS_GRID_MS - (CLOCK_START % BOSS_GRID_MS)
 const bossIdAt = (t: number) => `wb${Math.floor(t / BOSS_GRID_MS).toString(36)}`
-const ZONE1_BOSS = content.enemies[content.zones[0]?.boss ?? '']?.stats
+const ZONE1_DEF = content.enemies[content.zones[0]?.boss ?? '']
+/** The world boss's stats are zone 1's boss's, its atk before the move scales it (#169). */
+const ZONE1_BOSS = ZONE1_DEF && {
+  ...ZONE1_DEF.stats,
+  atk: ZONE1_DEF.baseAtk ?? ZONE1_DEF.stats.atk,
+}
 
 /** A minted trader whose party is level 40 at full HP: about 240 a tick on the zone 1 world boss. */
 function strongState(seed: number, patch: Partial<GameState> = {}): GameState {

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { GAUGE_FULL, scaled } from './battle'
 import { hitDamage } from './combat'
 import { content, enemyAt, zoneAt } from './content'
-import { pickAction, type Unit } from './picker'
+import { actionWeights, pickAction, type Unit } from './picker'
 import { heroStats, livingParty } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
@@ -161,11 +161,37 @@ describe('strikes twice', () => {
 })
 
 describe('hits the whole party', () => {
+  const unit = (s: GameState): Unit => {
+    const enemy = s.encounter?.enemies[0]
+    if (!enemy) throw new Error('no boss')
+    return { side: 'enemy', enemy }
+  }
+
+  it('sweeps one action in three beside its single attack while the party stands', () => {
+    const s = bossFight('sigh_hag', 1)
+    expect(actionWeights(s, unit(s))).toEqual({ attack: 150, attack_all: 75 })
+    // One mage down: the single attack weighs less, the sweep as much.
+    const mage = s.roster.find((h) => h.cls === 'black_mage')
+    if (mage) mage.hp = 0
+    expect(actionWeights(s, unit(s))).toEqual({ attack: 130, attack_all: 75 })
+    let sweeps = 0
+    for (let i = 0; i < 300; i++) {
+      const at = bossFight('sigh_hag', 1)
+      at.rng = (i * 2654435761 + 17) >>> 0
+      if (pickAction(at, unit(at))?.action === 'attack_all') sweeps++
+    }
+    expect(sweeps).toBeGreaterThanOrEqual(80)
+    expect(sweeps).toBeLessThanOrEqual(120)
+  })
+
   it('hits every living hero once in one act, each from 60% of its attack', () => {
     const atk = enemyAt('sigh_hag', 3)?.stats.atk ?? 0
-    for (let seed = 1; seed <= 20; seed++) {
+    let swept = 0
+    for (let seed = 1; seed <= 60; seed++) {
       const s = bossFight('sigh_hag', seed)
       const action = firstBossAction(step(s, { t: 'tick' }).effects)
+      if (!action[0] || !('action' in action[0]) || action[0].action !== 'attack_all') continue
+      swept++
       expect(action[0]).toMatchObject({ k: 'act', actor: BOSS, action: 'attack_all' })
       const struck = hits(action)
       expect(struck.map((h) => h.target)).toEqual(livingParty(s).map((h) => h.id))
@@ -175,6 +201,7 @@ describe('hits the whole party', () => {
         expect(hit.amount).toBeLessThanOrEqual(hi)
       }
     }
+    expect(swept).toBeGreaterThan(0)
   })
 })
 

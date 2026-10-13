@@ -118,7 +118,7 @@ export const BOSS_MOVES: readonly BossMove[] = [
 export const MOVE_ATK_BP: Record<BossMove, number> = {
   strike_twice: 15000,
   heal_self: 20000,
-  hit_all: 29400,
+  hit_all: 22000,
   rage: 13500,
 }
 

@@ -13,8 +13,9 @@ describe('the early envelope, at the reference cadence on today’s rules', () =
       expect(zone1?.firstClearedHour).not.toBeNull()
       expect(zone1?.firstClearedHour).toBeLessThan(0.5)
       expect(zone1?.wipes).toBeLessThanOrEqual(5)
-      // A wipe restarts the zone and the third retreats: the dedicated player climbs to zone 7 to 9
-      // in two hours, with 13 to 19 wipes across these seeds.
+      // A wipe restarts the zone and the third retreats: with the boss moves (#169) the dedicated
+      // player climbs to zone 6 or 7 in two hours, with 15 to 17 wipes across these seeds; zone 3's
+      // whole-party boss, sweeping one action in three, costs 1 to 4 of them.
       expect(r.wipes).toBeLessThanOrEqual(20)
       expect(r.roundsPerKillZone1).toBeGreaterThanOrEqual(2)
       expect(r.roundsPerKillZone1).toBeLessThanOrEqual(6)
@@ -67,10 +68,12 @@ describe('the feel probe', () => {
     })
   })
 
-  it('models each boss move as one boss action on the Knight', () => {
+  it('models each boss move as its tactics weigh its actions on the Knight', () => {
     // Zones 3 and 4: a level 6 Common Knight, 121 HP and 20 def, so a hit lands 100 / 120 of its atk.
-    // The Sighing Hag hits the whole party from 29 atk: 60%, 17, lands 14, doubled to 28: 4.
-    expect(p.zones[2]).toMatchObject({ bossMove: 'hit_all', knightBossHits: 4 })
+    // The Sighing Hag sweeps one action in three from 22 atk: its single attack lands 18, doubled
+    // to 36; its sweep from 60%, 13, lands 10, doubled to 20. Weighted 150 to 75: (120 × 225) /
+    // (150 × 36 + 75 × 20) is 3.9: 3.
+    expect(p.zones[2]).toMatchObject({ bossMove: 'hit_all', knightBossHits: 3 })
     // The Barrow King rages from 14 atk: 150% under half, 21, lands 17, doubled to 34: 3.
     expect(p.zones[3]).toMatchObject({ bossMove: 'rage', knightBossHits: 3 })
     // The Elder Treant's heal is no hit: its 16 atk lands 26, as before the moves: 3.
