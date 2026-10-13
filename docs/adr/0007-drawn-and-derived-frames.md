@@ -41,6 +41,9 @@ page.
 
 ## Why 1.5× only
 
+_ADR 0018 (2026-10-13) retires the 1× stage art: the Raster now renders the same 1.5× scene and
+scales it to its box, so the frames below play on every surface._
+
 A half-block terminal shows one pixel per column, and the compact stage is 8 pixels tall: a
 16 px figure has no room for a wind-up that reads as more than noise (grill Q21). At 1× the
 actor keeps one drawing (a hero shows its attack art through the wind-up and strike) and the

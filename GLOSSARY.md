@@ -201,6 +201,45 @@ The step an item stores from its drop that multiplies its affix rolls at read an
 price: 1 to 4 from its base's minimum zone, 5 and 6 for every drop in tiers 2 and 3.
 _Avoid_: item level, tier (that is the ladder's)
 
+**Reforge**:
+Replacing one affix on an item for gold: a new kind the item does not already carry, drawn
+from its slot's pool, with a fresh roll in the new kind's range. The affix count never changes.
+_Avoid_: reroll (that is what the roll does, not the act), craft, enchant
+
+**Hone**:
+Rerolling one affix's value in its own range, keeping the kind. It costs a whetstone and no
+gold.
+_Avoid_: reroll, polish, refine, value reforge
+
+**Whetstone**:
+The item a hone consumes. Paid by the daily goal, a rare drop from kills, held in a stack and
+traded on the market by the quantity.
+_Avoid_: token, consumable (that is what it is, not its name), reroll orb, currency
+
+**Stack**:
+One inventory slot holding up to 99 of one stackable base. A stackable arriving joins its
+stack without a slot; only a new stack takes one.
+_Avoid_: pile, bundle, quantity (that is a listing's or an order's count)
+
+**Trait**:
+A percentage bonus a hero rolls at its recruit, from one pool shared by every class: none on a
+Common, four on a Legendary. It scales the hero's own stats before its gear adds.
+_Avoid_: affix (that is an item's), perk, talent, passive
+
+**Retrain**:
+Replacing one trait on a hero for gold: a new kind the hero does not already carry, with a
+fresh roll in the new kind's range. The trait count never changes.
+_Avoid_: refresh, reroll, respec, reforge (that is an item's)
+
+**Drill**:
+Rerolling one trait's value in its own range, keeping the kind. It costs a manual and no gold.
+_Avoid_: refresh, reroll, train, hone (that is an item's)
+
+**Manual**:
+The item a drill consumes. The daily goal pays a whetstone or a manual, drawn from the day and
+the account, and both are rare drops from kills; both trade on the market by the quantity.
+_Avoid_: tome, scroll, book, token
+
 **Reactive event**:
 A change in the fight that answers what Claude is doing: Haste while a turn runs, Enrage on a
 failed tool call, Camp on compaction, Guard while a permission prompt waits, and the enemy kind a

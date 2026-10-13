@@ -1,5 +1,5 @@
 ---
-status: accepted
+status: superseded by ADR-0018 for the stage; the windows and the compact stage keep both drawings
 ---
 
 # Two drawings per sprite, and a scale on the stage
