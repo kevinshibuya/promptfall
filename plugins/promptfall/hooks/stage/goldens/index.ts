@@ -35,7 +35,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
   guard: {rasterHash: "64c399da5edbdad6", imageHash: "f845e7ac11166b9d", svgHash: "3b14648e61710dde", svgChars: 33526, rasterPairs: 110, imageHashHires: "f4eeccef88681dd9", svgHashLo: "a8b75af2e1a92885"},
   travel: {rasterHash: "4be93cd6ebc42c60", imageHash: "f2a1dc57f0ac37d1", svgHash: "3194a75321daab4b", svgChars: 36239, rasterPairs: 108, imageHashHires: "14dfa30acc55c5d4", svgHashLo: "520f7a0b1e395f4c"},
   'level-up': {rasterHash: "3e560c9d710f1ce9", imageHash: "211fced18cd71a36", svgHash: "85d9ab802f490623", svgChars: 35638, rasterPairs: 108, imageHashHires: "fe8c94dd4f44ffd1", svgHashLo: "65a72cca6e7e9639"},
-  victory: {rasterHash: "fd1b72f9fac615d6", imageHash: "cdda0de0b2be7dae", svgHash: "226e7a4516a1a051", svgChars: 30063, rasterPairs: 86, imageHashHires: "79ad2dd080d1a70d", svgHashLo: "55661d43ec237bd3"},
+  victory: {rasterHash: "fd1b72f9fac615d6", imageHash: "cdda0de0b2be7dae", svgHash: "58de3ac9b1e03bb7", svgChars: 37657, rasterPairs: 86, imageHashHires: "f3c274faa12c847c", svgHashLo: "55661d43ec237bd3"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
