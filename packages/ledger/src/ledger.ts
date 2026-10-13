@@ -517,6 +517,12 @@ export class Ledger implements ServerClient {
       // 3. Authentication.
       const owner = await this.books.accountFor(auth.deviceToken)
       if (!owner || owner !== batch.accountId) return { ok: false, reason: 'unauthorized' }
+      // The week's hunt rolls over before the record loads: a commit after Monday midnight and
+      // before any poll counts toward the new week, and a closing hunt's rewards land on records
+      // this commit then loads fresh.
+      const now = await this.options.now()
+      const worldCtx = await this.worldContext(now)
+      await hunt.advanceHunt(worldCtx)
       const record = await this.books.load(owner)
       if (!record) return { ok: false, reason: 'unauthorized' }
       const banned = refusedBanned(record)
@@ -557,8 +563,7 @@ export class Ledger implements ServerClient {
       // 7. Base hash, against the committed point.
       if (batch.baseHash !== record.committedHash) return this.adopt(record, 'hash_mismatch')
 
-      // 8. Budgets on the server's clock.
-      const now = await this.options.now()
+      // 8. Budgets on the server's clock, read before the record loaded.
       // Each bucket's clock advances by whole refill periods only, so the
       // remainder carries over and a steady honest cadence never drains it.
       const buckets = {} as Record<BudgetKind, number>
@@ -594,7 +599,6 @@ export class Ledger implements ServerClient {
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING)
       settle(record)
       // The batch's damage to the world boss; a killing commit authors the rewards here.
-      const worldCtx = await this.worldContext(now)
       await boss.contribute(worldCtx, record, prevDealt)
       await hunt.countHunt(worldCtx, record, before)
       await this.books.deliverReturns(record)

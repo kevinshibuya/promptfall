@@ -1986,6 +1986,31 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(eventsOf((await infoOf(client, a.auth)).delivery, 'rewarded')).toHaveLength(1)
     })
 
+    it("rule 52b: a commit after the week turns and before any poll counts toward the new week's hunt", async (ctx) => {
+      const { client, clock, trader } = await market(ctx, { 'worldboss.enabled': false })
+      // A week whose next hunt counts kills a tick batch makes.
+      let { weekStart } = await huntWeek(clock, () => true)
+      while (huntAt(Math.floor(weekStart / WEEK) + 1).kind === 'zone_boss') weekStart += WEEK
+      const now = await clock.now()
+      if (weekStart > now) clock.advance(weekStart + 3_600_000 - now)
+      const next = huntAt(Math.floor(weekStart / WEEK) + 1)
+      const a = await trader('Ann', strongState(155))
+      // This week's hunt is stored; then the week turns with no poll.
+      expect((await snapshot(client, a.auth)).hunt?.endsAt).toBe(weekStart + WEEK)
+      clock.advance(weekStart + WEEK + 1_000 - (await clock.now()))
+      const before = huntCount(next.kind, a.mirror.committed)
+      await hunt(client, clock, a, 2)
+      const counted = huntCount(next.kind, a.mirror.committed) - before
+      expect(counted).toBeGreaterThan(0)
+      expect((await snapshot(client, a.auth)).hunt).toEqual({
+        name: next.name,
+        target: next.target,
+        count: counted,
+        endsAt: weekStart + 2 * WEEK,
+        yours: counted,
+      })
+    })
+
     it('rule 53: with the hunt off the snapshot has none, and nothing counts or pays', async (ctx) => {
       const { client, clock, trader } = await market(ctx, {
         'hunt.enabled': false,

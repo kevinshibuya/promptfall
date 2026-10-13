@@ -298,6 +298,11 @@ export class StageTimeline {
   private scene: Scene | null = null
   /** Each travel until its party has stepped on, in start order. */
   private travels: Travel[] = []
+  /**
+   * The entries a travel left, until an observe sees them gone: a first observe after the step-off
+   * has ended still knows them from a kill.
+   */
+  private leftByTravel = new Set<string>()
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -305,6 +310,17 @@ export class StageTimeline {
     this.travels = this.travels.filter((t) => t.end > now)
     this.scene = { zone: view.zone, zoneName: view.zoneName, wave: view.wave }
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
+    // A hero the travel applied with a pending party walks off and on with the rest.
+    for (const travel of this.travels) {
+      for (const actor of this.heroes.keys()) {
+        if (this.motions.some((m) => m.actor === actor && m.kind === 'travel_on')) continue
+        const off = travel.show - TRAVEL_OFF_MS
+        if (travel.show > now) {
+          this.motions.push({ kind: 'travel_off', actor, from: off, until: travel.show })
+        }
+        this.motions.push({ kind: 'travel_on', actor, from: travel.show, until: travel.end })
+      }
+    }
     const predicted = this.seenHp
     this.seenHp = new Map([...view.heroes, ...view.enemies].map((a) => [a.id, a.hp]))
     this.landing = this.landing.filter((l) => l.at > now)
@@ -319,7 +335,8 @@ export class StageTimeline {
       const hp = known.kind === 'world_boss' ? 0 : (predicted.get(id) ?? 0)
       if (seen) this.seen.set(id, { ...seen, row: { ...seen.row, hp } })
       // Left by a travel: it stands until the backdrop changes, with no dissolve.
-      if (this.motions.some((m) => m.actor === id && m.kind === 'leave')) {
+      const leftByTravel = this.leftByTravel.delete(id)
+      if (leftByTravel || this.motions.some((m) => m.actor === id && m.kind === 'leave')) {
         this.calm(id, now)
         continue
       }
@@ -860,8 +877,9 @@ export class StageTimeline {
       this.motions.push({ kind: 'travel_on', actor, from: show, until: end })
     }
     for (const id of this.entries.keys()) {
-      if (!this.departed.has(id))
-        this.motions.push({ kind: 'leave', actor: id, from: at, until: show })
+      if (this.departed.has(id)) continue
+      this.motions.push({ kind: 'leave', actor: id, from: at, until: show })
+      this.leftByTravel.add(id)
     }
     const from =
       this.scene?.zone === effect.from
