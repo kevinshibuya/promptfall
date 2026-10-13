@@ -1,7 +1,7 @@
 // The Heroes tab as windows (docs/plans/2026-10-06-ui-pr2-pane-windows.md, "Window contents"): the
 // roster list with its recruit row, the hero's detail (a party window of one, grill 1.19), its
 // command window, the dismiss Yes/No, and the sell window in the detail's place.
-import type { RosterHeroView } from '../../../types'
+import type { GuaranteesView, RosterHeroView } from '../../../types'
 import { spriteFor } from '../../sprites/index'
 import { RARITY_RGB } from '../../stage/tuning'
 import type { Line } from '../../windows/kit'
@@ -12,6 +12,7 @@ import { cursorRow, type MenuItem, paneLayout } from './frame'
 import type { PaneInput } from './input'
 import { gold, listInner, rowSpans } from './inventory'
 import { type ListRow, type ListSpec, listPane } from './list'
+import { GUARANTEED } from './odds'
 import { sellWindow } from './sell'
 import type { PaneAction, PaneBuild } from './types'
 
@@ -79,6 +80,33 @@ function heroDetail(input: PaneInput, h: RosterHeroView, inner: number): Line[] 
     return [head, cls, ...(hp ? [hp] : traits.slice(0, 1)), ...statusLine]
   }
   return [head, cls, ...(hp ? [hp] : []), ...traits, ...gear, ...statusLine]
+}
+
+/**
+ * The guarantee fewest recruits away, the higher rarity on a tie, short enough for the Heroes
+ * tab's recruit detail: "Rare guaranteed in 13", "Epic guaranteed next".
+ */
+function nearestGuarantee(guarantees: GuaranteesView): string {
+  let best: (typeof GUARANTEED)[number] = GUARANTEED[0]
+  for (const g of GUARANTEED) if (guarantees[g[0]] <= guarantees[best[0]]) best = g
+  const count = guarantees[best[0]]
+  return `${best[1]} guaranteed ${count <= 1 ? 'next' : `in ${count}`}`
+}
+
+/** The recruit row's detail: the price and the nearest tavern guarantee, in one line. */
+function recruitDetail(input: PaneInput, inner: number): Line[] {
+  const { view } = input
+  return [
+    { spans: [{ gap: 1 }, { text: 'Recruit a hero' }], rule: true },
+    {
+      spans: [
+        { gap: 1 },
+        {
+          text: clip(`${gold(view.tavernPrice)} · ${nearestGuarantee(view.guarantees)}`, inner - 1),
+        },
+      ],
+    },
+  ]
 }
 
 type Command = MenuItem & { action: PaneAction }
@@ -151,7 +179,11 @@ export function heroesPane(input: PaneInput): PaneBuild {
     rows,
     empty: 'No heroes.',
     cursor,
-    detail: current ? (w) => heroDetail(input, current, w) : null,
+    detail: current
+      ? (w) => heroDetail(input, current, w)
+      : ids[cursor] === 'recruit'
+        ? (w) => recruitDetail(input, w)
+        : null,
     menu: null,
     yesNo: null,
     panel: !input.readOnly && dialog.sell ? (rect) => sellWindow(input, rect) : null,

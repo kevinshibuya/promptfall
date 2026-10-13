@@ -1,15 +1,15 @@
 import type { On } from 'claude-code'
 import { expect, type TestBody } from 'claude-code/testing'
-import type { DialogState, MarketState, OrdersState } from '../../../types'
+import type { DialogState, JournalState, MarketState, OrdersState } from '../../../types'
 import type { GameHandle } from '../../engine'
-import { DIALOG_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from '../../state'
+import { DIALOG_DEFAULT, JOURNAL_DEFAULT, MARKET_DEFAULT, ORDERS_DEFAULT } from '../../state'
 import { test } from '../../testing'
 import type { PlayerEvent } from '../../vendor/sim.js'
 import type { PaneScene, Win } from '../../windows/kit'
 import { loadMarket } from '../market'
 import { placeOrder } from '../orders'
 import { chatPane } from './chat'
-import { chatWorld, marketPage, paneInput, paneView } from './fixtures'
+import { chatWorld, journalLoaded, marketPage, paneInput, paneView } from './fixtures'
 import { inventoryPane } from './inventory'
 import { marketPane } from './market'
 import {
@@ -206,7 +206,13 @@ test('rung (c) steps the ▶ among the cursor stops, wrapping', () => {
 })
 
 function context(
-  state: { d: DialogState; market?: MarketState; orders?: OrdersState; tab?: 'orders' },
+  state: {
+    d: DialogState
+    market?: MarketState
+    orders?: OrdersState
+    journal?: JournalState
+    tab?: 'orders'
+  },
   events: PlayerEvent[],
   game: GameHandle | null = null,
 ): ActionContext {
@@ -228,6 +234,9 @@ function context(
     },
     updOrders: async (fn) => {
       state.orders = fn(state.orders ?? ORDERS_DEFAULT)
+    },
+    updJournal: async (fn) => {
+      state.journal = fn(state.journal ?? JOURNAL_DEFAULT)
     },
     market: async () => state.market ?? MARKET_DEFAULT,
     orders: async () => state.orders ?? ORDERS_DEFAULT,
@@ -409,6 +418,57 @@ test('buy closes the menu and buys once; cancel cancels; reset and delete close 
   await runAction({ t: 'delete' }, context(state, [], game))
   expect(state.d.menu).toBeNull()
   expect(calls.at(-1)).toBe('deleteAccount')
+})
+
+test('a rest-days pick toggles its days; the second closes it and sends the pair, the journal answering', async () => {
+  const sent: number[][] = []
+  const answer = journalLoaded().journal
+  if (!answer) throw new Error('journalLoaded holds no journal')
+  const next = { days: [2, 4], from: 20_384 }
+  const game = {
+    setRestDays: async (days: number[]) => {
+      sent.push(days)
+      return { ok: true, journal: { ...answer, restDays: { current: [6, 7], next } } }
+    },
+  } as unknown as GameHandle
+  const state: { d: DialogState; journal?: JournalState } = {
+    d: { ...DIALOG_DEFAULT, menu: { kind: 'rest_days', picked: [], at: 1 } },
+  }
+  await runAction({ t: 'rest_day', day: 2 }, context(state, [], game))
+  expect(state.d.menu).toEqual({ kind: 'rest_days', picked: [2], at: 1 })
+  await runAction({ t: 'rest_day', day: 2 }, context(state, [], game))
+  expect(state.d.menu).toEqual({ kind: 'rest_days', picked: [], at: 1 })
+  expect(sent).toEqual([])
+  await runAction({ t: 'rest_day', day: 4 }, context(state, [], game))
+  await runAction({ t: 'rest_day', day: 2 }, context(state, [], game))
+  expect(state.d.menu).toBeNull()
+  expect(sent).toEqual([[4, 2]])
+  expect(state.journal?.journal?.restDays).toEqual({ current: [6, 7], next })
+  // A press with the pick closed sends nothing.
+  await runAction({ t: 'rest_day', day: 5 }, context(state, [], game))
+  expect(sent).toHaveLength(1)
+})
+
+test('a refused or failed rest-days write flashes in the journal slice', async () => {
+  const answers: unknown[] = [{ ok: false, reason: 'rest_days_same' }]
+  const game = {
+    setRestDays: async () => {
+      const a = answers.shift()
+      if (a instanceof Error) throw a
+      return a
+    },
+  } as unknown as GameHandle
+  const pick = (): DialogState => ({
+    ...DIALOG_DEFAULT,
+    menu: { kind: 'rest_days', picked: [3], at: 0 },
+  })
+  const state: { d: DialogState; journal?: JournalState } = { d: pick() }
+  await runAction({ t: 'rest_day', day: 5 }, context(state, [], game))
+  expect(state.journal?.error).toBe('Pick two different days')
+  answers.push(new Error('unreachable'))
+  state.d = pick()
+  await runAction({ t: 'rest_day', day: 5 }, context(state, [], game))
+  expect(state.journal?.error).toBe('Server unreachable')
 })
 
 test('Back: a Market pick returns to its filter row; an order pick keeps the form; then the form closes', async () => {

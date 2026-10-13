@@ -621,6 +621,7 @@ export const PANE_SCENARIOS = [
   'pane-orders-form',
   'pane-account',
   'pane-account-link',
+  'pane-account-rest-days',
   'pane-odds',
   'pane-journal',
   'pane-journal-zone',
@@ -736,7 +737,17 @@ export function pane(name: PaneScenario): PaneBuild {
         ),
       )
     case 'pane-account':
-      return accountPane(withDialog({}, { tab: 'account' }))
+      return accountPane(withDialog({}, { tab: 'account', journal: journalLoaded() }))
+    case 'pane-account-rest-days':
+      return accountPane(
+        withDialog(
+          {
+            menu: { kind: 'rest_days', picked: [2], at: 3 },
+            cursor: { account: { id: 'restdays', index: 4 } },
+          },
+          { tab: 'account', journal: journalLoaded() },
+        ),
+      )
     case 'pane-account-link':
       return accountPane(
         withDialog(
@@ -747,6 +758,7 @@ export function pane(name: PaneScenario): PaneBuild {
           {
             tab: 'account',
             view: { ...paneView(), account: { ...paneView().account, linked: null } },
+            journal: journalLoaded(),
           },
         ),
       )

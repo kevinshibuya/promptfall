@@ -56,6 +56,7 @@ import type {
   LinkRefused,
   LinkStart,
   MarketResult,
+  RestDaysResult,
   Unauthorized,
   WorldSnapshot,
 } from './vendor/protocol.js'
@@ -595,6 +596,17 @@ class GameSession implements GameHandle {
     let r: Journal | Unauthorized | Banned
     try {
       r = await this.server.client.journal(auth)
+    } catch {
+      throw new Error('unreachable')
+    }
+    return this.unbanned(r)
+  }
+
+  async setRestDays(days: number[]): Promise<Exclude<RestDaysResult, Banned>> {
+    const auth = await this.storedAuth()
+    let r: RestDaysResult
+    try {
+      r = await this.server.client.setRestDays(auth, days)
     } catch {
       throw new Error('unreachable')
     }
