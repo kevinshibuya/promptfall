@@ -5,6 +5,8 @@ import { content } from './index'
 /** `bp` applied `k` times, as a plain ratio. */
 const grown = (bp: number, k: number) => (bp / 10000) ** k
 const [TIER2_BP = 0, TIER3_BP = 0] = TIER_GROWTH_BP
+/** A zone boss's atk before its move scales it (#169); any other enemy's atk. */
+const baseAtk = (e: { baseAtk?: number; stats: { atk: number } }) => e.baseAtk ?? e.stats.atk
 
 describe('zoneAt', () => {
   it('answers zone 1 as tier 1, base zone 1, with its content', () => {
@@ -56,10 +58,12 @@ describe('enemyAt', () => {
     expect(boss).toMatchObject({ id: 'bandit_captain', name: 'Bandit Captain', zone: 13 })
     expect(boss.kind).toBe('zone_boss')
     const g = grown(TIER2_BP, 1)
-    // No step at the tier's door: stats, xp and gold grow alike.
-    for (const stat of ['hp', 'atk', 'def'] as const) {
+    // No step at the tier's door: stats, xp and gold grow alike, atk read before each boss's move
+    // scales it (#169).
+    for (const stat of ['hp', 'def'] as const) {
       expect(boss.stats[stat] / top.stats[stat], stat).toBeCloseTo(g, 1)
     }
+    expect(baseAtk(boss) / baseAtk(top), 'atk').toBeCloseTo(g, 1)
     expect(boss.stats.spd).toBe(top.stats.spd)
     expect(boss.xp / top.xp).toBeCloseTo(g, 1)
     expect(boss.gold[1]).toBeGreaterThanOrEqual(top.gold[1])
@@ -74,16 +78,19 @@ describe('enemyAt', () => {
     let before = content.enemies.unwritten_one
     for (let zone = 13; zone <= LADDER_END; zone++) {
       const at = boss(zone)
-      for (const stat of ['hp', 'atk', 'def'] as const) {
+      for (const stat of ['hp', 'def'] as const) {
         expect(at?.stats[stat], `zone ${zone} ${stat}`).toBeGreaterThan(before?.stats[stat] ?? 0)
       }
+      // Atk before each boss's move scales it (#169): the moves differ zone to zone.
+      expect(at && baseAtk(at), `zone ${zone} atk`).toBeGreaterThan(before ? baseAtk(before) : 0)
       // A small xp floors back for a zone or two, so it never shrinks and grows over the tier.
       expect(at?.xp, `zone ${zone} xp`).toBeGreaterThanOrEqual(before?.xp ?? 0)
       before = at
     }
     const top = content.enemies.unwritten_one
     const ramp = grown(TIER2_BP, 12)
-    expect((boss(24)?.stats.atk ?? 0) / (top?.stats.atk ?? 1)).toBeCloseTo(ramp, 0)
+    const at24 = boss(24)
+    expect((at24 ? baseAtk(at24) : 0) / (top ? baseAtk(top) : 1)).toBeCloseTo(ramp, 0)
     expect((boss(24)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(ramp, 0)
     expect((boss(36)?.xp ?? 0) / (top?.xp ?? 1)).toBeCloseTo(ramp * grown(TIER3_BP, 12), 0)
     expect((boss(36)?.gold[1] ?? 0) / (top?.gold[1] ?? 1)).toBeGreaterThan(2)

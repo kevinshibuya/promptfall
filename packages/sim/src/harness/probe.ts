@@ -6,6 +6,7 @@ import { heroStats } from '../progression'
 import { compareCodeUnits } from '../rng'
 import { createInitialState } from '../state'
 import type {
+  ActionId,
   Affix,
   Enemy,
   EnemyKind,
@@ -142,16 +143,23 @@ export function referenceParty(row: ReferenceRow, seed = 0): GameState {
   return state
 }
 
-/** One action's damage on the Knight from this atk: two 70% hits, a 60% hit, a raging 150% hit, or one hit. */
-function actionDamage(atk: number, def: number, move: BossMove | null): number {
+/**
+ * One action's damage on the Knight from this atk: two 70% hits, a 60% sweep, an attack (raging at
+ * 150% under a rage move), or nothing for a heal.
+ */
+function actionDamage(atk: number, def: number, action: ActionId, move: BossMove | null): number {
   const hit = (bp: number) => hitDamage(Math.floor((atk * bp) / 10000), def, NO_VARIANCE_BP)
-  if (move === 'strike_twice') return 2 * hit(STRIKE_TWICE_BP)
-  if (move === 'hit_all') return hit(HIT_ALL_BP)
-  if (move === 'rage') return hit(RAGE_BP)
-  return hit(10000)
+  if (action === 'attack_twice') return 2 * hit(STRIKE_TWICE_BP)
+  if (action === 'attack_all') return hit(HIT_ALL_BP)
+  if (action === 'attack') return hit(move === 'rage' ? RAGE_BP : 10000)
+  return 0
 }
 
-/** How many actions of this enemy the Knight takes and still stands; a zone boss's as its move lands them. */
+/**
+ * How many actions of this enemy the Knight takes and still stands. A zone boss's actions weigh as
+ * its tactics weigh them with the party standing: its expected action is the weighted mean of its
+ * actions' damage, and a heal weighs nothing at full HP.
+ */
 function hitsSurvived(
   s: GameState,
   hp: number,
@@ -160,8 +168,21 @@ function hitsSurvived(
   kind: EnemyKind,
 ): number {
   const enemy: Enemy = { id: 'probe_enemy', def: defId, kind, hp: 1, maxHp: 1, enraged: false }
-  const move = kind === 'zone_boss' ? (content.enemies[defId]?.move ?? null) : null
-  return Math.floor((hp - 1) / actionDamage(enemyStats(s, enemy).atk, def, move))
+  const { atk } = enemyStats(s, enemy)
+  if (kind !== 'zone_boss') return Math.floor((hp - 1) / actionDamage(atk, def, 'attack', null))
+  const move = content.enemies[defId]?.move ?? null
+  const fight: GameState = {
+    ...s,
+    encounter: { enemies: [enemy], queue: [], waveSize: 1, spawnedInWave: 1 },
+  }
+  let weight = 0
+  let dealt = 0
+  for (const [action, w] of Object.entries(actionWeights(fight, { side: 'enemy', enemy }))) {
+    if (!w) continue
+    weight += w
+    dealt += w * actionDamage(atk, def, action as ActionId, move)
+  }
+  return Math.floor(((hp - 1) * weight) / dealt)
 }
 
 /**
