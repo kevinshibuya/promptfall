@@ -17,6 +17,7 @@ import {
   paneSlots,
   type Rect,
   type Sub,
+  TAB_LABELS,
   tabWindow,
   yesNoWindow,
 } from './frame'
@@ -41,7 +42,20 @@ test('60 × 24 is narrow; wider bodies and taller panes clamp to 120 × 24', () 
 test('at 40 columns the tab labels take 3 lines', () => {
   expect(paneLayout(40, 24).tabRows).toBe(5)
   const lines = tabWindow(40, 'heroes').lines.map((l) => textOf(l.spans))
-  expect(lines).toEqual(['InventoryHeroesMarket', 'OrdersAccountOddsChat', 'Leaderboards'])
+  expect(lines).toEqual(['InventoryHeroesMarket', 'OrdersAccountOddsJournal', 'ChatLeaderboards'])
+})
+
+test('nine tabs: the journal sits between Odds and Chat on u, and still fits one line at 100 columns', () => {
+  expect(TAB_LABELS.find((t) => t.tab === 'journal')).toEqual({
+    tab: 'journal',
+    label: 'Journal',
+    hotkey: 'u',
+  })
+  expect(TAB_LABELS).toHaveLength(9)
+  expect(paneLayout(100, 24).tabRows).toBe(3)
+  expect(tabWindow(100, 'journal').alt).toBe(
+    'Tabs: Inventory, Heroes, Market, Orders, Account, Odds, ▶ Journal, Chat, Leaderboards. On Journal.',
+  )
 })
 
 test('under 40 columns, or a middle under the floors even without the tab window, is too small', () => {
@@ -86,11 +100,12 @@ test('the hotkey letter is drawn gold at its first occurrence, ignoring case', (
 test('the tab window puts ▶ on the current tab', () => {
   const spans = tabWindow(120, 'market').lines[0]?.spans ?? []
   const cursors = spans.filter((s) => 'cursor' in s)
-  expect(cursors.length).toBe(8)
+  expect(cursors.length).toBe(9)
   expect(cursors.map((s) => 'cursor' in s && s.cursor)).toEqual([
     false,
     false,
     true,
+    false,
     false,
     false,
     false,
@@ -231,4 +246,26 @@ test("messageLines: the tab's error in red, under the read-only rule", () => {
   expect(ro[0][0]).toMatchObject({ rgb: WARN_RGB })
   const spans = messageLines(paneInput(), null, [[{ text: 'gate', rgb: WARN_RGB }], ''])
   expect(spans).toEqual([[{ text: 'gate', rgb: WARN_RGB }], []])
+})
+
+test('a menu item with spans draws them in place of its label; the alt reads the label', () => {
+  const w = menuWindow({
+    key: 'menu',
+    x: 0,
+    y: 0,
+    columns: 20,
+    rows: 6,
+    header: [{ text: 'Page' }],
+    items: [
+      { label: 'Iron Sword: common', spans: [{ text: 'Iron Sword ' }, { text: 'C', rgb: 1 }] },
+      { label: 'Travel here', hotkey: 't' },
+    ],
+    at: 0,
+  })
+  expect(w.lines[1]?.spans).toEqual([
+    { cursor: true },
+    { text: 'Iron Sword ' },
+    { text: 'C', rgb: 1 },
+  ])
+  expect(w.alt).toBe('Page: ▶ Iron Sword: common, Travel here')
 })

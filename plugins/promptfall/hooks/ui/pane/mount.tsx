@@ -372,7 +372,7 @@ export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogSt
 
 /**
  * The open window as the re-focus signature names it: the sell flow, a menu (`filter`,
- * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`), the order form, or the tab.
+ * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`, a Journal page), the order form, or the tab.
  */
 export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): string {
   const m = d.menu
@@ -380,6 +380,8 @@ export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): strin
   if (m?.kind === 'filter') return 'filter'
   if (m?.kind === 'pick') return `pick:${m.field}`
   if (m?.kind === 'confirm') return `confirm:${m.action}:${m.id}`
+  if (m?.kind === 'journal_zone') return `journal_zone:${m.zone}`
+  if (m?.kind === 'journal_collection' || m?.kind === 'journal_achievements') return m.kind
   if (m) return `${m.kind}:${'itemId' in m ? m.itemId : m.id}`
   if (tab === 'orders' && form) return 'form'
   return tab
