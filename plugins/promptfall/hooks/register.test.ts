@@ -1981,7 +1981,7 @@ test('with motion still, a held toast lands at the same show time', async ($, on
 
 /**
  * A state whose next tick spawns a Goblin Scout and kills it before any view holds it, dropping a
- * rare item: the stage never stood the monster up, so no chest holds the drop.
+ * rare item: the stage never stood the monster up, so its chest falls on the empty ground.
  */
 function spawnedAndKilled(): GameState {
   for (let seed = 1; seed < 5_000; seed++) {
@@ -2011,17 +2011,27 @@ function spawnedAndKilled(): GameState {
   throw new Error('no tick that spawns and kills a monster with a rare drop')
 }
 
-test('a drop toast whose item has no chest is raised at once', async ($, on) => {
+test('a drop whose monster the stage never drew falls on the ground, its toast at the reveal', async ($, on) => {
   const state = spawnedAndKilled()
-  const { time, raised, plays } = staging(on, { ...record(state), ...STAGED })
+  const { time, raised, plays, blits } = staging(on, { ...record(state), ...STAGED })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
-  expect(revealsOf(state, time.now(), time.now() + 5_000)).toEqual([])
+  const [show] = revealsOf(state, time.now(), time.now() + 5_000)
+  if (!show) throw new Error('the tick drops no item with a chest')
   await time.advance(5_000)
   const kill = time.now()
-  const drops = raised.filter((t) => t.text.startsWith('Rare drop: '))
-  expect(drops.map((t) => t.at)).toEqual([kill])
-  expect(plays).toEqual([{ asset: 'cues/drop.wav', at: kill }])
+  // The chest falls on the front slot's ground as the tick arrives.
+  expect(show.at).toBe(kill + CHEST_SHOW_MS)
+  const drops = () => raised.filter((t) => t.text.startsWith('Rare drop: '))
+  expect(drops()).toEqual([])
+  expect(plays).toEqual([])
+  await time.advance(show.at - time.now() + 3 * EVENT_FRAME_MS)
+  const frame = firstFrameFrom(blits, show.at)
+  expect(drops()).toHaveLength(1)
+  const at = drops()[0]?.at ?? 0
+  expect(at).toBeGreaterThanOrEqual(show.at)
+  expect(at).toBeLessThanOrEqual(frame)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', at }])
   await ui.unmount()
 })
 
