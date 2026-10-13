@@ -154,6 +154,13 @@ export function validateContent(content: Content): string[] {
   const oddsTotal = RARITIES.reduce((sum, r) => sum + content.tavern.odds[r], 0)
   if (oddsTotal !== 10000) problems.push(`tavern odds: sum ${oddsTotal}, expected 10000`)
   if (content.tavern.odds.legendary > 100) problems.push('tavern odds: legendary above 100')
+  // The guarantee's thresholds: whole recruits, each rarer one further away.
+  const { rare, epic, legendary } = content.tavern.guarantees
+  for (const [r, n] of Object.entries({ rare, epic, legendary })) {
+    if (!Number.isInteger(n) || n < 1)
+      problems.push(`tavern guarantee ${r}: ${n}, expected 1 or more`)
+  }
+  if (!(rare < epic && epic < legendary)) problems.push('tavern guarantees: not ascending')
 
   // Expansions
   const inv = content.expansions.inventory

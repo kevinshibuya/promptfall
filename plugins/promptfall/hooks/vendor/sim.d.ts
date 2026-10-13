@@ -27,7 +27,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 15;
+declare const SIM_VERSION: 17;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -102,7 +102,8 @@ type Battle = {
     /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
     busy: number;
 };
-type ActionId = 'attack' | 'attack_all' | 'heal';
+/** `attack_twice` is a zone boss's strike twice: two hits on one target in one act. */
+type ActionId = 'attack' | 'attack_all' | 'attack_twice' | 'heal';
 type TradeKind = 'item' | 'hero';
 type Goods = {
     kind: 'item';
@@ -112,6 +113,37 @@ type Goods = {
     hero: Hero;
 };
 type RecruitVia = 'contract' | 'tavern' | 'sandbox';
+/** Who a reward pays for: a world boss's fight, or the weekly hunt. */
+type RewardSource = 'boss' | 'hunt';
+/** The rarities the tavern guarantee promises, each within its own count of recruits. */
+type GuaranteeRarity = 'rare' | 'epic' | 'legendary';
+declare const GUARANTEE_RARITIES: readonly GuaranteeRarity[];
+/** One integer per rarity. */
+type RarityCounts = Record<Rarity, number>;
+/**
+ * What the party has seen and done since version 16, counted in the state because the ledger
+ * replays state and never effects. Every field an integer, every one in the hash.
+ */
+type Tallies = {
+    /** Per enemy definition: spawns met and kills. */
+    enemies: Record<string, {
+        seen: number;
+        defeated: number;
+    }>;
+    /** Per item base: 1 at each rarity the party has held it in, by a drop, a purchase, a reward or a return. */
+    collection: Record<string, RarityCounts>;
+    zoneBosses: number;
+    /** Zone bosses beaten with the zone's wipe count at zero at the kill. */
+    cleanZoneBosses: number;
+    turnBosses: number;
+    /** Drops by rarity, kept or vendored on pickup. */
+    drops: RarityCounts;
+    /** Heroes joined by rarity: tavern, contract and sandbox alike. */
+    recruits: RarityCounts;
+    reforges: number;
+    /** Kill gold, vendoring, a sale's net, a reward's gold and credits; never a refund or escrow. */
+    goldEarned: number;
+};
 type LootEntry = {
     k: 'item';
     itemId: string;
@@ -150,6 +182,11 @@ type PlayerEvent = {
     t: 'turn_end';
 } | {
     t: 'rest';
+}
+/** Moves the party to a zone it has reached, ending the fight with no drops and no XP. */
+ | {
+    t: 'travel';
+    zone: number;
 } | {
     t: 'tool_mishap';
 } | {
@@ -252,12 +289,16 @@ type ServerEvent = {
     t: 'boss_disengaged';
     bossId: string;
 }
-/** One reward roll; `goods` null when the item waited in returns. */
+/**
+ * One reward roll; `goods` null when the item waited in returns. `source` absent reads as
+ * boss, as every event logged before it does.
+ */
  | {
     t: 'rewarded';
     bossId: string;
     goods: Goods | null;
     gold: number;
+    source?: RewardSource;
 } | SandboxEvent;
 /** Authored only by a host with the sandbox on. Each hands out what play would earn, through play's own path. */
 type SandboxEvent = 
@@ -300,9 +341,12 @@ type Effect = {
     item: Item;
     gold: number;
     cause: 'full' | 'setting';
-} | {
+}
+/** `reason` is a `credited` event's own; kill gold and a vendored contract carry none. */
+ | {
     k: 'gold';
     amount: number;
+    reason?: string;
 } | {
     k: 'level_up';
     heroId: string;
@@ -348,6 +392,13 @@ type Effect = {
     bossId: string;
     goods: Goods | null;
     gold: number;
+    source: RewardSource;
+}
+/** The party traveled from one zone to another. */
+ | {
+    k: 'traveled';
+    from: number;
+    to: number;
 } | {
     k: 'traded';
     entry: Extract<LootEntry, {
@@ -388,6 +439,11 @@ type Effect = {
 /** A mishap enraged this enemy (an Enemy.id). */
  | {
     k: 'enraged';
+    enemyId: string;
+}
+/** A raging zone boss's HP went under half at this hit: its hits land half again as hard from here. */
+ | {
+    k: 'raging';
     enemyId: string;
 }
 /** The party camped: each party hero and the HP it restored. */
@@ -433,6 +489,9 @@ type GameState = {
         bosses: number;
         wipes: number;
     };
+    tallies: Tallies;
+    /** Tavern recruits since the last of each rarity or better: the tavern guarantee's counts. */
+    guarantee: Record<GuaranteeRarity, number>;
     /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
     boss: {
         bossId: string;
@@ -448,7 +507,12 @@ type StepResult = {
     effects: Effect[];
 };
 
+/** Per guarantee, the recruits until one of its rarity or better is certain: 1 means the next. */
+declare function tavernGuarantees(state: GameState): Record<GuaranteeRarity, number>;
+
 type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss';
+/** A zone boss's one behaviour: two hits on one target, a heal of itself, a hit on every hero, or rage under half HP. */
+type BossMove = 'strike_twice' | 'heal_self' | 'hit_all' | 'rage';
 type EnemyDef = {
     id: string;
     name: string;
@@ -461,6 +525,10 @@ type EnemyDef = {
     gold: [number, number];
     dropBp: number;
     contractBp: number;
+    /** A zone boss's move, its base zone's in every tier; absent on every other enemy. */
+    move?: BossMove;
+    /** A zone boss's atk at the boss archetype's multiplier, before its move's: what the world boss scales by. */
+    baseAtk?: number;
 };
 type ZoneDef = {
     index: number;
@@ -518,6 +586,12 @@ type WeightRule = {
     kind: 'ally_need';
     belowBp: number;
     scale: number;
+}
+/** As ally_need, on the unit's own HP share. */
+ | {
+    kind: 'self_need';
+    belowBp: number;
+    scale: number;
 };
 type TargetRule = 
 /** No target to choose (attack_all). */
@@ -546,6 +620,10 @@ type TargetRule =
 /** One candidate, weight 1: the living ally with the lowest HP %, first in order on a tie. */
  | {
     kind: 'ally_lowest';
+}
+/** One candidate, weight 1: the unit itself. */
+ | {
+    kind: 'self';
 };
 type Tactic = {
     action: ActionId;
@@ -557,6 +635,41 @@ type Tactic = {
 type Tactics = {
     heroes: Record<HeroClass, Tactic[]>;
     enemies: Record<Archetype | 'world_boss', Tactic[]>;
+    /** Keyed by enemy definition, looked up before the archetype: the zone bosses' moves. */
+    byEnemy: Record<string, Tactic[]>;
+};
+/** What a daily goal counts: kills, zone bosses, Rare or better drops, or one turn boss. */
+type GoalKind = 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss';
+/** A goal row: its target is `base`, plus `step` for every `everyZones` zones past zone 1. */
+type GoalRow = {
+    kind: GoalKind;
+    base: number;
+    step: number;
+    everyZones: number;
+};
+/** What a weekly hunt counts: kills of one wave archetype across every zone, or zone bosses. */
+type HuntKind = 'brute' | 'swift' | 'tank' | 'caster' | 'zone_boss';
+/** A weekly hunt: its id, the name the World tab shows, what it counts and the server-wide target. */
+type HuntRow = {
+    id: string;
+    name: string;
+    kind: HuntKind;
+    target: number;
+};
+/** What an achievement row reads, from the state or from the account's journal. */
+type AchievementMetric = 'kills' | 'zone_bosses' | 'turn_bosses' | 'rare_drops' | 'legendary_drops' | 'recruits' | 'reforges' | 'gold_earned' | 'goals_met' | 'streak' | 'zones_complete' | 'bases_complete' | 'epic_held' | 'legendary_held' | 'highest_zone' | 'tier' | 'clean_zone_bosses' | 'classes_capped';
+/** A step is crossed when its row's metric reaches `at`; it pays `gold`, and its toast says `words`. */
+type AchievementStep = {
+    at: number;
+    gold: number;
+    words: string;
+};
+/** A ladder has two to four steps, a one-off one. Steps are numbered from 1. */
+type AchievementRow = {
+    id: string;
+    name: string;
+    reads: AchievementMetric;
+    steps: AchievementStep[];
 };
 type Content = {
     zones: ZoneDef[];
@@ -571,6 +684,8 @@ type Content = {
         baseCost: number;
         costGrowthBp: number;
         odds: Record<Rarity, number>;
+        /** The tavern guarantee: a recruit of each rarity or better comes within this many recruits. */
+        guarantees: Record<GuaranteeRarity, number>;
     };
     expansions: {
         inventory: {
@@ -588,7 +703,25 @@ type Content = {
     xpToNext: (level: number) => number;
     /** An item tier's multiplier in basis points, tier 1 first. */
     itemTierMultBp: readonly number[];
+    /** The ledger's achievement table: data no sim rule reads. */
+    achievements: AchievementRow[];
+    /** The daily goal's pool: data no sim rule reads. */
+    goals: GoalRow[];
+    /** The weekly hunts, one a week in turn: data no sim rule reads. */
+    hunts: HuntRow[];
 };
+
+/** A ladder's steps pay these, in order: a three-step ladder pays the first three. */
+declare const LADDER_GOLD: readonly [100, 400, 1500, 5000];
+/** What a one-off pays. */
+declare const ONE_OFF_GOLD = 500;
+/** What the journal adds to the state for the rows that read it. */
+type JournalCounts = {
+    goalsMet: number;
+    streak: number;
+};
+/** The count an achievement metric reads, from the state and the journal. */
+declare function achievementCount(metric: AchievementMetric, state: GameState, journal: JournalCounts): number;
 
 /**
  * The growth of an enemy's stats, xp and gold per zone past the first tier, in basis points, one
@@ -599,6 +732,11 @@ type Content = {
  * from there. Both are tuned to the feel probe at tiers 2 and 3.
  */
 declare const TIER_GROWTH_BP: readonly number[];
+
+/** The hunt of a week, by its index from the epoch's week (`⌊weekStart / week⌋`). */
+declare function huntAt(week: number, table?: readonly HuntRow[]): HuntRow;
+/** What a state has counted toward a hunt of this kind: the archetype's defeated counts summed, or the zone bosses. */
+declare function huntCount(kind: HuntKind, state: GameState): number;
 
 /** The last zone of the ladder, tier 3's zone 12: the advance gate farms from here, and no zone past it exists. */
 declare const LADDER_END = 36;
@@ -624,19 +762,41 @@ declare function oddsAt(zone: number): ZoneDef | undefined;
 
 declare const content: Content;
 
+type DailyGoal = {
+    kind: GoalKind;
+    target: number;
+};
+/**
+ * The day's goal for an account: a row of the goal table drawn with the sim's PRNG, seeded from a
+ * hash of the UTC day index and the account id, its target scaled to the party's zone. Pure: the
+ * ledger and the plugin derive the same goal from the same inputs. No sim rule reads it.
+ */
+declare function dailyGoal(day: number, accountId: string, zone: number): DailyGoal;
+/** What a goal of this kind counts, read from the state: progress is its rise since the day opened. */
+declare function goalCount(kind: GoalKind, state: GameState): number;
+/** A met goal pays this many of its zone's mean wave kill gold: about an hour of kills at the reference cadence. */
+declare const GOAL_GOLD_KILLS = 300;
+/**
+ * What the day's goal pays, from the zone the day opened at: the mean over the zone's four wave
+ * enemies of each one's gold range midpoint, times `GOAL_GOLD_KILLS`, rounded. 0 off the ladder.
+ */
+declare function goalGold(zone: number): number;
+
 declare const GOLDEN_SEED = 20261002;
 /**
  * A fixed 300-event script mixing world events, commands, the reactive events
  * (every turn hasted, hinted calls, a mishap, a guard, a camp in boss mode and
- * one out of it) and a world boss stretch (engaged after turn 3, disengaged
- * after turn 6, a reward after turn 7). Ids are the ones the initial state
+ * one out of it), a world boss stretch (engaged after turn 3, disengaged
+ * after turn 6, a reward after turn 7), tavern recruits on a credit, and
+ * travel (refused past the highest zone, then back from zone 2 after the
+ * sandbox moves the party there). Ids are the ones the initial state
  * mints (h0 to h3) plus guesses, so some commands are rejected; rejections are
  * part of the contract too.
  */
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "62144fd6f78c2048";
+declare const GOLDEN_HASH = "5a9469dfea696461";
 
 declare function hashState(state: GameState): string;
 
@@ -715,4 +875,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type Goods, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroFill, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, vendorValue, zoneAt };
+export { ACTION_STEPS, type AchievementMetric, type AchievementRow, type AchievementStep, type ActionId, type Affix, type AffixDef, type Battle, type BossMove, type Content, type DailyGoal, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOAL_GOLD_KILLS, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type GoalKind, type GoalRow, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type HuntKind, type HuntRow, type Item, type ItemBase, type JournalCounts, LADDER_END, LADDER_GOLD, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, ONE_OFF_GOLD, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, achievementCount, affixValue, baseTier, content, createInitialState, dailyGoal, dropTier, enemyAt, fill, goalCount, goalGold, goldenEvents, hashState, heroFill, heroStats, huntAt, huntCount, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };

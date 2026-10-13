@@ -11,6 +11,7 @@ import type {
   LinkStart,
   ServerConfig,
 } from './client'
+import { type Journal, JournalSchema, RestDaysResultSchema } from './journal'
 import {
   type Banned,
   BannedSchema,
@@ -159,7 +160,9 @@ export const WorldResponseSchema: z.ZodType<WorldSnapshot | Unauthorized | Banne
   orUnauthorized(WorldSnapshotSchema)
 export const BoardsResponseSchema: z.ZodType<Boards | Unauthorized | Banned> =
   orUnauthorized(BoardsSchema)
-export { ChatResultSchema, MarketResultSchema }
+export const JournalResponseSchema: z.ZodType<Journal | Unauthorized | Banned> =
+  orUnauthorized(JournalSchema)
+export { ChatResultSchema, MarketResultSchema, RestDaysResultSchema }
 
 /** The error bodies of non-200 answers. */
 export const ErrorBodySchema = z.union([

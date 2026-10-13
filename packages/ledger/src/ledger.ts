@@ -13,6 +13,7 @@ import {
   type BudgetKind,
   type ChatResult,
   compareSemver,
+  type Journal,
   type KeyValue,
   type LinkEnd,
   type LinkPoll,
@@ -25,10 +26,12 @@ import {
   type NewOrder,
   type Order,
   PRESENCE_TTL_MS,
+  type RestDaysResult,
   type ServerClient,
   type ServerConfig,
   ServerEventSchema,
   type Unauthorized,
+  type Weekday,
   type WorldSnapshot,
 } from '@promptfall/protocol'
 import {
@@ -66,6 +69,8 @@ import {
   tryAuthor,
 } from './books'
 import * as boss from './boss'
+import * as hunt from './hunt'
+import * as journal from './journal'
 import * as market from './market'
 import * as world from './world'
 
@@ -75,6 +80,7 @@ export type LedgerFlag =
   | 'worldboss.enabled'
   | 'presence.enabled'
   | 'leaderboards.enabled'
+  | 'hunt.enabled'
   | 'maintenance'
   | 'sandbox.enabled'
 
@@ -85,6 +91,7 @@ export const SETTABLE_FLAGS = [
   'worldboss.enabled',
   'presence.enabled',
   'leaderboards.enabled',
+  'hunt.enabled',
   'maintenance',
 ] as const satisfies readonly LedgerFlag[]
 export type SettableFlag = (typeof SETTABLE_FLAGS)[number]
@@ -168,7 +175,7 @@ export type LedgerHost = {
 
 /**
  * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
- * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged; `persist` off
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged, and the weekly hunt unclosed and unopened; `persist` off
  * leaves the market book at its version mark, unwalked. A secondary session reads with all three
  * off: those writes are the primary's, under its lease.
  */
@@ -306,6 +313,7 @@ export class Ledger implements ServerClient {
       'worldboss.enabled': true,
       'presence.enabled': true,
       'leaderboards.enabled': true,
+      'hunt.enabled': true,
       maintenance: false,
       'sandbox.enabled': false,
       ...this.options.flags,
@@ -492,6 +500,7 @@ export class Ledger implements ServerClient {
       await world.dropFromBoards(this.kv, id)
       if (this.presence.delete(id)) this.memo.presenceChanged()
       if (record.linkCode) await this.books.dropLink(record.linkCode)
+      await this.kv.delete(journal.journalKey(id))
       await this.books.remove(record, auth.deviceToken)
       return { deleted: true } as const
     })
@@ -508,6 +517,12 @@ export class Ledger implements ServerClient {
       // 3. Authentication.
       const owner = await this.books.accountFor(auth.deviceToken)
       if (!owner || owner !== batch.accountId) return { ok: false, reason: 'unauthorized' }
+      // The week's hunt rolls over before the record loads: a commit after Monday midnight and
+      // before any poll counts toward the new week, and a closing hunt's rewards land on records
+      // this commit then loads fresh.
+      const now = await this.options.now()
+      const worldCtx = await this.worldContext(now)
+      await hunt.advanceHunt(worldCtx)
       const record = await this.books.load(owner)
       if (!record) return { ok: false, reason: 'unauthorized' }
       const banned = refusedBanned(record)
@@ -548,8 +563,7 @@ export class Ledger implements ServerClient {
       // 7. Base hash, against the committed point.
       if (batch.baseHash !== record.committedHash) return this.adopt(record, 'hash_mismatch')
 
-      // 8. Budgets on the server's clock.
-      const now = await this.options.now()
+      // 8. Budgets on the server's clock, read before the record loaded.
       // Each bucket's clock advances by whole refill periods only, so the
       // remainder carries over and a steady honest cadence never drains it.
       const buckets = {} as Record<BudgetKind, number>
@@ -574,6 +588,7 @@ export class Ledger implements ServerClient {
       )
       const result = replay(record.state, events).state
       const prevDealt = boss.dealtBefore(record.state, result)
+      const before = record.state
       const hash = hashState(result)
       const seq = record.seq + 1
       for (const kind of KINDS) buckets[kind] -= counts[kind]
@@ -584,8 +599,11 @@ export class Ledger implements ServerClient {
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING)
       settle(record)
       // The batch's damage to the world boss; a killing commit authors the rewards here.
-      await boss.contribute(await this.worldContext(now), record, prevDealt)
+      await boss.contribute(worldCtx, record, prevDealt)
+      await hunt.countHunt(worldCtx, record, before)
       await this.books.deliverReturns(record)
+      // The journal reads the committed state, on this path and the hash mismatch's alike.
+      await journal.onCommit(this.kv, record, now)
       await this.offerZone(record, now)
       if (hash === batch.resultHash) {
         await this.books.save(record)
@@ -830,7 +848,10 @@ export class Ledger implements ServerClient {
       const ctx = await this.worldContext()
       // Before any record loads: the caller's record is read fresh after it. Once a second: a
       // grid point falls on a whole second, so the first poll at or past one still spawns it.
-      if (advance && this.memo.advanceDue(ctx.now)) await boss.advanceBoss(ctx)
+      if (advance && this.memo.advanceDue(ctx.now)) {
+        await boss.advanceBoss(ctx)
+        await hunt.advanceHunt(ctx)
+      }
       const record = await this.books.authenticate(auth)
       if (!record) return unauthorized
       // Banned: no heartbeat either, so the account leaves the online count.
@@ -859,6 +880,37 @@ export class Ledger implements ServerClient {
       const banned = bannedOf(record)
       if (banned) return banned
       return world.leaderboards(ctx)
+    })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Journal
+
+  /** The caller's journal from its committed state: a read that never writes. */
+  journal(auth: Auth): Promise<Journal | Unauthorized | Banned> {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record || !isCurrent(record)) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
+      const stored = await journal.loadJournal(this.kv, record.account.accountId)
+      return journal.journalView(stored, record, await this.options.now())
+    })
+  }
+
+  setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult> {
+    return this.run(async (): Promise<RestDaysResult> => {
+      const record = await this.books.authenticate(auth)
+      if (!record || !isCurrent(record)) return { ok: false, reason: 'unauthorized' }
+      const banned = refusedBanned(record)
+      if (banned) return banned
+      const refusal = journal.restDaysRefusal(days)
+      if (refusal) return { ok: false, reason: refusal }
+      const now = await this.options.now()
+      const stored = await journal.loadJournal(this.kv, record.account.accountId)
+      journal.setRestDays(stored, days, now)
+      await this.kv.set(journal.journalKey(record.account.accountId), stored)
+      return { ok: true, journal: journal.journalView(stored, record, now) }
     })
   }
 
@@ -969,7 +1021,9 @@ export class Ledger implements ServerClient {
   }
 
   private async sweep(): Promise<void> {
-    await boss.advanceBoss(await this.worldContext())
+    const ctx = await this.worldContext()
+    await boss.advanceBoss(ctx)
+    await hunt.advanceHunt(ctx)
     await market.expireDue(await this.marketContext())
     for (const accountId of await this.books.returnsQueue()) {
       const record = await this.books.load(accountId)

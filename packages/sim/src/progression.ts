@@ -3,6 +3,7 @@ import { content, enemyAt, LADDER_END, zoneAt } from './content'
 import type { EnemyDef } from './content/types'
 import { affixValue, rollDrops, takeDrop } from './loot'
 import { nextU32, pickWeighted } from './rng'
+import { earn, tallyKill, tallySeen } from './tallies'
 import type {
   Effect,
   Encounter,
@@ -121,7 +122,7 @@ function fullHealParty(s: GameState): void {
   for (const hero of partyHeroes(s)) hero.hp = heroStats(s, hero).hp
 }
 
-function applyPendingParty(s: GameState, effects: Effect[]): void {
+export function applyPendingParty(s: GameState, effects: Effect[]): void {
   if (!s.pendingParty) return
   s.party = [...s.pendingParty]
   s.pendingParty = null
@@ -142,6 +143,7 @@ function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: Ene
   const hp = def ? def.stats.hp : 1
   const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp, enraged: false }
   encounter.enemies.push(enemy)
+  tallySeen(s, defId)
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
 }
 
@@ -229,6 +231,12 @@ export function grantXp(s: GameState, hero: Hero, xp: number, effects: Effect[])
   if (hero.level >= cap) hero.xp = 0
 }
 
+/** The encounter goes with no drops and no XP, and the battle resets as a wipe resets it. */
+export function endEncounter(s: GameState): void {
+  s.encounter = null
+  s.battle = { gauges: [], queue: [], busy: 0 }
+}
+
 export function changeZone(s: GameState, zone: number): void {
   s.zone = zone
   s.wave = 1
@@ -249,11 +257,12 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects)
     const [min, max] = def.gold
     const gold = min + draw(s, max - min + 1)
-    s.gold += gold
+    earn(s, gold)
     effects.push({ k: 'gold', amount: gold })
   }
   s.stats.kills += 1
   if (enemy.kind !== 'wave') s.stats.bosses += 1
+  tallyKill(s, enemy)
   if (drop) takeDrop(s, drop, effects)
   else if (def) {
     const r = rollDrops(s, def)

@@ -106,6 +106,18 @@ test('the recruit row: dim when gold is short, absent in read-only mode', () => 
   expect(ro.stops.some((s) => s.key === 'row:recruit')).toBe(false)
 })
 
+test("the recruit row's detail: the price and the nearest guarantee in one line", () => {
+  const detail = (view = paneView()) =>
+    linesOf(win(heroesPane(input({ partyPick: [], ...at('recruit', 5) }, { view })), 'detail'))
+  expect(detail()).toEqual([' Recruit a hero', ' 120G · Rare guaranteed in 20'])
+  const near = paneView()
+  near.guarantees = { rare: 6, epic: 3, legendary: 300 }
+  expect(detail(near)[1]).toBe(' 120G · Epic guaranteed in 3')
+  const next = paneView()
+  next.guarantees = { rare: 1, epic: 1, legendary: 250 }
+  expect(detail(next)[1]).toBe(' 120G · Epic guaranteed next')
+})
+
 test('picks: the message names them and the count left', () => {
   const b = heroesPane(input({ partyPick: ['h4', 'h5'] }))
   const m = win(b, 'message')

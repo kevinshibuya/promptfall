@@ -77,3 +77,30 @@ test('a hero fills at the sim’s own rate, hasted and guarding, and the views c
   const guarding = toGameView(s, 'a1', false, account)
   expect(guarding.heroes[0]).toMatchObject({ hasted: true, guarding: true, gaugePerStep: 0 })
 })
+
+test('the view carries the tallies and the recruits remaining to each guarantee', () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  const s0 = createInitialState(1)
+  const fresh = toGameView(s0, 'a1', false, account)
+  expect(fresh.tallies.goldEarned).toBe(0)
+  expect(fresh.tallies.enemies).toEqual({})
+  expect(fresh.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
+
+  let s = step(s0, { t: 'tool_call' }).state
+  s = step(s, { t: 'sandbox_item', base: 'oak_staff', rarity: 'epic' }).state
+  s = { ...s, guarantee: { rare: 19, epic: 3, legendary: 7 } }
+  const v = toGameView(s, 'a1', false, account)
+  const def = Object.keys(s.tallies.enemies)[0]
+  if (!def) throw new Error('nothing seen')
+  expect(v.tallies.enemies[def]).toEqual({ seen: 1, defeated: 1 })
+  expect(v.tallies.collection.oak_staff?.epic).toBe(1)
+  expect(v.tallies.drops.epic).toBe(1)
+  expect(v.tallies.goldEarned).toBe(s.tallies.goldEarned)
+  expect(v.guarantees).toEqual({ rare: 1, epic: 77, legendary: 393 })
+
+  // A state from before version 16 reads as zero.
+  const { tallies: _t, guarantee: _g, ...old } = s0
+  const before = toGameView(old as typeof s0, 'a1', false, account)
+  expect(before.tallies.zoneBosses).toBe(0)
+  expect(before.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
+})

@@ -21,11 +21,15 @@ import {
   HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
+  LEVEL_RGB,
   LUNGE_MS,
   LUNGE_PX,
   RARITY_RGB,
   STEP_OUT_MS,
   STEP_PX,
+  TRAVEL_OFF_MS,
+  TRAVEL_ON_MS,
+  TRAVEL_PX,
   WINDUP_HOLD_MS,
   ZONE_GROUND,
 } from './tuning'
@@ -33,6 +37,7 @@ import {
 const NOW = 1_000_000 // bobbing(NOW) is 0
 const BOX = { columns: 116, rows: 8 }
 const BOX_COMPACT = { columns: 52, rows: 4 }
+const BOSS_BOX = { columns: 120, rows: 17 }
 type Opts = { compact: boolean; motion: 'full' | 'still'; scale?: 1 | 1.5 }
 const STILL: Opts = { compact: false, motion: 'still' }
 const hit = (by: string, target: string): Effect => ({ k: 'hit', by, target, amount: 12 })
@@ -403,6 +408,7 @@ test('a world boss at an emptied bar stands whole until the server disengages it
         endsAt: NOW + 660_000,
         yours: 0,
       },
+      hunt: null,
       chat: [],
       flags: {},
     },
@@ -829,4 +835,73 @@ test('a camp sets the campfire between the enemies and the party, then fades it'
   }
   expect(model(NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS / 2).campfire?.alpha).toBe(0.5)
   expect(model(NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS).campfire ?? null).toBe(null)
+})
+
+test('a level-up flashes the hero gold, the white flash untouched, and its deltas rise in gold', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects([{ k: 'level_up', heroId: 'h1', level: 6, deltas: { atk: 3, def: 2 } }], NOW)
+  const model = (now: number, opts: Opts = LO) =>
+    stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, opts)
+  const flashed = actor(model(NOW + 10).actors, 'h1')
+  expect(flashed.goldFlashing).toBe(true)
+  expect(flashed.flashing).toBe(false)
+  expect(flashed.palette.slice(1).every((c) => c === LEVEL_RGB)).toBe(true)
+  expect(model(NOW + 10).numbers.map((n) => [n.text, n.rgb])).toEqual([
+    ['+3 atk  +2 def', LEVEL_RGB],
+  ])
+  // At 1.5 the gold is a blink, as the white is.
+  expect(actor(model(NOW + 10, HI).actors, 'h1').goldFlashing).toBe(true)
+  expect(actor(model(NOW + 120, HI).actors, 'h1').goldFlashing).toBe(false)
+})
+
+test('a travel fades the party out stepping right, then in from the left at the new backdrop', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects([{ k: 'traveled', from: 1, to: 3 }], NOW)
+  const next: GameView = { ...v, enemies: [], zone: 3, zoneName: 'Marsh of Sighs', wave: 1 }
+  const model = (now: number, opts: Opts = LO) => {
+    t.observe(next, now)
+    return stageAt(stagedState(next, WORLD_DEFAULT, t, now), t, now, BOX, opts)
+  }
+  const placed = actor(at().actors, 'h1')
+  const off = actor(model(NOW + TRAVEL_OFF_MS / 2).actors, 'h1')
+  expect(off.alpha).toBe(0.5)
+  expect(off.x).toBe(placed.x + TRAVEL_PX / 2)
+  const show = NOW + TRAVEL_OFF_MS
+  expect(model(show - 1).ground).toBe(ZONE_GROUND[0])
+  const on = model(show + TRAVEL_ON_MS / 2)
+  expect(on.ground).toBe(ZONE_GROUND[2])
+  expect(actor(on.actors, 'h1').alpha).toBe(0.5)
+  expect(actor(on.actors, 'h1').x).toBe(placed.x - TRAVEL_PX / 2)
+  expect(actor(model(show + TRAVEL_ON_MS).actors, 'h1')).toMatchObject({ x: placed.x, alpha: 1 })
+})
+
+test('the victory pose holds the drawn slot at 1.5, the idle art at 1, and never on a fallen hero', () => {
+  const t = new StageTimeline()
+  const down = (v: GameView): GameView => ({
+    ...v,
+    heroes: v.heroes.map((h) => (h.id === 'h3' ? { ...h, hp: 0, alive: false } : h)),
+  })
+  t.observe(down(boss()), NOW)
+  t.onEffects(
+    [
+      { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+      { k: 'hit', by: 'h1', target: 'e9', amount: 500 },
+    ],
+    NOW,
+  )
+  const next = down(wave())
+  t.observe(next, NOW + 1)
+  const from = t.active(NOW + 1).find((m) => m.kind === 'victory')?.from ?? 0
+  const model = (opts: Opts) =>
+    stageAt(stagedState(next, WORLD_DEFAULT, t, from + 500), t, from + 500, BOSS_BOX, opts)
+  const hi = actor(model(HI).actors, 'h1')
+  expect(hi.pose).toBe('victory')
+  expect(hi.art).toBe(spriteFor('hero', 'knight').frames?.victory?.art)
+  expect(actor(model(HI).actors, 'h3').pose).toBe('idle')
+  const lo = actor(model(LO).actors, 'h1')
+  expect(lo.art).toBe(spriteFor('hero', 'knight').full)
 })

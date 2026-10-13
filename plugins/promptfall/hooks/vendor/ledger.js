@@ -390,7 +390,7 @@ import {
   BOSS_THRESHOLD_BP,
   BOSS_TOP_BONUS,
   BOSS_WINDOW_MS,
-  weekStartOf as weekStartOf2
+  weekStartOf as weekStartOf3
 } from './protocol.js';
 import {
   content,
@@ -406,13 +406,82 @@ import {
   CHAT_REFILL_MS,
   CHAT_SERVE,
   HERE_MAX,
+  weekStartOf as weekStartOf2
+} from './protocol.js';
+
+// packages/ledger/src/hunt.ts
+import {
+  HUNT_THRESHOLD_BP,
+  WEEK_MS as WEEK_MS2,
   weekStartOf
 } from './protocol.js';
+import { huntAt, huntCount } from './sim.js';
+var HUNT_KEY = "pf:world:hunt";
+var huntOn = (ctx) => ctx.flags["hunt.enabled"] !== false;
+async function loadHunt(kv) {
+  const raw = await kv.get(HUNT_KEY);
+  return raw ?? null;
+}
+function newHunt(weekStart) {
+  const week = Math.floor(weekStart / WEEK_MS2);
+  const row = huntAt(week);
+  return {
+    huntId: `h${week.toString(36)}`,
+    row: row.id,
+    name: row.name,
+    kind: row.kind,
+    target: row.target,
+    weekStart,
+    endsAt: weekStart + WEEK_MS2,
+    count: 0,
+    contributions: {},
+    closed: false
+  };
+}
+function toHuntView(ctx, hunt, accountId) {
+  if (!hunt || !huntOn(ctx) || hunt.closed || ctx.now >= hunt.endsAt) return null;
+  const { name, target, count, endsAt } = hunt;
+  return { name, target, count, endsAt, yours: hunt.contributions[accountId] ?? 0 };
+}
+async function closeHunt(ctx, hunt) {
+  for (const [id, contribution] of Object.entries(hunt.contributions)) {
+    if (contribution * 1e4 < hunt.target * HUNT_THRESHOLD_BP) continue;
+    const record = await ctx.books.load(id);
+    if (!record || !isCurrent(record)) continue;
+    await payReward(ctx, record, hunt.huntId, "hunt");
+    await ctx.books.syncReturnsQueue(record);
+    await ctx.books.save(record);
+  }
+  hunt.closed = true;
+  await ctx.books.kv.set(HUNT_KEY, hunt);
+}
+async function advanceHunt(ctx) {
+  if (!huntOn(ctx)) return;
+  const stored = await loadHunt(ctx.books.kv);
+  if (stored && !stored.closed && ctx.now >= stored.endsAt) await closeHunt(ctx, stored);
+  const weekStart = weekStartOf(ctx.now);
+  if (stored && stored.weekStart === weekStart) return;
+  await ctx.books.kv.set(HUNT_KEY, newHunt(weekStart));
+}
+async function countHunt(ctx, record, before) {
+  if (record.bot || !huntOn(ctx)) return;
+  const hunt = await loadHunt(ctx.books.kv);
+  if (!hunt || hunt.closed || ctx.now < hunt.weekStart || ctx.now >= hunt.endsAt) return;
+  const delta = huntCount(hunt.kind, record.state) - huntCount(hunt.kind, before);
+  if (delta <= 0) return;
+  const id = record.account.accountId;
+  hunt.count += delta;
+  hunt.contributions[id] = (hunt.contributions[id] ?? 0) + delta;
+  await ctx.books.kv.set(HUNT_KEY, hunt);
+}
+
+// packages/ledger/src/world.ts
 var WorldMemo = class {
   second = Number.NaN;
   advanced = Number.NaN;
   counts = null;
   boss = null;
+  hunt = null;
   messages = null;
   slices = /* @__PURE__ */ new Map();
   /** True on the first call in each second: the boss advance runs then, as it ran on every poll. */
@@ -429,6 +498,7 @@ var WorldMemo = class {
     this.second = second;
     this.counts = null;
     this.boss = null;
+    this.hunt = null;
     this.dropChat();
   }
   presenceChanged() {
@@ -437,6 +507,7 @@ var WorldMemo = class {
   /** The store's write hook. */
   written(key) {
     if (key === BOSS_KEY) this.boss = null;
+    if (key === HUNT_KEY) this.hunt = null;
     if (key === CHAT_KEY) this.dropChat();
   }
   presenceCounts(presence) {
@@ -454,6 +525,10 @@ var WorldMemo = class {
   async bossRecord(kv) {
     this.boss ??= { record: await loadBoss(kv) };
     return this.boss.record;
+  }
+  async huntRecord(kv) {
+    this.hunt ??= { record: await loadHunt(kv) };
+    return this.hunt.record;
   }
   async chatSince(kv, since) {
     const cached = this.slices.get(since);
@@ -476,7 +551,7 @@ async function loadChat(kv) {
 }
 async function loadBoards(kv, now) {
   const raw = await kv.get(BOARDS_KEY);
-  return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
+  return raw ?? { zone: [], week: { start: weekStartOf2(now), damage: {} } };
 }
 function prune(ctx) {
   let dropped = false;
@@ -525,6 +600,7 @@ async function world(ctx, record, since, engageCaller = true) {
     zones,
     here,
     boss: toBossView(ctx, boss, id),
+    hunt: toHuntView(ctx, await memo.huntRecord(ctx.books.kv), id),
     chat: chat2,
     flags: ctx.flags
   };
@@ -563,7 +639,7 @@ async function chat(ctx, record, text) {
   return { ok: true, message };
 }
 async function leaderboards(ctx) {
-  const weekStart = weekStartOf(ctx.now);
+  const weekStart = weekStartOf2(ctx.now);
   if (ctx.flags["leaderboards.enabled"] === false) {
     return { highestZone: [], damage: [], weekStart };
   }
@@ -610,9 +686,9 @@ async function offerZone(kv, now, row, keep = async () => true) {
 // packages/ledger/src/boss.ts
 var BOSS_KEY = "pf:world:boss";
 function bossStats() {
-  const stats = content.enemies[content.zones[0]?.boss ?? ""]?.stats;
-  if (!stats) throw new Error("content has no zone 1 boss");
-  return { ...stats };
+  const def = content.enemies[content.zones[0]?.boss ?? ""];
+  if (!def) throw new Error("content has no zone 1 boss");
+  return { ...def.stats, atk: def.baseAtk ?? def.stats.atk };
 }
 async function loadBoss(kv) {
   const raw = await kv.get(BOSS_KEY);
@@ -671,6 +747,30 @@ function partyClasses(state) {
 function rewardGold(rarity, zone) {
   return 3 * content.rarity[rarity].vendorGoldPerZone * zone;
 }
+async function payReward(ctx, record, rewardId, source) {
+  const tagged = source ? { source } : {};
+  const zone = record.state.zone;
+  const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
+  if (!rolled) {
+    author(record, {
+      t: "rewarded",
+      bossId: rewardId,
+      goods: null,
+      gold: rewardGold("rare", zone),
+      ...tagged
+    });
+    return;
+  }
+  const item = { ...rolled, id: await nextLedgerId(ctx.books.kv, "r") };
+  const goods = { kind: "item", item };
+  const gold = rewardGold(item.rarity, zone);
+  if (hasRoom(record.state, goods)) {
+    author(record, { t: "rewarded", bossId: rewardId, goods, gold, ...tagged });
+  } else {
+    record.returns.push({ listingId: rewardId, goods });
+    author(record, { t: "rewarded", bossId: rewardId, goods: null, gold, ...tagged });
+  }
+}
 async function settleBoss(ctx, boss, options) {
   const kv = ctx.books.kv;
   const threshold = Math.floor(BOSS_BASE_HP * BOSS_THRESHOLD_BP / 1e4);
@@ -679,28 +779,7 @@ async function settleBoss(ctx, boss, options) {
     const record = options.inHand?.account.accountId === id ? options.inHand : await ctx.books.load(id);
     if (!record || !isCurrent(record)) continue;
     const rolls = (options.allPaid || contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0);
-    for (let i = 0; i < rolls; i++) {
-      const zone = record.state.zone;
-      const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
-      if (!rolled) {
-        author(record, {
-          t: "rewarded",
-          bossId: boss.bossId,
-          goods: null,
-          gold: rewardGold("rare", zone)
-        });
-        continue;
-      }
-      const item = { ...rolled, id: await nextLedgerId(kv, "r") };
-      const goods = { kind: "item", item };
-      const gold = rewardGold(item.rarity, zone);
-      if (hasRoom(record.state, goods)) {
-        author(record, { t: "rewarded", bossId: boss.bossId, goods, gold });
-      } else {
-        record.returns.push({ listingId: boss.bossId, goods });
-        author(record, { t: "rewarded", bossId: boss.bossId, goods: null, gold });
-      }
-    }
+    for (let i = 0; i < rolls; i++) await payReward(ctx, record, boss.bossId);
     await ctx.books.syncReturnsQueue(record);
     disengage(ctx, record, boss.bossId);
     await ctx.books.save(record);
@@ -790,7 +869,7 @@ async function contribute(ctx, record, prevDealt) {
 }
 async function offerDamage(kv, now, record, delta) {
   const id = record.account.accountId;
-  const weekStart = weekStartOf2(now);
+  const weekStart = weekStartOf3(now);
   const boards = await kv.get(BOARDS_KEY) ?? {
     zone: [],
     week: { start: weekStart, damage: {} }
@@ -806,12 +885,159 @@ async function offerDamage(kv, now, record, delta) {
   });
 }
 
+// packages/ledger/src/journal.ts
+import {
+  DAY_MS as DAY_MS2,
+  DEFAULT_REST_DAYS,
+  dayOf,
+  nextMonday,
+  weekdayOf
+} from './protocol.js';
+import {
+  achievementCount,
+  content as content2,
+  dailyGoal,
+  goalCount,
+  goalGold
+} from './sim.js';
+var journalKey = (accountId) => `pf:acct:${accountId}:journal`;
+function emptyJournal() {
+  return {
+    achievements: {},
+    goalsMet: 0,
+    day: null,
+    streak: { length: 0, lastMet: null },
+    rest: [{ from: 0, days: [...DEFAULT_REST_DAYS] }]
+  };
+}
+async function loadJournal(kv, accountId) {
+  const raw = await kv.get(journalKey(accountId));
+  return raw ?? emptyJournal();
+}
+function restDaysOn(journal, day) {
+  let days = [...DEFAULT_REST_DAYS];
+  for (const entry of journal.rest) if (entry.from <= day) days = entry.days;
+  return days;
+}
+function isWorkDay(journal, day) {
+  return !restDaysOn(journal, day).includes(weekdayOf(day));
+}
+function missedSince(journal, lastMet, today) {
+  if (today - lastMet > 8) return true;
+  for (let day = lastMet + 1; day < today; day++) if (isWorkDay(journal, day)) return true;
+  return false;
+}
+function streakOn(journal, today) {
+  const { length, lastMet } = journal.streak;
+  return lastMet !== null && missedSince(journal, lastMet, today) ? 0 : length;
+}
+function baselineOf(state) {
+  return {
+    kills: goalCount("kills", state),
+    zone_bosses: goalCount("zone_bosses", state),
+    rare_drops: goalCount("rare_drops", state),
+    turn_boss: goalCount("turn_boss", state)
+  };
+}
+function pruneRest(journal, today) {
+  const { lastMet } = journal.streak;
+  const pivot = lastMet !== null && today - lastMet <= 8 ? Math.min(lastMet, today) : today;
+  let keep = 0;
+  journal.rest.forEach((entry, i) => {
+    if (entry.from <= pivot) keep = i;
+  });
+  journal.rest = journal.rest.slice(keep);
+}
+async function onCommit(kv, record, now) {
+  const accountId = record.account.accountId;
+  const state = record.committedState;
+  const journal = await loadJournal(kv, accountId);
+  const today = dayOf(now);
+  journal.streak.length = streakOn(journal, today);
+  if (journal.day?.index !== today) {
+    journal.day = {
+      index: today,
+      goal: dailyGoal(today, accountId, state.zone),
+      zone: state.zone,
+      baseline: baselineOf(state),
+      met: false
+    };
+  }
+  const day = journal.day;
+  if (!day.met && progressOf(day, state) >= day.goal.target) {
+    day.met = true;
+    journal.goalsMet += 1;
+    author(record, { t: "credited", gold: goalGold(day.zone), reason: `goal:${today}` });
+    if (isWorkDay(journal, today)) {
+      const { lastMet } = journal.streak;
+      const follows = lastMet !== null && lastMet < today && !missedSince(journal, lastMet, today);
+      journal.streak = { length: follows ? journal.streak.length + 1 : 1, lastMet: today };
+    }
+  }
+  const counts = { goalsMet: journal.goalsMet, streak: journal.streak.length };
+  for (const row of content2.achievements) {
+    const value = achievementCount(row.reads, state, counts);
+    const crossed = journal.achievements[row.id] ?? [];
+    row.steps.forEach((step2, i) => {
+      const n = i + 1;
+      if (value < step2.at || crossed.some((c) => c.step === n)) return;
+      author(record, { t: "credited", gold: step2.gold, reason: `achievement:${row.id}:${n}` });
+      crossed.push({ step: n, at: now });
+    });
+    if (crossed.length > 0) journal.achievements[row.id] = crossed;
+  }
+  pruneRest(journal, today);
+  await kv.set(journalKey(accountId), journal);
+}
+function progressOf(day, state) {
+  return Math.max(0, goalCount(day.goal.kind, state) - day.baseline[day.goal.kind]);
+}
+function journalView(journal, record, now) {
+  const state = record.committedState;
+  const today = dayOf(now);
+  const open2 = journal.day?.index === today ? journal.day : null;
+  const pending2 = journal.rest.filter((e) => e.from > today).at(-1);
+  return {
+    achievements: Object.entries(journal.achievements).map(([id, steps]) => ({
+      id,
+      steps: steps.map((s) => ({ ...s }))
+    })),
+    day: {
+      index: today,
+      goal: open2?.goal ?? dailyGoal(today, record.account.accountId, state.zone),
+      progress: open2 ? progressOf(open2, state) : 0,
+      met: open2?.met ?? false,
+      resetsAt: (today + 1) * DAY_MS2
+    },
+    goalsMet: journal.goalsMet,
+    streak: { length: streakOn(journal, today), lastMet: journal.streak.lastMet },
+    restDays: {
+      current: [...restDaysOn(journal, today)],
+      next: pending2 ? { days: [...pending2.days], from: pending2.from } : null
+    }
+  };
+}
+function restDaysRefusal(days) {
+  if (days.length !== 2) return "rest_days_count";
+  if (!days.every((d) => Number.isInteger(d) && d >= 1 && d <= 7)) return "rest_days_range";
+  if (days[0] === days[1]) return "rest_days_same";
+  return null;
+}
+function setRestDays(journal, days, now) {
+  const today = dayOf(now);
+  journal.rest = [
+    ...journal.rest.filter((e) => e.from <= today),
+    { from: nextMonday(today), days: [...days].sort((a, b) => a - b) }
+  ];
+  pruneRest(journal, today);
+}
+
 // packages/ledger/src/market.ts
 import {
   LISTINGS_PER_PAGE
 } from './protocol.js';
 import {
-  content as content2,
+  content as content3,
   migrateGoods as migrateGoods2,
   SIM_VERSION as SIM_VERSION3
 } from './sim.js';
@@ -1059,8 +1285,8 @@ async function placeOrder(ctx, record, input) {
   if (gate) return refuse(gate);
   if (!validPrice(input.maxPrice)) return refuse("bad_price");
   if (!tradeableRarity(input.minRarity)) return refuse("not_tradeable_rarity");
-  if (!Object.hasOwn(content2.itemBases, input.base)) return refuse("unknown_goods");
-  if (input.affixId !== null && !Object.hasOwn(content2.affixes, input.affixId)) {
+  if (!Object.hasOwn(content3.itemBases, input.base)) return refuse("unknown_goods");
+  if (input.affixId !== null && !Object.hasOwn(content3.affixes, input.affixId)) {
     return refuse("unknown_goods");
   }
   if (record.state.gold < input.maxPrice) return refuse("not_enough_gold");
@@ -1123,6 +1349,7 @@ var SETTABLE_FLAGS = [
   "worldboss.enabled",
   "presence.enabled",
   "leaderboards.enabled",
+  "hunt.enabled",
   "maintenance"
 ];
 function settable(raw) {
@@ -1231,6 +1458,7 @@ var Ledger = class {
       "worldboss.enabled": true,
       "presence.enabled": true,
       "leaderboards.enabled": true,
+      "hunt.enabled": true,
       maintenance: false,
       "sandbox.enabled": false,
       ...this.options.flags,
@@ -1386,6 +1614,7 @@ var Ledger = class {
       await dropFromBoards(this.kv, id);
       if (this.presence.delete(id)) this.memo.presenceChanged();
       if (record.linkCode) await this.books.dropLink(record.linkCode);
+      await this.kv.delete(journalKey(id));
       await this.books.remove(record, auth.deviceToken);
       return { deleted: true };
     });
@@ -1397,6 +1626,9 @@ var Ledger = class {
       const batch = BatchSchema.parse(input);
       const owner = await this.books.accountFor(auth.deviceToken);
       if (!owner || owner !== batch.accountId) return { ok: false, reason: "unauthorized" };
+      const now = await this.options.now();
+      const worldCtx = await this.worldContext(now);
+      await advanceHunt(worldCtx);
       const record = await this.books.load(owner);
       if (!record) return { ok: false, reason: "unauthorized" };
       const banned = refusedBanned(record);
@@ -1426,7 +1658,6 @@ var Ledger = class {
         return { ok: false, reason: "cursor_behind", delivery: deliveryOf(record) };
       }
       if (batch.baseHash !== record.committedHash) return this.adopt(record, "hash_mismatch");
-      const now = await this.options.now();
       const buckets = {};
       const refillAt = {};
       for (const kind of KINDS) {
@@ -1446,6 +1677,7 @@ var Ledger = class {
       );
       const result = replay3(record.state, events).state;
       const prevDealt = dealtBefore(record.state, result);
+      const before = record.state;
       const hash = hashState3(result);
       const seq = record.seq + 1;
       for (const kind of KINDS) buckets[kind] -= counts[kind];
@@ -1455,8 +1687,10 @@ var Ledger = class {
       record.buckets = buckets;
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING);
       settle(record);
-      await contribute(await this.worldContext(now), record, prevDealt);
+      await contribute(worldCtx, record, prevDealt);
+      await countHunt(worldCtx, record, before);
       await this.books.deliverReturns(record);
+      await onCommit(this.kv, record, now);
       await this.offerZone(record, now);
       if (hash === batch.resultHash) {
         await this.books.save(record);
@@ -1650,7 +1884,10 @@ var Ledger = class {
   world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      if (advance && this.memo.advanceDue(ctx.now)) await advanceBoss(ctx);
+      if (advance && this.memo.advanceDue(ctx.now)) {
+        await advanceBoss(ctx);
+        await advanceHunt(ctx);
+      }
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
       const banned = bannedOf(record);
@@ -1676,6 +1913,34 @@ var Ledger = class {
       const banned = bannedOf(record);
       if (banned) return banned;
       return leaderboards(ctx);
+    });
+  }
+  // ---------------------------------------------------------------------------
+  // Journal
+  /** The caller's journal from its committed state: a read that never writes. */
+  journal(auth) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || !isCurrent(record)) return unauthorized;
+      const banned = bannedOf(record);
+      if (banned) return banned;
+      const stored = await loadJournal(this.kv, record.account.accountId);
+      return journalView(stored, record, await this.options.now());
+    });
+  }
+  setRestDays(auth, days) {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth);
+      if (!record || !isCurrent(record)) return { ok: false, reason: "unauthorized" };
+      const banned = refusedBanned(record);
+      if (banned) return banned;
+      const refusal = restDaysRefusal(days);
+      if (refusal) return { ok: false, reason: refusal };
+      const now = await this.options.now();
+      const stored = await loadJournal(this.kv, record.account.accountId);
+      setRestDays(stored, days, now);
+      await this.kv.set(journalKey(record.account.accountId), stored);
+      return { ok: true, journal: journalView(stored, record, now) };
     });
   }
   // ---------------------------------------------------------------------------
@@ -1764,7 +2029,9 @@ var Ledger = class {
     await this.books.save(record);
   }
   async sweep() {
-    await advanceBoss(await this.worldContext());
+    const ctx = await this.worldContext();
+    await advanceBoss(ctx);
+    await advanceHunt(ctx);
     await expireDue(await this.marketContext());
     for (const accountId of await this.books.returnsQueue()) {
       const record = await this.books.load(accountId);

@@ -47,6 +47,7 @@ const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('turn_start'), at }),
   z.object({ t: z.literal('turn_end'), at }),
   z.object({ t: z.literal('rest'), at }),
+  z.object({ t: z.literal('travel'), zone: positive, at }),
   z.object({ t: z.literal('tool_mishap'), at }),
   z.object({ t: z.literal('camp'), at }),
   z.object({ t: z.literal('guard'), on: z.boolean(), at }),
@@ -73,6 +74,7 @@ export const PLAYER_EVENT_KINDS = [
   'turn_start',
   'turn_end',
   'rest',
+  'travel',
   'tool_mishap',
   'camp',
   'guard',
@@ -126,7 +128,7 @@ export const StatsSchema: z.ZodType<Stats> = z.object({
   spd: count,
 })
 
-export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t', [
+const ServerEventUnion = z.discriminatedUnion('t', [
   z.object({
     t: z.literal('listed'),
     listingId: id,
@@ -171,6 +173,8 @@ export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t
     bossId: id,
     goods: GoodsSchema.nullable(),
     gold: count,
+    // Absent on every reward logged before it, which reads as boss.
+    source: z.enum(['boss', 'hunt']).optional(),
   }),
   // Sandbox grants: only a host with the sandbox on authors them.
   z.object({
@@ -184,6 +188,11 @@ export const ServerEventSchema: z.ZodType<ServerEvent> = z.discriminatedUnion('t
   z.object({ t: z.literal('sandbox_recruit'), rarity: RaritySchema }),
   z.object({ t: z.literal('sandbox_wipe') }),
 ])
+
+// The reward's optional source: zod infers `source?: T | undefined`, which
+// exactOptionalPropertyTypes will not assign to `source?: T`; the cast is sound because an absent
+// key is dropped.
+export const ServerEventSchema = ServerEventUnion as unknown as z.ZodType<ServerEvent>
 
 /** Structural check of a sim state: the fields every version has; the rest passes through. */
 export const GameStateSchema = z

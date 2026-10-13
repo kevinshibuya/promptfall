@@ -83,3 +83,13 @@ test('every sprite is real art: no placeholders left', () => {
       .map((s) => s.id),
   ).toEqual([])
 })
+
+test('every hero holds a drawn victory pose on its idle 1.5x canvas, with its rarity slot', () => {
+  for (const key of ['knight', 'black_mage', 'white_mage', 'archer']) {
+    const hero = spriteFor('hero', key)
+    const victory = hero.frames?.victory
+    expect(victory?.art).not.toBe(hero.hires)
+    expect([victory?.art.width, victory?.art.height]).toEqual([hero.hires.width, hero.hires.height])
+    expect(victory?.raritySlot ?? 0).toBeGreaterThan(0)
+  }
+})

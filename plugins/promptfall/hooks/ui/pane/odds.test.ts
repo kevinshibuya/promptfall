@@ -46,21 +46,45 @@ test('the table: a heading, one line per rarity with zone, boss and tavern, as t
     expect(lines[i + 1]).toBe(want.trimEnd())
     expect(list?.lines[i + 1]?.spans[2]).toMatchObject({ rgb: RARITY_RGB[r] })
   }
-  expect(lines[6]).toBe('  Rarity multiplies base stats, heroes and items alike.')
-  expect(list?.lines[6]?.spans).toContainEqual({
+  expect(lines.slice(6, 9)).toEqual([
+    '  Rare guaranteed in 20 recruits',
+    '  Epic guaranteed in 80 recruits',
+    '  Legendary guaranteed in 400 recruits',
+  ])
+  expect(lines[9]).toBe('  Rarity multiplies base stats, heroes and items alike.')
+  expect(list?.lines[9]?.spans).toContainEqual({
     text: 'Rarity multiplies base stats, heroes and items alike.',
     rgb: DIM_RGB,
   })
-  expect(lines[7]).toBe('  Reforge is priced by rarity and tier.')
-  expect(list?.lines[7]?.spans).toContainEqual({
+  expect(lines[10]).toBe('  Reforge is priced by rarity and tier.')
+  expect(list?.lines[10]?.spans).toContainEqual({
     text: 'Reforge is priced by rarity and tier.',
     rgb: DIM_RGB,
   })
-  expect(lines[8]).toBe('  Expansions')
-  expect(list?.lines[8]?.rule).toBe(true)
+  expect(lines[11]).toBe('  Expansions')
+  expect(list?.lines[11]?.rule).toBe(true)
   // The rarity rows are stops that do nothing; the ▶ starts on the first.
   expect(b.focus).toBe('row:r-common')
   expect(message(b)[0]).toBe('Tab or arrows: move.')
+})
+
+test('the guarantee rows read the counts in the view; a count of 1 is the next recruit', () => {
+  const lines = linesOf(
+    win(oddsPane(input({ guarantees: { rare: 13, epic: 61, legendary: 377 } })), 'list'),
+  )
+  expect(lines.slice(6, 9)).toEqual([
+    '  Rare guaranteed in 13 recruits',
+    '  Epic guaranteed in 61 recruits',
+    '  Legendary guaranteed in 377 recruits',
+  ])
+  const next = linesOf(
+    win(oddsPane(input({ guarantees: { rare: 1, epic: 2, legendary: 1 } })), 'list'),
+  )
+  expect(next.slice(6, 9)).toEqual([
+    '  Rare guaranteed on the next recruit',
+    '  Epic guaranteed in 2 recruits',
+    '  Legendary guaranteed on the next recruit',
+  ])
 })
 
 test("past tier 1 the title names the tier and the table shows zone 12's odds", () => {
@@ -98,18 +122,18 @@ test('the expansion rows: their events, dim when gold is short, at max with no s
     ['row:expand-inventory', { t: 'event', event: { t: 'expand_inventory' } }],
     ['row:expand-roster', { t: 'event', event: { t: 'expand_roster' } }],
   ])
-  expect(linesOf(win(b, 'list'))[9]).toMatch(/^ {2}Inventory \+10 slots +500G$/)
+  expect(linesOf(win(b, 'list'))[12]).toMatch(/^ {2}Inventory \+10 slots +500G$/)
   const short = oddsPane(input({ gold: 450 }))
-  expect(win(short, 'list')?.lines[9]?.spans).toContainEqual({
+  expect(win(short, 'list')?.lines[12]?.spans).toContainEqual({
     text: 'Inventory +10 slots',
     rgb: DIM_RGB,
   })
-  expect(win(short, 'list')?.lines[10]?.spans).toContainEqual({
+  expect(win(short, 'list')?.lines[13]?.spans).toContainEqual({
     text: 'Roster +4 heroes',
     rgb: TEXT,
   })
   const max = oddsPane(input({ nextInventoryCost: null }))
-  expect(linesOf(win(max, 'list'))[9]).toBe('  Inventory at max')
+  expect(linesOf(win(max, 'list'))[12]).toBe('  Inventory at max')
   expect(cursors(max).at(-1)?.key).toBe('row:expand-roster')
   expect(cursors(max).some((s) => s.key === 'row:expand-inventory')).toBe(false)
 })

@@ -1,4 +1,4 @@
-// The pane: all eight tabs drawn as Dragon Quest V windows (UI PR 2 and 3), and the pane before a
+// The pane: all nine tabs drawn as Dragon Quest V windows (UI PR 2 and 3), and the pane before a
 // game view exists. Each tab's builder returns a PaneBuild; the mount draws it and runs its actions.
 import { atom, type On, read, update } from 'claude-code'
 import type {
@@ -7,6 +7,7 @@ import type {
   DialogState,
   DialogTab,
   GameView,
+  JournalState,
   MarketState,
   Mode,
   OrdersState,
@@ -21,6 +22,7 @@ import {
   BOARDS_DEFAULT,
   CHAT_DEFAULT,
   DIALOG_DEFAULT,
+  JOURNAL_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   PREFS_DEFAULT,
@@ -33,6 +35,7 @@ import { validPrice } from '../vendor/ledger.js'
 import type { PlayerEvent } from '../vendor/sim.js'
 import { FIELD_ROWS, LINK_ROWS, PANE_MAX_COLUMNS, PANE_ROWS } from '../windows/tuning'
 import { postChat } from './chat'
+import { loadJournal } from './journal'
 import { loadBoards } from './leaderboards'
 import { loadMarket } from './market'
 import { loadOrders, placeOrder } from './orders'
@@ -42,6 +45,7 @@ import { paneLayout } from './pane/frame'
 import { heroesPane } from './pane/heroes'
 import type { PaneInput } from './pane/input'
 import { inventoryPane } from './pane/inventory'
+import { journalPane } from './pane/journal'
 import { boardsPane } from './pane/leaderboards'
 import { marketPane } from './pane/market'
 import {
@@ -80,6 +84,7 @@ const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const chatAtom = atom({ plugin: 'promptfall', key: 'chat' } as const, CHAT_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const journalAtom = atom({ plugin: 'promptfall', key: 'journal' } as const, JOURNAL_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
 const soundSilentAtom = atom({ plugin: 'promptfall', key: 'soundSilent' } as const, false)
@@ -92,6 +97,7 @@ const BUILDERS: Record<DialogTab, (input: PaneInput) => PaneBuild> = {
   orders: ordersPane,
   account: accountPane,
   odds: oddsPane,
+  journal: journalPane,
   chat: chatPane,
   leaderboards: boardsPane,
 }
@@ -111,6 +117,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const orders: OrdersState = (await read($, ordersAtom)) ?? ORDERS_DEFAULT
     const chat: ChatState = (await read($, chatAtom)) ?? CHAT_DEFAULT
     const boards: BoardsState = (await read($, boardsAtom)) ?? BOARDS_DEFAULT
+    const journal: JournalState = (await read($, journalAtom)) ?? JOURNAL_DEFAULT
     const server: string = (await read($, serverAtom)) ?? 'in-process'
     const prefs: Prefs = (await read($, prefsAtom)) ?? PREFS_DEFAULT
     const leaseOwner = (await read($, leaseOwnerAtom)) ?? null
@@ -138,6 +145,9 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const updBoards: Updater<BoardsState> = async (fn) => {
       await update($, boardsAtom, (b) => fn(b ?? BOARDS_DEFAULT))
     }
+    const updJournal: Updater<JournalState> = async (fn) => {
+      await update($, journalAtom, (j) => fn(j ?? JOURNAL_DEFAULT))
+    }
     const updDialog: Updater<DialogState> = async (fn) => {
       await update($, dialogAtom, (d) => fn(d ?? DIALOG_DEFAULT))
     }
@@ -156,7 +166,10 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
     const serverClock = game()?.clock() ?? null
     const remainingMs = (deadline: number) =>
       serverClock ? remainingRealMs(deadline, serverClock, clientNow) : deadline - clientNow
-    /** Opening the Market, Orders or Leaderboards tab syncs and loads it. */
+    const serverNow = serverClock
+      ? serverClock.serverNow + (clientNow - serverClock.clientNow) * serverClock.speed
+      : clientNow
+    /** Opening the Market, Orders, Journal or Leaderboards tab syncs and loads it; Account loads the journal for its rest days. */
     const openTab = async (next: DialogTab) => {
       await update($, dialogTabAtom, () => next)
       const running = game()
@@ -164,6 +177,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       if (next === 'market') await loadMarket(running, market.query, updMarket, after)
       if (next === 'orders') await loadOrders(running, updOrders, after)
       if (next === 'leaderboards') await loadBoards(running, updBoards, after)
+      if (next === 'journal' || next === 'account') await loadJournal(running, updJournal, after)
     }
 
     const running = game()
@@ -196,10 +210,12 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
             hasInput: input,
             ...(shortPane ? { shortPane: true as const } : {}),
             remainingMs,
+            serverNow,
             market,
             orders,
             chat,
             boards,
+            journal,
             account: {
               server,
               leaseOwner,
@@ -263,6 +279,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
       dialog: async () => ({ ...DIALOG_DEFAULT, ...(await read($, dialogAtom)) }),
       updMarket,
       updOrders,
+      updJournal,
       market: async () => (await read($, marketAtom)) ?? MARKET_DEFAULT,
       orders: async () => (await read($, ordersAtom)) ?? ORDERS_DEFAULT,
       setSettings,

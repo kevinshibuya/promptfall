@@ -27,8 +27,10 @@ describe('createInitialState', () => {
     expect(s.stats).toEqual({ kills: 0, bosses: 0, wipes: 0 })
   })
 
-  it('is version 15 with an empty battle, no wipes in its zone, auto-vendor, Haste and Guard off', () => {
-    expect(s.v).toBe(15)
+  it('is version 17 with an empty battle, no wipes in its zone, auto-vendor, Haste and Guard off', () => {
+    expect(s.v).toBe(17)
+    expect(s.guarantee).toEqual({ rare: 0, epic: 0, legendary: 0 })
+    expect(s.tallies.goldEarned).toBe(0)
     expect(s.hasteTicks).toBe(0)
     expect(s.guardTicks).toBe(0)
     expect(s.zoneWipes).toBe(0)

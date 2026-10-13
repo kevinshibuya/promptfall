@@ -33,80 +33,80 @@ zone 1, with zone 1's enemies at their tier's numbers. Past tier 1 every base dr
 
 ## Enemies and bosses
 
-| Id | Name | Archetype |
-| --- | --- | --- |
-| `road_slime` | Road Slime | tank |
-| `field_rat` | Field Rat | swift |
-| `goblin_scout` | Goblin Scout | brute |
-| `hedge_sprite` | Hedge Sprite | caster |
-| `bandit_captain` | Bandit Captain | boss |
-| `wild_boar` | Wild Boar | turn_boss |
-| `bramble_wolf` | Bramble Wolf | swift |
-| `moss_golem` | Moss Golem | tank |
-| `wood_goblin` | Wood Goblin | brute |
-| `whisper_wisp` | Whisper Wisp | caster |
-| `elder_treant` | Elder Treant | boss |
-| `owlbear_cub` | Owlbear Cub | turn_boss |
-| `bog_lurker` | Bog Lurker | brute |
-| `marsh_leech` | Marsh Leech | swift |
-| `mire_toad` | Mire Toad | tank |
-| `will_o_wisp` | Will-o'-Wisp | caster |
-| `sigh_hag` | The Sighing Hag | boss |
-| `giant_heron` | Giant Heron | turn_boss |
-| `barrow_wight` | Barrow Wight | caster |
-| `grave_hound` | Grave Hound | swift |
-| `bone_soldier` | Bone Soldier | brute |
-| `cairn_crawler` | Cairn Crawler | tank |
-| `barrow_king` | The Barrow King | boss |
-| `crypt_ogre` | Crypt Ogre | turn_boss |
-| `salt_crab` | Salt Crab | tank |
-| `gull_harpy` | Gull Harpy | swift |
-| `drowned_sailor` | Drowned Sailor | brute |
-| `tide_witch` | Tide Witch | caster |
-| `glass_leviathan` | Glass Leviathan | boss |
-| `reef_troll` | Reef Troll | turn_boss |
-| `ember_imp` | Ember Imp | swift |
-| `magma_beetle` | Magma Beetle | tank |
-| `cinder_orc` | Cinder Orc | brute |
-| `flame_adept` | Flame Adept | caster |
-| `emberfall_wyrm` | Emberfall Wyrm | boss |
-| `slag_giant` | Slag Giant | turn_boss |
-| `frost_wolf` | Frost Wolf | swift |
-| `ice_troll` | Ice Troll | brute |
-| `rime_golem` | Rime Golem | tank |
-| `snow_shaman` | Snow Shaman | caster |
-| `frostvein_yeti` | Frostvein Yeti | boss |
-| `avalanche_drake` | Avalanche Drake | turn_boss |
-| `drowned_monk` | Drowned Monk | brute |
-| `abbey_gargoyle` | Abbey Gargoyle | tank |
-| `bell_wraith` | Bell Wraith | caster |
-| `eel_serpent` | Eel Serpent | swift |
-| `sunken_abbot` | The Sunken Abbot | boss |
-| `choir_of_bones` | Choir of Bones | turn_boss |
-| `ash_ghoul` | Ash Ghoul | brute |
-| `dust_stalker` | Dust Stalker | swift |
-| `cinder_colossus` | Cinder Colossus | tank |
-| `ash_oracle` | Ash Oracle | caster |
-| `waste_tyrant` | Tyrant of the Waste | boss |
-| `sand_basilisk` | Sand Basilisk | turn_boss |
-| `star_sentinel` | Star Sentinel | tank |
-| `comet_hound` | Comet Hound | swift |
-| `spire_warden` | Spire Warden | brute |
-| `astral_seer` | Astral Seer | caster |
-| `fallen_star` | The Fallen Star | boss |
-| `void_manta` | Void Manta | turn_boss |
-| `hollow_knight` | Hollow Knight | brute |
-| `court_jester` | Court Jester | swift |
-| `throne_guard` | Throne Guard | tank |
-| `court_mage` | Court Mage | caster |
-| `hollow_king` | The Hollow King | boss |
-| `royal_chimera` | Royal Chimera | turn_boss |
-| `ink_horror` | Ink Horror | brute |
-| `blank_page` | Blank Page | swift |
-| `quill_golem` | Quill Golem | tank |
-| `erased_scribe` | Erased Scribe | caster |
-| `unwritten_one` | The Unwritten One | boss |
-| `margin_beast` | Margin Beast | turn_boss |
+| Id | Name | Archetype | Move |
+| --- | --- | --- | --- |
+| `road_slime` | Road Slime | tank |  |
+| `field_rat` | Field Rat | swift |  |
+| `goblin_scout` | Goblin Scout | brute |  |
+| `hedge_sprite` | Hedge Sprite | caster |  |
+| `bandit_captain` | Bandit Captain | boss | strikes twice |
+| `wild_boar` | Wild Boar | turn_boss |  |
+| `bramble_wolf` | Bramble Wolf | swift |  |
+| `moss_golem` | Moss Golem | tank |  |
+| `wood_goblin` | Wood Goblin | brute |  |
+| `whisper_wisp` | Whisper Wisp | caster |  |
+| `elder_treant` | Elder Treant | boss | heals itself |
+| `owlbear_cub` | Owlbear Cub | turn_boss |  |
+| `bog_lurker` | Bog Lurker | brute |  |
+| `marsh_leech` | Marsh Leech | swift |  |
+| `mire_toad` | Mire Toad | tank |  |
+| `will_o_wisp` | Will-o'-Wisp | caster |  |
+| `sigh_hag` | The Sighing Hag | boss | hits the whole party |
+| `giant_heron` | Giant Heron | turn_boss |  |
+| `barrow_wight` | Barrow Wight | caster |  |
+| `grave_hound` | Grave Hound | swift |  |
+| `bone_soldier` | Bone Soldier | brute |  |
+| `cairn_crawler` | Cairn Crawler | tank |  |
+| `barrow_king` | The Barrow King | boss | rages under half HP |
+| `crypt_ogre` | Crypt Ogre | turn_boss |  |
+| `salt_crab` | Salt Crab | tank |  |
+| `gull_harpy` | Gull Harpy | swift |  |
+| `drowned_sailor` | Drowned Sailor | brute |  |
+| `tide_witch` | Tide Witch | caster |  |
+| `glass_leviathan` | Glass Leviathan | boss | strikes twice |
+| `reef_troll` | Reef Troll | turn_boss |  |
+| `ember_imp` | Ember Imp | swift |  |
+| `magma_beetle` | Magma Beetle | tank |  |
+| `cinder_orc` | Cinder Orc | brute |  |
+| `flame_adept` | Flame Adept | caster |  |
+| `emberfall_wyrm` | Emberfall Wyrm | boss | heals itself |
+| `slag_giant` | Slag Giant | turn_boss |  |
+| `frost_wolf` | Frost Wolf | swift |  |
+| `ice_troll` | Ice Troll | brute |  |
+| `rime_golem` | Rime Golem | tank |  |
+| `snow_shaman` | Snow Shaman | caster |  |
+| `frostvein_yeti` | Frostvein Yeti | boss | hits the whole party |
+| `avalanche_drake` | Avalanche Drake | turn_boss |  |
+| `drowned_monk` | Drowned Monk | brute |  |
+| `abbey_gargoyle` | Abbey Gargoyle | tank |  |
+| `bell_wraith` | Bell Wraith | caster |  |
+| `eel_serpent` | Eel Serpent | swift |  |
+| `sunken_abbot` | The Sunken Abbot | boss | rages under half HP |
+| `choir_of_bones` | Choir of Bones | turn_boss |  |
+| `ash_ghoul` | Ash Ghoul | brute |  |
+| `dust_stalker` | Dust Stalker | swift |  |
+| `cinder_colossus` | Cinder Colossus | tank |  |
+| `ash_oracle` | Ash Oracle | caster |  |
+| `waste_tyrant` | Tyrant of the Waste | boss | strikes twice |
+| `sand_basilisk` | Sand Basilisk | turn_boss |  |
+| `star_sentinel` | Star Sentinel | tank |  |
+| `comet_hound` | Comet Hound | swift |  |
+| `spire_warden` | Spire Warden | brute |  |
+| `astral_seer` | Astral Seer | caster |  |
+| `fallen_star` | The Fallen Star | boss | heals itself |
+| `void_manta` | Void Manta | turn_boss |  |
+| `hollow_knight` | Hollow Knight | brute |  |
+| `court_jester` | Court Jester | swift |  |
+| `throne_guard` | Throne Guard | tank |  |
+| `court_mage` | Court Mage | caster |  |
+| `hollow_king` | The Hollow King | boss | hits the whole party |
+| `royal_chimera` | Royal Chimera | turn_boss |  |
+| `ink_horror` | Ink Horror | brute |  |
+| `blank_page` | Blank Page | swift |  |
+| `quill_golem` | Quill Golem | tank |  |
+| `erased_scribe` | Erased Scribe | caster |  |
+| `unwritten_one` | The Unwritten One | boss | rages under half HP |
+| `margin_beast` | Margin Beast | turn_boss |  |
 
 ## Item bases
 
@@ -177,10 +177,65 @@ An item's tier multiplies its affixes' rolls and its reforge price.
 
 ## Rarities
 
-| Rarity | Level cap |
-| --- | --- |
-| common | 20 |
-| uncommon | 30 |
-| rare | 40 |
-| epic | 45 |
-| legendary | 50 |
+The tavern's odds, and its guarantee: a recruit of the rarity or better within that many recruits.
+
+| Rarity | Level cap | Tavern odds | Tavern guarantee |
+| --- | --- | --- | --- |
+| common | 20 | 60% | — |
+| uncommon | 30 | 28% | — |
+| rare | 40 | 9.5% | 20 |
+| epic | 45 | 2% | 80 |
+| legendary | 50 | 0.5% | 400 |
+
+## Achievements
+
+Paid by the ledger once per step, with reason `achievement:<id>:<step>`; steps count from 1.
+
+| Id | Name | Reads | Steps |
+| --- | --- | --- | --- |
+| `kills` | Kills | kills | 100 (100 gold), 1,000 (400 gold), 10,000 (1,500 gold), 100,000 (5,000 gold) |
+| `zone_bosses` | Zone bosses | zone_bosses | 10 (100 gold), 50 (400 gold), 200 (1,500 gold), 1,000 (5,000 gold) |
+| `turn_bosses` | Turn bosses | turn_bosses | 10 (100 gold), 100 (400 gold), 1,000 (1,500 gold) |
+| `rare_drops` | Rare finds | rare_drops | 10 (100 gold), 100 (400 gold), 1,000 (1,500 gold) |
+| `legendary_drops` | Legendary finds | legendary_drops | 1 (100 gold), 10 (400 gold), 50 (1,500 gold) |
+| `recruits` | Recruits | recruits | 5 (100 gold), 25 (400 gold), 100 (1,500 gold) |
+| `reforges` | Reforges | reforges | 10 (100 gold), 100 (400 gold) |
+| `gold_earned` | Gold earned | gold_earned | 10,000 (100 gold), 100,000 (400 gold), 1,000,000 (1,500 gold) |
+| `goals_met` | Daily goals | goals_met | 10 (100 gold), 50 (400 gold), 200 (1,500 gold) |
+| `streak` | Streak | streak | 5 (100 gold), 20 (400 gold), 60 (1,500 gold), 250 (5,000 gold) |
+| `zones_complete` | Bestiary | zones_complete | 1 (100 gold), 4 (400 gold), 8 (1,500 gold), 12 (5,000 gold) |
+| `bases_complete` | Collection | bases_complete | 1 (100 gold), 10 (400 gold), 35 (1,500 gold) |
+| `first_epic` | a first Epic | epic_held | 1 (500 gold) |
+| `first_legendary` | a first Legendary | legendary_held | 1 (500 gold) |
+| `zone_6` | zone 6 reached | highest_zone | 6 (500 gold) |
+| `zone_12` | zone 12 cleared | highest_zone | 13 (500 gold) |
+| `tier_2` | tier 2 reached | tier | 2 (500 gold) |
+| `tier_3` | tier 3 reached | tier | 3 (500 gold) |
+| `clean_boss` | a zone boss beaten with no wipe | clean_zone_bosses | 1 (500 gold) |
+| `all_capped` | all four classes at their cap | classes_capped | 4 (500 gold) |
+
+## Daily goals
+
+One row a day per account, its target `base + step × ⌊(zone − 1) / every⌋` at the day's first
+commit. Met, it pays the zone's wave gold midpoint × 300 with reason `goal:<day>`.
+
+| Kind | Base | Step | Every (zones) |
+| --- | --- | --- | --- |
+| kills | 150 | 10 | 1 |
+| zone_bosses | 2 | 1 | 12 |
+| rare_drops | 3 | 1 | 6 |
+| turn_boss | 1 | 0 | 1 |
+
+## Weekly hunts
+
+One row a week in turn, by the week's index from the epoch, counted by the ledger from every
+account's commits but bots'. At the week's close each contributor at 0.5% of the target or
+more gets one reward roll at its zone, the target reached or not.
+
+| Id | Name | Counts | Target |
+| --- | --- | --- | --- |
+| `casters` | casters | caster | 20,000 |
+| `brutes` | brutes | brute | 20,000 |
+| `zone_bosses` | zone bosses | zone_boss | 1,000 |
+| `tanks` | tanks | tank | 20,000 |
+| `swifts` | swifts | swift | 20,000 |

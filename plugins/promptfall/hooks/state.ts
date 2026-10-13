@@ -2,6 +2,7 @@ import type {
   BoardsState,
   ChatState,
   DialogState,
+  JournalState,
   MarketState,
   OrdersState,
   Prefs,
@@ -43,6 +44,7 @@ export const WORLD_DEFAULT: WorldState = {
 }
 export const CHAT_DEFAULT: ChatState = { draft: '', busy: false, error: null }
 export const BOARDS_DEFAULT: BoardsState = { boards: null, busy: false, error: null }
+export const JOURNAL_DEFAULT: JournalState = { journal: null, busy: false, error: null }
 export const SETTINGS_DEFAULT: Settings = {
   sound: 'quiet',
   motion: 'full',

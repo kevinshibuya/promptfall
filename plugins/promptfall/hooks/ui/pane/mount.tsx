@@ -11,6 +11,7 @@ import { atom, update } from 'claude-code'
 import type {
   DialogState,
   DialogTab,
+  JournalState,
   MarketState,
   OrdersState,
   PaneMenu,
@@ -27,6 +28,7 @@ import type { Tile } from '../../windows/kit'
 import { sceneCells } from '../../windows/raster'
 import { sceneSvg } from '../../windows/svg'
 import { CELL_H, CELL_W } from '../../windows/tuning'
+import { saveRestDays } from '../journal'
 import { confirmBuy, loadMarket } from '../market'
 import { ordersTrade, placeOrder } from '../orders'
 import { openSell, sellTrade } from '../sell'
@@ -372,7 +374,7 @@ export function withCursor(d: DialogState, tab: DialogTab, stop: Stop): DialogSt
 
 /**
  * The open window as the re-focus signature names it: the sell flow, a menu (`filter`,
- * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`), the order form, or the tab.
+ * `pick:<field>`, `confirm:<action>:<id>`, `actions:<id>`, a Journal page), the order form, or the tab.
  */
 export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): string {
   const m = d.menu
@@ -380,6 +382,9 @@ export function paneWindow(d: DialogState, tab: DialogTab, form: boolean): strin
   if (m?.kind === 'filter') return 'filter'
   if (m?.kind === 'pick') return `pick:${m.field}`
   if (m?.kind === 'confirm') return `confirm:${m.action}:${m.id}`
+  if (m?.kind === 'journal_zone') return `journal_zone:${m.zone}`
+  if (m?.kind === 'journal_collection' || m?.kind === 'journal_achievements') return m.kind
+  if (m?.kind === 'rest_days') return m.kind
   if (m) return `${m.kind}:${'itemId' in m ? m.itemId : m.id}`
   if (tab === 'orders' && form) return 'form'
   return tab
@@ -436,6 +441,7 @@ export type ActionContext = {
   dialog: () => Promise<DialogState>
   updMarket: Updater<MarketState>
   updOrders: Updater<OrdersState>
+  updJournal: Updater<JournalState>
   market: () => Promise<MarketState>
   orders: () => Promise<OrdersState>
   setSettings: (patch: Partial<Settings>) => Promise<void>
@@ -612,5 +618,22 @@ async function perform(a: PaneAction, ctx: ActionContext): Promise<void> {
     case 'delete':
       if (await answered(ctx, 'delete', '')) ctx.game()?.deleteAccount()
       return
+    case 'rest_day': {
+      // The toggle and the close in one update: a second press before the redraw finds it closed.
+      let pair: number[] | null = null
+      await ctx.upd((d) => {
+        const m = d.menu
+        if (m?.kind !== 'rest_days') return d
+        const picked = m.picked.includes(a.day)
+          ? m.picked.filter((day) => day !== a.day)
+          : [...m.picked, a.day]
+        if (picked.length < 2) return { ...d, menu: { ...m, picked } }
+        pair = picked
+        return { ...d, menu: null }
+      })
+      const running = ctx.game()
+      if (pair && running) await saveRestDays(running, pair, ctx.updJournal, ctx.after)
+      return
+    }
   }
 }

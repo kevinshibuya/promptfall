@@ -4,13 +4,21 @@
 // tsx scripts/content.ts
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
+import { type BossMove, baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
 
 /** A table cell: pipes escaped so a glyph like `|` stays in its column. */
 const cell = (s: string | number) => String(s).replaceAll('|', '\\|')
 const code = (s: string) => `\`${cell(s)}\``
 /** `×3.5`: a multiplier in basis points. */
 const times = (bp: number) => `×${bp / 10000}`
+
+/** A zone boss's move in the combat log's words. */
+const MOVE_WORDS: Record<BossMove, string> = {
+  strike_twice: 'strikes twice',
+  heal_self: 'heals itself',
+  hit_all: 'hits the whole party',
+  rage: 'rages under half HP',
+}
 
 function table(head: string[], rows: (string | number)[][]): string[] {
   return [
@@ -60,8 +68,13 @@ export function contentReference(c: Content): string {
     '## Enemies and bosses',
     '',
     ...table(
-      ['Id', 'Name', 'Archetype'],
-      Object.values(c.enemies).map((e) => [code(e.id), cell(e.name), e.archetype]),
+      ['Id', 'Name', 'Archetype', 'Move'],
+      Object.values(c.enemies).map((e) => [
+        code(e.id),
+        cell(e.name),
+        e.archetype,
+        e.move ? MOVE_WORDS[e.move] : '',
+      ]),
     ),
     '',
     '## Item bases',
@@ -96,9 +109,52 @@ export function contentReference(c: Content): string {
     '',
     '## Rarities',
     '',
+    "The tavern's odds, and its guarantee: a recruit of the rarity or better within that many recruits.",
+    '',
     ...table(
-      ['Rarity', 'Level cap'],
-      Object.entries(c.rarity).map(([r, rule]) => [r, rule.levelCap]),
+      ['Rarity', 'Level cap', 'Tavern odds', 'Tavern guarantee'],
+      Object.entries(c.rarity).map(([r, rule]) => {
+        const rarity = r as keyof Content['tavern']['odds']
+        const within = (c.tavern.guarantees as Partial<Record<string, number>>)[r]
+        return [r, rule.levelCap, `${c.tavern.odds[rarity] / 100}%`, within ?? '—']
+      }),
+    ),
+    '',
+    '## Achievements',
+    '',
+    'Paid by the ledger once per step, with reason `achievement:<id>:<step>`; steps count from 1.',
+    '',
+    ...table(
+      ['Id', 'Name', 'Reads', 'Steps'],
+      c.achievements.map((a) => [
+        code(a.id),
+        cell(a.name),
+        a.reads,
+        a.steps
+          .map((s) => `${s.at.toLocaleString('en-US')} (${s.gold.toLocaleString('en-US')} gold)`)
+          .join(', '),
+      ]),
+    ),
+    '',
+    '## Daily goals',
+    '',
+    "One row a day per account, its target `base + step × ⌊(zone − 1) / every⌋` at the day's first",
+    "commit. Met, it pays the zone's wave gold midpoint × 300 with reason `goal:<day>`.",
+    '',
+    ...table(
+      ['Kind', 'Base', 'Step', 'Every (zones)'],
+      c.goals.map((g) => [g.kind, g.base, g.step, g.everyZones]),
+    ),
+    '',
+    '## Weekly hunts',
+    '',
+    "One row a week in turn, by the week's index from the epoch, counted by the ledger from every",
+    "account's commits but bots'. At the week's close each contributor at 0.5% of the target or",
+    'more gets one reward roll at its zone, the target reached or not.',
+    '',
+    ...table(
+      ['Id', 'Name', 'Counts', 'Target'],
+      c.hunts.map((h) => [code(h.id), cell(h.name), h.kind, h.target.toLocaleString('en-US')]),
     ),
     '',
   ].join('\n')

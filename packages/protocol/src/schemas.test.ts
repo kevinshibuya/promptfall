@@ -105,6 +105,17 @@ describe('BatchSchema', () => {
     expect(TimedEventSchema.safeParse({ t: 'guard', on: 'on', at: 1 }).success).toBe(false)
   })
 
+  it('accepts travel to a zone, and refuses it without a whole zone above 0', () => {
+    const event = { t: 'travel', zone: 3, at: 1 }
+    expect(TimedEventSchema.parse(event)).toEqual(event)
+    expect(BatchSchema.safeParse({ ...valid, events: [event] }).success).toBe(true)
+    expect(PLAYER_EVENT_KINDS).toContain('travel')
+    for (const zone of [0, -1, 2.5, '3', null]) {
+      expect(TimedEventSchema.safeParse({ t: 'travel', zone, at: 1 }).success).toBe(false)
+    }
+    expect(TimedEventSchema.safeParse({ t: 'travel', at: 1 }).success).toBe(false)
+  })
+
   it('rejects a batch without a cursor', () => {
     const { cursor: _cursor, ...rest } = valid
     expect(BatchSchema.safeParse(rest).success).toBe(false)
@@ -164,6 +175,17 @@ describe('boss events', () => {
     expect(DeliverySchema.parse(delivery)).toEqual(delivery)
   })
 
+  it('a reward parses with no source, a boss source or a hunt source, and refuses any other', () => {
+    const reward = { t: 'rewarded', bossId: 'wb1', goods: null, gold: 45 }
+    expect(ServerEventSchema.parse(reward)).toEqual(reward)
+    for (const source of ['boss', 'hunt']) {
+      expect(ServerEventSchema.parse({ ...reward, source })).toEqual({ ...reward, source })
+    }
+    for (const source of ['goal', '', null, 1]) {
+      expect(ServerEventSchema.safeParse({ ...reward, source }).success).toBe(false)
+    }
+  })
+
   it('stats are non-negative integers and gold is non-negative', () => {
     const bad = { ...engaged, stats: { ...engaged.stats, atk: -1 } }
     expect(ServerEventSchema.safeParse(bad).success).toBe(false)
@@ -214,7 +236,7 @@ describe('sandbox events', () => {
       const batch = { ...valid, events: [{ ...grant, at: 1 }] }
       expect(BatchSchema.safeParse(batch).success).toBe(false)
     }
-    expect(PLAYER_EVENT_KINDS).toHaveLength(19)
+    expect(PLAYER_EVENT_KINDS).toHaveLength(20)
     for (const kind of SANDBOX_EVENT_KINDS) expect(PLAYER_EVENT_KINDS).not.toContain(kind)
   })
 })

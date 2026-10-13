@@ -67,7 +67,8 @@ describe('the tier ramp', () => {
         const factor =
           (hpBp / SIM_12_ZONE_12_HP_BP) * (now?.kind === 'zone_boss' ? bossBp / 10000 : 1)
         expect((now?.stats.hp ?? 0) / was.hp / factor, `${id} hp`).toBeCloseTo(1, 2)
-        expect(now?.stats.atk, `${id} atk`).toBe(was.atk)
+        // A zone boss's atk before its move scales it (#169).
+        expect(now?.baseAtk ?? now?.stats.atk, `${id} atk`).toBe(was.atk)
         expect(now?.stats.def, `${id} def`).toBeGreaterThanOrEqual(was.def)
         expect(now?.stats.def, `${id} def`).toBeLessThanOrEqual(Math.ceil(was.def * 1.005))
       }
@@ -79,9 +80,12 @@ describe('the tier ramp', () => {
     const boss = enemyAt('bandit_captain', 13)
     if (!top || !boss) throw new Error('no boss')
     expect(TIER_GROWTH_BP).toEqual([11325, 10400])
-    for (const stat of ['hp', 'atk', 'def'] as const) {
+    // Atk before each boss's move scales it (#169): zone 12 rages and zone 13 strikes twice.
+    const atk = (e: typeof boss) => e.baseAtk ?? e.stats.atk
+    for (const stat of ['hp', 'def'] as const) {
       expect(boss.stats[stat] / top.stats[stat], stat).toBeCloseTo(1.1325, 1)
     }
+    expect(atk(boss) / atk(top), 'atk').toBeCloseTo(1.1325, 1)
     expect(boss.xp / top.xp).toBeCloseTo(1.1325, 1)
     expect(boss.gold[1] / top.gold[1]).toBeCloseTo(1.1325, 1)
   })

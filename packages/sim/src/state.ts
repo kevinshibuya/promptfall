@@ -1,4 +1,5 @@
 import { generateHero } from './heroes'
+import { emptyTallies } from './tallies'
 import type { GameState } from './types'
 import { SIM_VERSION } from './types'
 
@@ -30,6 +31,8 @@ export function createInitialState(seed: number): GameState {
     guardTicks: 0,
     lootLog: [],
     stats: { kills: 0, bosses: 0, wipes: 0 },
+    tallies: emptyTallies(),
+    guarantee: { rare: 0, epic: 0, legendary: 0 },
     boss: null,
     battle: { gauges: [], queue: [], busy: 0 },
   }

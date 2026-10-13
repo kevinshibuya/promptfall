@@ -7,6 +7,7 @@ import {
   changeZone,
   checkWipe,
   draw,
+  endEncounter,
   findHero,
   grantXp,
   livingParty,
@@ -14,6 +15,7 @@ import {
   onEnemyKilled,
   partyHeroes,
 } from './progression'
+import { earn, markHeld } from './tallies'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
 // Server events are authored by the ledger, which has already judged them.
@@ -34,9 +36,12 @@ function noRoom(state: GameState, goods: Goods): string | null {
   return state.roster.length < state.rosterCap ? null : 'roster_full'
 }
 
+/** Takes goods in; an item marks the collection at its rarity, and counts no drop. */
 function insert(s: GameState, goods: Goods): void {
-  if (goods.kind === 'item') s.inventory.push(clone(goods.item))
-  else s.roster.push(clone(goods.hero))
+  if (goods.kind === 'item') {
+    s.inventory.push(clone(goods.item))
+    markHeld(s, goods.item.base, goods.item.rarity)
+  } else s.roster.push(clone(goods.hero))
 }
 
 function goodsEntry(goods: Goods, what: TradeEntry['what'], gold: number): TradeEntry {
@@ -84,7 +89,7 @@ export function returned(state: GameState, event: Of<'returned'>): StepResult {
 
 export function sold(state: GameState, event: Of<'sold'>): StepResult {
   return draft(state, (s, effects) => {
-    s.gold += event.net
+    earn(s, event.net)
     const { kind, base, rarity, net } = event
     logTrade(s, effects, { k: 'trade', what: 'sold', kind, base, rarity, gold: net })
   })
@@ -130,7 +135,7 @@ export function orderSold(state: GameState, event: Of<'order_sold'>): StepResult
   if (item.equippedBy !== null) return unapplicable(state, event, 'equipped')
   return draft(state, (s, effects) => {
     s.inventory = s.inventory.filter((i) => i.id !== event.itemId)
-    s.gold += event.net
+    earn(s, event.net)
     const { base, rarity, net } = event
     logTrade(s, effects, { k: 'trade', what: 'sold', kind: 'item', base, rarity, gold: net })
   })
@@ -138,8 +143,8 @@ export function orderSold(state: GameState, event: Of<'order_sold'>): StepResult
 
 export function credited(state: GameState, event: Of<'credited'>): StepResult {
   return draft(state, (s, effects) => {
-    s.gold += event.gold
-    effects.push({ k: 'gold', amount: event.gold })
+    earn(s, event.gold)
+    effects.push({ k: 'gold', amount: event.gold, reason: event.reason })
   })
 }
 
@@ -184,7 +189,7 @@ export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
     if (full) return unapplicable(state, event, full)
   }
   return draft(state, (s, effects) => {
-    s.gold += event.gold
+    earn(s, event.gold)
     if (goods) {
       insert(s, goods)
       const { base, rarity } =
@@ -193,7 +198,13 @@ export function rewarded(state: GameState, event: Of<'rewarded'>): StepResult {
           : { base: goods.hero.template, rarity: goods.hero.rarity }
       pushLog(s, { k: 'reward', base, rarity, gold: event.gold })
     }
-    effects.push({ k: 'rewarded', bossId: event.bossId, goods: clone(goods), gold: event.gold })
+    effects.push({
+      k: 'rewarded',
+      bossId: event.bossId,
+      goods: clone(goods),
+      gold: event.gold,
+      source: event.source ?? 'boss',
+    })
   })
 }
 
@@ -205,12 +216,6 @@ function noSuchZone(zone: number): boolean {
 
 function noSuchRarity(rarity: string): boolean {
   return !Object.hasOwn(content.rarity, rarity)
-}
-
-/** The encounter goes with no drops and no XP, and the battle resets as a wipe resets it. */
-function endEncounter(s: GameState): void {
-  s.encounter = null
-  s.battle = { gauges: [], queue: [], busy: 0 }
 }
 
 export function sandboxBoss(state: GameState, event: Of<'sandbox_boss'>): StepResult {

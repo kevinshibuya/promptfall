@@ -94,12 +94,18 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward of gold alone',
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
     { row: 'reward', text: 'Your share of The Promptwyrm: 120 gold', timeoutMs: LONG, cue: null },
   ],
   [
     'a reward of gold and an item',
-    { k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item: oakStaff('rare') }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb1',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of The Promptwyrm: 120 gold and Oak Staff',
@@ -109,7 +115,13 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward of gold and a hero',
-    { k: 'rewarded', bossId: 'wb1', goods: { kind: 'hero', hero: MORWEN }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb1',
+      goods: { kind: 'hero', hero: MORWEN },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of The Promptwyrm: 120 gold and Morwen the Bold',
@@ -119,13 +131,40 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward from a boss whose name is unknown',
-    { k: 'rewarded', bossId: 'wb9', goods: { kind: 'item', item: oakStaff('rare') }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb9',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of the world boss: 120 gold and Oak Staff',
       timeoutMs: LONG,
       cue: null,
     },
+  ],
+  [
+    'a reward from the weekly hunt',
+    {
+      k: 'rewarded',
+      bossId: 'h1a',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'hunt',
+    },
+    {
+      row: 'reward',
+      text: 'Your share of the hunt: 120 gold and Oak Staff',
+      timeoutMs: LONG,
+      cue: null,
+    },
+  ],
+  [
+    'a hunt reward of gold alone, under an id that is also a boss name',
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80, source: 'hunt' },
+    { row: 'reward', text: 'Your share of the hunt: 80 gold', timeoutMs: LONG, cue: null },
   ],
   [
     'a retreat',
@@ -401,7 +440,7 @@ test('drop and vendored toasts wait for their item, a zone arrival for its zone;
   const effects: Effect[] = [
     drop('rune_staff', 'legendary', 'i-l'),
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
     { k: 'retreat', zone: 3 },
     { k: 'wipe', zone: 4 },
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
@@ -527,8 +566,8 @@ test('rows that never fold give one toast per effect', () => {
   const effects: Effect[] = [
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
     { k: 'hero_recruited', hero: { ...MORWEN, id: 'h-2', epithet: 'the Wise' }, via: 'tavern' },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80, source: 'boss' },
     { k: 'retreat', zone: 3 },
     { k: 'retreat', zone: 2 },
     { k: 'wipe', zone: 4 },
@@ -584,5 +623,77 @@ test('two bursts with one sale each give two single forms, never a fold', () => 
   expect([...first, ...second]).toEqual([
     'Oak Staff sold for 120 gold',
     'Rune Staff sold for 90 gold',
+  ])
+})
+
+/** A `credited` event's gold effect, with the reason the ledger gave it. */
+const credited = (amount: number, reason?: string): Effect => ({
+  k: 'gold',
+  amount,
+  ...(reason === undefined ? {} : { reason }),
+})
+
+test('an achievement step toasts its words and its gold, short, with the goal cue', () => {
+  expect(toastsFor([credited(1500, 'achievement:kills:3')], null, BOSSES)).toEqual([
+    {
+      row: 'achievement',
+      text: 'Achievement: ten thousand kills, 1,500 gold',
+      timeoutMs: SHORT,
+      cue: 'goal',
+    },
+  ])
+})
+
+test('a one-off achievement toasts its step words', () => {
+  expect(texts([credited(500, 'achievement:first_epic:1')])).toEqual([
+    'Achievement: a first Epic, 500 gold',
+  ])
+})
+
+test('achievements in one burst fold into a count and the gold', () => {
+  const effects = [
+    credited(100, 'achievement:kills:1'),
+    credited(400, 'achievement:kills:2'),
+    credited(1500, 'achievement:kills:3'),
+  ]
+  expect(toastsFor(effects, null, BOSSES)).toEqual([
+    { row: 'achievement', text: '3 achievements, 2,000 gold', timeoutMs: SHORT, cue: 'goal' },
+  ])
+})
+
+test('a daily goal met toasts its gold, short, with the goal cue, and never folds', () => {
+  expect(toastsFor([credited(40, 'goal:20374')], null, BOSSES)).toEqual([
+    { row: 'goal_met', text: 'Daily goal met: 40 gold', timeoutMs: SHORT, cue: 'goal' },
+  ])
+  const two = [credited(40, 'goal:20374'), credited(1200, 'goal:20375')]
+  expect(toastsFor(two, null, BOSSES)).toEqual([
+    { row: 'goal_met', text: 'Daily goal met: 40 gold', timeoutMs: SHORT, cue: 'goal' },
+    { row: 'goal_met', text: 'Daily goal met: 1,200 gold', timeoutMs: SHORT, cue: 'goal' },
+  ])
+})
+
+test('a credit whose reason the table does not know toasts nothing', () => {
+  for (const reason of [
+    'bot_stipend',
+    'fixture',
+    'achievement:no_such_row:1',
+    'achievement:kills:9',
+  ])
+    expect(toastsFor([credited(1000, reason)], null, BOSSES)).toEqual([])
+})
+
+test('achievement and goal toasts stack after the level-up and before the sale', () => {
+  const { view, ids } = partyView()
+  const effects: Effect[] = [
+    trade('sold', 'item', 'oak_staff', 120),
+    credited(40, 'goal:20374'),
+    credited(100, 'achievement:kills:1'),
+    { k: 'level_up', heroId: ids[0], level: 6 },
+  ]
+  expect(toastsFor(effects, view, BOSSES).map((t) => t.row)).toEqual([
+    'level_up',
+    'achievement',
+    'goal_met',
+    'sold',
   ])
 })

@@ -14,11 +14,13 @@
       "rarityColorHires": "#fb0803",
       "frames": {
         "windup": "sprites-frames/hero/knight-windup.png",
-        "follow": "sprites-frames/hero/knight-follow.png"
+        "follow": "sprites-frames/hero/knight-follow.png",
+        "victory": "sprites-frames/hero/knight-victory.png"
       },
       "frameRarityColors": {
         "windup": "#fb0f06",
-        "follow": "#fc0c02"
+        "follow": "#fc0c02",
+        "victory": "#f8180a"
       }
     },
     {
@@ -37,10 +39,12 @@
       "rarityColor": "#6d0faf",
       "rarityColorHires": "#7112b3",
       "frames": {
-        "windup": "sprites-frames/hero/black_mage-windup.png"
+        "windup": "sprites-frames/hero/black_mage-windup.png",
+        "victory": "sprites-frames/hero/black_mage-victory.png"
       },
       "frameRarityColors": {
-        "windup": "#6d19ab"
+        "windup": "#6d19ab",
+        "victory": "#6c1ab7"
       }
     },
     {
@@ -59,10 +63,12 @@
       "rarityColor": "#86eff5",
       "rarityColorHires": "#07e4fa",
       "frames": {
-        "windup": "sprites-frames/hero/white_mage-windup.png"
+        "windup": "sprites-frames/hero/white_mage-windup.png",
+        "victory": "sprites-frames/hero/white_mage-victory.png"
       },
       "frameRarityColors": {
-        "windup": "#02e1fd"
+        "windup": "#02e1fd",
+        "victory": "#06e5fd"
       }
     },
     {
@@ -81,10 +87,12 @@
       "rarityColor": "#f0bc3c",
       "rarityColorHires": "#fbeb05",
       "frames": {
-        "windup": "sprites-frames/hero/archer-windup.png"
+        "windup": "sprites-frames/hero/archer-windup.png",
+        "victory": "sprites-frames/hero/archer-victory.png"
       },
       "frameRarityColors": {
-        "windup": "#fdee04"
+        "windup": "#fdee04",
+        "victory": "#fceb04"
       }
     },
     {

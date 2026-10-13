@@ -1,7 +1,8 @@
 // The Account tab as windows (docs/plans/2026-10-06-ui-pr3-remaining-tabs.md, "Account"): the
 // settings and actions as rows, the machine and session facts in the detail window, the GitHub
 // device-flow Link under the picture, the reset and delete Yes/Nos; and the pane with no game view.
-import type { Settings } from '../../../types'
+import type { JournalView, Settings } from '../../../types'
+import { dayOf } from '../../vendor/protocol.js'
 import { SIM_VERSION } from '../../vendor/sim.js'
 import { CLIENT_VERSION } from '../../version'
 import type { Line, Span } from '../../windows/kit'
@@ -50,6 +51,34 @@ const DELETE_ACTION: PaneAction = {
   menu: { kind: 'confirm', action: 'delete', id: '', at: 1 },
 }
 
+const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+/** The day names' cells in the pick, before the mark. */
+const DAY_CELLS = 11
+const short = (day: number) => DAYS[day - 1]?.slice(0, 3) ?? '?'
+/** "Sat, Sun": ISO weekdays in week order. */
+const dayList = (days: readonly number[]) =>
+  [...days]
+    .sort((a, b) => a - b)
+    .map(short)
+    .join(', ')
+
+/**
+ * The set in force, and the set to come until its Monday passes; past it, the set to come is in
+ * force though the journal was read before.
+ */
+function restDaysNow(rest: JournalView['restDays'], serverNow: number) {
+  const { current, next } = rest
+  return next && dayOf(serverNow) < next.from
+    ? { inForce: current, next: next.days }
+    : { inForce: next?.days ?? current, next: null }
+}
+
+/** The Rest days row's value: "Sat, Sun", "Sat, Sun (Tue, Thu from Monday)". */
+function restDaysValue(rest: ReturnType<typeof restDaysNow>): string {
+  const now = dayList(rest.inForce)
+  return rest.next ? `${now} (${dayList(rest.next)} from Monday)` : now
+}
+
 const text = (t: string, inner: number): Line => ({
   spans: [{ gap: 1 }, { text: clip(t, inner - 1) }],
 })
@@ -66,10 +95,11 @@ function setting(
   hotkey?: string,
 ): ListRow {
   const alt = label.map((s) => ('text' in s ? s.text : '')).join('')
+  const cells = Math.max(VALUE_CELLS, value.length)
   return {
     key: `row:${id}`,
     ...(hotkey ? { hotkey } : {}),
-    spans: rowSpans(inner, null, label, value ? [{ text: value, cells: VALUE_CELLS }] : []),
+    spans: rowSpans(inner, null, label, value ? [{ text: value, cells }] : []),
     action,
     alt: value ? `${alt}: ${value}` : alt,
   }
@@ -103,6 +133,8 @@ export function accountPane(input: PaneInput): PaneBuild {
   const { view, account, dialog } = input
   const { settings } = account
   const inner = listInner(input)
+  const loaded = input.journal.journal?.restDays
+  const rest = loaded ? restDaysNow(loaded, input.serverNow) : null
   // Off is off on any system: the note is for a step that should be heard.
   const silent = account.soundSilent && settings.sound !== 'off'
   const renderer =
@@ -144,6 +176,16 @@ export function accountPane(input: PaneInput): PaneBuild {
         ? { t: 'none' }
         : { t: 'event', event: { t: 'set_auto_vendor', on: !view.autoVendor } },
     ),
+    // The account's too, from the journal: nothing to pick before it loads.
+    setting(
+      inner,
+      'restdays',
+      [{ text: 'Rest days' }],
+      rest ? restDaysValue(rest) : '…',
+      input.readOnly || !rest
+        ? { t: 'none' }
+        : { t: 'open', menu: { kind: 'rest_days', picked: [], at: 0 } },
+    ),
     setting(inner, 'band', [{ text: 'Band' }], account.collapsed ? 'collapsed' : 'shown', {
       t: 'band',
       collapsed: !account.collapsed,
@@ -172,16 +214,36 @@ export function accountPane(input: PaneInput): PaneBuild {
     menu: null,
     yesNo: null,
     panel: null,
-    error: null,
+    error: input.journal.error,
     state: [
       `Enter: change it. ${MOVE_HELP}`,
-      'Auto-vendor is kept per account, the rest per machine.',
+      'Auto-vendor and rest days are kept per account, the rest per machine.',
     ],
     field: null,
     link: !view.account.linked && dialog.link ? { url: dialog.link.url } : null,
   }
-  // Reset works in read-only mode, as today.
   const menu = dialog.menu
+  if (menu?.kind === 'rest_days' && rest && !input.readOnly) {
+    spec.menu = {
+      header: [{ text: 'Rest days' }],
+      items: DAYS.map((name, i) => {
+        const day = i + 1
+        const mark = menu.picked.includes(day) ? 'pick' : rest.inForce.includes(day) ? 'rest' : ''
+        return {
+          label: `${name.padEnd(DAY_CELLS)}${mark}`.trimEnd(),
+          action: { t: 'rest_day', day },
+        }
+      }),
+      at: Math.max(0, Math.min(DAYS.length - 1, menu.at)),
+    }
+    spec.state = [
+      menu.picked.length === 0
+        ? 'Pick two rest days.'
+        : `Picked ${dayList(menu.picked)}: pick one more.`,
+      'They apply from next Monday. q: back.',
+    ]
+  }
+  // Reset works in read-only mode, as today.
   if (menu?.kind === 'confirm' && menu.action === 'reset') {
     spec.yesNo = { at: menu.at, yes: { t: 'reset' } }
     spec.state = [RESET_QUESTION, '']

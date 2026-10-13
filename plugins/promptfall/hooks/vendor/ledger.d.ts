@@ -1,4 +1,4 @@
-import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards, Journal, Weekday, RestDaysResult } from './protocol.js';
 import { GameState, ServerEvent, Goods, SandboxEvent, MigrationChain, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
@@ -83,9 +83,9 @@ declare function transfer(goods: Goods, now: number, nextId: () => Promise<strin
 /** The next ledger id for a prefix (`L` listings, `O` orders, `t` transferred goods, `r` boss rewards, `sb` sandbox bosses), base 36 over one global counter. */
 declare function nextLedgerId(kv: KeyValue, prefix: 'L' | 'O' | 't' | 'r' | 'sb'): Promise<string>;
 
-type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'maintenance' | 'sandbox.enabled';
+type LedgerFlag = 'market.enabled' | 'chat.enabled' | 'worldboss.enabled' | 'presence.enabled' | 'leaderboards.enabled' | 'hunt.enabled' | 'maintenance' | 'sandbox.enabled';
 /** The flags an operator may set while the host runs: every flag but the sandbox's. */
-declare const SETTABLE_FLAGS: readonly ["market.enabled", "chat.enabled", "worldboss.enabled", "presence.enabled", "leaderboards.enabled", "maintenance"];
+declare const SETTABLE_FLAGS: readonly ["market.enabled", "chat.enabled", "worldboss.enabled", "presence.enabled", "leaderboards.enabled", "hunt.enabled", "maintenance"];
 type SettableFlag = (typeof SETTABLE_FLAGS)[number];
 /** What a sandbox host call answers: the refusal is an answer, not a throw. */
 type SandboxOutcome = {
@@ -165,7 +165,7 @@ type LedgerHost = {
 };
 /**
  * A read's store writes. `expire` off leaves listings and orders past `expiresAt` in place;
- * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged; `persist` off
+ * `advance` off leaves the world boss as stored, unspawned, unsettled and unengaged, and the weekly hunt unclosed and unopened; `persist` off
  * leaves the market book at its version mark, unwalked. A secondary session reads with all three
  * off: those writes are the primary's, under its lease.
  */
@@ -287,6 +287,9 @@ declare class Ledger implements ServerClient {
     world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
+    /** The caller's journal from its committed state: a read that never writes. */
+    journal(auth: Auth): Promise<Journal | Unauthorized | Banned>;
+    setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>;
     private mint;
     /** Offers the account's row to the highest-zone board; a bot's is never offered. */
     private offerZone;

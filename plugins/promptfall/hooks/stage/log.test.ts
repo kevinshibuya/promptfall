@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
-import type { Toast } from '../toasts'
+import { type Toast, toastsFor } from '../toasts'
 import type { Effect, Item } from '../vendor/sim.js'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS } from '../windows/tuning'
 import { boss, wave } from './fixtures'
@@ -107,7 +107,7 @@ test('each row of the wording table prints as written', () => {
         goods: { kind: 'item', item: item('oak_staff', 'epic') },
         gold: 120,
       } as unknown as Effect,
-      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
       { k: 'gold', amount: 9 },
       { k: 'wave_cleared', zone: 1, wave: 2 },
     ],
@@ -146,6 +146,23 @@ test('a level-up names the hero the way its toast does, from the roster', () => 
     { before: v },
   )
   expect(texts).toEqual(['Aldric the Steadfast reached level 6.', 'A hero reached level 2.'])
+})
+
+test('a reward from the weekly hunt says so', () => {
+  const { texts } = run([
+    {
+      k: 'rewarded',
+      bossId: 'h1a',
+      goods: { kind: 'item', item: item('oak_staff', 'epic') },
+      gold: 120,
+      source: 'hunt',
+    },
+    { k: 'rewarded', bossId: 'h1a', goods: null, gold: 80, source: 'hunt' },
+  ])
+  expect(texts).toEqual([
+    'Your share of the hunt: 120G and Oak Staff.',
+    'Your share of the hunt: 80G.',
+  ])
 })
 
 test('a hero won from the boss is named by its template', () => {
@@ -453,6 +470,10 @@ test("the zone line is held to the zone's show time and takes its place at relea
   const show = t.zoneShowAt(1) ?? 0
   // The boss's drop reveals before its row leaves: its line lands first.
   expect(t.showAt('i1') ?? show).toBeLessThan(show)
+  // The next draw departs the boss and schedules its dissolve, its chest and the party's victory
+  // pose: the show time stands.
+  t.observe(next, NOW + 1)
+  expect(t.zoneShowAt(1)).toBe(show)
   // A later tick's hit, in the new zone, once the drop's line has typed and while the zone line
   // is held.
   const tick = NOW + 3000
@@ -460,7 +481,6 @@ test("the zone line is held to the zone's show time and takes its place at relea
   const hitting: Effect[] = [act('h2', 0), hit('h2', 'e1', 4)]
   const [start = 0] = t.onEffects(hitting, tick, 2000)
   log.onEffects(hitting, [start], next, tick, 2000, t)
-  // A draw departs the boss and schedules its dissolve and chest: the show time stands.
   t.observe(next, tick + 1)
   expect(t.zoneShowAt(1)).toBe(show)
   const texts = (now: number) => log.shown(now, 'still').map((l) => l.text)
@@ -731,6 +751,58 @@ test('each reactive event prints its line at its effect’s time', () => {
   }
 })
 
+test('each boss move prints its line at its effect’s time, and none toasts', () => {
+  // The Bandit Captain as Gorvax: the log names a boss as the view does.
+  const v = boss()
+  const b = v.enemies[0]?.id ?? ''
+  const gorvax = { ...v, enemies: v.enemies.map((e) => ({ ...e, name: 'Gorvax' })) }
+  const [h1, h2, h3] = v.heroes.map((h) => h.id)
+  const [n1, n2] = v.heroes.map((h) => h.shortName)
+  const cases: [Effect[], string[]][] = [
+    [
+      [
+        { k: 'act', actor: b, action: 'attack_twice', at: 0 },
+        hit(b, h1 ?? '', 12),
+        hit(b, h1 ?? '', 13),
+      ],
+      ['Gorvax strikes twice!', `Gorvax hits ${n1} for 12.`, `Gorvax hits ${n1} for 13.`],
+    ],
+    [
+      [
+        { k: 'act', actor: b, action: 'heal', at: 0 },
+        { k: 'heal', by: b, target: b, amount: 40 },
+      ],
+      ['Gorvax heals itself for 40.'],
+    ],
+    [
+      [act(h2 ?? '', 0), hit(h2 ?? '', b, 30), { k: 'raging', enemyId: b }],
+      [`${n2} hits Gorvax for 30.`, "Gorvax's rage grows!"],
+    ],
+    [
+      [
+        { k: 'act', actor: b, action: 'attack_all', at: 0 },
+        hit(b, h1 ?? '', 5),
+        hit(b, h2 ?? '', 6),
+        hit(b, h3 ?? '', 7),
+      ],
+      ['Gorvax hits 3 foes for 5, 6 and 7.'],
+    ],
+  ]
+  for (const [effects, texts] of cases) {
+    const r = run(effects, { before: gorvax })
+    expect(r.texts).toEqual(texts)
+    const move = texts.find((t) => /twice!|itself|rage grows/.test(t))
+    if (move) {
+      // The strike's and the heal's lines open their action; the rage's follows the hit that raised it.
+      const line = r.log.upcoming(NOW - 1, 1e9).find((l) => l.text === move)
+      if (texts[0] === move) expect(line?.at, move).toBe(r.starts[0])
+      else expect(line?.at, move).toBeGreaterThan(r.starts[0] ?? 0)
+      expect(line?.key, move).toBe(true)
+    }
+    expect(toastsFor(effects, gorvax, { bossName: () => null })).toEqual([])
+  }
+})
+
 test('a reactive line behind a burst more than a tick long is never dropped', () => {
   const v = wave()
   const h1 = v.heroes[0]?.id ?? ''
@@ -744,4 +816,40 @@ test('a reactive line behind a burst more than a tick long is never dropped', ()
   expect(texts).toContain('Claude stumbles. Goblin Scout is enraged!')
   expect(texts).toContain('The party stands guard.')
   expect(texts).toContain('The party quickens.')
+})
+
+const arrived = (zone: number): GameView => ({ ...wave(), enemies: [], zone, wave: 1 })
+
+test('the travel line is held for the backdrop change and lands at its show time, no sooner', () => {
+  const v = wave()
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  const effects: Effect[] = [{ k: 'traveled', from: 1, to: 3 }]
+  const starts = t.onEffects(effects, NOW, 2000)
+  log.onEffects(effects, starts, arrived(3), NOW, 2000, t)
+  const show = t.travelShowAt(3) ?? 0
+  expect(show).toBeGreaterThan(NOW)
+  const line = 'The party travels to zone 3, Marsh of Sighs.'
+  expect(log.shown(show - 1, 'still').map((l) => l.text)).not.toContain(line)
+  expect(log.isBusy(show - 1, 'still')).toBe(true)
+  expect(log.upcoming(show - 1, 10_000)[0]).toMatchObject({ text: line, key: true, at: show })
+  expect(log.shown(show, 'still').at(-1)?.text).toBe(line)
+})
+
+test('with no stage drawn the travel line lands with the state', () => {
+  // A timeline that never drew a stage has no show time for it.
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  const effects: Effect[] = [{ k: 'traveled', from: 1, to: 3 }]
+  log.onEffects(effects, t.onEffects(effects, NOW, 2000), arrived(3), NOW, 2000, t)
+  expect(log.shown(NOW, 'still').map((l) => l.text)).toEqual([
+    'The party travels to zone 3, Marsh of Sighs.',
+  ])
+})
+
+test('the travel line carries the tier past zone 12', () => {
+  const { texts } = run([{ k: 'traveled', from: 14, to: 13 }])
+  expect(texts).toEqual(['The party travels to tier 2, zone 1, Greenmeadow Road.'])
 })

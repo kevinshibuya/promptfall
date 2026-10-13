@@ -76,6 +76,33 @@ export const MIGRATIONS: MigrationChain = {
       }
     },
   },
+  // 15 → 16: the tallies, travel and the tavern guarantee (#161). Every tally starts at zero but the
+  // zone boss count, seeded from the boss total: the one count the past kept, mixing zone and turn
+  // bosses, so a veteran's turn bosses count there once. The guarantee's counts start at zero.
+  15: {
+    state: (s) => {
+      const zero = () => ({ common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 })
+      const stats = s.stats as { bosses: number }
+      return {
+        ...s,
+        tallies: {
+          enemies: {},
+          collection: {},
+          zoneBosses: stats.bosses,
+          cleanZoneBosses: 0,
+          turnBosses: 0,
+          drops: zero(),
+          recruits: zero(),
+          reforges: 0,
+          goldEarned: 0,
+        },
+        guarantee: { rare: 0, epic: 0, legendary: 0 },
+      }
+    },
+  },
+  // 16 → 17: the zone bosses' moves (#169). Rules, tactics and the bosses' atk moved; a move is read
+  // from content and rage from a boss's HP at the hit, so nothing changes shape.
+  16: { state: (s) => s },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

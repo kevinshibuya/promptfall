@@ -18,14 +18,17 @@ it, never below 1. Its sprite wears its rarity colour, from Common grey to Legen
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
 Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
-the next zone boss kill, wipe or retreat, farm restarts included (on a fresh save,
+the next zone boss kill, wipe, retreat or travel, farm restarts included (on a fresh save,
 before the first kill, at once), and the stage draws the party in the list's order. A new save
 starts with one Common hero of each class, three of them already in the party.
 
 **Recruiting.** The Heroes tab's last row recruits a hero at the tavern for gold, at the odds the
-Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bosses less often,
-drop recruit contracts that bring a hero straight into the roster. A contract that finds the
-roster full is vendored for gold.
+Odds tab publishes, each recruit dearer than the last. The tavern guarantee puts a floor under the
+odds: a Rare or better comes within 20 tavern recruits, an Epic or better within 80 and a
+Legendary within 400, so the recruit that would break the promise comes up at least that rare.
+Zone bosses, and turn bosses less often, drop recruit contracts that bring a hero straight into
+the roster; a contract never counts toward the guarantee, nor does a sandbox recruit. A contract
+that finds the roster full is vendored for gold.
 
 **Rests.** Each prompt the player submits is a short rest: every hero heals 50% of max HP, and
 fallen heroes get up at 50%.
@@ -55,7 +58,7 @@ the hero who is acting; enemies' gauges never show.
 over the small party. Beating it moves the party on to the next zone: twelve of them, from
 Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
-played and its row has left, the backdrop changes, and only then does the combat log say "The
+played, the party has held its victory pose and the boss's row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
 percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
 zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
@@ -65,7 +68,17 @@ worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity
 contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the arrival toast
 and the log name the tier in words, "The party reached tier 2, zone 1, Greenmeadow Road", and the
 enemy window's title in the short form that fits it, "T2 Z1 · Wave 3". Inside tier 1 they read as
-before.
+before. Each zone boss has one of four moves, the same in every tier: zones 1, 5 and 9 strike
+twice, two hits on one hero at 70% each, both numbers landing at the lunge's one impact and the
+log saying "Gorvax strikes twice!"; zones 2, 6 and 10 heal themselves under half HP for half
+their attack, more often the lower they are, with the White Mage's light burst on the boss and
+"Gorvax heals itself for 40."; zones 3, 7 and 11 sweep the whole party at 60% about one action
+in three, beside their single attack, one lunge with every hero's hit landing at once and the
+usual "hits 3 foes" line; zones 4, 8 and 12 rage under half
+HP, every hit from there half again as hard, and "Gorvax's rage grows!" when the hit takes them
+under. A raging boss that is also enraged takes both on that hit. Each move's boss attack is tuned
+so the reference Knight still survives three to four of its actions; turn bosses and the world
+boss keep the single attack. None of it toasts.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
 better drops and a chance of a recruit contract, separate from the zone's own boss. One that
@@ -80,6 +93,15 @@ falls back one zone to wave 1 at full health (in zone 1 it restarts zone 1), and
 starts again. A zone boss kill or any change of zone also starts it again. The combat log says
 "The party retreats to zone 3.", and a long toast reads "The party retreats to zone 3, Marsh of
 Sighs".
+
+**Travel.** The party can travel to any zone it has reached, from that zone's Journal page or
+with `/promptfall travel <zone>`. It travels at once, with no cost and no cooldown. The fight on the
+field ends with no drops and no XP, and the party starts the zone at wave 1. Past tier 1 a zone's
+page offers each tier of it the party has reached. The command answers "The party travels to
+zone 3, Marsh of Sighs." or says why it cannot go: a zone past the highest reached, the zone the
+party is in, a world boss fight, or a zone that is not a number. A session with no game running
+answers that it is not playing. A retreat still drops the party one zone, and travel can take it
+straight back.
 
 **Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
@@ -109,8 +131,8 @@ still the streaks and the stance still draw and the bob stays stopped.
 
 **Combat log.** The Party tab's message window types out each action as the stage plays it, in
 Dragon Quest's words: "Aldric hits Wood Goblin for 12.", "Wood Goblin is defeated!". Hit lines
-that fall behind are dropped; kills, drops, level-ups, deaths, sales and reactive
-events always get their line.
+that fall behind are dropped; kills, drops, level-ups, deaths, sales, reactive events, travels,
+rewards and a boss's move always get their line.
 
 ## Loot
 
@@ -221,7 +243,8 @@ none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
 takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
-the market, chat, the world boss, presence, the leaderboards and maintenance switch on the next
+the market, chat, the world boss, presence, the leaderboards, the hunt (`hunt.enabled`) and
+maintenance switch on the next
 call, and stay switched after a restart, over the `--flag` values it starts with. The sandbox flag
 is refused there. Each admin call logs one line with its time, the flags it set and its outcome,
 never the token. A server without the token has no admin routes. A server makes at most five new
@@ -275,6 +298,18 @@ records row says so in place when it has room.
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
 "Your share of …", and goods with no free slot wait in returns.
 
+**Weekly hunt.** One target a week shared by everyone on the server, from Monday 00:00 UTC on the
+server's clock: one enemy kind across every zone (casters, brutes, tanks, swifts) or zone bosses,
+in turn from a table, each with a target such as 20,000 casters. The server counts every account's
+kills of that kind as its batches commit, never a bot's, and the World tab's records row shows it
+after the highest zone and the kills, as "Hunt: casters 12,400 / 20,000, 3 days left", with an
+eight-cell bar when the row has room. When the week ends every account that counted at least half
+a percent of the target gets one reward rolled at its zone, whether or not the target was reached:
+it toasts "Your share of the hunt: 120 gold and Oak Staff", the combat log says the same, and goods
+with no free slot wait in returns. The next week's hunt opens then. It needs a server and the
+`hunt.enabled` flag, on by default; with it off the records row says "hunt is off" in place, and
+"world boss and hunt are off" with the boss off too, as on the in-process fake.
+
 ## Servers
 
 **The public server.** Promptfall's own server runs at `https://promptfall.kevinshibuya.com`: the
@@ -285,7 +320,7 @@ paragraph says what it keeps about an account and for how long.
 
 **The default server and `local`.** A fresh install, with no server set, plays on the public
 server. `/promptfall server local` moves this machine to the in-process fake, which plays offline
-with no chat and no world boss; `/promptfall server <url>` moves it to any other server, and
+with no chat, no world boss and no hunt; `/promptfall server <url>` moves it to any other server, and
 `/promptfall server` says which one is in force. Each server has its own account on the machine,
 and nothing moves between them. The sandbox always plays on the in-process fake, whatever the
 setting.
@@ -328,6 +363,15 @@ stands and fights until the blow that kills him lands, then dims, and the party 
 with each hit as it lands, not when the game applies it. The stage is 17 rows in every fight and
 never changes height, the party small on the zone's painting, so a boss lands at its full size. A
 monster that steps on partway through a tick plays its first actions animated, on the desktop too.
+Three moments get a scene of their own. When the party travels, the heroes step off to the right
+and fade, the enemies it left stand until the backdrop changes to the destination's, and the
+heroes step back on from the left; the log's "The party travels to zone 3, Marsh of Sighs." lands
+as the backdrop changes. A level-up flashes the hero gold and its gains rise over it in gold,
+"+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
+the empty ground for about two seconds after the boss has dissolved, and only then does the
+backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
+The pose is a slot: at 1.5× it holds the class's drawn victory frame, the weapon raised, and the
+idle art where a class has none; at 1× it always holds the idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.
@@ -350,30 +394,54 @@ a tick, the HP bars drop at the moment each hit lands, as the action gauges fill
 with ▶ on the current one. Under it the message window shows the combat log on Party, the last
 two drops on Loot and the World rows on World.
 
-**The pane.** `/promptfall` opens the pane on eight tabs: Inventory, Heroes, Market, Orders,
-Account, Odds, Chat and Leaderboards, named in a tab window with each hotkey letter in gold. Each
+**The pane.** `/promptfall` opens the pane on nine tabs: Inventory, Heroes, Market, Orders,
+Account, Odds, Journal, Chat and Leaderboards, named in a tab window with each hotkey letter in gold. Each
 tab is a list window with a ▶ cursor, a detail window beside it, and a two-line message window at
 the foot saying what the keys do. Tab or the arrows move the ▶, Enter runs the row or opens its
 command window, `q` backs out and Escape closes; Vendor, Dismiss, Buy, the cancels and Reset ask
 Yes or No first. Long lists page with a footer such as `16-30/40`.
 
 **Account tab.** The Account tab holds the settings as rows (Sound, Motion, Renderer, and
-Auto-vendor off or on, the one kept with the account rather than the machine), the band shown or
-collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my account on this
-server, each of the last two asking Yes or No. A session that is not playing shows Auto-vendor and
-cannot change it. Its detail window names the server, the client, the mode and the session.
+Auto-vendor off or on, the one kept with the account rather than the machine), the rest days, the
+band shown or collapsed, Band off, Link GitHub, a reset of this machine's data and Delete my
+account on this server, each of the last two asking Yes or No. The rest-days row, "Rest days: Sat,
+Sun", is the account's too and reads the journal, which the tab loads on open: Enter opens a pick
+of the seven days with the two in force marked, and the second day picked sends the pair to the
+server, which applies it from the next Monday. Until that Monday passes the row reads "Rest days:
+Sat, Sun (Tue, Thu from Monday)"; a refusal flashes in the message window. A session that is not
+playing shows Auto-vendor and the rest days and cannot change them. Its detail window names the
+server, the client, the mode and the session.
 
 **Odds tab.** The Odds tab publishes the drop, rarity and tavern odds for the current zone, and
 sells the inventory and roster expansions. Past tier 1 its title and its message name the tier
 ("Odds · tier 2, zone 1") and the table shows zone 12's odds, which every zone of tiers 2 and 3 drops at. Under
-the tables it says that rarity multiplies base stats, heroes and items alike, and that reforge is
-priced by rarity and tier.
+the tables three rows publish the tavern guarantee from the save's own counts, "Rare guaranteed in
+13 recruits", "Epic guaranteed in 61 recruits" and "Legendary guaranteed in 377 recruits" ("on the
+next recruit" at one), then it says that rarity multiplies base stats, heroes and items alike, and
+that reforge is priced by rarity and tier. On the Heroes tab the recruit row's detail gives the
+price and the nearest guarantee in one line ("120G · Rare guaranteed in 13").
+
+**Journal tab.** The Journal tab, on `u`, keeps the player's record. Today shows the daily goal
+with its progress, "Resets in 5 h" from the server's clock and the streak in work days. The goal
+shows as soon as the tab opens; the progress, the reset and the streak arrive with the journal read,
+with "Loading…" in their place until then. Bestiary lists one row per zone reached, all twelve
+past tier 1, each with its enemies defeated out of six. Collection and Achievements follow. Enter
+on a zone opens its page: the six enemies with how often each was seen and defeated, a `*` on each
+defeated at least once, the zone boss in orange, and Travel here (`t`), which is left out on the
+zone the party is in. The Collection page lists every item base with five rarity letters,
+`C U R E L`, lit in each rarity the party has held it in. The Achievements page shows each ladder
+as one row of step marks with the next step's gold and the date of the last step crossed, and each
+one-off with its mark and date. `q` backs out of a page. The bestiary and the collection count from
+the version that brought them. A session that is not playing reads the Journal and writes nothing.
+`/promptfall journal` opens the pane on it. Unequip in an item's command window is on `n`, since
+`u` is the Journal's.
 
 **Motion.** Motion is full by default; set to still, the idle bob stops while attacks and hits
 still play. It is set with `n` on the Account tab or `/promptfall motion full|still`.
 
-**The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab. `off` and `on` hide
-and show the band for the session while play goes on, `farm` flips the tactics, `autovendor on`
+**The `/promptfall` verbs.** `/promptfall <tab>` opens the pane on that tab, `journal` among
+them. `off` and `on` hide and show the band for the session while play goes on, `farm` flips the
+tactics, `travel <zone>` moves the party to a zone it has reached, `autovendor on`
 and `autovendor off` set the account's auto-vendor setting (any other word answers the usage),
 and `server <url>` or `server local` points the machine at an HTTP server or at the in-process
 fake, each with its own account; `server` alone says which is in force. A fresh install, with no server set, plays on
@@ -385,10 +453,18 @@ another session makes that one the primary. A prompt goes through at once and th
 when the server answers. Every other session draws read-only and says "playing in another
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
-trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
+trades, `farm`, `autovendor`, `travel` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
+A session that becomes primary more than ten minutes after this account was last seen playing on
+this machine says what the party did since, in a toast and for 20 seconds in the message window:
+"Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
+Today's goal: kill 40 enemies." It names the weekday when a day or more has passed and says
+"Since your last session" under a day, leaves out what did not change, and says nothing when
+nothing did.
+A shorter break says nothing and loses nothing: the next summary still counts it. The play counted
+runs from the last summary, and a reset starts it over.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
@@ -405,26 +481,28 @@ and play stays paused until a new session asks again.
 
 **Toasts.** Only the primary session toasts, one sentence per event worth a glance: a Rare or
 better drop, a recruit, a level-up, a zone arrival, a wipe, a retreat, a boss reward, a sale, a purchase, a
-return, a world boss appearing or going down, a revoked item, and a Rare or better drop vendored
-for lack of room. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
+return, a world boss appearing or going down, a revoked item, a Rare or better drop vendored
+for lack of room, an achievement step ("Achievement: ten thousand kills, 1,500 gold") and the
+daily goal met ("Daily goal met: 40 gold"). A gold credit whose reason is neither, such as a bot's
+stipend, toasts nothing, and neither of the two prints a log line. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
 recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
-once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
-legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat or a zone arrival keeps
-its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
+once, fold into one toast with the count and the sum ("3 items sold for 410 gold", "3
+achievements, 2,000 gold"), while a legendary, epic or rare drop, a vendored item, a recruit, a
+reward, a wipe, a retreat, a zone arrival or a goal met keeps its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, the reactive events, farming clears and chat never toast, the open pane holds toasts until it closes,
-and a first launch toasts a welcome that points at the Heroes tab.
+and the session raises two toasts of its own: a first launch's welcome that points at the Heroes tab,
+and the session summary when a session becomes primary after a break (under Primary session).
 
-**Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
-world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays
-none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
+**Cues.** Nine toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
+world boss appearing, a zone arrival (the zone-cleared cue), a recruit, a retreat, an achievement
+and a goal met (both the goal cue); a wipe plays none. A burst plays each of its cues once, after its toasts; a held toast's cue plays with it, so
 a drop's lands at the reveal and a zone arrival's with the new backdrop. Only the primary session
 plays them, and hiding the band does not silence them. The set holds eight cues, one family
-written by `pnpm cues` and checked in CI; the goal cue ships ahead of its toast rows and plays once
-a goal met or achievement toasts it.
+written by `pnpm cues` and checked in CI.
 
 ## Sound
 
@@ -450,7 +528,7 @@ default. /promptfall sound off silences it."
 
 **The switch.** Starting Claude Code with `PROMPTFALL_SANDBOX=1` turns the sandbox on for that
 session: the game plays on the in-process fake whatever server the machine points at, with chat
-off and the world boss on, and `/promptfall server` answers that the sandbox pins the server.
+and the hunt off and the world boss on, and `/promptfall server` answers that the sandbox pins the server.
 Without the variable the `sandbox` verb is not in the command's hint, and typing it anyway answers
 "Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1."
 

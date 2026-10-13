@@ -106,7 +106,8 @@ export function itemCommands(input: PaneInput, item: ItemView): Command[] {
   } else if (item.equippedBy) {
     out.push({
       label: 'Unequip',
-      hotkey: 'u',
+      // Not `u`: the Journal tab's, mounted on every tab.
+      hotkey: 'n',
       action: {
         t: 'event',
         event: { t: 'unequip', heroId: item.equippedBy, slot: item.slot as Slot },

@@ -1,7 +1,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { rewindRecord } from '@promptfall/ledger/testing'
+import { patchRecord, rewindRecord } from '@promptfall/ledger/testing'
 import {
   type Auth,
   BOSS_GRID_MS,
@@ -57,7 +57,11 @@ async function host(
   open.add(listening)
   return {
     client: new HttpClient({ baseUrl: `http://127.0.0.1:${listening.port}`, fetch: nodeFetch }),
-    host: { ...server.ledger.host, rewind: (id: string, v: number) => rewindRecord(kv, id, v) },
+    host: {
+      ...server.ledger.host,
+      rewind: (id: string, v: number) => rewindRecord(kv, id, v),
+      patch: (id: string, fn: (s: GameState) => GameState) => patchRecord(kv, id, fn),
+    },
     async close() {
       open.delete(listening)
       await listening.close()

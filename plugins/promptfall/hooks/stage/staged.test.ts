@@ -5,7 +5,7 @@ import type { Effect } from '../vendor/sim.js'
 import { boss, wave, worldBoss } from './fixtures'
 import { landingsWithin, stagedState } from './staged'
 import { StageTimeline } from './timeline'
-import { DISSOLVE_MS, WAVE_GAP_MS } from './tuning'
+import { DISSOLVE_MS, FLASH_MS, VICTORY_MS, WAVE_GAP_MS } from './tuning'
 
 const NOW = 1_000_000
 
@@ -85,8 +85,12 @@ test('the wave and zone hold while a departed enemy of them is held; newcomers w
   const held = { zone: 1, zoneName: 'Greenmeadow Road', wave: 11, enemies: ['Bandit Captain'] }
   expect(at(impact - 1)).toEqual(held)
   expect(at(impact + DISSOLVE_MS)).toEqual(held)
+  // Through the party's victory pose after the boss's dissolve.
+  const posed = impact + FLASH_MS + DISSOLVE_MS + VICTORY_MS
+  t.observe(next, posed - 1)
+  expect(at(posed - 1)).toEqual(held)
   // The boss gone and the pause over, the newcomers step on and the encounter is the view's.
-  const later = impact + 1_000 + DISSOLVE_MS + WAVE_GAP_MS
+  const later = posed + WAVE_GAP_MS
   t.observe(next, later)
   expect(at(later)).toEqual({
     zone: 2,
@@ -162,6 +166,7 @@ const polled = (hp: number, committed: number): WorldState => ({
       endsAt: NOW + 660_000,
       yours: committed,
     },
+    hunt: null,
     chat: [],
     flags: {},
   },
