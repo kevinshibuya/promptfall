@@ -12,6 +12,7 @@ import {
   type FetchLike,
   HealthSchema,
   HttpClient,
+  JournalResponseSchema,
   type KeyValue,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
@@ -21,6 +22,7 @@ import {
   MemoryKeyValue,
   MIN_CLIENT_VERSION,
   MyOrdersResponseSchema,
+  RestDaysResultSchema,
   WorldResponseSchema,
 } from '@promptfall/protocol'
 import { hashState, replay, SIM_VERSION } from '@promptfall/sim'
@@ -174,6 +176,33 @@ describe('HTTP fake', () => {
     expect(b).toEqual({ status: 200, body: { reason: 'unauthorized' } })
     const c = await raw('POST', '/v1/listings/L1/buy', { token: 'forged' })
     expect(c).toEqual({ status: 200, body: { ok: false, reason: 'unauthorized' } })
+    const d = await raw('GET', '/v1/journal', { token: 'forged' })
+    expect(d).toEqual({ status: 200, body: { reason: 'unauthorized' } })
+    const e = await raw('POST', '/v1/journal/rest-days', {
+      body: '{"days":[1,2]}',
+      token: 'forged',
+    })
+    expect(e).toEqual({ status: 200, body: { ok: false, reason: 'unauthorized' } })
+  })
+
+  it('GET /v1/journal reads the journal; POST /v1/journal/rest-days writes the rest days', async () => {
+    const http = new HttpClient({ baseUrl: base, fetch: nodeFetch })
+    const auth = { deviceToken: await freshToken() }
+    const journal = await http.journal(auth)
+    expect(journal).toMatchObject({ restDays: { current: [6, 7], next: null }, goalsMet: 0 })
+    const written = await http.setRestDays(auth, [5, 4])
+    // The fake's clock stands on a Tuesday: the set applies from the next Monday.
+    expect(written).toMatchObject({
+      ok: true,
+      journal: { restDays: { current: [6, 7], next: { days: [4, 5], from: 19_681 } } },
+    })
+    expect(await http.setRestDays(auth, [9, 4])).toEqual({ ok: false, reason: 'rest_days_range' })
+    // A body that is not a list of numbers is the schema's, not the ledger's.
+    const bad = await raw('POST', '/v1/journal/rest-days', {
+      body: '{"days":"sat"}',
+      token: auth.deviceToken,
+    })
+    expect(bad.status).toBe(400)
   })
 
   it('every response body passes its schema', async () => {
@@ -243,6 +272,11 @@ describe('HTTP fake', () => {
       [(await raw('GET', '/v1/world?since=0', { token })).body, WorldResponseSchema],
       [(await raw('POST', '/v1/chat', { body: '{"text":"hi"}', token })).body, ChatResultSchema],
       [(await raw('GET', '/v1/leaderboards', { token })).body, BoardsResponseSchema],
+      [(await raw('GET', '/v1/journal', { token })).body, JournalResponseSchema],
+      [
+        (await raw('POST', '/v1/journal/rest-days', { body: '{"days":[6,7]}', token })).body,
+        RestDaysResultSchema,
+      ],
     ]
     for (const [body, schema] of checks) expect(() => schema.parse(body)).not.toThrow()
     // The client agrees: it parses the same bodies.

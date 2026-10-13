@@ -19,6 +19,21 @@ export {
   type ServerConfig,
 } from './client'
 export { type AbortSignalLike, type FetchLike, HttpClient, ROUTES } from './http'
+export {
+  DAY_MS,
+  DailyGoalSchema,
+  DEFAULT_REST_DAYS,
+  dayOf,
+  type Journal,
+  JournalSchema,
+  nextMonday,
+  RestDaysBodySchema,
+  type RestDaysRefusal,
+  type RestDaysResult,
+  RestDaysResultSchema,
+  type Weekday,
+  weekdayOf,
+} from './journal'
 export { type KeyValue, MemoryKeyValue } from './kv'
 export {
   type Banned,
@@ -59,6 +74,7 @@ export {
   ErrorBodySchema,
   type Health,
   HealthSchema,
+  JournalResponseSchema,
   LinkPollResponseSchema,
   LinkPollSchema,
   LinkRefusedSchema,

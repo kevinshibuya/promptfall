@@ -2,6 +2,7 @@ import { createInitialState, hashState, SIM_VERSION } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import type { Account, Bootstrap, Delivery, ServerConfig } from './client'
 import { type FetchLike, HttpClient } from './http'
+import type { Journal } from './journal'
 import type { Listing, Order } from './market'
 import type { Batch } from './schemas'
 import type { Boards, WorldSnapshot } from './world'
@@ -350,6 +351,48 @@ describe('HttpClient', () => {
       undefined,
     ])
     expect(req.headers).toEqual({ authorization: 'Bearer tok-1' })
+  })
+
+  const journal: Journal = {
+    achievements: [{ id: 'kills', steps: [{ step: 1, at: 1_700_000_000_000 }] }],
+    day: {
+      index: 19_675,
+      goal: { kind: 'kills', target: 150 },
+      progress: 12,
+      met: false,
+      resetsAt: 19_676 * 86_400_000,
+    },
+    goalsMet: 3,
+    streak: { length: 2, lastMet: 19_674 },
+    restDays: { current: [6, 7], next: { days: [1, 2], from: 19_681 } },
+  }
+
+  it('journal gets the journal with auth and no body', async () => {
+    const { http, sent } = client(journal)
+    expect(await http.journal(auth)).toEqual(journal)
+    const req = only(sent)
+    expect([req.method, req.url, req.body]).toEqual([
+      'GET',
+      'http://127.0.0.1:7777/v1/journal',
+      undefined,
+    ])
+    expect(req.headers).toEqual({ authorization: 'Bearer tok-1' })
+  })
+
+  it('setRestDays posts the days with auth; a refusal passes through as a value', async () => {
+    const { http, sent } = client({ ok: true, journal })
+    expect(await http.setRestDays(auth, [1, 2])).toEqual({ ok: true, journal })
+    const req = only(sent)
+    expect([req.method, req.url, req.body]).toEqual([
+      'POST',
+      'http://127.0.0.1:7777/v1/journal/rest-days',
+      '{"days":[1,2]}',
+    ])
+    const refused = client({ ok: false, reason: 'rest_days_same' })
+    expect(await refused.http.setRestDays(auth, [3, 3])).toEqual({
+      ok: false,
+      reason: 'rest_days_same',
+    })
   })
 
   it('a thrown fetch is ServerUnreachable', async () => {

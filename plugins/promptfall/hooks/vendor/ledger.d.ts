@@ -1,4 +1,4 @@
-import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards } from './protocol.js';
+import { Account, BudgetKind, KeyValue, ServerClient, LinkStart, LinkRefused, LinkEnd, Bootstrap, BootstrapRefused, Auth, AccountInfo, Unauthorized, Banned, AccountDeleted, BatchAck, LinkPoll, ListingQuery, ListingPage, MarketResult, MyOrders, NewOrder, Order, WorldSnapshot, ChatResult, Boards, Journal, Weekday, RestDaysResult } from './protocol.js';
 import { GameState, ServerEvent, Goods, SandboxEvent, MigrationChain, TradeKind } from './sim.js';
 
 /** Placeholder content: the mechanism is phase 3's, the word list is not. */
@@ -287,6 +287,9 @@ declare class Ledger implements ServerClient {
     world(auth: Auth, since: number, { advance }?: ReadOptions): Promise<WorldSnapshot | Unauthorized | Banned>;
     chat(auth: Auth, text: string): Promise<ChatResult>;
     leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>;
+    /** The caller's journal from its committed state: a read that never writes. */
+    journal(auth: Auth): Promise<Journal | Unauthorized | Banned>;
+    setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>;
     private mint;
     /** Offers the account's row to the highest-zone board; a bot's is never offered. */
     private offerZone;

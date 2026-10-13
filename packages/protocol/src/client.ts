@@ -1,4 +1,5 @@
 import type { GameState, PlayerEventKind, ServerEvent, TradeKind } from '@promptfall/sim'
+import type { Journal, RestDaysResult, Weekday } from './journal'
 import type {
   Banned,
   ListingPage,
@@ -132,6 +133,10 @@ export interface ServerClient {
   world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>
   chat(auth: Auth, text: string): Promise<ChatResult>
   leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>
+  /** The caller's journal: a read that writes nothing. */
+  journal(auth: Auth): Promise<Journal | Unauthorized | Banned>
+  /** Two distinct weekdays, stored as the rest days from next Monday; answers the journal. */
+  setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>
 }
 
 /**
