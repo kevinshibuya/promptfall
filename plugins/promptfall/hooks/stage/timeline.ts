@@ -567,6 +567,22 @@ export class StageTimeline {
     return p.from + (p.to - p.from) * (1 - (1 - t) * (1 - t))
   }
 
+  /** The slots an entry stands in, and those a chest on the empty ground holds until it fades. */
+  private heldSlots(now: number): Set<number> {
+    const held = new Set([...this.entries.values()].map((k) => k.slot))
+    for (const m of this.motions) {
+      if (m.kind === 'chest' && m.actor === null && m.until > now) held.add(m.slot)
+    }
+    return held
+  }
+
+  /** Where a chest with no row to fall from lands: the lowest free slot, the front on a full stage. */
+  private groundSlot(now: number): number {
+    const held = this.heldSlots(now)
+    for (let slot = 0; slot < SLOTS; slot++) if (!held.has(slot)) return slot
+    return 0
+  }
+
   /**
    * The lowest slot no entry and no chest on the empty ground holds; when all three are held, the slot of the departed entry that
    * ends first among those whose hit has played out (flash, numbers and chest over). Null when every
@@ -574,11 +590,7 @@ export class StageTimeline {
    * brought a newcomer, and evicting would drop that hit, so the newcomer waits a frame or more.
    */
   private freeSlot(now: number): number | null {
-    const held = new Set([...this.entries.values()].map((k) => k.slot))
-    // A chest on the empty ground holds its slot until it fades.
-    for (const m of this.motions) {
-      if (m.kind === 'chest' && m.actor === null && m.until > now) held.add(m.slot)
-    }
+    const held = this.heldSlots(now)
     for (let slot = 0; slot < SLOTS; slot++) if (!held.has(slot)) return slot
     let evict: Known | null = null
     let evictEnd = Number.POSITIVE_INFINITY
@@ -825,11 +837,12 @@ export class StageTimeline {
           } as const
           if (actor === null || !this.entries.has(actor)) {
             // No row to fall from, or its hit's target has left the stage: on a stage the band has
-            // drawn, the chest falls when it arrived onto the front slot's ground and holds the
-            // slot, a pause after it, as a kill's does.
+            // drawn, the chest falls when it arrived onto the lowest free slot's ground (the front
+            // on an empty stage) and holds the slot, a pause after it, as a kill's does.
             if (!this.observed) continue
             const until = arrivedAt + chestMs(effect.item.rarity)
-            this.motions.push({ ...chest, actor: null, slot: 0, from: arrivedAt, until })
+            const slot = this.groundSlot(arrivedAt)
+            this.motions.push({ ...chest, actor: null, slot, from: arrivedAt, until })
             this.gaps.set(`ground:${effect.item.id}`, until + WAVE_GAP_MS)
             continue
           }
