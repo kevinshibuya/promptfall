@@ -18,7 +18,7 @@ it, never below 1. Its sprite wears its rarity colour, from Common grey to Legen
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
 Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
-the next zone boss kill, wipe or retreat, farm restarts included (on a fresh save,
+the next zone boss kill, wipe, retreat or travel, farm restarts included (on a fresh save,
 before the first kill, at once), and the stage draws the party in the list's order. A new save
 starts with one Common hero of each class, three of them already in the party.
 
@@ -27,8 +27,8 @@ Odds tab publishes, each recruit dearer than the last. The tavern guarantee puts
 odds: a Rare or better comes within 20 tavern recruits, an Epic or better within 80 and a
 Legendary within 400, so the recruit that would break the promise comes up at least that rare.
 Zone bosses, and turn bosses less often, drop recruit contracts that bring a hero straight into
-the roster; a contract never counts toward the guarantee. A contract that finds the roster full
-is vendored for gold.
+the roster; a contract never counts toward the guarantee, nor does a sandbox recruit. A contract
+that finds the roster full is vendored for gold.
 
 **Rests.** Each prompt the player submits is a short rest: every hero heals 50% of max HP, and
 fallen heroes get up at 50%.
@@ -58,7 +58,7 @@ the hero who is acting; enemies' gauges never show.
 over the small party. Beating it moves the party on to the next zone: twelve of them, from
 Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
-played and its row has left, the backdrop changes, and only then does the combat log say "The
+played, the party has held its victory pose and the boss's row has left, the backdrop changes, and only then does the combat log say "The
 party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
 percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
 zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
@@ -131,8 +131,8 @@ still the streaks and the stance still draw and the bob stays stopped.
 
 **Combat log.** The Party tab's message window types out each action as the stage plays it, in
 Dragon Quest's words: "Aldric hits Wood Goblin for 12.", "Wood Goblin is defeated!". Hit lines
-that fall behind are dropped; kills, drops, level-ups, deaths, sales and reactive
-events always get their line.
+that fall behind are dropped; kills, drops, level-ups, deaths, sales, reactive events, travels,
+rewards and a boss's move always get their line.
 
 ## Loot
 
@@ -370,7 +370,8 @@ as the backdrop changes. A level-up flashes the hero gold and its gains rise ove
 "+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
 the empty ground for about two seconds after the boss has dissolved, and only then does the
 backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
-At 1.5× each hero raises its weapon in a drawn frame of its own; at 1× it keeps its idle.
+The pose is a slot: at 1.5× it holds the class's drawn victory frame, the weapon raised, and the
+idle art where a class has none; at 1× it always holds the idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.
