@@ -9,6 +9,7 @@ import {
   setAutoVendor,
   setFarm,
   setParty,
+  travel,
   unequip,
   vendor,
 } from './commands'
@@ -69,6 +70,7 @@ const handlers: Handlers = {
       stopHaste(s, effects)
       stopGuard(s, effects)
     }),
+  travel,
   tool_mishap: (state) => draft(state, (s, effects) => onMishap(s, effects)),
   camp: (state) => draft(state, (s, effects) => onCamp(s, effects)),
   guard: (state, event) => draft(state, (s, effects) => onGuard(s, event.on === true, effects)),

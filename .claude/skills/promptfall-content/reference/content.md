@@ -177,10 +177,12 @@ An item's tier multiplies its affixes' rolls and its reforge price.
 
 ## Rarities
 
-| Rarity | Level cap |
-| --- | --- |
-| common | 20 |
-| uncommon | 30 |
-| rare | 40 |
-| epic | 45 |
-| legendary | 50 |
+The tavern's odds, and its guarantee: a recruit of the rarity or better within that many recruits.
+
+| Rarity | Level cap | Tavern odds | Tavern guarantee |
+| --- | --- | --- | --- |
+| common | 20 | 60% | — |
+| uncommon | 30 | 28% | — |
+| rare | 40 | 9.5% | 20 |
+| epic | 45 | 2% | 80 |
+| legendary | 50 | 0.5% | 400 |

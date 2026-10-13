@@ -118,7 +118,7 @@ type TimedEvent = PlayerEvent & {
     at: number;
 };
 declare const TimedEventSchema: z.ZodType<TimedEvent>;
-declare const PLAYER_EVENT_KINDS: readonly ["tick", "tool_call", "turn_start", "turn_end", "rest", "tool_mishap", "camp", "guard", "equip", "unequip", "vendor", "reforge", "set_party", "recruit", "dismiss", "set_farm", "set_auto_vendor", "expand_inventory", "expand_roster"];
+declare const PLAYER_EVENT_KINDS: readonly ["tick", "tool_call", "turn_start", "turn_end", "rest", "travel", "tool_mishap", "camp", "guard", "equip", "unequip", "vendor", "reforge", "set_party", "recruit", "dismiss", "set_farm", "set_auto_vendor", "expand_inventory", "expand_roster"];
 declare const ItemSchema: z.ZodType<Item>;
 declare const HeroSchema: z.ZodType<Hero>;
 declare const GoodsSchema: z.ZodType<Goods>;
@@ -400,11 +400,12 @@ interface ServerClient {
  * told to update. It moves with the plugin's version only when old clients must go.
  */
 declare const MIN_CLIENT_VERSION = "0.3.0";
-type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'turn_end' | 'turn_start' | 'tool_mishap' | 'camp' | 'guard';
+type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'travel' | 'turn_end' | 'turn_start' | 'tool_mishap' | 'camp' | 'guard';
 /**
  * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
  * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
  * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
+ * Travel (#161) is capped as a rest is.
  */
 declare const BUDGETS: Record<BudgetKind, {
     refillMs: number;

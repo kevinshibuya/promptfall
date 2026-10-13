@@ -163,12 +163,20 @@ describe('boss mode', () => {
       gold: 45,
     })
     expect(r.effects).toEqual([
-      { k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item: sword('r0') }, gold: 45 },
+      {
+        k: 'rewarded',
+        bossId: 'wb1',
+        goods: { kind: 'item', item: sword('r0') },
+        gold: 45,
+        source: 'boss',
+      },
     ])
     const goldOnly = step(s, { t: 'rewarded', bossId: 'wb1', goods: null, gold: 45 })
     expect(goldOnly.state.gold).toBe(s.gold + 45)
     expect(goldOnly.state.lootLog).toEqual(s.lootLog)
-    expect(goldOnly.effects).toEqual([{ k: 'rewarded', bossId: 'wb1', goods: null, gold: 45 }])
+    expect(goldOnly.effects).toEqual([
+      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 45, source: 'boss' },
+    ])
   })
 
   it('rewarded into a full inventory is inventory_full', () => {

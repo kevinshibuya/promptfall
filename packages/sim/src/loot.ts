@@ -4,6 +4,7 @@ import { pushLog, rollContract } from './heroes'
 import { draw, drawBp, drawWeighted, newId, partyHeroes } from './progression'
 import { compareCodeUnits } from './rng'
 import { createInitialState } from './state'
+import { earn, tallyDrop } from './tallies'
 import type { Affix, Effect, GameState, HeroClass, Item, Rarity, StepResult } from './types'
 
 export function vendorValue(item: Item): number {
@@ -133,12 +134,13 @@ export function takeDrop(s: GameState, item: Item, effects: Effect[]): void {
   const cause =
     s.inventory.length >= s.inventoryCap ? 'full' : autoVendors(s, item) ? 'setting' : null
   let gold: number | null = null
+  tallyDrop(s, item.base, item.rarity)
   if (cause === null) {
     s.inventory.push(item)
     effects.push({ k: 'drop', item })
   } else {
     gold = vendorValue(item)
-    s.gold += gold
+    earn(s, gold)
     effects.push({ k: 'drop_vendored', item, gold, cause })
   }
   pushLog(s, {

@@ -529,7 +529,8 @@ var tactics = { heroes: heroTactics, enemies: enemyTactics };
 var tavern = {
   baseCost: 200,
   costGrowthBp: 1500,
-  odds: { common: 6e3, uncommon: 2800, rare: 950, epic: 200, legendary: 50 }
+  odds: { common: 6e3, uncommon: 2800, rare: 950, epic: 200, legendary: 50 },
+  guarantees: { rare: 20, epic: 80, legendary: 400 }
 };
 
 // packages/sim/src/content/tiers.ts
@@ -690,77 +691,25 @@ var content = {
   itemTierMultBp
 };
 
-// packages/sim/src/golden.ts
-var GOLDEN_BOSS = "wbgold";
-var GOLDEN_REWARD = {
-  id: "r0",
-  base: "steel_longsword",
-  rarity: "rare",
-  tier: 2,
-  affixes: [],
-  equippedBy: null,
-  tradeableAt: null
-};
-var GOLDEN_SEED = 20261002;
-var HINTS = ["swift", null, "brute", "caster", null, "tank"];
-function goldenEvents(options = {}) {
-  const boss = options.boss ?? true;
-  const events = [
-    { t: "set_party", heroIds: ["h0", "h3", "h2"] },
-    { t: "set_farm", on: false },
-    { t: "recruit" }
-  ];
-  for (let turn = 0; events.length < 300; turn++) {
-    events.push({ t: "rest" });
-    events.push({ t: "turn_start" });
-    for (let i = 0; i < 12 && events.length < 296; i++) {
-      events.push({ t: "tick" });
-      if (i % 3 === 0) {
-        const hint = HINTS[(turn + i / 3) % HINTS.length] ?? null;
-        events.push(hint ? { t: "tool_call", hint } : { t: "tool_call" });
-      }
-      if (i === 4 && turn % 2 === 1) events.push({ t: "tool_mishap" });
-      if (i === 6 && turn === 8) events.push({ t: "guard", on: true });
-      if (i === 10 && turn === 8) events.push({ t: "guard", on: false });
-    }
-    events.push({ t: "turn_end" });
-    if (turn === 5 || turn === 9) events.push({ t: "camp" });
-    if (boss && turn === 3) {
-      events.push({
-        t: "boss_engaged",
-        bossId: GOLDEN_BOSS,
-        name: "Golden Wyrm",
-        glyph: "\u2620",
-        stats: { hp: 630, atk: 14, def: 4, spd: 5 }
-      });
-    }
-    if (boss && turn === 6) events.push({ t: "boss_disengaged", bossId: GOLDEN_BOSS });
-    if (boss && turn === 7) {
-      events.push({
-        t: "rewarded",
-        bossId: GOLDEN_BOSS,
-        goods: { kind: "item", item: GOLDEN_REWARD },
-        gold: 45
-      });
-    }
-    if (turn === 2) events.push({ t: "equip", heroId: "h0", itemId: "i10" });
-    if (turn === 4) events.push({ t: "set_party", heroIds: ["h0", "h1", "h2"] });
-    if (turn === 5) events.push({ t: "dismiss", heroId: "h3" });
-    if (turn === 6) events.push({ t: "expand_inventory" });
-    if (turn === 7) events.push({ t: "set_farm", on: true });
-    if (turn === 8) events.push({ t: "vendor", itemId: "i20" });
-    if (turn === 9) events.push({ t: "unequip", heroId: "h0", slot: "weapon" });
-    if (turn === 10) events.push({ t: "reforge", itemId: "i10", affixIndex: 0 });
-    if (turn === 11) events.push({ t: "recruit" });
-    if (turn === 12) events.push({ t: "expand_roster" });
-    if (turn === 13) {
-      for (const heroId of ["h0", "h1", "h2", "h3"])
-        events.push({ t: "equip", heroId, itemId: "i9" });
-    }
+// packages/sim/src/draft.ts
+function clone(value) {
+  if (Array.isArray(value)) return value.map((v) => clone(v));
+  if (value !== null && typeof value === "object") {
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = clone(value[key]);
+    return out;
   }
-  return events.slice(0, 300);
+  return value;
 }
-var GOLDEN_HASH = "62144fd6f78c2048";
+function reject(state, event, reason) {
+  return { state, effects: [{ k: "rejected", event, reason }] };
+}
+function draft(state, mutate) {
+  const s = clone(state);
+  const effects = [];
+  mutate(s, effects);
+  return { state: s, effects };
+}
 
 // packages/sim/src/rng.ts
 function nextU32(s) {
@@ -797,38 +746,242 @@ function pickWeighted(state, weights2) {
   return { state: r.state, value: keys[keys.length - 1] };
 }
 
-// packages/sim/src/hash.ts
-function canonicalJson(value) {
-  if (value === null) return "null";
-  if (Array.isArray(value)) {
-    return `[${value.map((v) => v === void 0 ? "null" : canonicalJson(v)).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const obj = value;
-    const parts = [];
-    for (const key of Object.keys(obj).sort(compareCodeUnits)) {
-      const v = obj[key];
-      if (v === void 0) continue;
-      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
-    }
-    return `{${parts.join(",")}}`;
-  }
-  return JSON.stringify(value);
+// packages/sim/src/tallies.ts
+function noRarities() {
+  return { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 };
 }
-function fnv1a32(text, offset) {
-  let h = offset >>> 0;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
+function emptyTallies() {
+  return {
+    enemies: {},
+    collection: {},
+    zoneBosses: 0,
+    cleanZoneBosses: 0,
+    turnBosses: 0,
+    drops: noRarities(),
+    recruits: noRarities(),
+    reforges: 0,
+    goldEarned: 0
+  };
+}
+function bestiaryRow(s, def) {
+  const row = s.tallies.enemies[def] ?? { seen: 0, defeated: 0 };
+  s.tallies.enemies[def] = row;
+  return row;
+}
+function tallySeen(s, def) {
+  bestiaryRow(s, def).seen += 1;
+}
+function tallyKill(s, enemy) {
+  bestiaryRow(s, enemy.def).defeated += 1;
+  if (enemy.kind === "zone_boss") {
+    s.tallies.zoneBosses += 1;
+    if (s.zoneWipes === 0) s.tallies.cleanZoneBosses += 1;
+  } else if (enemy.kind === "turn_boss") s.tallies.turnBosses += 1;
+}
+function markHeld(s, base2, rarity2) {
+  const marks = s.tallies.collection[base2] ?? noRarities();
+  marks[rarity2] = 1;
+  s.tallies.collection[base2] = marks;
+}
+function tallyDrop(s, base2, rarity2) {
+  markHeld(s, base2, rarity2);
+  s.tallies.drops[rarity2] += 1;
+}
+function earn(s, gold) {
+  s.gold += gold;
+  s.tallies.goldEarned += gold;
+}
+
+// packages/sim/src/types.ts
+var SIM_VERSION = 16;
+var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
+var WAVE_ARCHETYPES = ["swift", "brute", "caster", "tank"];
+var GUARANTEE_RARITIES = ["rare", "epic", "legendary"];
+var SANDBOX_EVENT_KINDS = [
+  "sandbox_boss",
+  "sandbox_item",
+  "sandbox_level",
+  "sandbox_zone",
+  "sandbox_recruit",
+  "sandbox_wipe"
+];
+var SERVER_EVENT_KINDS = [
+  "listed",
+  "returned",
+  "sold",
+  "bought",
+  "order_placed",
+  "order_refunded",
+  "order_filled",
+  "order_sold",
+  "credited",
+  "boss_engaged",
+  "boss_disengaged",
+  "rewarded",
+  ...SANDBOX_EVENT_KINDS
+];
+
+// packages/sim/src/state.ts
+function createInitialState(seed) {
+  const state = {
+    v: SIM_VERSION,
+    seed: seed >>> 0,
+    rng: seed >>> 0,
+    counter: 0,
+    tick: 0,
+    gold: 0,
+    zone: 1,
+    wave: 1,
+    farm: false,
+    autoVendor: false,
+    highestZone: 1,
+    zoneWipes: 0,
+    roster: [],
+    party: ["", "", ""],
+    pendingParty: null,
+    inventory: [],
+    inventoryCap: 30,
+    rosterCap: 24,
+    recruits: 0,
+    turnToolCalls: 0,
+    encounter: null,
+    pendingTurnBoss: false,
+    hasteTicks: 0,
+    guardTicks: 0,
+    lootLog: [],
+    stats: { kills: 0, bosses: 0, wipes: 0 },
+    tallies: emptyTallies(),
+    guarantee: { rare: 0, epic: 0, legendary: 0 },
+    boss: null,
+    battle: { gauges: [], queue: [], busy: 0 }
+  };
+  const roster = ["knight_1", "black_mage_1", "white_mage_1", "archer_1"].map(
+    (id) => generateHero(state, "common", id)
+  );
+  state.roster = roster;
+  state.rng = state.seed;
+  const [k, b, w] = roster;
+  return { ...state, roster, party: [k?.id ?? "", b?.id ?? "", w?.id ?? ""] };
+}
+
+// packages/sim/src/loot.ts
+function vendorValue(item) {
+  const minZone = content.itemBases[item.base]?.minZone ?? 1;
+  return content.rarity[item.rarity].vendorGoldPerZone * minZone;
+}
+function baseTier(baseId) {
+  const minZone = content.itemBases[baseId]?.minZone ?? 1;
+  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER));
+}
+function dropTier(zone, baseId) {
+  const tier = zoneAt(zone)?.tier ?? 1;
+  if (tier === 1) return baseTier(baseId);
+  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1;
+}
+function tierMultBp(tier) {
+  return content.itemTierMultBp[tier - 1] ?? 1e4;
+}
+function affixValue(item, affix) {
+  return Math.floor(affix.value * tierMultBp(item.tier) / 1e4);
+}
+function reforgeCost(item) {
+  return Math.floor(content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier) / 1e4);
+}
+function rollItem(s, boss) {
+  return rollItemFor(
+    s,
+    boss,
+    partyHeroes(s).map((h) => h.cls)
+  );
+}
+function rollItemFor(s, boss, classes) {
+  const zone = oddsAt(s.zone);
+  if (!zone) return null;
+  const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
+  const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
+    const b = content.itemBases[id];
+    return b !== void 0 && b.minZone <= s.zone && b.classes.some((c) => classes.includes(c));
+  });
+  if (bases.length === 0) return null;
+  const baseId = bases[draw(s, bases.length)] ?? "";
+  return rollItemOf(s, baseId, rarity2);
+}
+function rollItemOf(s, baseId, rarity2) {
+  const affixes2 = rollAffixes(s, baseId, rarity2);
+  return {
+    id: newId(s, "i"),
+    base: baseId,
+    rarity: rarity2,
+    tier: dropTier(s.zone, baseId),
+    affixes: affixes2,
+    equippedBy: null,
+    tradeableAt: null
+  };
+}
+function rollAffixes(s, baseId, rarity2) {
+  const slot = content.itemBases[baseId]?.slot;
+  const pool = Object.keys(content.affixes).sort(compareCodeUnits).filter((id) => slot !== void 0 && content.affixes[id]?.slots.includes(slot));
+  const affixes2 = [];
+  for (let i = 0; i < content.rarity[rarity2].affixCount && pool.length > 0; i++) {
+    const [id] = pool.splice(draw(s, pool.length), 1);
+    const def = id ? content.affixes[id] : void 0;
+    if (!def || !id) continue;
+    const [min, max] = def.range;
+    affixes2.push({ id, value: min + draw(s, max - min + 1) });
   }
-  return h;
+  return affixes2;
 }
-function hex8(n) {
-  return n.toString(16).padStart(8, "0");
+function rollRewardItem(seed, zone, classes) {
+  const scratch = { ...createInitialState(seed), zone };
+  const item = rollItemFor(scratch, true, classes);
+  return item ? { ...item, id: "" } : null;
 }
-function hashState(state) {
-  const json = canonicalJson(state);
-  return hex8(fnv1a32(json, 2166136261)) + hex8(fnv1a32(json, 84696351));
+function autoVendors(s, item) {
+  if (!s.autoVendor) return false;
+  if (item.rarity !== "common" && !(item.rarity === "uncommon" && s.zone > 3)) return false;
+  const base2 = content.itemBases[item.base];
+  if (!base2) return false;
+  return !partyHeroes(s).some(
+    (h) => h.equipment[base2.slot] === null && base2.classes.includes(h.cls)
+  );
+}
+function takeDrop(s, item, effects) {
+  const cause = s.inventory.length >= s.inventoryCap ? "full" : autoVendors(s, item) ? "setting" : null;
+  let gold = null;
+  tallyDrop(s, item.base, item.rarity);
+  if (cause === null) {
+    s.inventory.push(item);
+    effects.push({ k: "drop", item });
+  } else {
+    gold = vendorValue(item);
+    earn(s, gold);
+    effects.push({ k: "drop_vendored", item, gold, cause });
+  }
+  pushLog(s, {
+    k: "item",
+    itemId: item.id,
+    base: item.base,
+    rarity: item.rarity,
+    vendoredFor: gold
+  });
+}
+function rollDrops(state, def) {
+  const s = state;
+  const effects = [];
+  const boss = def.kind !== "wave";
+  if (drawBp(s) < def.dropBp) {
+    const item = rollItem(s, boss);
+    if (item) takeDrop(s, item, effects);
+  }
+  if (boss && def.contractBp > 0 && drawBp(s) < def.contractBp) rollContract(s, effects);
+  return { state: s, effects };
+}
+function rerollAffix(s, item, index) {
+  const affix = item.affixes[index];
+  const def = affix ? content.affixes[affix.id] : void 0;
+  if (!affix || !def) return;
+  const [min, max] = def.range;
+  affix.value = min + draw(s, max - min + 1);
 }
 
 // packages/sim/src/progression.ts
@@ -931,6 +1084,7 @@ function spawnEnemy(s, encounter, defId, kind) {
   const hp = def ? def.stats.hp : 1;
   const enemy = { id: newId(s, "e"), def: defId, kind, hp, maxHp: hp, enraged: false };
   encounter.enemies.push(enemy);
+  tallySeen(s, defId);
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) });
 }
 function pickWaveEnemy(s, hint) {
@@ -1002,6 +1156,10 @@ function grantXp(s, hero, xp, effects) {
   }
   if (hero.level >= cap) hero.xp = 0;
 }
+function endEncounter(s) {
+  s.encounter = null;
+  s.battle = { gauges: [], queue: [], busy: 0 };
+}
 function changeZone(s, zone) {
   s.zone = zone;
   s.wave = 1;
@@ -1017,11 +1175,12 @@ function onEnemyKilled(s, enemy, effects, drop) {
     for (const hero of livingParty(s)) grantXp(s, hero, def.xp, effects);
     const [min, max] = def.gold;
     const gold = min + draw(s, max - min + 1);
-    s.gold += gold;
+    earn(s, gold);
     effects.push({ k: "gold", amount: gold });
   }
   s.stats.kills += 1;
   if (enemy.kind !== "wave") s.stats.bosses += 1;
+  tallyKill(s, enemy);
   if (drop) takeDrop(s, drop, effects);
   else if (def) {
     const r = rollDrops(s, def);
@@ -1112,6 +1271,7 @@ function generateHero(s, rarity2, templateId) {
 }
 function recruitHero(s, hero, via, effects) {
   s.roster.push(hero);
+  s.tallies.recruits[hero.rarity] += 1;
   effects.push({ k: "hero_recruited", hero, via });
   pushLog(s, { k: "hero", heroId: hero.id, template: hero.template, rarity: hero.rarity, via });
 }
@@ -1129,217 +1289,303 @@ function rollContract(s, effects) {
     return;
   }
   const gold = 3 * content.rarity[rarity2].vendorGoldPerZone * s.zone;
-  s.gold += gold;
+  earn(s, gold);
   effects.push({ k: "gold", amount: gold });
   pushLog(s, { k: "item", itemId: hero.id, base: "contract", rarity: rarity2, vendoredFor: gold });
 }
 
-// packages/sim/src/types.ts
-var SIM_VERSION = 15;
-var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
-var WAVE_ARCHETYPES = ["swift", "brute", "caster", "tank"];
-var SANDBOX_EVENT_KINDS = [
-  "sandbox_boss",
-  "sandbox_item",
-  "sandbox_level",
-  "sandbox_zone",
-  "sandbox_recruit",
-  "sandbox_wipe"
-];
-var SERVER_EVENT_KINDS = [
-  "listed",
-  "returned",
-  "sold",
-  "bought",
-  "order_placed",
-  "order_refunded",
-  "order_filled",
-  "order_sold",
-  "credited",
-  "boss_engaged",
-  "boss_disengaged",
-  "rewarded",
-  ...SANDBOX_EVENT_KINDS
-];
-
-// packages/sim/src/state.ts
-function createInitialState(seed) {
-  const state = {
-    v: SIM_VERSION,
-    seed: seed >>> 0,
-    rng: seed >>> 0,
-    counter: 0,
-    tick: 0,
-    gold: 0,
-    zone: 1,
-    wave: 1,
-    farm: false,
-    autoVendor: false,
-    highestZone: 1,
-    zoneWipes: 0,
-    roster: [],
-    party: ["", "", ""],
-    pendingParty: null,
-    inventory: [],
-    inventoryCap: 30,
-    rosterCap: 24,
-    recruits: 0,
-    turnToolCalls: 0,
-    encounter: null,
-    pendingTurnBoss: false,
-    hasteTicks: 0,
-    guardTicks: 0,
-    lootLog: [],
-    stats: { kills: 0, bosses: 0, wipes: 0 },
-    boss: null,
-    battle: { gauges: [], queue: [], busy: 0 }
-  };
-  const roster = ["knight_1", "black_mage_1", "white_mage_1", "archer_1"].map(
-    (id) => generateHero(state, "common", id)
-  );
-  state.roster = roster;
-  state.rng = state.seed;
-  const [k, b, w] = roster;
-  return { ...state, roster, party: [k?.id ?? "", b?.id ?? "", w?.id ?? ""] };
+// packages/sim/src/commands.ts
+function tavernPrice(state) {
+  const { baseCost, costGrowthBp } = content.tavern;
+  return Math.floor(baseCost * (1e4 + costGrowthBp * state.recruits) / 1e4);
 }
-
-// packages/sim/src/loot.ts
-function vendorValue(item) {
-  const minZone = content.itemBases[item.base]?.minZone ?? 1;
-  return content.rarity[item.rarity].vendorGoldPerZone * minZone;
-}
-function baseTier(baseId) {
-  const minZone = content.itemBases[baseId]?.minZone ?? 1;
-  return Math.max(1, Math.ceil(minZone / ZONES_PER_ITEM_TIER));
-}
-function dropTier(zone, baseId) {
-  const tier = zoneAt(zone)?.tier ?? 1;
-  if (tier === 1) return baseTier(baseId);
-  return Math.ceil(content.zones.length / ZONES_PER_ITEM_TIER) + tier - 1;
-}
-function tierMultBp(tier) {
-  return content.itemTierMultBp[tier - 1] ?? 1e4;
-}
-function affixValue(item, affix) {
-  return Math.floor(affix.value * tierMultBp(item.tier) / 1e4);
-}
-function reforgeCost(item) {
-  return Math.floor(content.rarity[item.rarity].reforgeCost * tierMultBp(item.tier) / 1e4);
-}
-function rollItem(s, boss) {
-  return rollItemFor(
-    s,
-    boss,
-    partyHeroes(s).map((h) => h.cls)
-  );
-}
-function rollItemFor(s, boss, classes) {
-  const zone = oddsAt(s.zone);
-  if (!zone) return null;
-  const rarity2 = drawWeighted(s, boss ? zone.bossRarityWeights : zone.rarityWeights);
-  const bases = Object.keys(content.itemBases).sort(compareCodeUnits).filter((id) => {
-    const b = content.itemBases[id];
-    return b !== void 0 && b.minZone <= s.zone && b.classes.some((c) => classes.includes(c));
-  });
-  if (bases.length === 0) return null;
-  const baseId = bases[draw(s, bases.length)] ?? "";
-  return rollItemOf(s, baseId, rarity2);
-}
-function rollItemOf(s, baseId, rarity2) {
-  const affixes2 = rollAffixes(s, baseId, rarity2);
-  return {
-    id: newId(s, "i"),
-    base: baseId,
-    rarity: rarity2,
-    tier: dropTier(s.zone, baseId),
-    affixes: affixes2,
-    equippedBy: null,
-    tradeableAt: null
-  };
-}
-function rollAffixes(s, baseId, rarity2) {
-  const slot = content.itemBases[baseId]?.slot;
-  const pool = Object.keys(content.affixes).sort(compareCodeUnits).filter((id) => slot !== void 0 && content.affixes[id]?.slots.includes(slot));
-  const affixes2 = [];
-  for (let i = 0; i < content.rarity[rarity2].affixCount && pool.length > 0; i++) {
-    const [id] = pool.splice(draw(s, pool.length), 1);
-    const def = id ? content.affixes[id] : void 0;
-    if (!def || !id) continue;
-    const [min, max] = def.range;
-    affixes2.push({ id, value: min + draw(s, max - min + 1) });
+function tavernGuarantees(state) {
+  const out = { rare: 0, epic: 0, legendary: 0 };
+  for (const r of GUARANTEE_RARITIES) {
+    out[r] = Math.max(1, content.tavern.guarantees[r] - (state.guarantee?.[r] ?? 0));
   }
-  return affixes2;
+  return out;
 }
-function rollRewardItem(seed, zone, classes) {
-  const scratch = { ...createInitialState(seed), zone };
-  const item = rollItemFor(scratch, true, classes);
-  return item ? { ...item, id: "" } : null;
+var rank = (r) => RARITIES.indexOf(r);
+function tavernRarity(s) {
+  let floor = "common";
+  for (const r of GUARANTEE_RARITIES) {
+    s.guarantee[r] += 1;
+    if (s.guarantee[r] >= content.tavern.guarantees[r]) floor = r;
+  }
+  const roll2 = drawWeighted(s, content.tavern.odds);
+  const rarity2 = rank(roll2) >= rank(floor) ? roll2 : floor;
+  for (const r of GUARANTEE_RARITIES) if (rank(r) <= rank(rarity2)) s.guarantee[r] = 0;
+  return rarity2;
 }
-function autoVendors(s, item) {
-  if (!s.autoVendor) return false;
-  if (item.rarity !== "common" && !(item.rarity === "uncommon" && s.zone > 3)) return false;
+function nextExpansionCost(state, which) {
+  const rule = content.expansions[which];
+  const start = which === "inventory" ? 30 : 24;
+  const cap = which === "inventory" ? state.inventoryCap : state.rosterCap;
+  if (cap >= rule.max) return null;
+  return rule.costs[Math.floor((cap - start) / rule.step)] ?? null;
+}
+function equip(state, event) {
+  const hero = findHero(state, event.heroId);
+  if (!hero) return reject(state, event, "unknown_hero");
+  const item = state.inventory.find((i) => i.id === event.itemId);
+  if (!item) return reject(state, event, "unknown_item");
   const base2 = content.itemBases[item.base];
-  if (!base2) return false;
-  return !partyHeroes(s).some(
-    (h) => h.equipment[base2.slot] === null && base2.classes.includes(h.cls)
-  );
-}
-function takeDrop(s, item, effects) {
-  const cause = s.inventory.length >= s.inventoryCap ? "full" : autoVendors(s, item) ? "setting" : null;
-  let gold = null;
-  if (cause === null) {
-    s.inventory.push(item);
-    effects.push({ k: "drop", item });
-  } else {
-    gold = vendorValue(item);
-    s.gold += gold;
-    effects.push({ k: "drop_vendored", item, gold, cause });
+  if (!base2?.classes.includes(hero.cls)) return reject(state, event, "class_mismatch");
+  if (item.equippedBy !== null && item.equippedBy !== hero.id) {
+    return reject(state, event, "already_equipped");
   }
-  pushLog(s, {
-    k: "item",
-    itemId: item.id,
-    base: item.base,
-    rarity: item.rarity,
-    vendoredFor: gold
+  return draft(state, (s) => {
+    const h = findHero(s, event.heroId);
+    const it = s.inventory.find((i) => i.id === event.itemId);
+    if (!h || !it) return;
+    const oldId = h.equipment[base2.slot];
+    if (oldId && oldId !== it.id) {
+      const old = s.inventory.find((i) => i.id === oldId);
+      if (old) old.equippedBy = null;
+    }
+    h.equipment[base2.slot] = it.id;
+    it.equippedBy = h.id;
+    clampHp(s, h);
   });
 }
-function rollDrops(state, def) {
-  const s = state;
-  const effects = [];
-  const boss = def.kind !== "wave";
-  if (drawBp(s) < def.dropBp) {
-    const item = rollItem(s, boss);
-    if (item) takeDrop(s, item, effects);
-  }
-  if (boss && def.contractBp > 0 && drawBp(s) < def.contractBp) rollContract(s, effects);
-  return { state: s, effects };
+function unequip(state, event) {
+  const hero = findHero(state, event.heroId);
+  if (!hero) return reject(state, event, "unknown_hero");
+  if (!hero.equipment[event.slot]) return reject(state, event, "slot_empty");
+  return draft(state, (s) => {
+    const h = findHero(s, event.heroId);
+    if (!h) return;
+    const it = s.inventory.find((i) => i.id === h.equipment[event.slot]);
+    if (it) it.equippedBy = null;
+    h.equipment[event.slot] = null;
+    clampHp(s, h);
+  });
 }
-function rerollAffix(s, item, index) {
-  const affix = item.affixes[index];
-  const def = affix ? content.affixes[affix.id] : void 0;
-  if (!affix || !def) return;
-  const [min, max] = def.range;
-  affix.value = min + draw(s, max - min + 1);
+function vendor(state, event) {
+  const item = state.inventory.find((i) => i.id === event.itemId);
+  if (!item) return reject(state, event, "unknown_item");
+  if (item.equippedBy !== null) return reject(state, event, "item_equipped");
+  return draft(state, (s) => {
+    s.inventory = s.inventory.filter((i) => i.id !== event.itemId);
+    earn(s, vendorValue(item));
+  });
+}
+function reforge(state, event) {
+  const item = state.inventory.find((i) => i.id === event.itemId);
+  if (!item) return reject(state, event, "unknown_item");
+  const index = event.affixIndex;
+  if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
+    return reject(state, event, "bad_affix_index");
+  }
+  const cost = reforgeCost(item);
+  if (state.gold < cost) return reject(state, event, "not_enough_gold");
+  return draft(state, (s) => {
+    const it = s.inventory.find((i) => i.id === event.itemId);
+    if (!it) return;
+    s.gold -= cost;
+    s.tallies.reforges += 1;
+    rerollAffix(s, it, index);
+    const wearer = it.equippedBy ? findHero(s, it.equippedBy) : void 0;
+    if (wearer) clampHp(s, wearer);
+  });
+}
+function setParty(state, event) {
+  const ids = event.heroIds;
+  for (const id of ids) if (!findHero(state, id)) return reject(state, event, "unknown_hero");
+  if (new Set(ids).size !== ids.length) return reject(state, event, "duplicate_hero");
+  return draft(state, (s, effects) => {
+    const party = [ids[0], ids[1], ids[2]];
+    if (s.encounter === null && s.wave === 1 && s.stats.kills === 0) {
+      s.party = party;
+      s.pendingParty = null;
+      effects.push({ k: "party_applied", heroIds: [...party] });
+    } else {
+      s.pendingParty = party;
+    }
+  });
+}
+function recruit(state, event) {
+  const price = tavernPrice(state);
+  if (state.gold < price) return reject(state, event, "not_enough_gold");
+  if (state.roster.length >= state.rosterCap) return reject(state, event, "roster_full");
+  return draft(state, (s, effects) => {
+    s.gold -= price;
+    s.recruits += 1;
+    recruitHero(s, generateHero(s, tavernRarity(s)), "tavern", effects);
+  });
+}
+function travel(state, event) {
+  const { zone } = event;
+  if (!Number.isInteger(zone)) return reject(state, event, "bad_zone");
+  if (zone < 1) return reject(state, event, "zone_below_1");
+  if (zone > Math.min(state.highestZone, LADDER_END))
+    return reject(state, event, "zone_not_reached");
+  if (zone === state.zone) return reject(state, event, "already_in_zone");
+  if (state.boss) return reject(state, event, "boss_mode");
+  return draft(state, (s, effects) => {
+    const from = s.zone;
+    endEncounter(s);
+    changeZone(s, zone);
+    effects.push({ k: "traveled", from, to: zone });
+    applyPendingParty(s, effects);
+  });
+}
+function dismiss(state, event) {
+  const hero = findHero(state, event.heroId);
+  if (!hero) return reject(state, event, "unknown_hero");
+  if (state.party.includes(hero.id) || state.pendingParty?.includes(hero.id)) {
+    return reject(state, event, "in_party");
+  }
+  if (state.roster.filter((h) => h.cls === hero.cls).length <= 1) {
+    return reject(state, event, "last_of_class");
+  }
+  return draft(state, (s) => {
+    for (const it of s.inventory) if (it.equippedBy === hero.id) it.equippedBy = null;
+    s.roster = s.roster.filter((h) => h.id !== hero.id);
+    s.gold += content.rarity[hero.rarity].vendorGoldPerZone * 2;
+  });
+}
+function setFarm(state, event) {
+  return draft(state, (s) => {
+    s.farm = event.on === true;
+  });
+}
+function setAutoVendor(state, event) {
+  return draft(state, (s) => {
+    s.autoVendor = event.on === true;
+  });
+}
+function expand(state, event, which) {
+  const cost = nextExpansionCost(state, which);
+  if (cost === null) return reject(state, event, "at_max");
+  if (state.gold < cost) return reject(state, event, "not_enough_gold");
+  const step2 = content.expansions[which].step;
+  return draft(state, (s) => {
+    s.gold -= cost;
+    if (which === "inventory") s.inventoryCap += step2;
+    else s.rosterCap += step2;
+  });
+}
+function expandInventory(state, event) {
+  return expand(state, event, "inventory");
+}
+function expandRoster(state, event) {
+  return expand(state, event, "roster");
 }
 
-// packages/sim/src/draft.ts
-function clone(value) {
-  if (Array.isArray(value)) return value.map((v) => clone(v));
-  if (value !== null && typeof value === "object") {
-    const out = {};
-    for (const key of Object.keys(value)) out[key] = clone(value[key]);
-    return out;
+// packages/sim/src/golden.ts
+var GOLDEN_BOSS = "wbgold";
+var GOLDEN_REWARD = {
+  id: "r0",
+  base: "steel_longsword",
+  rarity: "rare",
+  tier: 2,
+  affixes: [],
+  equippedBy: null,
+  tradeableAt: null
+};
+var GOLDEN_SEED = 20261002;
+var HINTS = ["swift", null, "brute", "caster", null, "tank"];
+function goldenEvents(options = {}) {
+  const boss = options.boss ?? true;
+  const events = [
+    { t: "set_party", heroIds: ["h0", "h3", "h2"] },
+    { t: "set_farm", on: false },
+    { t: "recruit" }
+  ];
+  for (let turn = 0; events.length < 300; turn++) {
+    events.push({ t: "rest" });
+    events.push({ t: "turn_start" });
+    for (let i = 0; i < 12 && events.length < 296; i++) {
+      events.push({ t: "tick" });
+      if (i % 3 === 0) {
+        const hint = HINTS[(turn + i / 3) % HINTS.length] ?? null;
+        events.push(hint ? { t: "tool_call", hint } : { t: "tool_call" });
+      }
+      if (i === 4 && turn % 2 === 1) events.push({ t: "tool_mishap" });
+      if (i === 6 && turn === 8) events.push({ t: "guard", on: true });
+      if (i === 10 && turn === 8) events.push({ t: "guard", on: false });
+    }
+    events.push({ t: "turn_end" });
+    if (turn === 5 || turn === 9) events.push({ t: "camp" });
+    if (boss && turn === 3) {
+      events.push({
+        t: "boss_engaged",
+        bossId: GOLDEN_BOSS,
+        name: "Golden Wyrm",
+        glyph: "\u2620",
+        stats: { hp: 630, atk: 14, def: 4, spd: 5 }
+      });
+    }
+    if (boss && turn === 6) events.push({ t: "boss_disengaged", bossId: GOLDEN_BOSS });
+    if (boss && turn === 7) {
+      events.push({
+        t: "rewarded",
+        bossId: GOLDEN_BOSS,
+        goods: { kind: "item", item: GOLDEN_REWARD },
+        gold: 45
+      });
+    }
+    if (turn === 1) events.push({ t: "travel", zone: 2 });
+    if (turn === 2) events.push({ t: "equip", heroId: "h0", itemId: "i10" });
+    if (turn === 4) events.push({ t: "set_party", heroIds: ["h0", "h1", "h2"] });
+    if (turn === 5) events.push({ t: "dismiss", heroId: "h3" });
+    if (turn === 6) events.push({ t: "expand_inventory" });
+    if (turn === 7) events.push({ t: "set_farm", on: true });
+    if (turn === 8) events.push({ t: "vendor", itemId: "i20" });
+    if (turn === 9) events.push({ t: "unequip", heroId: "h0", slot: "weapon" });
+    if (turn === 10) events.push({ t: "reforge", itemId: "i10", affixIndex: 0 });
+    if (turn === 11) {
+      events.push({ t: "recruit" });
+      events.push({ t: "credited", gold: 2e3, reason: "golden" });
+      events.push({ t: "recruit" }, { t: "recruit" });
+    }
+    if (turn === 12) {
+      events.push({ t: "expand_roster" });
+      events.push({ t: "sandbox_zone", zone: 2 }, { t: "travel", zone: 1 });
+    }
+    if (turn === 13) {
+      for (const heroId of ["h0", "h1", "h2", "h3"])
+        events.push({ t: "equip", heroId, itemId: "i9" });
+    }
   }
-  return value;
+  return events.slice(0, 300);
 }
-function reject(state, event, reason) {
-  return { state, effects: [{ k: "rejected", event, reason }] };
+var GOLDEN_HASH = "ea3cd5be0f52d490";
+
+// packages/sim/src/hash.ts
+function canonicalJson(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => v === void 0 ? "null" : canonicalJson(v)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const obj = value;
+    const parts = [];
+    for (const key of Object.keys(obj).sort(compareCodeUnits)) {
+      const v = obj[key];
+      if (v === void 0) continue;
+      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
+    }
+    return `{${parts.join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
-function draft(state, mutate) {
-  const s = clone(state);
-  const effects = [];
-  mutate(s, effects);
-  return { state: s, effects };
+function fnv1a32(text, offset) {
+  let h = offset >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+function hex8(n) {
+  return n.toString(16).padStart(8, "0");
+}
+function hashState(state) {
+  const json = canonicalJson(state);
+  return hex8(fnv1a32(json, 2166136261)) + hex8(fnv1a32(json, 84696351));
 }
 
 // packages/sim/src/migrate.ts
@@ -1394,6 +1640,30 @@ var MIGRATIONS = {
           ...encounter,
           enemies: encounter.enemies.map((e) => ({ ...e, enraged: false }))
         }
+      };
+    }
+  },
+  // 15 → 16: the tallies, travel and the tavern guarantee (#161). Every tally starts at zero but the
+  // zone boss count, seeded from the boss total: the one count the past kept, mixing zone and turn
+  // bosses, so a veteran's turn bosses count there once. The guarantee's counts start at zero.
+  15: {
+    state: (s) => {
+      const zero = () => ({ common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 });
+      const stats = s.stats;
+      return {
+        ...s,
+        tallies: {
+          enemies: {},
+          collection: {},
+          zoneBosses: stats.bosses,
+          cleanZoneBosses: 0,
+          turnBosses: 0,
+          drops: zero(),
+          recruits: zero(),
+          reforges: 0,
+          goldEarned: 0
+        },
+        guarantee: { rare: 0, epic: 0, legendary: 0 }
       };
     }
   }
@@ -1731,151 +2001,6 @@ function advanceBattle(s, effects) {
   }
 }
 
-// packages/sim/src/commands.ts
-function tavernPrice(state) {
-  const { baseCost, costGrowthBp } = content.tavern;
-  return Math.floor(baseCost * (1e4 + costGrowthBp * state.recruits) / 1e4);
-}
-function nextExpansionCost(state, which) {
-  const rule = content.expansions[which];
-  const start = which === "inventory" ? 30 : 24;
-  const cap = which === "inventory" ? state.inventoryCap : state.rosterCap;
-  if (cap >= rule.max) return null;
-  return rule.costs[Math.floor((cap - start) / rule.step)] ?? null;
-}
-function equip(state, event) {
-  const hero = findHero(state, event.heroId);
-  if (!hero) return reject(state, event, "unknown_hero");
-  const item = state.inventory.find((i) => i.id === event.itemId);
-  if (!item) return reject(state, event, "unknown_item");
-  const base2 = content.itemBases[item.base];
-  if (!base2?.classes.includes(hero.cls)) return reject(state, event, "class_mismatch");
-  if (item.equippedBy !== null && item.equippedBy !== hero.id) {
-    return reject(state, event, "already_equipped");
-  }
-  return draft(state, (s) => {
-    const h = findHero(s, event.heroId);
-    const it = s.inventory.find((i) => i.id === event.itemId);
-    if (!h || !it) return;
-    const oldId = h.equipment[base2.slot];
-    if (oldId && oldId !== it.id) {
-      const old = s.inventory.find((i) => i.id === oldId);
-      if (old) old.equippedBy = null;
-    }
-    h.equipment[base2.slot] = it.id;
-    it.equippedBy = h.id;
-    clampHp(s, h);
-  });
-}
-function unequip(state, event) {
-  const hero = findHero(state, event.heroId);
-  if (!hero) return reject(state, event, "unknown_hero");
-  if (!hero.equipment[event.slot]) return reject(state, event, "slot_empty");
-  return draft(state, (s) => {
-    const h = findHero(s, event.heroId);
-    if (!h) return;
-    const it = s.inventory.find((i) => i.id === h.equipment[event.slot]);
-    if (it) it.equippedBy = null;
-    h.equipment[event.slot] = null;
-    clampHp(s, h);
-  });
-}
-function vendor(state, event) {
-  const item = state.inventory.find((i) => i.id === event.itemId);
-  if (!item) return reject(state, event, "unknown_item");
-  if (item.equippedBy !== null) return reject(state, event, "item_equipped");
-  return draft(state, (s) => {
-    s.inventory = s.inventory.filter((i) => i.id !== event.itemId);
-    s.gold += vendorValue(item);
-  });
-}
-function reforge(state, event) {
-  const item = state.inventory.find((i) => i.id === event.itemId);
-  if (!item) return reject(state, event, "unknown_item");
-  const index = event.affixIndex;
-  if (!Number.isInteger(index) || index < 0 || index >= item.affixes.length) {
-    return reject(state, event, "bad_affix_index");
-  }
-  const cost = reforgeCost(item);
-  if (state.gold < cost) return reject(state, event, "not_enough_gold");
-  return draft(state, (s) => {
-    const it = s.inventory.find((i) => i.id === event.itemId);
-    if (!it) return;
-    s.gold -= cost;
-    rerollAffix(s, it, index);
-    const wearer = it.equippedBy ? findHero(s, it.equippedBy) : void 0;
-    if (wearer) clampHp(s, wearer);
-  });
-}
-function setParty(state, event) {
-  const ids = event.heroIds;
-  for (const id of ids) if (!findHero(state, id)) return reject(state, event, "unknown_hero");
-  if (new Set(ids).size !== ids.length) return reject(state, event, "duplicate_hero");
-  return draft(state, (s, effects) => {
-    const party = [ids[0], ids[1], ids[2]];
-    if (s.encounter === null && s.wave === 1 && s.stats.kills === 0) {
-      s.party = party;
-      s.pendingParty = null;
-      effects.push({ k: "party_applied", heroIds: [...party] });
-    } else {
-      s.pendingParty = party;
-    }
-  });
-}
-function recruit(state, event) {
-  const price = tavernPrice(state);
-  if (state.gold < price) return reject(state, event, "not_enough_gold");
-  if (state.roster.length >= state.rosterCap) return reject(state, event, "roster_full");
-  return draft(state, (s, effects) => {
-    s.gold -= price;
-    s.recruits += 1;
-    const rarity2 = drawWeighted(s, content.tavern.odds);
-    recruitHero(s, generateHero(s, rarity2), "tavern", effects);
-  });
-}
-function dismiss(state, event) {
-  const hero = findHero(state, event.heroId);
-  if (!hero) return reject(state, event, "unknown_hero");
-  if (state.party.includes(hero.id) || state.pendingParty?.includes(hero.id)) {
-    return reject(state, event, "in_party");
-  }
-  if (state.roster.filter((h) => h.cls === hero.cls).length <= 1) {
-    return reject(state, event, "last_of_class");
-  }
-  return draft(state, (s) => {
-    for (const it of s.inventory) if (it.equippedBy === hero.id) it.equippedBy = null;
-    s.roster = s.roster.filter((h) => h.id !== hero.id);
-    s.gold += content.rarity[hero.rarity].vendorGoldPerZone * 2;
-  });
-}
-function setFarm(state, event) {
-  return draft(state, (s) => {
-    s.farm = event.on === true;
-  });
-}
-function setAutoVendor(state, event) {
-  return draft(state, (s) => {
-    s.autoVendor = event.on === true;
-  });
-}
-function expand(state, event, which) {
-  const cost = nextExpansionCost(state, which);
-  if (cost === null) return reject(state, event, "at_max");
-  if (state.gold < cost) return reject(state, event, "not_enough_gold");
-  const step2 = content.expansions[which].step;
-  return draft(state, (s) => {
-    s.gold -= cost;
-    if (which === "inventory") s.inventoryCap += step2;
-    else s.rosterCap += step2;
-  });
-}
-function expandInventory(state, event) {
-  return expand(state, event, "inventory");
-}
-function expandRoster(state, event) {
-  return expand(state, event, "roster");
-}
-
 // packages/sim/src/server-events.ts
 function unapplicable(state, event, detail) {
   return reject(state, event, `server_event_unapplicable:${detail}`);
@@ -1887,8 +2012,10 @@ function noRoom(state, goods) {
   return state.roster.length < state.rosterCap ? null : "roster_full";
 }
 function insert(s, goods) {
-  if (goods.kind === "item") s.inventory.push(clone(goods.item));
-  else s.roster.push(clone(goods.hero));
+  if (goods.kind === "item") {
+    s.inventory.push(clone(goods.item));
+    markHeld(s, goods.item.base, goods.item.rarity);
+  } else s.roster.push(clone(goods.hero));
 }
 function goodsEntry(goods, what, gold) {
   return goods.kind === "item" ? { k: "trade", what, kind: "item", base: goods.item.base, rarity: goods.item.rarity, gold } : { k: "trade", what, kind: "hero", base: goods.hero.template, rarity: goods.hero.rarity, gold };
@@ -1929,7 +2056,7 @@ function returned(state, event) {
 }
 function sold(state, event) {
   return draft(state, (s, effects) => {
-    s.gold += event.net;
+    earn(s, event.net);
     const { kind, base: base2, rarity: rarity2, net } = event;
     logTrade(s, effects, { k: "trade", what: "sold", kind, base: base2, rarity: rarity2, gold: net });
   });
@@ -1970,15 +2097,15 @@ function orderSold(state, event) {
   if (item.equippedBy !== null) return unapplicable(state, event, "equipped");
   return draft(state, (s, effects) => {
     s.inventory = s.inventory.filter((i) => i.id !== event.itemId);
-    s.gold += event.net;
+    earn(s, event.net);
     const { base: base2, rarity: rarity2, net } = event;
     logTrade(s, effects, { k: "trade", what: "sold", kind: "item", base: base2, rarity: rarity2, gold: net });
   });
 }
 function credited(state, event) {
   return draft(state, (s, effects) => {
-    s.gold += event.gold;
-    effects.push({ k: "gold", amount: event.gold });
+    earn(s, event.gold);
+    effects.push({ k: "gold", amount: event.gold, reason: event.reason });
   });
 }
 function bossEngaged(state, event) {
@@ -2019,13 +2146,19 @@ function rewarded(state, event) {
     if (full) return unapplicable(state, event, full);
   }
   return draft(state, (s, effects) => {
-    s.gold += event.gold;
+    earn(s, event.gold);
     if (goods) {
       insert(s, goods);
       const { base: base2, rarity: rarity2 } = goods.kind === "item" ? goods.item : { base: goods.hero.template, rarity: goods.hero.rarity };
       pushLog(s, { k: "reward", base: base2, rarity: rarity2, gold: event.gold });
     }
-    effects.push({ k: "rewarded", bossId: event.bossId, goods: clone(goods), gold: event.gold });
+    effects.push({
+      k: "rewarded",
+      bossId: event.bossId,
+      goods: clone(goods),
+      gold: event.gold,
+      source: event.source ?? "boss"
+    });
   });
 }
 function noSuchZone(zone) {
@@ -2033,10 +2166,6 @@ function noSuchZone(zone) {
 }
 function noSuchRarity(rarity2) {
   return !Object.hasOwn(content.rarity, rarity2);
-}
-function endEncounter(s) {
-  s.encounter = null;
-  s.battle = { gauges: [], queue: [], busy: 0 };
 }
 function sandboxBoss(state, event) {
   if (state.boss) return unapplicable(state, event, "boss_mode");
@@ -2127,6 +2256,7 @@ var handlers = {
     stopHaste(s, effects);
     stopGuard(s, effects);
   }),
+  travel,
   tool_mishap: (state) => draft(state, (s, effects) => onMishap(s, effects)),
   camp: (state) => draft(state, (s, effects) => onCamp(s, effects)),
   guard: (state, event) => draft(state, (s, effects) => onGuard(s, event.on === true, effects)),
@@ -2183,6 +2313,7 @@ export {
   GAUGE_FULL,
   GOLDEN_HASH,
   GOLDEN_SEED,
+  GUARANTEE_RARITIES,
   GUARD_DAMAGE_BP,
   GUARD_TICKS,
   HASTE_BP,
@@ -2217,6 +2348,7 @@ export {
   replay,
   rollRewardItem,
   step,
+  tavernGuarantees,
   vendorValue,
   zoneAt
 };

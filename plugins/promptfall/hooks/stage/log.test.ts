@@ -107,7 +107,7 @@ test('each row of the wording table prints as written', () => {
         goods: { kind: 'item', item: item('oak_staff', 'epic') },
         gold: 120,
       } as unknown as Effect,
-      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
       { k: 'gold', amount: 9 },
       { k: 'wave_cleared', zone: 1, wave: 2 },
     ],

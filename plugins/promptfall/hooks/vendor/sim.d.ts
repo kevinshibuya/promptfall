@@ -27,7 +27,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 15;
+declare const SIM_VERSION: 16;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -112,6 +112,37 @@ type Goods = {
     hero: Hero;
 };
 type RecruitVia = 'contract' | 'tavern' | 'sandbox';
+/** Who a reward pays for: a world boss's fight, or the weekly hunt. */
+type RewardSource = 'boss' | 'hunt';
+/** The rarities the tavern guarantee promises, each within its own count of recruits. */
+type GuaranteeRarity = 'rare' | 'epic' | 'legendary';
+declare const GUARANTEE_RARITIES: readonly GuaranteeRarity[];
+/** One integer per rarity. */
+type RarityCounts = Record<Rarity, number>;
+/**
+ * What the party has seen and done since version 16, counted in the state because the ledger
+ * replays state and never effects. Every field an integer, every one in the hash.
+ */
+type Tallies = {
+    /** Per enemy definition: spawns met and kills. */
+    enemies: Record<string, {
+        seen: number;
+        defeated: number;
+    }>;
+    /** Per item base: 1 at each rarity the party has held it in, by a drop, a purchase, a reward or a return. */
+    collection: Record<string, RarityCounts>;
+    zoneBosses: number;
+    /** Zone bosses beaten with the zone's wipe count at zero at the kill. */
+    cleanZoneBosses: number;
+    turnBosses: number;
+    /** Drops by rarity, kept or vendored on pickup. */
+    drops: RarityCounts;
+    /** Heroes joined by rarity: tavern, contract and sandbox alike. */
+    recruits: RarityCounts;
+    reforges: number;
+    /** Kill gold, vendoring, a sale's net, a reward's gold and credits; never a refund or escrow. */
+    goldEarned: number;
+};
 type LootEntry = {
     k: 'item';
     itemId: string;
@@ -150,6 +181,11 @@ type PlayerEvent = {
     t: 'turn_end';
 } | {
     t: 'rest';
+}
+/** Moves the party to a zone it has reached, ending the fight with no drops and no XP. */
+ | {
+    t: 'travel';
+    zone: number;
 } | {
     t: 'tool_mishap';
 } | {
@@ -252,12 +288,16 @@ type ServerEvent = {
     t: 'boss_disengaged';
     bossId: string;
 }
-/** One reward roll; `goods` null when the item waited in returns. */
+/**
+ * One reward roll; `goods` null when the item waited in returns. `source` absent reads as
+ * boss, as every event logged before it does.
+ */
  | {
     t: 'rewarded';
     bossId: string;
     goods: Goods | null;
     gold: number;
+    source?: RewardSource;
 } | SandboxEvent;
 /** Authored only by a host with the sandbox on. Each hands out what play would earn, through play's own path. */
 type SandboxEvent = 
@@ -300,9 +340,12 @@ type Effect = {
     item: Item;
     gold: number;
     cause: 'full' | 'setting';
-} | {
+}
+/** `reason` is a `credited` event's own; kill gold and a vendored contract carry none. */
+ | {
     k: 'gold';
     amount: number;
+    reason?: string;
 } | {
     k: 'level_up';
     heroId: string;
@@ -348,6 +391,13 @@ type Effect = {
     bossId: string;
     goods: Goods | null;
     gold: number;
+    source: RewardSource;
+}
+/** The party traveled from one zone to another. */
+ | {
+    k: 'traveled';
+    from: number;
+    to: number;
 } | {
     k: 'traded';
     entry: Extract<LootEntry, {
@@ -433,6 +483,9 @@ type GameState = {
         bosses: number;
         wipes: number;
     };
+    tallies: Tallies;
+    /** Tavern recruits since the last of each rarity or better: the tavern guarantee's counts. */
+    guarantee: Record<GuaranteeRarity, number>;
     /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
     boss: {
         bossId: string;
@@ -447,6 +500,9 @@ type StepResult = {
     state: GameState;
     effects: Effect[];
 };
+
+/** Per guarantee, the recruits until one of its rarity or better is certain: 1 means the next. */
+declare function tavernGuarantees(state: GameState): Record<GuaranteeRarity, number>;
 
 type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss';
 type EnemyDef = {
@@ -571,6 +627,8 @@ type Content = {
         baseCost: number;
         costGrowthBp: number;
         odds: Record<Rarity, number>;
+        /** The tavern guarantee: a recruit of each rarity or better comes within this many recruits. */
+        guarantees: Record<GuaranteeRarity, number>;
     };
     expansions: {
         inventory: {
@@ -628,15 +686,17 @@ declare const GOLDEN_SEED = 20261002;
 /**
  * A fixed 300-event script mixing world events, commands, the reactive events
  * (every turn hasted, hinted calls, a mishap, a guard, a camp in boss mode and
- * one out of it) and a world boss stretch (engaged after turn 3, disengaged
- * after turn 6, a reward after turn 7). Ids are the ones the initial state
+ * one out of it), a world boss stretch (engaged after turn 3, disengaged
+ * after turn 6, a reward after turn 7), tavern recruits on a credit, and
+ * travel (refused past the highest zone, then back from zone 2 after the
+ * sandbox moves the party there). Ids are the ones the initial state
  * mints (h0 to h3) plus guesses, so some commands are rejected; rejections are
  * part of the contract too.
  */
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "62144fd6f78c2048";
+declare const GOLDEN_HASH = "ea3cd5be0f52d490";
 
 declare function hashState(state: GameState): string;
 
@@ -715,4 +775,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type Goods, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroFill, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, vendorValue, zoneAt };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroFill, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };

@@ -183,16 +183,17 @@ describe('a record behind the sim version', () => {
     expect(after.refillAt.tick).toBe(record.refillAt.tick)
   })
 
-  it('starts a new account with eight full buckets, and one from before the reactive events with the four new ones full', async () => {
+  it('starts a new account with nine full buckets, and one from before the reactive events with the four new ones full', async () => {
     const kv = new MemoryKeyValue()
     const { ledger, advance } = makeLedger(kv, { migrations: stubChain() })
     const m = await ledger.host.mint({ state: createInitialState(4), name: 'Bo', linked: false })
     const record = await stored(kv, m.accountId)
-    // A new account starts with all eight full.
+    // A new account starts with all nine full.
     expect(record.buckets).toEqual({
       tick: 70,
       tool_call: 140,
       rest: 30,
+      travel: 30,
       turn_end: 30,
       turn_start: 30,
       tool_mishap: 30,
@@ -215,6 +216,27 @@ describe('a record behind the sim version', () => {
     expect(after.buckets).toMatchObject({ turn_start: 30, tool_mishap: 30, camp: 5, guard: 60 })
     for (const kind of fresh) expect(after.refillAt[kind]).toBe(START + 60_000)
     expect(after.buckets.tick).toBe(3)
+  })
+
+  it('starts a record from before travel with its bucket full, capped as a rest is', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger, advance } = makeLedger(kv, { migrations: stubChain() })
+    const m = await ledger.host.mint({ state: createInitialState(4), name: 'Bo', linked: false })
+    const record = await stored(kv, m.accountId)
+    expect(BUDGETS.travel).toEqual(BUDGETS.rest)
+    const { travel: _b, ...buckets } = record.buckets
+    const { travel: _r, ...refillAt } = record.refillAt
+    await rewind(kv, m.accountId, BEHIND, [], {
+      buckets: { ...buckets, rest: 4 } as AccountRecord['buckets'],
+      refillAt: refillAt as AccountRecord['refillAt'],
+    })
+    advance(60_000)
+    await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
+    await ledger.host.credit(m.accountId, 1, 'test')
+    const after = await stored(kv, m.accountId)
+    expect(after.buckets.travel).toBe(BUDGETS.rest.capacity)
+    expect(after.refillAt.travel).toBe(START + 60_000)
+    expect(after.buckets.rest).toBe(4)
   })
 
   it('normalises the market book and the returns once through the goods rule', async () => {

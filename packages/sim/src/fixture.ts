@@ -61,8 +61,8 @@ function hurt(s: GameState, heroId: string): boolean {
 }
 
 /**
- * Zone 10, an Epic and a Rare wounded in tiered kit, a full inventory, gold, a world boss engaged
- * and enraged, Haste and Guard on.
+ * Zone 10, an Epic and a Rare wounded in tiered kit, a full inventory, gold, tallies and the tavern
+ * guarantee's counts above zero, a world boss engaged and enraged, Haste and Guard on.
  */
 function deepFixture(): GameState {
   const script = new Script(DEEP_SEED)
@@ -96,6 +96,11 @@ function deepFixture(): GameState {
   for (let i = 0; script.state.inventory.length < script.state.inventoryCap; i++) {
     script.item(FILL[i % FILL.length] ?? 'mithril_blade', 'rare')
   }
+  // Tavern recruits move the guarantee's counts and a reforge its tally, for a later step to carry.
+  for (let i = 0; i < 3; i++) script.run({ t: 'recruit' })
+  const loose = script.state.inventory.find((it) => it.affixes.length > 0 && !it.equippedBy)
+  if (!loose) throw new Error('no loose affixed item to reforge')
+  script.run({ t: 'reforge', itemId: loose.id, affixIndex: 0 })
   script.run({
     t: 'boss_engaged',
     bossId: 'wbdeep',

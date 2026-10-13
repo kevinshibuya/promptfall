@@ -61,13 +61,13 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-market-narrow': {imageHash: "83efe1f6f3547e84", cellsHash: "2702accda573917f", svgHash: "6798e5ce66c09b3d", svgChars: 24890},
   'pane-orders': {imageHash: "ea48f9a935c9e2bb", cellsHash: "8f3cfd0a782a3d7b", svgHash: "a7614ea65da3f491", svgChars: 22789},
   'pane-orders-form': {imageHash: "d817a7b8f776aca6", cellsHash: "9ef8e99379b78d88", svgHash: "9b7cedbe4299bf3e", svgChars: 23410},
-  'pane-account': {imageHash: "9a67bbdddd58cecc", cellsHash: "5041f3da2e507457", svgHash: "7682942eecd2ef2d", svgChars: 26511},
-  'pane-account-link': {imageHash: "d54eaa7726c76a61", cellsHash: "a740401e0caf3238", svgHash: "826be03d12cc3a57", svgChars: 28013},
+  'pane-account': {imageHash: "daa4d9a7ce1dd647", cellsHash: "9f38d24b639a282f", svgHash: "7b02025176865489", svgChars: 26411},
+  'pane-account-link': {imageHash: "948a1b9719673ece", cellsHash: "482546465f93e8d4", svgHash: "e7fc9a6a7c38f587", svgChars: 27913},
   'pane-odds': {imageHash: "4fad838757a672cf", cellsHash: "44494129b4e65e02", svgHash: "3f5475488233fa27", svgChars: 28028},
   'pane-chat': {imageHash: "2e74efb23715606a", cellsHash: "8f4715240f05171f", svgHash: "be9c497a9a79fd15", svgChars: 24790},
   'pane-leaderboards': {imageHash: "49556278714a8f11", cellsHash: "d7f4ed9cac1cc19f", svgHash: "8101a329ec5407c9", svgChars: 26422},
   'pane-short': {imageHash: "e68134c378f16623", cellsHash: "b84e798c19e1f5ec", svgHash: "6d514a62425b5490", svgChars: 22782},
-  'pane-no-view': {imageHash: "209a84297e9668a2", cellsHash: "f32ce6d4e5d191a5", svgHash: "e722942afe5227f0", svgChars: 14839},
+  'pane-no-view': {imageHash: "db8770298c5917ad", cellsHash: "2f3e876eb5a3f949", svgHash: "619aaa16f15c7c5d", svgChars: 14739},
 }
 
 export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {

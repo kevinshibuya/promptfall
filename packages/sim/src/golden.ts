@@ -19,8 +19,10 @@ const HINTS: (WaveArchetype | null)[] = ['swift', null, 'brute', 'caster', null,
 /**
  * A fixed 300-event script mixing world events, commands, the reactive events
  * (every turn hasted, hinted calls, a mishap, a guard, a camp in boss mode and
- * one out of it) and a world boss stretch (engaged after turn 3, disengaged
- * after turn 6, a reward after turn 7). Ids are the ones the initial state
+ * one out of it), a world boss stretch (engaged after turn 3, disengaged
+ * after turn 6, a reward after turn 7), tavern recruits on a credit, and
+ * travel (refused past the highest zone, then back from zone 2 after the
+ * sandbox moves the party there). Ids are the ones the initial state
  * mints (h0 to h3) plus guesses, so some commands are rejected; rejections are
  * part of the contract too.
  */
@@ -64,6 +66,7 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
         gold: 45,
       })
     }
+    if (turn === 1) events.push({ t: 'travel', zone: 2 })
     if (turn === 2) events.push({ t: 'equip', heroId: 'h0', itemId: 'i10' })
     if (turn === 4) events.push({ t: 'set_party', heroIds: ['h0', 'h1', 'h2'] })
     if (turn === 5) events.push({ t: 'dismiss', heroId: 'h3' })
@@ -72,8 +75,15 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
     if (turn === 8) events.push({ t: 'vendor', itemId: 'i20' })
     if (turn === 9) events.push({ t: 'unequip', heroId: 'h0', slot: 'weapon' })
     if (turn === 10) events.push({ t: 'reforge', itemId: 'i10', affixIndex: 0 })
-    if (turn === 11) events.push({ t: 'recruit' })
-    if (turn === 12) events.push({ t: 'expand_roster' })
+    if (turn === 11) {
+      events.push({ t: 'recruit' })
+      events.push({ t: 'credited', gold: 2000, reason: 'golden' })
+      events.push({ t: 'recruit' }, { t: 'recruit' })
+    }
+    if (turn === 12) {
+      events.push({ t: 'expand_roster' })
+      events.push({ t: 'sandbox_zone', zone: 2 }, { t: 'travel', zone: 1 })
+    }
     if (turn === 13) {
       for (const heroId of ['h0', 'h1', 'h2', 'h3'])
         events.push({ t: 'equip', heroId, itemId: 'i9' })
@@ -83,4 +93,4 @@ export function goldenEvents(options: { boss?: boolean } = {}): Event[] {
 }
 
 // Changing this literal is a change of the simulation: bump SIM_VERSION with it.
-export const GOLDEN_HASH = '62144fd6f78c2048'
+export const GOLDEN_HASH = 'ea3cd5be0f52d490'
