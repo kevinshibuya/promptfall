@@ -153,6 +153,16 @@ export const DESKTOP_ROW_PX = 19
  */
 export const PROBE_ALT_DENY =
   'the Image draws its alt here: the terminal draws no placeholder images'
+/**
+ * The start of every deny a blit answers for an Image drawing its alt: no pictures on the terminal,
+ * or no image id for this Image. Either way only a new Image is laid out again as a picture.
+ */
+export const IMAGE_ALT_DENY = 'the Image draws its alt here'
+/**
+ * How often an Image drawing its alt is mounted afresh. A background worker's Image is laid out
+ * before a terminal attaches, with no pictures and no image id; a new one gets both once it has.
+ */
+export const ALT_REMOUNT_MS = 2000
 export const SVG_MAX_CHARS = 131_072
 export const RASTER_MAX_PAIRS = 1024
 
