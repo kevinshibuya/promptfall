@@ -13,7 +13,7 @@ import { hex, medianCut, nearest, parseHex, type Rgba, readPng, rgbOf } from './
 
 export type Style = 'nes' | 'snes'
 export type Kind = 'hero' | 'hero_attack' | 'enemy' | 'world_boss' | 'item' | 'effect' | 'chest'
-export type FrameName = 'windup' | 'strike' | 'follow'
+export type FrameName = 'windup' | 'strike' | 'follow' | 'victory'
 
 export type ManifestEntry = {
   id: string
@@ -29,10 +29,13 @@ export type ManifestEntry = {
   /** As `rarityColor`, for `fileHires`. */
   rarityColorHires?: string
   fit?: { height: number }
-  /** PNGs under art/ holding the drawn 1.5x frames; a hero's strike defaults to its hero_attack. */
-  frames?: { windup: string; strike?: string; follow?: string }
+  /**
+   * PNGs under art/ holding the drawn 1.5x frames; a hero's strike defaults to its hero_attack,
+   * and its victory pose, a hero's only, to its idle 1.5x art.
+   */
+  frames?: { windup: string; strike?: string; follow?: string; victory?: string }
   /** A hero's rarity colour per drawn frame, as `rarityColorHires`. */
-  frameRarityColors?: { windup: string; follow?: string }
+  frameRarityColors?: { windup: string; follow?: string; victory?: string }
 }
 /** One zone's stage backdrop: the 1x painting and its 1.5x twin, each at the full stage's size. */
 export type BackdropEntry = {
@@ -52,7 +55,13 @@ export type Manifest = {
 export type Indexed = { width: number; height: number; palette: number[]; idx: Uint8Array }
 export type Variants = { full: Indexed; hires: Indexed; compact: Indexed; small: Indexed }
 export type BuiltFrame = { art: Indexed; raritySlot: number | null }
-export type BuiltFrames = { windup: BuiltFrame; strike: BuiltFrame; follow: BuiltFrame | null }
+export type BuiltFrames = {
+  windup: BuiltFrame
+  strike: BuiltFrame
+  follow: BuiltFrame | null
+  /** A hero's victory pose: drawn, or its idle 1.5x art by identity; null for any other sprite. */
+  victory: BuiltFrame | null
+}
 export type BuiltSprite = {
   id: string
   kind: Kind
@@ -288,7 +297,12 @@ export function buildSprites(input: BuildInput): BuildResult {
   const expected = new Set(input.expected)
   const drift: string[] = []
   /** Heroes with frames and no strike: resolved to their hero_attack after the loop. */
-  const pendingStrike: { sprite: BuiltSprite; windup: BuiltFrame; follow: BuiltFrame | null }[] = []
+  const pendingStrike: {
+    sprite: BuiltSprite
+    windup: BuiltFrame
+    follow: BuiltFrame | null
+    victory: BuiltFrame | null
+  }[] = []
 
   for (const entry of input.manifest.sprites) {
     const { id } = entry
@@ -391,20 +405,32 @@ export function buildSprites(input: BuildInput): BuildResult {
         errors.push(`${id}: frames.strike: a hero strikes in its hero_attack art`)
         continue
       }
+      if (!hero && f.victory !== undefined) {
+        errors.push(`${id}: frames.victory: only a hero holds a victory pose`)
+        continue
+      }
       const ctx = { id, entry, idle: variants.hires, master: input.palettes.hires, hero, input }
       const windup = buildFrame(ctx, 'windup', f.windup, errors, drift)
       const strike =
         f.strike === undefined ? null : buildFrame(ctx, 'strike', f.strike, errors, drift)
       const follow =
         f.follow === undefined ? null : buildFrame(ctx, 'follow', f.follow, errors, drift)
+      // Undrawn, a hero's victory pose is its idle 1.5x art (ADR 0007: none at 1x).
+      const victory =
+        f.victory !== undefined
+          ? buildFrame(ctx, 'victory', f.victory, errors, drift)
+          : hero
+            ? { art: variants.hires, raritySlot: raritySlotHires }
+            : null
       if (windup === null || (f.strike !== undefined && strike === null)) continue
       if (f.follow !== undefined && follow === null) continue
-      if (strike !== null) sprite.frames = { windup, strike, follow }
-      else pendingStrike.push({ sprite, windup, follow })
+      if (f.victory !== undefined && victory === null) continue
+      if (strike !== null) sprite.frames = { windup, strike, follow, victory }
+      else pendingStrike.push({ sprite, windup, follow, victory })
     }
     sprites.push(sprite)
   }
-  for (const { sprite, windup, follow } of pendingStrike) {
+  for (const { sprite, windup, follow, victory } of pendingStrike) {
     const attackId = sprite.id.replace(/^hero:/, 'hero_attack:')
     const attack = sprites.find((s) => s.id === attackId)
     const hires = attack ? art.get(attack.stem)?.hires : undefined
@@ -412,7 +438,12 @@ export function buildSprites(input: BuildInput): BuildResult {
       errors.push(`${sprite.id}: frames.strike needs ${attackId}`)
       continue
     }
-    sprite.frames = { windup, strike: { art: hires, raritySlot: attack.raritySlotHires }, follow }
+    sprite.frames = {
+      windup,
+      strike: { art: hires, raritySlot: attack.raritySlotHires },
+      follow,
+      victory,
+    }
   }
   for (const id of input.expected) {
     if (!seen.has(id)) errors.push(`${id}: no manifest entry`)
@@ -683,7 +714,10 @@ export function emitModule(result: BuildResult): string {
   const name = new Map(stems.map((stem, i) => [stem, `a${i}`]))
   const sprites = [...result.sprites].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   const items = new Set(sprites.filter((s) => s.kind === 'item').map((s) => s.stem))
-  /** A frame that is a stem's 1.5x art (a hero's strike) is emitted as a reference to it. */
+  /**
+   * A frame that is a stem's 1.5x art (a hero's strike, an undrawn victory pose) is emitted as a
+   * reference to it.
+   */
   const hiresRef = new Map<Indexed, string>()
   for (const stem of stems) {
     const v = result.art.get(stem)
@@ -695,7 +729,7 @@ export function emitModule(result: BuildResult): string {
     'type Art = { width: number; height: number; palette: readonly number[]; pixels: string }',
     'type Variants = { full: Art; hires: Art; compact: Art; small: Art | null }',
     'type Frame = { art: Art; raritySlot: number | null }',
-    'type Frames = { windup: Frame; strike: Frame; follow: Frame | null }',
+    'type Frames = { windup: Frame; strike: Frame; follow: Frame | null; victory: Frame | null }',
     '',
   ]
   for (const stem of stems) {
@@ -726,7 +760,7 @@ export function emitModule(result: BuildResult): string {
   const framesLiteral = (f: BuiltFrames | null): string =>
     f === null
       ? 'null'
-      : `{ windup: ${frameLiteral(f.windup)}, strike: ${frameLiteral(f.strike)}, follow: ${frameLiteral(f.follow)} }`
+      : `{ windup: ${frameLiteral(f.windup)}, strike: ${frameLiteral(f.strike)}, follow: ${frameLiteral(f.follow)}, victory: ${frameLiteral(f.victory)} }`
   lines.push('')
   lines.push('export const ART: Readonly<Record<string, Variants>> = {')
   for (const stem of stems) lines.push(`  '${stem}': ${name.get(stem)},`)

@@ -9,8 +9,8 @@ import { wave } from './fixtures'
 import { effectAt, SHIELD, stageAt } from './model'
 import { stage } from './scenarios'
 import { stagedState } from './staged'
-import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
-import { StageTimeline } from './timeline'
+import { artPaths, backdropPlacements, framesInUse, renderSvg, svgWithFallback } from './svg'
+import { type Motion, type StageEffect, StageTimeline } from './timeline'
 import {
   CAMPFIRE_FADE_MS,
   CAMPFIRE_MS,
@@ -20,9 +20,13 @@ import {
   HASTE_FRAME_MS,
   HIRES_SCALE,
   IDLE_BOB_PX,
+  LEVEL_RGB,
   LUNGE_MS,
   RARITY_RGB,
+  SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
+  TRAVEL_OFF_MS,
+  TRAVEL_PX,
   WINDUP_HOLD_MS,
   WINDUP_MS,
 } from './tuning'
@@ -556,7 +560,7 @@ test('backdropPlacements covers a frame of any width with mirrored copies, every
 /** The Svg of `v` after `effects` at `at`, at `scale`. */
 function svgOf(
   v: GameView,
-  effects: Effect[] = [],
+  effects: StageEffect[] = [],
   at = NOW,
   scale: 1 | 1.5 = HIRES_SCALE,
   opts: Opts = { smil: true, motion: 'full' },
@@ -646,4 +650,54 @@ test('guarding heroes hold the stance with no idle clock; the front hero wears t
   expect(lo).not.toContain(artPaths(SHIELD, null))
   const knight = spriteFor('hero', 'knight')
   expect(lo).toContain(artPaths(stance(knight.full).art, knight.raritySlot))
+})
+
+test('a level-up flashes gold beside the white flash filter and its deltas rise as gold text', () => {
+  const up: StageEffect[] = [{ k: 'level_up', heroId: 'h1', level: 6, deltas: { atk: 3, def: 2 } }]
+  const gold = `#${LEVEL_RGB.toString(16)}`
+  for (const scale of [1, HIRES_SCALE] as const) {
+    const s = svgOf(wave(), up, NOW + 10, scale)
+    expect(balanced(s), `${scale}`).toBe(true)
+    expect(s, `${scale}`).toContain(`<filter id="goldflash"><feFlood flood-color="${gold}"/>`)
+    expect(s, `${scale}`).toContain(`<filter id="flash"><feFlood flood-color="#ffffff"/>`)
+    expect(s, `${scale}`).toContain(`fill="${gold}"`)
+    expect(s, `${scale}`).toContain('+3 atk  +2 def</text>')
+    const flat = svgOf(wave(), up, NOW + 10, scale, { smil: false, motion: 'full' })
+    expect(flat, `${scale}`).toContain('filter="url(#goldflash)"/>')
+  }
+  expect(svgOf(wave())).not.toContain('goldflash')
+})
+
+test('a travel steps the party off fading and on from the left, under SMIL and without it', () => {
+  const traveled: StageEffect[] = [{ k: 'traveled', from: 1, to: 3 }]
+  for (const scale of [1, HIRES_SCALE] as const) {
+    const px = Math.round(TRAVEL_PX * scale)
+    const s = svgOf(wave(), traveled, NOW + 100, scale)
+    expect(balanced(s), `${scale}`).toBe(true)
+    expect(s, `${scale}`).toContain(`values="0 0;${px} 0" begin="-0.1s"`)
+    expect(s, `${scale}`).toContain(`values="1;0" begin="-0.1s" dur="0.5s" fill="freeze"`)
+    expect(s, `${scale}`).toContain(`values="-${px} 0;0 0" begin="0.4s"`)
+    // Drawn once the backdrop has changed, the party starts unseen and fades in.
+    const on = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS + 100, scale)
+    expect(on, `${scale}`).toContain(`values="0;1" begin="-0.1s" dur="0.5s" fill="freeze"`)
+    expect(on, `${scale}`).not.toContain(`values="1;0" begin=`)
+    const flat = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS / 2, scale, {
+      smil: false,
+      motion: 'full',
+    })
+    expect(flat, `${scale}`).toContain('opacity="0.5"')
+  }
+})
+
+test('a victory pose is carried from the kill, however far ahead it starts', () => {
+  const victory: Motion = {
+    kind: 'victory',
+    actor: 'h1',
+    boss: 'e9',
+    from: NOW + 900,
+    until: NOW + 2900,
+  }
+  const windup: Motion = { kind: 'windup', actor: 'h1', from: NOW + 900, until: NOW + 1000 }
+  expect(NOW + SVG_FALLBACK_FRAME_MS).toBeLessThan(victory.from)
+  expect(framesInUse([victory, windup], NOW)).toEqual([victory])
 })

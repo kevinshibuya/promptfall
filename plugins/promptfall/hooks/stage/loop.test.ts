@@ -662,6 +662,7 @@ function smilHarness(clock: ReturnType<typeof fakeClock>, readMs = 0) {
     invalidations: 0,
     onNext: null as (() => void) | null,
     loop: null as unknown as StageLoop,
+    timeline: new StageTimeline(),
   }
   const io: LoopIo = {
     now: clock.now,
@@ -688,11 +689,25 @@ function smilHarness(clock: ReturnType<typeof fakeClock>, readMs = 0) {
     },
     strip: async () => null,
   }
-  const timeline = new StageTimeline()
-  timeline.observe(wave(), 1_000_000)
-  h.loop = new StageLoop(io, timeline)
+  h.timeline.observe(wave(), 1_000_000)
+  h.loop = new StageLoop(io, h.timeline)
   return h
 }
+
+test("on SMIL a travel's backdrop change redraws the band at its show time, with no toast held", async () => {
+  const clock = fakeClock(1_000_000)
+  const h = smilHarness(clock)
+  h.loop.mount(site('smil', wave(), PROPS, 'desktop'))
+  await clock.advance(10)
+  h.timeline.onEffects([{ k: 'traveled', from: 1, to: 3 }], await clock.now())
+  h.loop.wake()
+  const show = h.timeline.travelShowAt(3) ?? 0
+  await clock.advance(show - 1 - (await clock.now()))
+  expect(h.invalidations).toBe(0)
+  await clock.advance(1)
+  expect(h.invalidations).toBe(1)
+  expect(h.released).toEqual([])
+})
 
 test('on SMIL a held toast lands at its show time however slow the reads, and the band redraws', async () => {
   const clock = fakeClock(1_000_000)
