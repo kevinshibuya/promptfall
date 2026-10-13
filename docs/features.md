@@ -340,6 +340,13 @@ stands and fights until the blow that kills him lands, then dims, and the party 
 with each hit as it lands, not when the game applies it. The stage is 17 rows in every fight and
 never changes height, the party small on the zone's painting, so a boss lands at its full size. A
 monster that steps on partway through a tick plays its first actions animated, on the desktop too.
+Three moments get a scene of their own. When the party travels, the heroes step off to the right
+and fade, the enemies it left stand until the backdrop changes to the destination's, and the
+heroes step back on from the left; the log's "The party travels to zone 3, Marsh of Sighs." lands
+as the backdrop changes. A level-up flashes the hero gold and its gains rise over it in gold,
+"+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
+the empty ground for about two seconds after the boss has dissolved, and only then does the
+backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.
@@ -417,6 +424,14 @@ trades, `farm`, `autovendor`, `travel` and the sandbox verbs with "Promptfall is
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
+A session that becomes primary more than ten minutes after this account was last seen playing on
+this machine says what the party did since, in a toast and for 20 seconds in the message window:
+"Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
+Today's goal: kill 40 enemies." It names the weekday when a day or more has passed and says
+"Since your last session" under a day, leaves out what did not change, and says nothing when
+nothing did.
+A shorter break says nothing and loses nothing: the next summary still counts it. The play counted
+runs from the last summary, and a reset starts it over.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
@@ -444,7 +459,8 @@ toast lands at its reveal, as the item rises out of the chest, and a zone arriva
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, the reactive events, farming clears and chat never toast, the open pane holds toasts until it closes,
-and a first launch toasts a welcome that points at the Heroes tab.
+and the session raises two toasts of its own: a first launch's welcome that points at the Heroes tab,
+and the session summary when a session becomes primary after a break (under Primary session).
 
 **Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
 world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays

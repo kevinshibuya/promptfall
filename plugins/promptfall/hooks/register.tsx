@@ -24,7 +24,7 @@ import {
 import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
-import { StageTimeline } from './stage/timeline'
+import { type StageEffect, StageTimeline } from './stage/timeline'
 import { SKIPPED_PLAY_MS, SOUND_GAIN } from './stage/tuning'
 import {
   BOARDS_DEFAULT,
@@ -40,6 +40,7 @@ import {
   WORLD_DEFAULT,
 } from './state'
 import { PREFIX, SANDBOX_PREFIX, type StoreCalls, StoreKeyValue } from './storage'
+import { STAMP_MS, SUMMARY_MS, SummaryRecords } from './summary'
 import { LONG_MS, type Toast, toastsFor, worldToast } from './toasts'
 import { toolKind } from './tool-kinds'
 import { registerBand } from './ui/band'
@@ -58,7 +59,8 @@ import type {
   Unauthorized,
   WorldSnapshot,
 } from './vendor/protocol.js'
-import { type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
+import { dayOf } from './vendor/protocol.js'
+import { type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
 import { WorldPoller } from './world'
@@ -156,6 +158,8 @@ const SOUND_NEWS_KEY = `${PREFIX}soundNews`
 class GameSession implements GameHandle {
   engine: GameEngine
   private readonly kv: StoreKeyValue
+  /** The session summary's snapshot and stamp: the primary's alone to read and write. */
+  private readonly summary: SummaryRecords
   private server: ResolvedServer
   private setting: string | null = null
   private linkGen = 0
@@ -218,6 +222,7 @@ class GameSession implements GameHandle {
 
   constructor(private readonly io: Io) {
     this.kv = new StoreKeyValue(io.store, io.sandbox ? SANDBOX_PREFIX : PREFIX)
+    this.summary = new SummaryRecords(this.kv)
     this.server = this.resolve(null)
     this.engine = this.makeEngine()
     this.poller = new WorldPoller({
@@ -368,6 +373,7 @@ class GameSession implements GameHandle {
     // A demoted primary discards its engine, so nothing it held is ever submitted.
     this.timers.push(this.io.every(FLUSH_MS, () => void this.flushIfOwner()))
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
+    this.timers.push(this.io.every(STAMP_MS, () => void this.stamp()))
   }
 
   /** Events apply while this session holds the lease and the engine is not paused. Off only hides the band. */
@@ -426,6 +432,8 @@ class GameSession implements GameHandle {
     if (this.role === 'primary') {
       await this.engine.flush()
       if (this.engine.isUnreachable()) dropped = this.engine.unsentCount()
+      // The old server's account stops playing here.
+      await this.stamp()
     }
     await this.kv.set(SERVER_KEY, url ?? LOCAL)
     await this.restart(url)
@@ -647,6 +655,7 @@ class GameSession implements GameHandle {
    */
   async end(processEnds: boolean, remainingMs: () => number): Promise<void> {
     if (this.role === 'primary' && remainingMs() > 200) await this.engine.flush()
+    await this.stamp()
     if (!processEnds) return
     this.tickTimer?.cancel()
     for (const timer of this.timers) timer.cancel()
@@ -755,17 +764,53 @@ class GameSession implements GameHandle {
       await this.io.store.delete(SOUND_NEWS_KEY)
       this.io.toast(SOUND_NEWS, LONG_MS)
     }
-    if (this.firstRun) {
+    const firstRun = this.firstRun
+    if (firstRun) {
       this.firstRun = false
       this.io.toast(WELCOME)
       const { sound } = await this.io.settings()
       this.engine.notice(sound === 'off' ? WELCOME : WELCOME_SOUND, WELCOME_MS)
       await this.engine.settled()
     }
+    await this.summarize(firstRun)
+  }
+
+  /**
+   * The session summary: the play since this account was last seen, in a toast and the message
+   * window, as the welcome is; a first launch only takes the snapshot the next one counts from.
+   */
+  private async summarize(firstRun: boolean): Promise<void> {
+    const account = this.engine.accountId()
+    const view = await this.io.view()
+    if (account === null || view === null || this.engine.isPaused()) return
+    const now = await this.io.now()
+    // The local day: the Journal shows the same goal before its read answers.
+    const line = await this.summary.onPrimary({
+      tokenKey: this.server.tokenKey,
+      account,
+      view,
+      now,
+      day: dayOf(now),
+      firstRun,
+    })
+    if (line === null || this.role !== 'primary') return
+    this.io.toast(line, LONG_MS)
+    this.engine.notice(line, SUMMARY_MS)
+    await this.engine.settled()
+  }
+
+  /** The account was seen playing: written by the primary only, while it plays and as it stops. */
+  private async stamp(): Promise<void> {
+    const account = this.engine.accountId()
+    if (this.role !== 'primary' || account === null) return
+    await this.summary
+      .stamp(this.server.tokenKey, account, await this.io.now())
+      .catch(() => undefined)
   }
 
   private async becomeSecondary(): Promise<void> {
     if (this.role === 'primary') {
+      await this.stamp()
       // Its retry timers, publishes and notice must not outlive the lease.
       const discarded = this.engine
       this.engine = this.makeEngine()
@@ -840,7 +885,7 @@ class GameSession implements GameHandle {
   }
 
   private onEffects(
-    effects: Effect[],
+    effects: StageEffect[],
     at: number | undefined,
     view: GameView | null,
     arrived?: number,

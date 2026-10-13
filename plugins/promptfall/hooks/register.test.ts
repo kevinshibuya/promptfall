@@ -8,6 +8,7 @@ import { bandKey } from './stage/loop'
 import { CHEST_SHOW_MS, StageTimeline } from './stage/timeline'
 import { EVENT_FRAME_MS, PROBE_ALT_DENY, PROBE_DELAY_MS } from './stage/tuning'
 import { SANDBOX_PREFIX, StoreKeyValue } from './storage'
+import { goalWords, STAMP_MS, SUMMARY_MS } from './summary'
 import { test } from './testing'
 import { worldRows } from './ui/band'
 import { paneText } from './ui/pane/testing'
@@ -15,12 +16,15 @@ import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   BOSS_WINDOW_MS,
   type ChatMessage,
+  DAY_MS,
+  dayOf,
   MemoryKeyValue,
   type WorldSnapshot,
 } from './vendor/protocol.js'
 import {
   content,
   createInitialState,
+  dailyGoal,
   type Effect,
   type Event,
   GAUGE_FULL,
@@ -2576,4 +2580,161 @@ test('the desktop never marks the session, whatever its plays answer', async ($,
   await $.session.attach({ surface: 'desktop', clientId: 'desktop:default' })
   await twoCues($, time, last)
   expect(plays).toEqual(['cues/boss.wav', 'cues/level_up.wav'])
+})
+
+const SNAPSHOT = 'promptfall:deviceToken:snapshot'
+const STAMP = 'promptfall:deviceToken:stamp'
+const MINUTE = 60_000
+
+/**
+ * acct-1 back after a while: 412 kills, 3 zone bosses, 1 Legendary and 2 Epics dropped, 1,200
+ * gold earned and zone 5 reached since a snapshot whose roster stood 2 levels lower. `stampAge`:
+ * how long ago the stamp says the account was last seen playing; `of`: whose records they are.
+ */
+function returning(on: On, stampAge: number, of = 'acct-1', seed: Record<string, unknown> = {}) {
+  const s0 = createInitialState(7)
+  const state: GameState = {
+    ...s0,
+    highestZone: 5,
+    stats: { ...s0.stats, kills: 412 },
+    tallies: {
+      ...s0.tallies,
+      zoneBosses: 3,
+      drops: { ...s0.tallies.drops, epic: 2, legendary: 1 },
+      goldEarned: 1200,
+    },
+  }
+  const levels = s0.roster.reduce((sum, h) => sum + h.level, 0)
+  const snapshot = {
+    account: of,
+    kills: 0,
+    zoneBosses: 0,
+    levels: levels - 2,
+    drops: { rare: 0, epic: 0, legendary: 0 },
+    goldEarned: 0,
+    highestZone: 4,
+  }
+  const now = 1_000_000_000
+  const time = mock.clock(on, { now })
+  const { data, writes } = store(on, {
+    ...account(state),
+    [SNAPSHOT]: snapshot,
+    [STAMP]: { account: of, at: now - stampAge },
+    ...seed,
+  })
+  const last = states(on)
+  const raised: Raised[] = []
+  engineBottom(on, [], {}, (t) => raised.push(t))
+  const line = `Since your last session: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached. Today's goal: ${goalWords(dailyGoal(dayOf(now), 'acct-1', 1))}.`
+  return { time, data, writes, last, raised, snapshot, now, line }
+}
+
+test("a primary start eleven minutes after acct-1's stamp toasts the summary and retakes the snapshot", async ($, on) => {
+  const { time, data, last, raised, line, now } = returning(on, 11 * MINUTE)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(line).toMatch(/Today's goal: (kill|beat|see) /)
+  expect(raised.filter((t) => t.text.startsWith('Since'))).toEqual([
+    { text: line, timeoutMs: 8000 },
+  ])
+  // It holds the message window for 20 seconds, as the welcome does.
+  expect(last.get('notice')).toBe(line)
+  expect(raised.some((t) => t.text.startsWith('Welcome'))).toBe(false)
+  const view = last.get('view') as GameView
+  expect(data.get(SNAPSHOT)).toEqual({
+    account: 'acct-1',
+    kills: 412,
+    zoneBosses: 3,
+    levels: view.roster.reduce((sum, h) => sum + h.level, 0),
+    drops: { rare: 0, epic: 2, legendary: 1 },
+    goldEarned: 1200,
+    highestZone: 5,
+  })
+  expect(data.get(STAMP)).toEqual({ account: 'acct-1', at: now })
+  await time.advance(SUMMARY_MS)
+  expect(last.get('notice') ?? null).toBeNull()
+})
+
+test('a stamp nine minutes old toasts nothing and keeps the snapshot', async ($, on) => {
+  const { data, last, raised, snapshot } = returning(on, 9 * MINUTE)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(raised.filter((t) => t.text.startsWith('Since'))).toEqual([])
+  expect(last.get('notice') ?? null).toBeNull()
+  expect(data.get(SNAPSHOT)).toEqual(snapshot)
+})
+
+test('a gap of a day or more names the weekday of the stamp', async ($, on) => {
+  const { raised, now } = returning(on, 2 * DAY_MS)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][
+    new Date(now - 2 * DAY_MS).getDay()
+  ]
+  expect(raised.filter((t) => t.text.startsWith(`Since ${weekday}: 412 kills,`))).toHaveLength(1)
+})
+
+test("another account's records raise nothing, and this account's snapshot replaces them", async ($, on) => {
+  const { data, raised } = returning(on, 11 * MINUTE, 'acct-2')
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(raised.filter((t) => t.text.startsWith('Since'))).toEqual([])
+  expect((data.get(SNAPSHOT) as { account: string }).account).toBe('acct-1')
+  expect((data.get(STAMP) as { account: string }).account).toBe('acct-1')
+})
+
+test('a first launch toasts the welcome, no summary, and takes the first snapshot', async ($, on) => {
+  const now = 1_000_000_000
+  mock.clock(on, { now })
+  const { data } = store(on)
+  states(on)
+  const raised: Raised[] = []
+  engineBottom(on, [], {}, (t) => raised.push(t))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(raised.map((t) => t.text)).toContain(WELCOME)
+  expect(raised.filter((t) => t.text.startsWith('Since'))).toEqual([])
+  const account = (data.get(SNAPSHOT) as { account: string; kills: number }).account
+  expect(account).toBeTruthy()
+  expect(data.get(STAMP)).toEqual({ account, at: now })
+})
+
+test('a secondary writes neither record', async ($, on) => {
+  const { writes, raised } = returning(on, 11 * MINUTE, 'acct-1', {
+    [LEASE]: { owner: 'someone-else', until: 9_999_999_999_999 },
+  })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(raised.filter((t) => t.text.startsWith('Since'))).toEqual([])
+  expect(writes.filter((w) => w.key === SNAPSHOT || w.key === STAMP)).toEqual([])
+})
+
+test('the stamp is refreshed every five minutes while primary and at a handover', async ($, on) => {
+  const { time, data, last, now } = returning(on, 9 * MINUTE)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(data.get(STAMP)).toEqual({ account: 'acct-1', at: now })
+  await time.advance(STAMP_MS)
+  expect(data.get(STAMP)).toEqual({ account: 'acct-1', at: now + STAMP_MS })
+  // Another session takes the lease: this one stamps as it stops being primary.
+  await time.advance(MINUTE - 5_000)
+  data.set(LEASE, { owner: 'someone-else', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  const stamped = (data.get(STAMP) as { at: number }).at
+  expect(stamped).toBeGreaterThan(now + STAMP_MS)
+  // A secondary leaves it alone from then on.
+  await time.advance(STAMP_MS)
+  expect((data.get(STAMP) as { at: number }).at).toBe(stamped)
+})
+
+test("the session's end stamps; a reset wipes both records", async ($, on) => {
+  const { time, data, now } = returning(on, 9 * MINUTE)
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(MINUTE)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(data.get(STAMP)).toEqual({ account: 'acct-1', at: now + MINUTE })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:reset' })
+  await ui.press({ key: 'yes' })
+  // The fresh account's first launch takes its own: nothing of acct-1's is left.
+  expect((data.get(SNAPSHOT) as { account: string }).account).not.toBe('acct-1')
+  expect((data.get(STAMP) as { account: string }).account).not.toBe('acct-1')
+  await ui.unmount()
 })

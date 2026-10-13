@@ -7,6 +7,7 @@ import {
   UNREACHABLE_NOTICE,
   UPDATE_NOTICE,
 } from './engine'
+import type { StageEffect } from './stage/timeline'
 import { approveAs, Ledger } from './vendor/ledger.js'
 import {
   type Auth,
@@ -175,6 +176,8 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
   const calls: { count: number; view: boolean }[] = []
   /** The arrival time each batch holding a drop came with. */
   const drops: (number | undefined)[] = []
+  /** Every level-up handed on, as the stage gets it. */
+  const levelUps: StageEffect[] = []
   const toasts: { text: string; timeoutMs: number | undefined }[] = []
   const engine = new GameEngine({
     client,
@@ -188,6 +191,7 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
       for (const e of list) effects.push(e.k)
       calls.push({ count: list.length, view: view !== null })
       if (list.some((e) => e.k === 'drop')) drops.push(arrived)
+      levelUps.push(...list.filter((e) => e.k === 'level_up'))
     },
     toast: (text, timeoutMs) => {
       toasts.push({ text, timeoutMs })
@@ -216,6 +220,7 @@ function setup(kv = new MemoryKeyValue(), flags?: Record<string, boolean>) {
     effects,
     calls,
     drops,
+    levelUps,
     toasts,
     timers,
     fire,
@@ -855,6 +860,27 @@ test('a delivered drop carries the time it arrived, not the last tick', async ()
   })
   await s.engine.sync()
   expect(s.drops).toEqual([s.at()])
+})
+
+test("a level-up reaches the stage with the hero's stat deltas over the tick, on its last level", async () => {
+  const s = setup(new MemoryKeyValue(), { 'sandbox.enabled': true })
+  await s.engine.start()
+  const knight = s.engine.state()?.roster.find((h) => h.template === 'knight_1')
+  expect(knight?.level).toBe(1)
+  const accountId = s.engine.accountId() ?? ''
+  expect(
+    await s.ledger.host.sandbox(accountId, {
+      t: 'sandbox_level',
+      heroId: knight?.id ?? '',
+      level: 3,
+    }),
+  ).toEqual({ ok: true })
+  await s.engine.sync()
+  // A common Aldric grows 9 HP, 2 attack and 2 defence a level: two levels at once.
+  expect(s.levelUps).toEqual([
+    { k: 'level_up', heroId: knight?.id, level: 2 },
+    { k: 'level_up', heroId: knight?.id, level: 3, deltas: { hp: 18, atk: 4, def: 4, spd: 0 } },
+  ])
 })
 
 /** An engine on a sandbox ledger that holds an Oak Staff, a Rune Staff and an Iron Sword, granted and synced. */

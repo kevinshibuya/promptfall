@@ -34,20 +34,22 @@ import {
   HASTE_FRAME_MS,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
+  LEVEL_RGB,
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
   SPRITE_PX,
   STEP_OUT_MS,
   STEP_PX,
+  TRAVEL_PX,
   ZONE_GROUND,
 } from './tuning'
 
 /**
- * The drawing an actor shows: idle A and B, the three drawn frames, the hit frame, and Guard's
- * stance (derived, as idle B and the hit are).
+ * The drawing an actor shows: idle A and B, the three drawn frames, the hit frame, Guard's
+ * stance (derived, as idle B and the hit are), and a hero's victory pose.
  */
-export type Pose = 'idle' | 'idle_b' | 'windup' | 'strike' | 'follow' | 'hit' | 'guard'
+export type Pose = 'idle' | 'idle_b' | 'windup' | 'strike' | 'follow' | 'hit' | 'guard' | 'victory'
 /** One pose's art, palette (rarity swap and fallen dim, no flash) and its offset from `x`. */
 export type PoseArt = {
   art: SpriteArt
@@ -66,6 +68,7 @@ export const POSES: readonly Pose[] = [
   'follow',
   'hit',
   'guard',
+  'victory',
 ]
 
 /** An art drawn with an actor, its top-left `dx`, `dy` from the actor's idle top-left. */
@@ -78,7 +81,16 @@ export function samePoses(
   raritySlot: number | null = null,
 ): Record<Pose, PoseArt> {
   const one: PoseArt = { art, palette, raritySlot, dx: 0 }
-  return { idle: one, idle_b: one, windup: one, strike: one, follow: one, hit: one, guard: one }
+  return {
+    idle: one,
+    idle_b: one,
+    windup: one,
+    strike: one,
+    follow: one,
+    hit: one,
+    guard: one,
+    victory: one,
+  }
 }
 
 export type StageActor = {
@@ -120,6 +132,8 @@ export type StageActor = {
   shield?: Mark | null
   /** Enrage's red flash, as `flashing` is the white one. */
   redFlashing?: boolean
+  /** A level-up's gold flash, as `flashing` is the white one. */
+  goldFlashing?: boolean
   /** An enraged enemy's red tint, until its next hit lands; folded into `palette`. */
   tinted?: boolean
 }
@@ -196,6 +210,28 @@ export function stepOffset(m: Motion | undefined, now: number, scale = 1): numbe
   const out = clamp((now - m.from) / STEP_OUT_MS, 0, 1)
   const back = clamp((m.until - now) / STEP_OUT_MS, 0, 1)
   return m.dir * Math.round(Math.round(STEP_PX * scale) * Math.min(out, back))
+}
+
+/**
+ * A travel's offset and opacity: stepping off toward the right while fading out, then on from the
+ * left while fading in; none outside a travel.
+ */
+export function travelAt(
+  off: Motion | undefined,
+  on: Motion | undefined,
+  now: number,
+  scale = 1,
+): { dx: number; alpha: number } {
+  const span = Math.round(TRAVEL_PX * scale)
+  if (on?.kind === 'travel_on') {
+    const p = progress(on, now)
+    return { dx: -Math.round(span * (1 - p)), alpha: p }
+  }
+  if (off?.kind === 'travel_off') {
+    const p = progress(off, now)
+    return { dx: Math.round(span * p), alpha: 1 - p }
+  }
+  return { dx: 0, alpha: 1 }
 }
 
 /** An actor's offset from its place: the step, and the lunge from the stepped position. */
@@ -312,6 +348,7 @@ function posesOf(
     const act = attack
       ? pose(variant(attack, compact, scale), slotOf(attack, compact, scale))
       : idle
+    // At 1x a hero keeps its idle through the victory too (ADR 0007).
     return {
       idle,
       idle_b: idle,
@@ -320,6 +357,7 @@ function posesOf(
       follow: idle,
       hit: idle,
       guard: guardOf(),
+      victory: idle,
     }
   }
   const f = sprite.frames
@@ -337,6 +375,7 @@ function posesOf(
     follow: f?.follow ? pose(f.follow.art, f.follow.raritySlot) : strike,
     hit: pose(leaned.art, idle.raritySlot, flipX ? 0 : -leaned.grow, true),
     guard: guardOf(),
+    victory: f?.victory ? pose(f.victory.art, f.victory.raritySlot) : idle,
   }
 }
 
@@ -370,8 +409,8 @@ export function stageAt(
   const liftOf = (bobMs: number | null): number =>
     scale === 1 && bobMs !== null ? bobbingAt(now, bobMs) * px(IDLE_BOB_PX) : 0
   /**
-   * Hit wins, then the follow-through, the strike and the wind-up; at rest Guard's stance, or the
-   * idle pair on the actor's bob.
+   * Hit wins, then the follow-through, the strike and the wind-up, then a hero's victory pose; at
+   * rest Guard's stance, or the idle pair on the actor's bob.
    */
   const poseOf = (
     actor: string,
@@ -380,14 +419,17 @@ export function stageAt(
     bobMs: number | null,
   ): Pose => {
     if (fallen) return 'idle'
-    for (const kind of ['hit', 'follow', 'strike', 'windup'] as const) {
+    for (const kind of ['hit', 'follow', 'strike', 'windup', 'victory'] as const) {
       if (motionOf(actor, kind)) return kind
     }
     if (rest === 'guard') return 'guard'
     return bobMs !== null && bobbingAt(now, bobMs) === 1 ? 'idle_b' : 'idle'
   }
   /** At 1.5 a flash is a blink at its start; at 1 it holds for the whole flash. */
-  const isFlashing = (actor: string, kind: 'flash' | 'red_flash' = 'flash'): boolean => {
+  const isFlashing = (
+    actor: string,
+    kind: 'flash' | 'red_flash' | 'gold_flash' = 'flash',
+  ): boolean => {
     const flash = motionOf(actor, kind)
     return flash !== undefined && (scale === 1 || now < flash.from + BLINK_MS)
   }
@@ -395,6 +437,7 @@ export function stageAt(
     palette.map((c, i) => (i === 0 ? c : rgb))
   const white = fill(FLASH_RGB)
   const red = fill(ENRAGE_RGB)
+  const gold = fill(LEVEL_RGB)
 
   const actors: StageActor[] = []
   const bosses: StageActor[] = []
@@ -507,25 +550,34 @@ export function stageAt(
     const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
     const shield = marks && rest === 'guard' && index === front ? shieldOver(poses.idle.art) : null
     const flashing = !fallen && isFlashing(hero.id)
+    const goldFlashing = !fallen && !flashing && isFlashing(hero.id, 'gold_flash')
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
+    const travel = travelAt(
+      motionOf(hero.id, 'travel_off'),
+      motionOf(hero.id, 'travel_on'),
+      now,
+      scale,
+    )
     const x =
       width -
       edge -
       art.width -
       (partySize - 1 - index) * pitch +
-      actionOffset(step, lunge, now, scale)
+      actionOffset(step, lunge, now, scale) +
+      travel.dx
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
     actors.push({
       key: hero.id,
       spriteId: sprite.id,
       art: shown.art,
-      palette: flashing ? white(shown.palette) : shown.palette,
+      palette: flashing ? white(shown.palette) : goldFlashing ? gold(shown.palette) : shown.palette,
       x,
       y: height - art.height - liftOf(bobMs),
       flipX: true,
-      alpha: 1,
+      alpha: travel.alpha,
       fallen,
       flashing,
+      goldFlashing,
       accent,
       raritySlot: shown.raritySlot,
       pose,
