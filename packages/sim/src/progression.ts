@@ -14,6 +14,7 @@ import type {
   Slot,
   Stat,
   Stats,
+  WaveArchetype,
 } from './types'
 
 /** A value in [0, n), advancing the draft's rng in place. Same stream as `roll`. */
@@ -139,24 +140,29 @@ function openEncounter(s: GameState, waveSize: number): Encounter {
 function spawnEnemy(s: GameState, encounter: Encounter, defId: string, kind: EnemyKind): void {
   const def = enemyAt(defId, s.zone)
   const hp = def ? def.stats.hp : 1
-  const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp }
+  const enemy: Enemy = { id: newId(s, 'e'), def: defId, kind, hp, maxHp: hp, enraged: false }
   encounter.enemies.push(enemy)
   s.battle.gauges.push({ id: enemy.id, g: draw(s, SPAWN_GAUGE_MAX + 1) })
 }
 
-function pickWaveEnemy(s: GameState): string {
+/** The zone's wave enemy of the hinted archetype when its list holds one; else a uniform draw. */
+function pickWaveEnemy(s: GameState, hint?: WaveArchetype): string {
   const zone = zoneAt(s.zone)?.def
+  const hinted = hint
+    ? zone?.enemies.find((id) => enemyAt(id, s.zone)?.archetype === hint)
+    : undefined
+  if (hinted) return hinted
   const weights: Record<string, number> = {}
   for (const id of zone?.enemies ?? []) weights[id] = 1
   return drawWeighted(s, weights)
 }
 
-export function onToolCall(s: GameState): void {
+export function onToolCall(s: GameState, hint?: WaveArchetype): void {
   s.turnToolCalls += 1
   // Boss mode: the call still counts toward the turn boss, and nothing spawns.
   if (s.boss) return
   const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3))
-  const defId = pickWaveEnemy(s)
+  const defId = pickWaveEnemy(s, hint)
   if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, 'wave')
   else if (encounter.queue.length < 10) encounter.queue.push({ def: defId, kind: 'wave' })
 }

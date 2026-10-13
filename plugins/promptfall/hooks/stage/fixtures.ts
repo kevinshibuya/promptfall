@@ -28,6 +28,8 @@ function hero(
     gauge: gauge.gauge,
     queued: gauge.queued,
     gaugePerStep: 250,
+    hasted: false,
+    guarding: false,
   }
 }
 
@@ -39,7 +41,7 @@ function enemy(
   maxHp: number,
   kind = 'wave',
 ): EnemyView {
-  return { id, def, name, glyph: '?', hp, maxHp, kind }
+  return { id, def, name, glyph: '?', hp, maxHp, kind, enraged: false }
 }
 
 export const HEROES: readonly HeroView[] = [

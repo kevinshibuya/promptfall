@@ -60,7 +60,10 @@ function hurt(s: GameState, heroId: string): boolean {
   return hero !== undefined && hero.hp > 0 && hero.hp < heroStats(s, hero).hp
 }
 
-/** Zone 10, an Epic and a Rare wounded in tiered kit, a full inventory, gold, a world boss engaged. */
+/**
+ * Zone 10, an Epic and a Rare wounded in tiered kit, a full inventory, gold, a world boss engaged
+ * and enraged, Haste and Guard on.
+ */
 function deepFixture(): GameState {
   const script = new Script(DEEP_SEED)
   const knight = script.state.party[0]
@@ -100,6 +103,9 @@ function deepFixture(): GameState {
     glyph: '☠',
     stats: { hp: 900, atk: 18, def: 6, spd: 5 },
   })
+  script.run({ t: 'turn_start' })
+  script.run({ t: 'guard', on: true })
+  script.run({ t: 'tool_mishap' })
   return script.state
 }
 

@@ -1627,7 +1627,9 @@ function dropping(rarity: string): GameState {
     const s: GameState = {
       ...s0,
       encounter: {
-        enemies: [{ id: 'e-test', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 }],
+        enemies: [
+          { id: 'e-test', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60, enraged: false },
+        ],
         queue: [],
         waveSize: 3,
         spawnedInWave: 3,
@@ -1796,8 +1798,8 @@ function twoRareDropsAndALevel(): GameState {
       ),
       encounter: {
         enemies: [
-          { id: 'e-a', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
-          { id: 'e-b', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60 },
+          { id: 'e-a', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60, enraged: false },
+          { id: 'e-b', def: 'goblin_scout', kind: 'wave', hp: 1, maxHp: 60, enraged: false },
         ],
         queue: [],
         waveSize: 3,
@@ -2073,7 +2075,16 @@ function bossDropping(): GameState {
       ...s0,
       wave: 11,
       encounter: {
-        enemies: [{ id: 'e-boss', def: 'bandit_captain', kind: 'zone_boss', hp: 1, maxHp: 630 }],
+        enemies: [
+          {
+            id: 'e-boss',
+            def: 'bandit_captain',
+            kind: 'zone_boss',
+            hp: 1,
+            maxHp: 630,
+            enraged: false,
+          },
+        ],
         queue: [],
         waveSize: 0,
         spawnedInWave: 0,

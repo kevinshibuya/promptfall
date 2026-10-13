@@ -3,7 +3,7 @@ import { hashState } from './hash'
 import { createInitialState } from './state'
 import { replay, step } from './step'
 import type { Event, GameState, Rarity, SandboxEvent, ServerEvent, Slot } from './types'
-import { RARITIES, SANDBOX_EVENT_KINDS } from './types'
+import { RARITIES, SANDBOX_EVENT_KINDS, WAVE_ARCHETYPES } from './types'
 
 // An xorshift32 independent of the sim's PRNG.
 function makeRandom(seed: number): (n: number) => number {
@@ -133,7 +133,16 @@ function randomEvent(r: (n: number) => number, s: GameState): Event {
   const itemId = r(10) === 0 ? 'ijunk' : pick(r, itemIds, 'i0')
   const roll = r(100)
   if (roll < 40) return { t: 'tick' }
-  if (roll < 60) return { t: 'tool_call' }
+  if (roll < 60) {
+    // The reactive events ride the tool call's share: a third of it.
+    const kind = r(15)
+    if (kind < 10) return { t: 'tool_call' }
+    if (kind === 10) return { t: 'tool_call', hint: pick(r, WAVE_ARCHETYPES, 'tank') }
+    if (kind === 11) return { t: 'turn_start' }
+    if (kind === 12) return { t: 'tool_mishap' }
+    if (kind === 13) return { t: 'guard', on: r(2) === 0 }
+    return { t: 'camp' }
+  }
   if (roll < 64) return { t: 'turn_end' }
   if (roll < 67) return { t: 'rest' }
   if (roll < 74) return { t: 'equip', heroId, itemId }

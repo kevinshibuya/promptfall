@@ -26,6 +26,8 @@ export function createInitialState(seed: number): GameState {
     turnToolCalls: 0,
     encounter: null,
     pendingTurnBoss: false,
+    hasteTicks: 0,
+    guardTicks: 0,
     lootLog: [],
     stats: { kills: 0, bosses: 0, wipes: 0 },
     boss: null,

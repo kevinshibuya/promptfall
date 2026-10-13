@@ -12,12 +12,22 @@ declare const FILL_K = 10;
 declare const FILL_BP = 16667;
 /** Every damage and heal amount × POWER_BP / 10000 (grill 1.5). Tunable. */
 declare const POWER_BP = 20000;
+/** While Haste is on, a hero's per-step fill × HASTE_BP / 10000. Tunable (the arc check of #156). */
+declare const HASTE_BP = 12500;
+/** Haste's countdown: 90 ticks, 3 minutes of battle time. */
+declare const HASTE_TICKS = 90;
+/** Guard's countdown: 60 ticks, 2 minutes of battle time. */
+declare const GUARD_TICKS = 60;
+/** While Guard is on, the damage a hero takes × GUARD_DAMAGE_BP / 10000. */
+declare const GUARD_DAMAGE_BP = 5000;
+/** An enraged enemy's next attack uses its atk × ENRAGE_BP / 10000. */
+declare const ENRAGE_BP = 15000;
 /** A spawned enemy's gauge starts at draw(SPAWN_GAUGE_MAX + 1). */
 declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 14;
+declare const SIM_VERSION: 15;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -65,7 +75,12 @@ type Enemy = {
     kind: EnemyKind;
     hp: number;
     maxHp: number;
+    /** Set by a mishap: its next attack lands harder, then it clears. */
+    enraged: boolean;
 };
+/** A wave enemy's archetype: what a tool call's hint names. Every zone's wave list holds one of each. */
+type WaveArchetype = 'swift' | 'brute' | 'caster' | 'tank';
+declare const WAVE_ARCHETYPES: readonly WaveArchetype[];
 type Encounter = {
     enemies: Enemy[];
     queue: {
@@ -124,12 +139,24 @@ type LootEntry = {
 };
 type PlayerEvent = {
     t: 'tick';
-} | {
+}
+/** `hint` names the wave enemy the call spawns; absent, the draw is uniform. */
+ | {
     t: 'tool_call';
+    hint?: WaveArchetype;
+} | {
+    t: 'turn_start';
 } | {
     t: 'turn_end';
 } | {
     t: 'rest';
+} | {
+    t: 'tool_mishap';
+} | {
+    t: 'camp';
+} | {
+    t: 'guard';
+    on: boolean;
 } | {
     t: 'equip';
     heroId: string;
@@ -347,6 +374,29 @@ type Effect = {
     by: string;
     target: string;
     amount: number;
+}
+/** Haste turned on or off: emitted on the change only. */
+ | {
+    k: 'haste';
+    on: boolean;
+}
+/** Guard turned on or off: emitted on the change only. */
+ | {
+    k: 'guard';
+    on: boolean;
+}
+/** A mishap enraged this enemy (an Enemy.id). */
+ | {
+    k: 'enraged';
+    enemyId: string;
+}
+/** The party camped: each party hero and the HP it restored. */
+ | {
+    k: 'camp';
+    heals: {
+        heroId: string;
+        amount: number;
+    }[];
 };
 type GameState = {
     v: typeof SIM_VERSION;
@@ -373,6 +423,10 @@ type GameState = {
     turnToolCalls: number;
     encounter: Encounter | null;
     pendingTurnBoss: boolean;
+    /** Ticks of Haste left; 0 is off. Set by turn_start, cleared by turn_end and rest. */
+    hasteTicks: number;
+    /** Ticks of Guard left; 0 is off. Set by guard on, cleared by guard off and rest. */
+    guardTicks: number;
     lootLog: LootEntry[];
     stats: {
         kills: number;
@@ -572,15 +626,17 @@ declare const content: Content;
 
 declare const GOLDEN_SEED = 20261002;
 /**
- * A fixed 300-event script mixing world events, commands and a world boss
- * stretch (engaged after turn 3, disengaged after turn 6, a reward after
- * turn 7). Ids are the ones the initial state mints (h0 to h3) plus guesses,
- * so some commands are rejected; rejections are part of the contract too.
+ * A fixed 300-event script mixing world events, commands, the reactive events
+ * (every turn hasted, hinted calls, a mishap, a guard, a camp in boss mode and
+ * one out of it) and a world boss stretch (engaged after turn 3, disengaged
+ * after turn 6, a reward after turn 7). Ids are the ones the initial state
+ * mints (h0 to h3) plus guesses, so some commands are rejected; rejections are
+ * part of the contract too.
  */
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "42969ddaf82b0564";
+declare const GOLDEN_HASH = "62144fd6f78c2048";
 
 declare function hashState(state: GameState): string;
 
@@ -651,9 +707,12 @@ declare function migrateGoods(goods: Goods, from: number, options?: MigrateOptio
 
 declare function heroStats(state: GameState, hero: Hero): Stats;
 
+/** A hero's gauge gained per step as the battle fills it: zero while guarding, scaled while hasted. */
+declare function heroFill(s: GameState, hero: Hero): number;
+
 declare function createInitialState(seed: number): GameState;
 
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, type GameState, type Goods, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type TradeKind, type Trait, type TraitDef, type VersionedState, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, vendorValue, zoneAt };
+export { ACTION_STEPS, type ActionId, type Affix, type AffixDef, type Battle, type Content, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOLDEN_HASH, GOLDEN_SEED, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type Goods, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type Item, type ItemBase, LADDER_END, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityRule, type RecruitVia, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, affixValue, baseTier, content, createInitialState, dropTier, enemyAt, fill, goldenEvents, hashState, heroFill, heroStats, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, vendorValue, zoneAt };

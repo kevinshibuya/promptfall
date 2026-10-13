@@ -141,7 +141,7 @@ function hitsSurvived(
   defId: string,
   kind: EnemyKind,
 ): number {
-  const enemy: Enemy = { id: 'probe_enemy', def: defId, kind, hp: 1, maxHp: 1 }
+  const enemy: Enemy = { id: 'probe_enemy', def: defId, kind, hp: 1, maxHp: 1, enraged: false }
   const hit = hitDamage(enemyStats(s, enemy).atk, def, NO_VARIANCE_BP)
   return Math.floor((hp - 1) / hit)
 }

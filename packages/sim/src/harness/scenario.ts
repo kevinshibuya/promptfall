@@ -57,6 +57,10 @@ export type LegendaryTimeline = {
 
 export type ScenarioReport = {
   ticks: number
+  /** Ticks applied with Haste on. */
+  hastedTicks: number
+  /** turn_start events sent: one at each turn's start and one per 60 seconds of it. */
+  turnStarts: number
   toolCalls: number
   turnBosses: number
   zone: number
@@ -171,6 +175,8 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
   const startingInventoryCap = state.inventoryCap
   const report: ScenarioReport = {
     ticks: 0,
+    hastedTicks: 0,
+    turnStarts: 0,
     toolCalls: 0,
     turnBosses: 0,
     zone: state.zone,
@@ -232,7 +238,11 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
       zone1Rounds += state.tick - before.tick
       zone1Kills += state.stats.kills - before.stats.kills
     }
-    if (event.t === 'tick') report.ticks += 1
+    if (event.t === 'tick') {
+      report.ticks += 1
+      if (before.hasteTicks > 0) report.hastedTicks += 1
+    }
+    if (event.t === 'turn_start') report.turnStarts += 1
     // A combat tick is one that ran the battle loop: only those count in state.tick.
     if (state.tick > before.tick) {
       heroTicks += livingParty(before).length
@@ -350,6 +360,9 @@ export function runScenario(options: ScenarioOptions): ScenarioReport {
     let call = 0
     for (let t = 0; t < turn.lengthSec && elapsed < total; t++, elapsed++, inTurn++) {
       maybeGrant()
+      // The turn's start, then one per 60 seconds of it: the model steps a real turn has, at the
+      // hooks' throttle (#156). Haste runs through the turn; its tool calls carry no hint.
+      if (t % 60 === 0) apply({ t: 'turn_start' })
       for (; call < turn.calls.length && (turn.calls[call] ?? 0) <= t; call++) {
         apply({ t: 'tool_call' })
       }

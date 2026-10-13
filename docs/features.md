@@ -35,7 +35,10 @@ fallen heroes get up at 50%.
 **Encounters and waves.** Each tool call Claude makes spawns an enemy into the encounter: at most
 three fight at once and up to ten more wait. When nobody is left to fight, the next enemy of the
 current wave walks in, so an idle session still plays. A zone is ten waves of one to three of its
-own enemies, and clearing a wave heals every hero 15% and gets the fallen back up at 15%.
+own enemies, and clearing a wave heals every hero 15% and gets the fallen back up at 15%. A wave
+enemy pays for its toughness: its XP, gold and drop chance follow its share of HP, so a zone's
+tank pays about 1.3 times the zone's base and its swift about 0.74, and no kind pays better per
+point of HP it takes to kill.
 
 **Action gauge and action queue.** Every hero and enemy has an action gauge that fills with
 battle time, faster with more speed, and a full gauge joins the action queue. Units act one at a

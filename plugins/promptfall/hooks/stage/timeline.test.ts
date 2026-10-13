@@ -264,6 +264,7 @@ test('survivors keep their places and a newcomer joins the end of the line after
     hp: 9,
     maxHp: 9,
     kind: 'wave',
+    enraged: false,
   })
   const enter = NOW + DISSOLVE_MS + WAVE_GAP_MS
   t.observe(v, enter)
@@ -290,7 +291,16 @@ test('a monster that enters mid-tick is known to the timeline before the next re
   const tick = wave()
   tick.enemies = [
     ...two.enemies,
-    { id: 'e4', def: 'road_slime', name: 'Road Slime', glyph: 'T', hp: 9, maxHp: 9, kind: 'wave' },
+    {
+      id: 'e4',
+      def: 'road_slime',
+      name: 'Road Slime',
+      glyph: 'T',
+      hp: 9,
+      maxHp: 9,
+      kind: 'wave',
+      enraged: false,
+    },
   ]
   t.admit(tick, NOW)
   t.onEffects([act('e4', 0), hit('e4', 'h1'), act('h1', 500), hit('h1', 'e4')], NOW)
@@ -325,6 +335,7 @@ test('a newcomer the pause after a kill holds back is not admitted with the tick
     hp: 9,
     maxHp: 9,
     kind: 'wave',
+    enraged: false,
   })
   t.admit(v, NOW + 10)
   expect(t.known().map((k) => k.id)).toEqual(['e1', 'e2', 'e3'])
