@@ -82,6 +82,7 @@ function view(enemies: EnemyView[], zone = 1, wave = 2): GameView {
       presenceOpen: false,
       leaderboardsOpen: false,
       bossOpen: false,
+      huntOpen: false,
       returns: 0,
       sandbox: false,
     },

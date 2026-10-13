@@ -631,6 +631,37 @@ describe('HTTP host admin flags', () => {
     expect(lines.join('\n')).not.toContain(ADMIN)
   })
 
+  it('hunt.enabled is on by default, and off over the admin route hides the hunt', async () => {
+    const h = await hostOn(new MemoryKeyValue(), { adminToken: ADMIN, adminLog: () => undefined })
+    try {
+      const boot = BootstrapSchema.parse(
+        (
+          await h.call('POST', '/v1/bootstrap', {
+            body: { clientVersion: '0.3.0', deviceToken: null },
+          })
+        ).body,
+      )
+      expect(boot.config.flags['hunt.enabled']).toBe(true)
+      const token = boot.deviceToken
+      const world = async () => {
+        const w = WorldResponseSchema.parse((await h.call('GET', '/v1/world', { token })).body)
+        if ('reason' in w) throw new Error('unauthorized')
+        return w
+      }
+      expect((await world()).hunt).not.toBeNull()
+      const off = await h.call('POST', '/v1/admin/flags', {
+        body: { 'hunt.enabled': false },
+        token: ADMIN,
+      })
+      expect(off.body).toMatchObject({ flags: { 'hunt.enabled': false } })
+      const w = await world()
+      expect(w.hunt).toBeNull()
+      expect(w.flags['hunt.enabled']).toBe(false)
+    } finally {
+      await h.close()
+    }
+  })
+
   it('sandbox.enabled and unknown flags are refused, and nothing is set', async () => {
     const lines: string[] = []
     const h = await hostOn(new MemoryKeyValue(), {
@@ -997,6 +1028,7 @@ describe('parseFlags', () => {
       'worldboss.enabled': false,
     })
     expect(parseFlags(['sandbox.enabled=true'])).toEqual({ 'sandbox.enabled': true })
+    expect(parseFlags(['hunt.enabled=false'])).toEqual({ 'hunt.enabled': false })
   })
 
   it('throws on an unknown name or a value other than true and false', () => {

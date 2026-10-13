@@ -148,6 +148,23 @@ test('a level-up names the hero the way its toast does, from the roster', () => 
   expect(texts).toEqual(['Aldric the Steadfast reached level 6.', 'A hero reached level 2.'])
 })
 
+test('a reward from the weekly hunt says so', () => {
+  const { texts } = run([
+    {
+      k: 'rewarded',
+      bossId: 'h1a',
+      goods: { kind: 'item', item: item('oak_staff', 'epic') },
+      gold: 120,
+      source: 'hunt',
+    },
+    { k: 'rewarded', bossId: 'h1a', goods: null, gold: 80, source: 'hunt' },
+  ])
+  expect(texts).toEqual([
+    'Your share of the hunt: 120G and Oak Staff.',
+    'Your share of the hunt: 80G.',
+  ])
+})
+
 test('a hero won from the boss is named by its template', () => {
   const { texts } = run([
     {

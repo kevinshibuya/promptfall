@@ -191,6 +191,7 @@ export function toAccountView(
     presenceOpen: config?.flags['presence.enabled'] ?? true,
     leaderboardsOpen: config?.flags['leaderboards.enabled'] ?? true,
     bossOpen: config?.flags['worldboss.enabled'] ?? true,
+    huntOpen: config?.flags['hunt.enabled'] ?? true,
     returns,
     sandbox,
   }
@@ -201,6 +202,7 @@ export type Gates = {
   presenceOpen: boolean
   leaderboardsOpen: boolean
   bossOpen: boolean
+  huntOpen: boolean
   marketOpen: boolean
 }
 
@@ -218,6 +220,7 @@ export function gates(world: WorldState | null, account: AccountView): Gates {
     presenceOpen: open('presence.enabled', account.presenceOpen),
     leaderboardsOpen: open('leaderboards.enabled', account.leaderboardsOpen),
     bossOpen: open('worldboss.enabled', account.bossOpen),
+    huntOpen: open('hunt.enabled', account.huntOpen),
     marketOpen: open('market.enabled', account.marketOpen),
   }
 }

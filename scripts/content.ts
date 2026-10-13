@@ -133,6 +133,17 @@ export function contentReference(c: Content): string {
       c.goals.map((g) => [g.kind, g.base, g.step, g.everyZones]),
     ),
     '',
+    '## Weekly hunts',
+    '',
+    "One row a week in turn, by the week's index from the epoch, counted by the ledger from every",
+    "account's commits but bots'. At the week's close each contributor at 0.5% of the target or",
+    'more gets one reward roll at its zone, the target reached or not.',
+    '',
+    ...table(
+      ['Id', 'Name', 'Counts', 'Target'],
+      c.hunts.map((h) => [code(h.id), cell(h.name), h.kind, h.target.toLocaleString('en-US')]),
+    ),
+    '',
   ].join('\n')
 }
 

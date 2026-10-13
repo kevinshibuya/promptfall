@@ -153,8 +153,9 @@ const TABLE = {
     cue: null,
     single: ({ effect, names }: EffectInput) => {
       if (effect.k !== 'rewarded') return null
-      const boss = names.bossName(effect.bossId) ?? 'the world boss'
       const goods = effect.goods ? ` and ${goodsName(effect.goods)}` : ''
+      if (effect.source === 'hunt') return `Your share of the hunt: ${effect.gold} gold${goods}`
+      const boss = names.bossName(effect.bossId) ?? 'the world boss'
       return `Your share of ${boss}: ${effect.gold} gold${goods}`
     },
   },

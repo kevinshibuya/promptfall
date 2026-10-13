@@ -4404,7 +4404,9 @@ var BOSS_WINDOW_MS = 12e5;
 var BOSS_BASE_HP = 4e3;
 var BOSS_THRESHOLD_BP = 500;
 var BOSS_TOP_BONUS = 3;
+var HUNT_THRESHOLD_BP = 50;
 var DAY_MS2 = 864e5;
+var WEEK_MS = 7 * DAY_MS2;
 function weekStartOf(now) {
   const days = Math.floor(now / DAY_MS2);
   return (days - (days + 3) % 7) * DAY_MS2;
@@ -4443,6 +4445,13 @@ var BossViewSchema = external_exports.object({
   endsAt: count4,
   yours: count4
 });
+var HuntViewSchema = external_exports.object({
+  name: external_exports.string().max(128),
+  target: external_exports.number().int().positive(),
+  count: count4,
+  endsAt: count4,
+  yours: count4
+});
 var WorldSnapshotSchema = external_exports.object({
   serverNow: count4,
   speed: external_exports.number().positive(),
@@ -4452,6 +4461,7 @@ var WorldSnapshotSchema = external_exports.object({
   ),
   here: external_exports.array(external_exports.string().max(128)).max(HERE_MAX),
   boss: BossViewSchema.nullable(),
+  hunt: HuntViewSchema.nullable(),
   chat: external_exports.array(ChatMessageSchema),
   flags: external_exports.record(external_exports.boolean())
 });
@@ -4785,9 +4795,11 @@ export {
   GoodsSchema,
   HERE_MAX,
   HEX16,
+  HUNT_THRESHOLD_BP,
   HealthSchema,
   HeroSchema,
   HttpClient,
+  HuntViewSchema,
   ItemSchema,
   JournalResponseSchema,
   JournalSchema,
@@ -4823,6 +4835,7 @@ export {
   StatsSchema,
   TimedEventSchema,
   UnauthorizedSchema,
+  WEEK_MS,
   WorldResponseSchema,
   WorldSnapshotSchema,
   compareSemver,
