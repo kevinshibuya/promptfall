@@ -4341,6 +4341,55 @@ var UnauthorizedSchema = external_exports.object({
 });
 var NewListingSchema = external_exports.object({ kind: TradeKindSchema, id: id2, price });
 
+// packages/protocol/src/journal.ts
+var DAY_MS = 864e5;
+var DEFAULT_REST_DAYS = [6, 7];
+function dayOf(now) {
+  return Math.floor(now / DAY_MS);
+}
+function weekdayOf(day) {
+  return ((day + 3) % 7 + 7) % 7 + 1;
+}
+function nextMonday(day) {
+  return day + 8 - weekdayOf(day);
+}
+var count3 = external_exports.number().int().nonnegative();
+var weekday = external_exports.number().int().min(1).max(7);
+var DailyGoalSchema = external_exports.object({
+  kind: external_exports.enum(["kills", "zone_bosses", "rare_drops", "turn_boss"]),
+  target: external_exports.number().int().positive()
+});
+var JournalSchema = external_exports.object({
+  achievements: external_exports.array(
+    external_exports.object({
+      id: external_exports.string().min(1).max(64),
+      steps: external_exports.array(external_exports.object({ step: external_exports.number().int().positive(), at: count3 }))
+    })
+  ),
+  day: external_exports.object({
+    index: count3,
+    goal: DailyGoalSchema,
+    progress: count3,
+    met: external_exports.boolean(),
+    resetsAt: count3
+  }),
+  goalsMet: count3,
+  streak: external_exports.object({ length: count3, lastMet: count3.nullable() }),
+  restDays: external_exports.object({
+    current: external_exports.array(weekday).max(7),
+    next: external_exports.object({ days: external_exports.array(weekday).max(7), from: count3 }).nullable()
+  })
+});
+var RestDaysResultSchema = external_exports.union([
+  external_exports.object({ ok: external_exports.literal(true), journal: JournalSchema }),
+  external_exports.object({
+    ok: external_exports.literal(false),
+    reason: external_exports.enum(["rest_days_count", "rest_days_same", "rest_days_range", "unauthorized"])
+  }),
+  RefusedBannedSchema
+]);
+var RestDaysBodySchema = external_exports.object({ days: external_exports.array(external_exports.number()).max(16) });
+
 // packages/protocol/src/world.ts
 var PRESENCE_TTL_MS = 45e3;
 var HERE_MAX = 10;
@@ -4355,17 +4404,17 @@ var BOSS_WINDOW_MS = 12e5;
 var BOSS_BASE_HP = 4e3;
 var BOSS_THRESHOLD_BP = 500;
 var BOSS_TOP_BONUS = 3;
-var DAY_MS = 864e5;
+var DAY_MS2 = 864e5;
 function weekStartOf(now) {
-  const days = Math.floor(now / DAY_MS);
-  return (days - (days + 3) % 7) * DAY_MS;
+  const days = Math.floor(now / DAY_MS2);
+  return (days - (days + 3) % 7) * DAY_MS2;
 }
-var count3 = external_exports.number().int().nonnegative();
+var count4 = external_exports.number().int().nonnegative();
 var ChatMessageSchema = external_exports.object({
   id: external_exports.number().int().positive(),
   name: external_exports.string().max(128),
   text: external_exports.string().min(1).max(CHAT_MAX_CHARS),
-  at: count3
+  at: count4
 });
 var ChatResultSchema = external_exports.union([
   external_exports.object({ ok: external_exports.literal(true), message: ChatMessageSchema }),
@@ -4388,16 +4437,16 @@ var BossViewSchema = external_exports.object({
   bossId: external_exports.string().min(1).max(64),
   name: external_exports.string().max(128),
   glyph: external_exports.string().max(8),
-  maxHp: count3,
-  hp: count3,
-  spawnedAt: count3,
-  endsAt: count3,
-  yours: count3
+  maxHp: count4,
+  hp: count4,
+  spawnedAt: count4,
+  endsAt: count4,
+  yours: count4
 });
 var WorldSnapshotSchema = external_exports.object({
-  serverNow: count3,
+  serverNow: count4,
   speed: external_exports.number().positive(),
-  online: count3,
+  online: count4,
   zones: external_exports.array(
     external_exports.object({ zone: external_exports.number().int().positive(), count: external_exports.number().int().positive() })
   ),
@@ -4409,7 +4458,7 @@ var WorldSnapshotSchema = external_exports.object({
 var BoardRowSchema = external_exports.object({
   accountId: external_exports.string().min(1).max(128),
   name: external_exports.string().max(128),
-  value: count3
+  value: count4
 });
 var BoardsSchema = external_exports.object({
   highestZone: external_exports.array(BoardRowSchema).max(BOARD_ROWS),
@@ -4419,19 +4468,19 @@ var BoardsSchema = external_exports.object({
 });
 
 // packages/protocol/src/responses.ts
-var count4 = external_exports.number().int().nonnegative();
+var count5 = external_exports.number().int().nonnegative();
 var AccountSchema = external_exports.object({
   accountId: external_exports.string().min(1).max(128),
-  seed: count4,
-  createdAt: count4,
+  seed: count5,
+  createdAt: count5,
   displayName: external_exports.string().max(128).nullable(),
   linked: external_exports.object({ provider: external_exports.literal("github"), login: external_exports.string().min(1).max(64) }).nullable()
 });
 var ServerConfigSchema = external_exports.object({
   minClientVersion: external_exports.string(),
-  simVersion: count4,
+  simVersion: count5,
   flags: external_exports.record(external_exports.boolean()),
-  serverNow: count4,
+  serverNow: count5,
   speed: external_exports.number().positive()
 });
 var BootstrapSchema = external_exports.object({
@@ -4439,9 +4488,9 @@ var BootstrapSchema = external_exports.object({
   account: AccountSchema,
   config: ServerConfigSchema,
   state: GameStateSchema,
-  seq: count4,
+  seq: count5,
   hash: HEX16,
-  cursor: count4,
+  cursor: count5,
   delivery: DeliverySchema
 });
 var BootstrapRefusedSchema = external_exports.object({
@@ -4451,15 +4500,15 @@ var BootstrapRefusedSchema = external_exports.object({
 var BootstrapResponseSchema = external_exports.union([BootstrapRefusedSchema, BootstrapSchema]);
 var adopt = {
   ok: external_exports.literal(false),
-  seq: count4,
+  seq: count5,
   state: GameStateSchema,
   hash: HEX16,
-  cursor: count4
+  cursor: count5
 };
 var BatchAckSchema = external_exports.union([
   external_exports.object({
     ok: external_exports.literal(true),
-    seq: count4,
+    seq: count5,
     hash: HEX16,
     duplicate: external_exports.boolean(),
     delivery: DeliverySchema
@@ -4471,7 +4520,7 @@ var BatchAckSchema = external_exports.union([
     reason: external_exports.literal("version_gate"),
     minClientVersion: external_exports.string()
   }),
-  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count4 }),
+  external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("sim_version"), simVersion: count5 }),
   external_exports.object({ ok: external_exports.literal(false), reason: external_exports.literal("cursor_behind"), delivery: DeliverySchema }),
   external_exports.object({ ...adopt, reason: external_exports.enum(["seq_mismatch", "cursor_mismatch"]) }),
   external_exports.object({ ...adopt, reason: external_exports.literal("hash_mismatch"), revokedItemIds: external_exports.array(external_exports.string()) }),
@@ -4482,14 +4531,14 @@ function orUnauthorized(schema) {
 }
 var AccountInfoSchema = external_exports.object({
   account: AccountSchema,
-  returns: count4,
+  returns: count5,
   config: ServerConfigSchema,
   delivery: DeliverySchema
 });
 var LinkStartSchema = external_exports.object({
   code: external_exports.string().min(1).max(32),
   url: external_exports.string().min(1),
-  intervalMs: count4
+  intervalMs: count5
 });
 var LinkRefusedSchema = external_exports.object({
   refusal: external_exports.literal("link_unavailable"),
@@ -4506,10 +4555,10 @@ var LinkPollSchema = external_exports.union([
 ]);
 var HealthSchema = external_exports.object({
   ok: external_exports.literal(true),
-  simVersion: count4,
-  seed: count4,
+  simVersion: count5,
+  seed: count5,
   speed: external_exports.number().positive(),
-  now: count4
+  now: count5
 });
 var AccountResponseSchema = orUnauthorized(AccountInfoSchema);
 var AccountDeletedResponseSchema = orUnauthorized(external_exports.object({ deleted: external_exports.literal(true) }));
@@ -4520,6 +4569,7 @@ var MyOrdersResponseSchema = orUnauthorized(MyOrdersSchema);
 var MatchingOrdersResponseSchema = orUnauthorized(external_exports.array(OrderSchema));
 var WorldResponseSchema = orUnauthorized(WorldSnapshotSchema);
 var BoardsResponseSchema = orUnauthorized(BoardsSchema);
+var JournalResponseSchema = orUnauthorized(JournalSchema);
 var ErrorBodySchema = external_exports.union([
   external_exports.object({ error: external_exports.literal("schema"), issues: external_exports.array(external_exports.unknown()) }),
   external_exports.object({ error: external_exports.literal("route") }),
@@ -4546,7 +4596,9 @@ var ROUTES = {
   fillOrder: { method: "POST", path: "/v1/orders/:id/fill" },
   world: { method: "GET", path: "/v1/world" },
   chat: { method: "POST", path: "/v1/chat" },
-  leaderboards: { method: "GET", path: "/v1/leaderboards" }
+  leaderboards: { method: "GET", path: "/v1/leaderboards" },
+  journal: { method: "GET", path: "/v1/journal" },
+  setRestDays: { method: "POST", path: "/v1/journal/rest-days" }
 };
 function failure(name, message, status) {
   const error = new Error(message);
@@ -4666,6 +4718,12 @@ var HttpClient = class {
   leaderboards(auth) {
     return this.call("leaderboards", BoardsResponseSchema, { auth });
   }
+  journal(auth) {
+    return this.call("journal", JournalResponseSchema, { auth });
+  }
+  setRestDays(auth, days) {
+    return this.call("setRestDays", RestDaysResultSchema, { auth, body: { days } });
+  }
 };
 
 // packages/protocol/src/kv.ts
@@ -4718,6 +4776,9 @@ export {
   ChatBodySchema,
   ChatMessageSchema,
   ChatResultSchema,
+  DAY_MS,
+  DEFAULT_REST_DAYS,
+  DailyGoalSchema,
   DeliverySchema,
   ErrorBodySchema,
   GameStateSchema,
@@ -4728,6 +4789,8 @@ export {
   HeroSchema,
   HttpClient,
   ItemSchema,
+  JournalResponseSchema,
+  JournalSchema,
   LISTINGS_PER_PAGE,
   LinkPollResponseSchema,
   LinkPollSchema,
@@ -4753,6 +4816,8 @@ export {
   PROTOCOL_VERSION,
   ROUTES,
   RefusedBannedSchema,
+  RestDaysBodySchema,
+  RestDaysResultSchema,
   ServerConfigSchema,
   ServerEventSchema,
   StatsSchema,
@@ -4761,5 +4826,8 @@ export {
   WorldResponseSchema,
   WorldSnapshotSchema,
   compareSemver,
-  weekStartOf
+  dayOf,
+  nextMonday,
+  weekStartOf,
+  weekdayOf
 };

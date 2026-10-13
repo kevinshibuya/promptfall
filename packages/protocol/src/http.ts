@@ -12,6 +12,7 @@ import type {
   LinkStart,
   ServerClient,
 } from './client'
+import type { Journal, RestDaysResult, Weekday } from './journal'
 import type {
   Banned,
   ListingPage,
@@ -28,12 +29,14 @@ import {
   BatchAckSchema,
   BoardsResponseSchema,
   BootstrapResponseSchema,
+  JournalResponseSchema,
   LinkPollResponseSchema,
   LinkStartResponseSchema,
   ListingPageResponseSchema,
   MarketResultSchema,
   MatchingOrdersResponseSchema,
   MyOrdersResponseSchema,
+  RestDaysResultSchema,
   WorldResponseSchema,
 } from './responses'
 import type { Batch } from './schemas'
@@ -79,6 +82,8 @@ export const ROUTES = {
   world: { method: 'GET', path: '/v1/world' },
   chat: { method: 'POST', path: '/v1/chat' },
   leaderboards: { method: 'GET', path: '/v1/leaderboards' },
+  journal: { method: 'GET', path: '/v1/journal' },
+  setRestDays: { method: 'POST', path: '/v1/journal/rest-days' },
 } as const satisfies Record<string, { method: Method; path: string }>
 
 type Route = keyof typeof ROUTES
@@ -246,5 +251,13 @@ export class HttpClient implements ServerClient {
 
   leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned> {
     return this.call('leaderboards', BoardsResponseSchema, { auth })
+  }
+
+  journal(auth: Auth): Promise<Journal | Unauthorized | Banned> {
+    return this.call('journal', JournalResponseSchema, { auth })
+  }
+
+  setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult> {
+    return this.call('setRestDays', RestDaysResultSchema, { auth, body: { days } })
   }
 }

@@ -147,6 +147,12 @@ class Recorder implements ServerClient {
   leaderboards(auth: Auth) {
     return this.inner.leaderboards(auth)
   }
+  journal(auth: Auth) {
+    return this.inner.journal(auth)
+  }
+  setRestDays(auth: Auth, days: number[]) {
+    return this.inner.setRestDays(auth, days)
+  }
 }
 
 /** `flags`: the ledger's, e.g. the sandbox switch for item grants. */

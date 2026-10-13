@@ -19,33 +19,49 @@ function scaled(raw, powerBp = POWER_BP) {
   return Math.max(1, Math.floor(raw * powerBp / 1e4));
 }
 
-// packages/sim/src/content/affixes.ts
-var W = ["weapon"];
-var A = ["armour"];
-var X = ["accessory"];
-var WX = ["weapon", "accessory"];
-var AX = ["armour", "accessory"];
-var ALL = ["weapon", "armour", "accessory"];
-var LIST = [
-  { id: "keen", name: "Keen", slots: WX, stat: "atk", range: [1, 2] },
-  { id: "brutal", name: "Brutal", slots: W, stat: "atk", range: [2, 4] },
-  { id: "vicious", name: "Vicious", slots: W, stat: "atk", range: [3, 7] },
-  { id: "tempered", name: "Tempered", slots: W, stat: "def", range: [1, 2] },
-  { id: "swift", name: "Swift", slots: ALL, stat: "spd", range: [1, 1] },
-  { id: "hasty", name: "Hasty", slots: WX, stat: "spd", range: [1, 2] },
-  { id: "vital", name: "Vital", slots: ALL, stat: "hp", range: [3, 10] },
-  { id: "hearty", name: "Hearty", slots: AX, stat: "hp", range: [8, 22] },
-  { id: "sturdy", name: "Sturdy", slots: AX, stat: "def", range: [1, 2] },
-  { id: "warded", name: "Warded", slots: A, stat: "def", range: [2, 5] },
-  { id: "bulwark", name: "Bulwark", slots: A, stat: "def", range: [3, 7] },
-  { id: "nimble", name: "Nimble", slots: A, stat: "spd", range: [1, 1] },
-  { id: "thorned", name: "Thorned", slots: A, stat: "atk", range: [1, 2] },
-  { id: "lucky", name: "Lucky", slots: X, stat: "spd", range: [1, 2] },
-  { id: "mighty", name: "Mighty", slots: X, stat: "atk", range: [2, 5] },
-  { id: "guardian", name: "Guardian", slots: X, stat: "def", range: [2, 5] },
-  { id: "lifebound", name: "Lifebound", slots: W, stat: "hp", range: [5, 15] }
-];
-var affixes = Object.fromEntries(LIST.map((a) => [a.id, a]));
+// packages/sim/src/content/rarity.ts
+var rarity = {
+  common: {
+    affixCount: 0,
+    traitCount: 0,
+    levelCap: 20,
+    statMultBp: 1e4,
+    vendorGoldPerZone: 2,
+    reforgeCost: 10
+  },
+  uncommon: {
+    affixCount: 1,
+    traitCount: 1,
+    levelCap: 30,
+    statMultBp: 11e3,
+    vendorGoldPerZone: 5,
+    reforgeCost: 25
+  },
+  rare: {
+    affixCount: 2,
+    traitCount: 2,
+    levelCap: 40,
+    statMultBp: 12e3,
+    vendorGoldPerZone: 15,
+    reforgeCost: 60
+  },
+  epic: {
+    affixCount: 3,
+    traitCount: 3,
+    levelCap: 45,
+    statMultBp: 13500,
+    vendorGoldPerZone: 40,
+    reforgeCost: 150
+  },
+  legendary: {
+    affixCount: 4,
+    traitCount: 4,
+    levelCap: 50,
+    statMultBp: 15e3,
+    vendorGoldPerZone: 100,
+    reforgeCost: 400
+  }
+};
 
 // packages/sim/src/content/enemies.ts
 var ARCHETYPES = {
@@ -56,7 +72,7 @@ var ARCHETYPES = {
   boss: { hpBp: 7e4, atkBp: 2e4, defBp: 12e3, spd: 5 },
   turn_boss: { hpBp: 3e4, atkBp: 12e3, defBp: 11e3, spd: 5 }
 };
-var WAVE_HP_MEAN_BP = ["brute", "swift", "tank", "caster"].reduce((sum, a) => sum + ARCHETYPES[a].hpBp, 0) / 4;
+var WAVE_HP_MEAN_BP = ["brute", "swift", "tank", "caster"].reduce((sum2, a) => sum2 + ARCHETYPES[a].hpBp, 0) / 4;
 var ENEMY_TUNING = {
   zone1: { hp: 90, atk: 8, def: 4, xp: 5, goldMin: 1, goldMax: 3 },
   growthBp: { hp: 12750, atk: 13e3, def: 13e3, xp: 11300, gold: 11300 },
@@ -278,6 +294,236 @@ function buildTierEnemies(t, growthBp, last) {
 var enemies = buildEnemies(ENEMY_TUNING);
 var zoneRosters = ROSTERS.map((r) => r.map(([id]) => id));
 
+// packages/sim/src/content/zones.ts
+var NAMES = [
+  "Greenmeadow Road",
+  "Whisperwood",
+  "Marsh of Sighs",
+  "Old Barrow Hills",
+  "Saltglass Coast",
+  "Emberfall Caves",
+  "Frostvein Pass",
+  "Sunken Abbey",
+  "Ashen Waste",
+  "Starfall Spire",
+  "Hollow King's Court",
+  "The Unwritten Reach"
+];
+function weights(zone, boss) {
+  const z = zone - 1;
+  if (boss) {
+    return {
+      common: Math.max(1500, 5200 - z * 300),
+      uncommon: 3500,
+      rare: 1e3 + z * 150,
+      epic: 250 + z * 90,
+      legendary: 50 + z * 40
+    };
+  }
+  return {
+    common: Math.max(2e3, 7e3 - z * 400),
+    uncommon: 2200 + z * 150,
+    rare: 650 + z * 150,
+    epic: 130 + z * 70,
+    legendary: 20 + z * 15
+  };
+}
+var zones = NAMES.map((name, i) => {
+  const roster = zoneRosters[i] ?? [];
+  return {
+    index: i + 1,
+    name,
+    enemies: roster.slice(0, 4),
+    boss: roster[4] ?? "",
+    turnBoss: roster[5] ?? "",
+    rarityWeights: weights(i + 1, false),
+    bossRarityWeights: weights(i + 1, true)
+  };
+});
+
+// packages/sim/src/content/zone.ts
+var LADDER_END = 36;
+function zoneAt(zone) {
+  if (!Number.isInteger(zone) || zone < 1) return void 0;
+  const base2 = (zone - 1) % zones.length + 1;
+  const def = zones[base2 - 1];
+  if (!def) return void 0;
+  return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
+}
+var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_GROWTH_BP, LADDER_END);
+function enemyAt(id, zone) {
+  const at = zoneAt(zone);
+  if (!at || zone > LADDER_END) return void 0;
+  return at.tier === 1 ? enemies[id] : tierEnemies[zone]?.[id];
+}
+function oddsAt(zone) {
+  const at = zoneAt(zone);
+  if (!at) return void 0;
+  return at.tier === 1 ? at.def : zones[zones.length - 1];
+}
+
+// packages/sim/src/content/achievements.ts
+var LADDER_GOLD = [100, 400, 1500, 5e3];
+var ONE_OFF_GOLD = 500;
+function ladder(id, name, reads, steps) {
+  return {
+    id,
+    name,
+    reads,
+    steps: steps.map(([at, words], i) => ({ at, gold: LADDER_GOLD[i] ?? 0, words }))
+  };
+}
+function oneOff(id, name, reads, at) {
+  return { id, name, reads, steps: [{ at, gold: ONE_OFF_GOLD, words: name }] };
+}
+var achievements = [
+  ladder("kills", "Kills", "kills", [
+    [100, "a hundred kills"],
+    [1e3, "a thousand kills"],
+    [1e4, "ten thousand kills"],
+    [1e5, "a hundred thousand kills"]
+  ]),
+  ladder("zone_bosses", "Zone bosses", "zone_bosses", [
+    [10, "ten zone bosses"],
+    [50, "fifty zone bosses"],
+    [200, "two hundred zone bosses"],
+    [1e3, "a thousand zone bosses"]
+  ]),
+  ladder("turn_bosses", "Turn bosses", "turn_bosses", [
+    [10, "ten turn bosses"],
+    [100, "a hundred turn bosses"],
+    [1e3, "a thousand turn bosses"]
+  ]),
+  ladder("rare_drops", "Rare finds", "rare_drops", [
+    [10, "ten Rare or better drops"],
+    [100, "a hundred Rare or better drops"],
+    [1e3, "a thousand Rare or better drops"]
+  ]),
+  ladder("legendary_drops", "Legendary finds", "legendary_drops", [
+    [1, "a Legendary drop"],
+    [10, "ten Legendary drops"],
+    [50, "fifty Legendary drops"]
+  ]),
+  ladder("recruits", "Recruits", "recruits", [
+    [5, "five recruits"],
+    [25, "twenty-five recruits"],
+    [100, "a hundred recruits"]
+  ]),
+  ladder("reforges", "Reforges", "reforges", [
+    [10, "ten reforges"],
+    [100, "a hundred reforges"]
+  ]),
+  ladder("gold_earned", "Gold earned", "gold_earned", [
+    [1e4, "ten thousand gold earned"],
+    [1e5, "a hundred thousand gold earned"],
+    [1e6, "a million gold earned"]
+  ]),
+  ladder("goals_met", "Daily goals", "goals_met", [
+    [10, "ten daily goals"],
+    [50, "fifty daily goals"],
+    [200, "two hundred daily goals"]
+  ]),
+  ladder("streak", "Streak", "streak", [
+    [5, "a five-day streak"],
+    [20, "a twenty-day streak"],
+    [60, "a sixty-day streak"],
+    [250, "a 250-day streak"]
+  ]),
+  ladder("zones_complete", "Bestiary", "zones_complete", [
+    [1, "a zone with every enemy defeated"],
+    [4, "four zones with every enemy defeated"],
+    [8, "eight zones with every enemy defeated"],
+    [12, "every zone with every enemy defeated"]
+  ]),
+  ladder("bases_complete", "Collection", "bases_complete", [
+    [1, "a base held in every rarity"],
+    [10, "ten bases held in every rarity"],
+    [35, "thirty-five bases held in every rarity"]
+  ]),
+  oneOff("first_epic", "a first Epic", "epic_held", 1),
+  oneOff("first_legendary", "a first Legendary", "legendary_held", 1),
+  oneOff("zone_6", "zone 6 reached", "highest_zone", 6),
+  oneOff("zone_12", "zone 12 cleared", "highest_zone", 13),
+  oneOff("tier_2", "tier 2 reached", "tier", 2),
+  oneOff("tier_3", "tier 3 reached", "tier", 3),
+  oneOff("clean_boss", "a zone boss beaten with no wipe", "clean_zone_bosses", 1),
+  oneOff("all_capped", "all four classes at their cap", "classes_capped", 4)
+];
+var sum = (counts) => Object.values(counts).reduce((a, b) => a + b, 0);
+function achievementCount(metric, state, journal) {
+  const t = state.tallies;
+  switch (metric) {
+    case "kills":
+      return state.stats.kills;
+    case "zone_bosses":
+      return t.zoneBosses;
+    case "turn_bosses":
+      return t.turnBosses;
+    case "rare_drops":
+      return t.drops.rare + t.drops.epic + t.drops.legendary;
+    case "legendary_drops":
+      return t.drops.legendary;
+    case "recruits":
+      return sum(t.recruits);
+    case "reforges":
+      return t.reforges;
+    case "gold_earned":
+      return t.goldEarned;
+    case "goals_met":
+      return journal.goalsMet;
+    case "streak":
+      return journal.streak;
+    case "zones_complete":
+      return zones.filter(
+        (z) => [...z.enemies, z.boss, z.turnBoss].every((id) => (t.enemies[id]?.defeated ?? 0) > 0)
+      ).length;
+    case "bases_complete":
+      return Object.values(t.collection).filter((marks) => Object.values(marks).every((m) => m > 0)).length;
+    case "epic_held":
+      return t.recruits.epic + Object.values(t.collection).filter((m) => m.epic > 0).length;
+    case "legendary_held":
+      return t.recruits.legendary + Object.values(t.collection).filter((m) => m.legendary > 0).length;
+    case "highest_zone":
+      return state.highestZone;
+    case "tier":
+      return zoneAt(state.highestZone)?.tier ?? 1;
+    case "clean_zone_bosses":
+      return t.cleanZoneBosses;
+    case "classes_capped":
+      return new Set(
+        state.roster.filter((h) => h.level >= rarity[h.rarity].levelCap).map((h) => h.cls)
+      ).size;
+  }
+}
+
+// packages/sim/src/content/affixes.ts
+var W = ["weapon"];
+var A = ["armour"];
+var X = ["accessory"];
+var WX = ["weapon", "accessory"];
+var AX = ["armour", "accessory"];
+var ALL = ["weapon", "armour", "accessory"];
+var LIST = [
+  { id: "keen", name: "Keen", slots: WX, stat: "atk", range: [1, 2] },
+  { id: "brutal", name: "Brutal", slots: W, stat: "atk", range: [2, 4] },
+  { id: "vicious", name: "Vicious", slots: W, stat: "atk", range: [3, 7] },
+  { id: "tempered", name: "Tempered", slots: W, stat: "def", range: [1, 2] },
+  { id: "swift", name: "Swift", slots: ALL, stat: "spd", range: [1, 1] },
+  { id: "hasty", name: "Hasty", slots: WX, stat: "spd", range: [1, 2] },
+  { id: "vital", name: "Vital", slots: ALL, stat: "hp", range: [3, 10] },
+  { id: "hearty", name: "Hearty", slots: AX, stat: "hp", range: [8, 22] },
+  { id: "sturdy", name: "Sturdy", slots: AX, stat: "def", range: [1, 2] },
+  { id: "warded", name: "Warded", slots: A, stat: "def", range: [2, 5] },
+  { id: "bulwark", name: "Bulwark", slots: A, stat: "def", range: [3, 7] },
+  { id: "nimble", name: "Nimble", slots: A, stat: "spd", range: [1, 1] },
+  { id: "thorned", name: "Thorned", slots: A, stat: "atk", range: [1, 2] },
+  { id: "lucky", name: "Lucky", slots: X, stat: "spd", range: [1, 2] },
+  { id: "mighty", name: "Mighty", slots: X, stat: "atk", range: [2, 5] },
+  { id: "guardian", name: "Guardian", slots: X, stat: "def", range: [2, 5] },
+  { id: "lifebound", name: "Lifebound", slots: W, stat: "hp", range: [5, 15] }
+];
+var affixes = Object.fromEntries(LIST.map((a) => [a.id, a]));
+
 // packages/sim/src/content/epithets.ts
 var epithets = [
   "the Steadfast",
@@ -329,6 +575,14 @@ var expansions = {
   inventory: { step: 10, max: 90, costs: [500, 1e3, 2e3, 4e3, 8e3, 16e3] },
   roster: { step: 4, max: 48, costs: [400, 800, 1600, 3200, 6400, 12800] }
 };
+
+// packages/sim/src/content/goals.ts
+var goals = [
+  { kind: "kills", base: 150, step: 10, everyZones: 1 },
+  { kind: "zone_bosses", base: 2, step: 1, everyZones: 12 },
+  { kind: "rare_drops", base: 3, step: 1, everyZones: 6 },
+  { kind: "turn_boss", base: 1, step: 0, everyZones: 1 }
+];
 
 // packages/sim/src/content/heroes.ts
 var heroTemplates = {
@@ -427,50 +681,6 @@ var LIST2 = [
   base("phoenix_pendant", "Phoenix Pendant", '"', "accessory", ALL2, { atk: 14, hp: 80 }, 10)
 ];
 var itemBases = Object.fromEntries(LIST2.map((b) => [b.id, b]));
-
-// packages/sim/src/content/rarity.ts
-var rarity = {
-  common: {
-    affixCount: 0,
-    traitCount: 0,
-    levelCap: 20,
-    statMultBp: 1e4,
-    vendorGoldPerZone: 2,
-    reforgeCost: 10
-  },
-  uncommon: {
-    affixCount: 1,
-    traitCount: 1,
-    levelCap: 30,
-    statMultBp: 11e3,
-    vendorGoldPerZone: 5,
-    reforgeCost: 25
-  },
-  rare: {
-    affixCount: 2,
-    traitCount: 2,
-    levelCap: 40,
-    statMultBp: 12e3,
-    vendorGoldPerZone: 15,
-    reforgeCost: 60
-  },
-  epic: {
-    affixCount: 3,
-    traitCount: 3,
-    levelCap: 45,
-    statMultBp: 13500,
-    vendorGoldPerZone: 40,
-    reforgeCost: 150
-  },
-  legendary: {
-    affixCount: 4,
-    traitCount: 4,
-    levelCap: 50,
-    statMultBp: 15e3,
-    vendorGoldPerZone: 100,
-    reforgeCost: 400
-  }
-};
 
 // packages/sim/src/content/tactics.ts
 var ENEMY_ATTACK = [
@@ -606,74 +816,6 @@ function xpToNext(level) {
   return XP_TO_NEXT[Math.min(Math.max(level, 1), XP_TO_NEXT.length) - 1] ?? 0;
 }
 
-// packages/sim/src/content/zones.ts
-var NAMES = [
-  "Greenmeadow Road",
-  "Whisperwood",
-  "Marsh of Sighs",
-  "Old Barrow Hills",
-  "Saltglass Coast",
-  "Emberfall Caves",
-  "Frostvein Pass",
-  "Sunken Abbey",
-  "Ashen Waste",
-  "Starfall Spire",
-  "Hollow King's Court",
-  "The Unwritten Reach"
-];
-function weights(zone, boss) {
-  const z = zone - 1;
-  if (boss) {
-    return {
-      common: Math.max(1500, 5200 - z * 300),
-      uncommon: 3500,
-      rare: 1e3 + z * 150,
-      epic: 250 + z * 90,
-      legendary: 50 + z * 40
-    };
-  }
-  return {
-    common: Math.max(2e3, 7e3 - z * 400),
-    uncommon: 2200 + z * 150,
-    rare: 650 + z * 150,
-    epic: 130 + z * 70,
-    legendary: 20 + z * 15
-  };
-}
-var zones = NAMES.map((name, i) => {
-  const roster = zoneRosters[i] ?? [];
-  return {
-    index: i + 1,
-    name,
-    enemies: roster.slice(0, 4),
-    boss: roster[4] ?? "",
-    turnBoss: roster[5] ?? "",
-    rarityWeights: weights(i + 1, false),
-    bossRarityWeights: weights(i + 1, true)
-  };
-});
-
-// packages/sim/src/content/zone.ts
-var LADDER_END = 36;
-function zoneAt(zone) {
-  if (!Number.isInteger(zone) || zone < 1) return void 0;
-  const base2 = (zone - 1) % zones.length + 1;
-  const def = zones[base2 - 1];
-  if (!def) return void 0;
-  return { base: base2, tier: Math.floor((zone - 1) / zones.length) + 1, def };
-}
-var tierEnemies = buildTierEnemies(ENEMY_TUNING, TIER_GROWTH_BP, LADDER_END);
-function enemyAt(id, zone) {
-  const at = zoneAt(zone);
-  if (!at || zone > LADDER_END) return void 0;
-  return at.tier === 1 ? enemies[id] : tierEnemies[zone]?.[id];
-}
-function oddsAt(zone) {
-  const at = zoneAt(zone);
-  if (!at) return void 0;
-  return at.tier === 1 ? at.def : zones[zones.length - 1];
-}
-
 // packages/sim/src/content/index.ts
 var content = {
   zones,
@@ -688,7 +830,9 @@ var content = {
   expansions,
   tactics,
   xpToNext,
-  itemTierMultBp
+  itemTierMultBp,
+  achievements,
+  goals
 };
 
 // packages/sim/src/draft.ts
@@ -1474,6 +1618,72 @@ function expandRoster(state, event) {
   return expand(state, event, "roster");
 }
 
+// packages/sim/src/hash.ts
+function canonicalJson(value) {
+  if (value === null) return "null";
+  if (Array.isArray(value)) {
+    return `[${value.map((v) => v === void 0 ? "null" : canonicalJson(v)).join(",")}]`;
+  }
+  if (typeof value === "object") {
+    const obj = value;
+    const parts = [];
+    for (const key of Object.keys(obj).sort(compareCodeUnits)) {
+      const v = obj[key];
+      if (v === void 0) continue;
+      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
+    }
+    return `{${parts.join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+function fnv1a32(text, offset) {
+  let h = offset >>> 0;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+function hex8(n) {
+  return n.toString(16).padStart(8, "0");
+}
+function hashState(state) {
+  const json = canonicalJson(state);
+  return hex8(fnv1a32(json, 2166136261)) + hex8(fnv1a32(json, 84696351));
+}
+
+// packages/sim/src/goal.ts
+function dailyGoal(day, accountId, zone) {
+  const { u } = nextU32(fnv1a32(`${day}:${accountId}`, 2166136261));
+  const row = content.goals[u % content.goals.length];
+  if (!row) throw new Error("dailyGoal: the goal table is empty");
+  const zonesPast = Math.max(0, Math.floor(zone) - 1);
+  return { kind: row.kind, target: row.base + row.step * Math.floor(zonesPast / row.everyZones) };
+}
+function goalCount(kind, state) {
+  const t = state.tallies;
+  switch (kind) {
+    case "kills":
+      return state.stats.kills;
+    case "zone_bosses":
+      return t.zoneBosses;
+    case "rare_drops":
+      return t.drops.rare + t.drops.epic + t.drops.legendary;
+    case "turn_boss":
+      return t.turnBosses;
+  }
+}
+var GOAL_GOLD_KILLS = 300;
+function goalGold(zone) {
+  const wave = zoneAt(zone)?.def.enemies ?? [];
+  const mids = wave.flatMap((id) => {
+    const gold = enemyAt(id, zone)?.gold;
+    return gold ? [(gold[0] + gold[1]) / 2] : [];
+  });
+  if (mids.length === 0) return 0;
+  return Math.round(mids.reduce((a, b) => a + b, 0) / mids.length * GOAL_GOLD_KILLS);
+}
+
 // packages/sim/src/golden.ts
 var GOLDEN_BOSS = "wbgold";
 var GOLDEN_REWARD = {
@@ -1553,40 +1763,6 @@ function goldenEvents(options = {}) {
   return events.slice(0, 300);
 }
 var GOLDEN_HASH = "ea3cd5be0f52d490";
-
-// packages/sim/src/hash.ts
-function canonicalJson(value) {
-  if (value === null) return "null";
-  if (Array.isArray(value)) {
-    return `[${value.map((v) => v === void 0 ? "null" : canonicalJson(v)).join(",")}]`;
-  }
-  if (typeof value === "object") {
-    const obj = value;
-    const parts = [];
-    for (const key of Object.keys(obj).sort(compareCodeUnits)) {
-      const v = obj[key];
-      if (v === void 0) continue;
-      parts.push(`${JSON.stringify(key)}:${canonicalJson(v)}`);
-    }
-    return `{${parts.join(",")}}`;
-  }
-  return JSON.stringify(value);
-}
-function fnv1a32(text, offset) {
-  let h = offset >>> 0;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619) >>> 0;
-  }
-  return h;
-}
-function hex8(n) {
-  return n.toString(16).padStart(8, "0");
-}
-function hashState(state) {
-  const json = canonicalJson(state);
-  return hex8(fnv1a32(json, 2166136261)) + hex8(fnv1a32(json, 84696351));
-}
 
 // packages/sim/src/migrate.ts
 var MIGRATIONS = {
@@ -2311,6 +2487,7 @@ export {
   FILL_BP,
   FILL_K,
   GAUGE_FULL,
+  GOAL_GOLD_KILLS,
   GOLDEN_HASH,
   GOLDEN_SEED,
   GUARANTEE_RARITIES,
@@ -2319,7 +2496,9 @@ export {
   HASTE_BP,
   HASTE_TICKS,
   LADDER_END,
+  LADDER_GOLD,
   MIGRATIONS,
+  ONE_OFF_GOLD,
   POWER_BP,
   RARITIES,
   SANDBOX_EVENT_KINDS,
@@ -2330,13 +2509,17 @@ export {
   TICK_MS,
   TIER_GROWTH_BP,
   WAVE_ARCHETYPES,
+  achievementCount,
   affixValue,
   baseTier,
   content,
   createInitialState,
+  dailyGoal,
   dropTier,
   enemyAt,
   fill,
+  goalCount,
+  goalGold,
   goldenEvents,
   hashState,
   heroFill,

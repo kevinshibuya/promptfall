@@ -13,6 +13,7 @@ import {
   type BudgetKind,
   type ChatResult,
   compareSemver,
+  type Journal,
   type KeyValue,
   type LinkEnd,
   type LinkPoll,
@@ -25,10 +26,12 @@ import {
   type NewOrder,
   type Order,
   PRESENCE_TTL_MS,
+  type RestDaysResult,
   type ServerClient,
   type ServerConfig,
   ServerEventSchema,
   type Unauthorized,
+  type Weekday,
   type WorldSnapshot,
 } from '@promptfall/protocol'
 import {
@@ -66,6 +69,7 @@ import {
   tryAuthor,
 } from './books'
 import * as boss from './boss'
+import * as journal from './journal'
 import * as market from './market'
 import * as world from './world'
 
@@ -492,6 +496,7 @@ export class Ledger implements ServerClient {
       await world.dropFromBoards(this.kv, id)
       if (this.presence.delete(id)) this.memo.presenceChanged()
       if (record.linkCode) await this.books.dropLink(record.linkCode)
+      await this.kv.delete(journal.journalKey(id))
       await this.books.remove(record, auth.deviceToken)
       return { deleted: true } as const
     })
@@ -586,6 +591,8 @@ export class Ledger implements ServerClient {
       // The batch's damage to the world boss; a killing commit authors the rewards here.
       await boss.contribute(await this.worldContext(now), record, prevDealt)
       await this.books.deliverReturns(record)
+      // The journal reads the committed state, on this path and the hash mismatch's alike.
+      await journal.onCommit(this.kv, record, now)
       await this.offerZone(record, now)
       if (hash === batch.resultHash) {
         await this.books.save(record)
@@ -859,6 +866,37 @@ export class Ledger implements ServerClient {
       const banned = bannedOf(record)
       if (banned) return banned
       return world.leaderboards(ctx)
+    })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Journal
+
+  /** The caller's journal from its committed state: a read that never writes. */
+  journal(auth: Auth): Promise<Journal | Unauthorized | Banned> {
+    return this.run(async () => {
+      const record = await this.books.authenticate(auth)
+      if (!record || !isCurrent(record)) return unauthorized
+      const banned = bannedOf(record)
+      if (banned) return banned
+      const stored = await journal.loadJournal(this.kv, record.account.accountId)
+      return journal.journalView(stored, record, await this.options.now())
+    })
+  }
+
+  setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult> {
+    return this.run(async (): Promise<RestDaysResult> => {
+      const record = await this.books.authenticate(auth)
+      if (!record || !isCurrent(record)) return { ok: false, reason: 'unauthorized' }
+      const banned = refusedBanned(record)
+      if (banned) return banned
+      const refusal = journal.restDaysRefusal(days)
+      if (refusal) return { ok: false, reason: refusal }
+      const now = await this.options.now()
+      const stored = await journal.loadJournal(this.kv, record.account.accountId)
+      journal.setRestDays(stored, days, now)
+      await this.kv.set(journal.journalKey(record.account.accountId), stored)
+      return { ok: true, journal: journal.journalView(stored, record, now) }
     })
   }
 

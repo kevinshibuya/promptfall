@@ -16,9 +16,14 @@ export {
 } from './battle'
 export { tavernGuarantees } from './commands'
 export type {
+  AchievementMetric,
+  AchievementRow,
+  AchievementStep,
   AffixDef,
   Content,
   EnemyDef,
+  GoalKind,
+  GoalRow,
   HeroTemplate,
   ItemBase,
   RarityRule,
@@ -27,13 +32,18 @@ export type {
   ZoneDef,
 } from './content'
 export {
+  achievementCount,
   content,
   enemyAt,
+  type JournalCounts,
   LADDER_END,
+  LADDER_GOLD,
+  ONE_OFF_GOLD,
   oddsAt,
   TIER_GROWTH_BP,
   zoneAt,
 } from './content'
+export { type DailyGoal, dailyGoal, GOAL_GOLD_KILLS, goalCount, goalGold } from './goal'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
 export { affixValue, baseTier, dropTier, reforgeCost, rollRewardItem, vendorValue } from './loot'
