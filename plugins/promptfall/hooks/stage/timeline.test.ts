@@ -2,9 +2,16 @@ import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { WORLD_DEFAULT } from '../state'
 import { ACTION_STEPS, type Effect, type Rarity, STEP_MS } from '../vendor/sim.js'
-import { boss, empty, wave, worldBoss } from './fixtures'
+import { boss, empty, turnBoss, wave, worldBoss } from './fixtures'
 import { stagedState } from './staged'
-import { ACTION_MS, chestPhaseAt, type Motion, StageTimeline } from './timeline'
+import {
+  ACTION_MS,
+  chestPhaseAt,
+  type Deltas,
+  type Motion,
+  type StageEffect,
+  StageTimeline,
+} from './timeline'
 import {
   BOLT_MS,
   BOSS_MIN_ROWS,
@@ -13,6 +20,7 @@ import {
   CAMPFIRE_MS,
   DISSOLVE_MS,
   FLASH_MS,
+  LEVEL_RGB,
   LUNGE_MS,
   NUMBER_MS,
   NUMBER_RGB_HEAL,
@@ -21,6 +29,9 @@ import {
   STAGE_MIN_ROWS,
   STAGE_ROWS,
   STEP_OUT_MS,
+  TRAVEL_OFF_MS,
+  TRAVEL_ON_MS,
+  VICTORY_MS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -960,15 +971,16 @@ test("a zone boss kill with no drop still answers the zone's show time from its 
   const t = observed(boss())
   t.onEffects(bossKill(), NOW, 2000)
   const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
-  expect(t.zoneShowAt(1)).toBe(faded)
+  const shown = faded + VICTORY_MS
+  expect(t.zoneShowAt(1)).toBe(shown)
   const next = nextZone()
   t.observe(next, NOW + 1)
   expect(endOf(t, 'dissolve')).toBe(faded)
-  expect(t.zoneShowAt(1)).toBe(faded)
-  t.observe(next, faded - 1)
-  expect(stagedState(next, WORLD_DEFAULT, t, faded - 1).zone).toBe(1)
-  t.observe(next, faded)
-  expect(stagedState(next, WORLD_DEFAULT, t, faded).zone).toBe(2)
+  expect(t.zoneShowAt(1)).toBe(shown)
+  t.observe(next, shown - 1)
+  expect(stagedState(next, WORLD_DEFAULT, t, shown - 1).zone).toBe(1)
+  t.observe(next, shown)
+  expect(stagedState(next, WORLD_DEFAULT, t, shown).zone).toBe(2)
 })
 
 test("a zone arrival's show time moves with the boss's chest when the backlog re-times it", () => {
@@ -1067,4 +1079,142 @@ test('a camp sets the campfire for its sit and fade, and each healed hero rises 
   expect(t.pending(from - 1)).toEqual([{ actor: 'h1', delta: 25, at: from }])
   expect(t.isBusy(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS - 1)).toBe(true)
   expect(of(t.active(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS), 'campfire')).toEqual([])
+})
+
+/** The party traveled from zone 1 to zone 3: the encounter ended, wave 1, no enemy yet. */
+const arrived = (): GameView => ({ ...empty(), zone: 3, zoneName: 'Marsh of Sighs', wave: 1 })
+const traveled: Effect = { k: 'traveled', from: 1, to: 3 }
+
+test('a travel steps the heroes off, changes the backdrop at its show time and steps them on', () => {
+  const t = observed()
+  const [start] = t.onEffects([traveled], NOW)
+  expect(start).toBe(NOW)
+  const show = NOW + TRAVEL_OFF_MS
+  expect(t.travelShowAt(3)).toBe(show)
+  const off = of(t.active(NOW), 'travel_off')
+  expect(off.map((m) => [m.actor, m.from, m.until])).toEqual(
+    ['h1', 'h2', 'h3'].map((h) => [h, NOW, show]),
+  )
+  const on = of(t.active(NOW), 'travel_on')
+  expect(on.map((m) => [m.actor, m.from, m.until])).toEqual(
+    ['h1', 'h2', 'h3'].map((h) => [h, show, show + TRAVEL_ON_MS]),
+  )
+  // The step-off, the backdrop and the step-on, in order: the staged zone flips between them.
+  const next = arrived()
+  const zoneAt = (now: number) => {
+    t.observe(next, now)
+    return stagedState(next, WORLD_DEFAULT, t, now)
+  }
+  expect(zoneAt(NOW + 1).zone).toBe(1)
+  expect(zoneAt(show - 1).zone).toBe(1)
+  expect(zoneAt(show).zone).toBe(3)
+  expect(t.isBusy(show + TRAVEL_ON_MS - 1)).toBe(true)
+})
+
+test('the departed encounter stays put until the backdrop changes, with no dissolve and no chest', () => {
+  const t = observed()
+  t.onEffects([traveled], NOW)
+  const show = NOW + TRAVEL_OFF_MS
+  const next = arrived()
+  t.observe(next, NOW + 1)
+  expect(of(t.active(NOW + 1), 'dissolve')).toEqual([])
+  expect(of(t.active(NOW + 1), 'chest')).toEqual([])
+  const lineAt = (now: number) => {
+    t.observe(next, now)
+    return stagedState(next, WORLD_DEFAULT, t, now).enemies.map((e) => [e.id, e.hp])
+  }
+  // Each leaves with the HP it had: nothing killed it.
+  expect(lineAt(show - 1)).toEqual([
+    ['e1', 42],
+    ['e2', 10],
+    ['e3', 30],
+  ])
+  expect(lineAt(show)).toEqual([])
+})
+
+test("a travel waits for the action under way, and the next action waits for the party's step-on", () => {
+  const t = observed()
+  t.onEffects([act('h1', 0), hit('h1', 'e1')], NOW)
+  const [start] = t.onEffects([traveled], NOW + 10)
+  expect(start).toBe(NOW + ACTION_MS)
+  expect(t.travelShowAt(3)).toBe(NOW + ACTION_MS + TRAVEL_OFF_MS)
+  const [next] = t.onEffects([act('h2', 0)], NOW + 20)
+  expect(next).toBe(NOW + ACTION_MS + TRAVEL_OFF_MS + TRAVEL_ON_MS)
+})
+
+test('a travel on a stage never drawn has no show time and plays nothing', () => {
+  const t = new StageTimeline()
+  t.onEffects([traveled], NOW)
+  expect(t.travelShowAt(3)).toBeNull()
+  expect(t.active(NOW)).toEqual([])
+})
+
+const levelUp = (heroId: string, deltas: Deltas): StageEffect => ({
+  k: 'level_up',
+  heroId,
+  level: 6,
+  deltas,
+})
+
+test('a level-up flashes the hero gold and raises its deltas as gold numbers at the tick', () => {
+  const t = observed()
+  t.onEffects(
+    [act('h1', 0), hit('h1', 'e2', 10), levelUp('h1', { hp: 9, atk: 3, def: 2, spd: 0 })],
+    NOW,
+  )
+  const impact = NOW + H + LUNGE_MS / 2
+  expect(of(t.active(NOW), 'gold_flash')).toEqual([
+    { kind: 'gold_flash', actor: 'h1', from: impact, until: impact + FLASH_MS },
+  ])
+  expect(of(t.active(NOW), 'number').filter((m) => m.actor === 'h1')).toEqual([
+    {
+      kind: 'number',
+      actor: 'h1',
+      text: '+3 atk  +2 def',
+      rgb: LEVEL_RGB,
+      from: impact,
+      until: impact + NUMBER_MS,
+    },
+  ])
+  // The hit flash is unchanged: white, on the enemy struck.
+  expect(of(t.active(NOW), 'flash').map((m) => [m.actor, m.from])).toEqual([['e2', impact]])
+})
+
+test('a level-up with no deltas from the engine still flashes gold, with no number', () => {
+  const t = observed()
+  const [start] = t.onEffects([{ k: 'level_up', heroId: 'h2', level: 6 }], NOW)
+  expect(of(t.active(NOW), 'gold_flash').map((m) => [m.actor, m.from])).toEqual([['h2', start]])
+  expect(of(t.active(NOW), 'number')).toEqual([])
+})
+
+test('a zone boss falls: the party holds its victory pose after the dissolve, and the zone show time moves past the hold', () => {
+  const t = observed(boss())
+  t.onEffects(bossKill(), NOW, 2000)
+  const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
+  // Predicted before any draw departs the boss.
+  expect(t.zoneShowAt(1)).toBe(faded + VICTORY_MS)
+  const next = nextZone()
+  t.observe(next, NOW + 1)
+  const hold = of(t.active(NOW + 1), 'victory')
+  expect(hold.map((m) => [m.actor, m.from, m.until])).toEqual(
+    ['h1', 'h2', 'h3'].map((h) => [h, faded, faded + VICTORY_MS]),
+  )
+  expect(t.zoneShowAt(1)).toBe(faded + VICTORY_MS)
+  // The backdrop holds through the pose; the next zone's enemies wait for it.
+  t.observe(next, faded + VICTORY_MS - 1)
+  expect(stagedState(next, WORLD_DEFAULT, t, faded + VICTORY_MS - 1).zone).toBe(1)
+  expect(t.known().map((k) => k.id)).toEqual(['e9'])
+  t.observe(next, faded + VICTORY_MS)
+  expect(stagedState(next, WORLD_DEFAULT, t, faded + VICTORY_MS).zone).toBe(2)
+})
+
+test('a turn boss falls with no hold, and a zone boss that leaves alive holds nothing', () => {
+  const turn = observed(turnBoss())
+  turn.onEffects([act('h1', 0), hit('h1', 'e8', 500)], NOW, 2000)
+  turn.observe(wave(), NOW + 1)
+  expect(of(turn.active(NOW + 1), 'victory')).toEqual([])
+  // A wipe ends the encounter: the boss leaves with its HP, and nobody poses.
+  const wiped = observed(boss())
+  wiped.observe({ ...boss(), enemies: [] }, NOW + 1)
+  expect(of(wiped.active(NOW + 1), 'victory')).toEqual([])
 })

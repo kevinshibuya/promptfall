@@ -4,7 +4,7 @@ import { boss, wave, worldBoss } from '../stage/fixtures'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
 import { stagedState } from '../stage/staged'
 import { StageTimeline } from '../stage/timeline'
-import { DISSOLVE_MS, WAVE_GAP_MS } from '../stage/tuning'
+import { DISSOLVE_MS, FLASH_MS, VICTORY_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
@@ -213,7 +213,7 @@ function strike(t: StageTimeline, actor: string, target: string, amount: number,
   return t.active(start).find((m) => m.kind === 'number' && m.actor === target)?.from ?? Number.NaN
 }
 
-test('the enemy and compact windows hold a killed zone boss, and its zone, until its death has played', () => {
+test('the enemy and compact windows hold a killed zone boss, and its zone, through its death and the victory pose', () => {
   const now = 1_000_000
   const t = new StageTimeline()
   t.observe(boss(), now - 1)
@@ -239,8 +239,12 @@ test('the enemy and compact windows hold a killed zone boss, and its zone, until
   const held = { title: 'Zone 1 · Boss', rows: ['Bandit Captain'], compact: 'Z1 · Boss' }
   expect(shown(impact - 1)).toEqual({ ...held, front: 'Bandit Captain' })
   expect(shown(impact + DISSOLVE_MS)).toEqual({ ...held, front: 'Bandit Captain' })
-  // Its dissolve and the pause over, the newcomers step on and the windows take the view's zone.
-  const later = impact + 1_000 + DISSOLVE_MS + WAVE_GAP_MS
+  // Through the party's victory pose after its dissolve.
+  const posed = impact + FLASH_MS + DISSOLVE_MS + VICTORY_MS
+  t.observe(next, posed - 1)
+  expect(shown(posed - 1)).toEqual({ ...held, front: 'Bandit Captain' })
+  // The pose and the pause over, the newcomers step on and the windows take the view's zone.
+  const later = posed + WAVE_GAP_MS
   t.observe(next, later)
   expect(shown(later)).toEqual({
     title: 'Zone 2 · Wave 1',

@@ -50,9 +50,9 @@ function worldBossRow(
  * a change the state made without a blow (a wipe's heal, a revive) is one of those landings.
  * The enemies are the timeline's line in arrival order, a departed one kept while it is held,
  * each with its HP staged the same way. The zone and wave hold the previous ones while a departed
- * enemy seen in them is held. The world boss is staged like any enemy, its bar from the poll.
- * The Loot rows leave out a drop until its own chest's reveal shows it; the last drop is their
- * newest.
+ * enemy seen in them is held, or while a travel's party steps off. The world boss is staged like
+ * any enemy, its bar from the poll. The Loot rows leave out a drop until its own chest's reveal
+ * shows it; the last drop is their newest.
  */
 export function stagedState(
   view: GameView,
@@ -78,11 +78,12 @@ export function stagedState(
     const hp = staged(current.hp, current.maxHp, current.id)
     return hp === current.hp ? current : { ...current, hp }
   })
-  // The encounter stays on the earliest wave or zone a held enemy was seen in.
+  // The encounter stays on the earliest wave or zone a held enemy was seen in, or on the scene a
+  // travel leaves until its backdrop changes.
   const before = line.find((l) => l.departed && (l.zone !== view.zone || l.wave !== view.wave))
   const encounter = before
     ? { zone: before.zone, zoneName: before.zoneName, wave: before.wave }
-    : {}
+    : (timeline.travelSceneAt(now) ?? {})
   const loot = timeline.pendingReveals(now) > 0 ? revealed(view.loot, timeline, now) : null
   const rows = loot ? { loot, lastDrop: loot.at(-1) ?? null } : {}
   return { ...view, ...encounter, heroes, enemies, ...rows }

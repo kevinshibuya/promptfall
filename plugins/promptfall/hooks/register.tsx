@@ -24,7 +24,7 @@ import {
 import { GaugeTrack } from './stage/gauges'
 import { MessageLog } from './stage/log'
 import { StageLoop } from './stage/loop'
-import { StageTimeline } from './stage/timeline'
+import { type StageEffect, StageTimeline } from './stage/timeline'
 import { SKIPPED_PLAY_MS, SOUND_GAIN } from './stage/tuning'
 import {
   BOARDS_DEFAULT,
@@ -56,7 +56,7 @@ import type {
   Unauthorized,
   WorldSnapshot,
 } from './vendor/protocol.js'
-import { type Effect, type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
+import { type PlayerEvent, replay, SIM_VERSION } from './vendor/sim.js'
 import { CLIENT_VERSION } from './version'
 import { toAccountView, toGameView } from './view'
 import { WorldPoller } from './world'
@@ -821,7 +821,7 @@ class GameSession implements GameHandle {
   }
 
   private onEffects(
-    effects: Effect[],
+    effects: StageEffect[],
     at: number | undefined,
     view: GameView | null,
     arrived?: number,

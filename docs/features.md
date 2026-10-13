@@ -331,6 +331,13 @@ stands and fights until the blow that kills him lands, then dims, and the party 
 with each hit as it lands, not when the game applies it. The stage is 17 rows in every fight and
 never changes height, the party small on the zone's painting, so a boss lands at its full size. A
 monster that steps on partway through a tick plays its first actions animated, on the desktop too.
+Three moments get a scene of their own. When the party travels, the heroes step off to the right
+and fade, the enemies it left stand until the backdrop changes to the destination's, and the
+heroes step back on from the left; the log's "The party travels to zone 3, Marsh of Sighs." lands
+as the backdrop changes. A level-up flashes the hero gold and its gains rise over it in gold,
+"+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
+the empty ground for about two seconds after the boss has dissolved, and only then does the
+backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.

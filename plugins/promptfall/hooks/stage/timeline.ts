@@ -1,6 +1,14 @@
 import type { EnemyView, GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
-import { ACTION_STEPS, type Effect, type Rarity, STEP_MS, TICK_MS } from '../vendor/sim.js'
+import {
+  ACTION_STEPS,
+  type Effect,
+  type Rarity,
+  STEP_MS,
+  type Stat,
+  TICK_MS,
+  zoneAt,
+} from '../vendor/sim.js'
 import {
   BACKLOG_ROUNDS,
   BOLT_MS,
@@ -15,6 +23,7 @@ import {
   FLASH_MS,
   FOLLOW_MS,
   IDLE_FRAME_MS,
+  LEVEL_RGB,
   LUNGE_MS,
   NUMBER_MS,
   NUMBER_RGB_ENEMY,
@@ -27,7 +36,10 @@ import {
   SPAWN_MS,
   STAGE_MIN_ROWS,
   STAGE_ROWS,
+  TRAVEL_OFF_MS,
+  TRAVEL_ON_MS,
   TURN_BOSS_MIN_ROWS,
+  VICTORY_MS,
   WAVE_GAP_MS,
   WINDUP_HOLD_MS,
   WINDUP_MS,
@@ -43,6 +55,16 @@ export type Motion =
   | { kind: 'flash'; actor: string; from: number; until: number }
   /** Enrage's red flash at the mishap: the white flash's mechanism in red. */
   | { kind: 'red_flash'; actor: string; from: number; until: number }
+  /** A level-up's gold flash: the white flash's mechanism in gold. */
+  | { kind: 'gold_flash'; actor: string; from: number; until: number }
+  /** A hero stepping off toward the right and fading, until the backdrop changes. */
+  | { kind: 'travel_off'; actor: string; from: number; until: number }
+  /** A hero stepping on from the left, from the backdrop's change. */
+  | { kind: 'travel_on'; actor: string; from: number; until: number }
+  /** An enemy of the encounter a travel left: it stands until the backdrop changes, then is gone. */
+  | { kind: 'leave'; actor: string; from: number; until: number }
+  /** A hero's victory pose over the fallen zone boss `boss`, after its dissolve. */
+  | { kind: 'victory'; actor: string; boss: string; from: number; until: number }
   /**
    * An enraged enemy's red tint, from the mishap to the show time of its next hit; `until` is
    * infinite while that hit has not come in.
@@ -142,6 +164,7 @@ const ACTION_KINDS: ReadonlySet<Motion['kind']> = new Set([
   'follow',
   'hit',
   'flash',
+  'gold_flash',
   'effect',
   'number',
 ])
@@ -165,9 +188,35 @@ export function impactOf(shape: AttackShape): number {
   return LUNGE_MS / 2
 }
 
+/** A hero's stat gains over one tick. */
+export type Deltas = Partial<Record<Stat, number>>
+/**
+ * An effect as the engine hands it to the stage: the sim's, a level-up carrying the hero's stat
+ * deltas, which the engine computes from the sim's stat function before and after the tick.
+ */
+export type StageEffect =
+  | Exclude<Effect, { k: 'level_up' }>
+  | (Extract<Effect, { k: 'level_up' }> & { deltas?: Deltas })
+
+/** The stats a level-up's gold numbers name, in order: HP is the bar's to show. */
+const DELTA_STATS: readonly Stat[] = ['atk', 'def', 'spd']
+
+/** "+3 atk  +2 def": each gain the hero made, left out at zero. */
+export function deltasText(deltas: Deltas): string {
+  return DELTA_STATS.filter((stat) => (deltas[stat] ?? 0) > 0)
+    .map((stat) => `+${deltas[stat]} ${stat}`)
+    .join('  ')
+}
+
+/** Where the stage stands: a zone, its name, a wave. */
+export type Scene = { zone: number; zoneName: string; wave: number }
+
+/** A travel on the timeline: where it goes, its show time (the backdrop's change), and its end. */
+type Travel = { to: number; show: number; end: number; from: Scene }
+
 type Act = Extract<Effect, { k: 'act' }>
 /** One action's effects; `act` null for effects that came before any act (a delivery, a resync). */
-export type Group = { act: Act | null; effects: Effect[] }
+export type Group = { act: Act | null; effects: StageEffect[] }
 
 /**
  * An enemy in the line for the staged state: its last view row, the zone and wave it was last
@@ -187,7 +236,7 @@ export type Landing = { actor: string; delta: number; at: number }
 /** An action on the timeline: its actor, when it starts, and when its ▶ goes (`acting`). */
 export type Action = { actor: string; start: number; until: number }
 
-export function groups(effects: readonly Effect[]): Group[] {
+export function groups(effects: readonly StageEffect[]): Group[] {
   const out: Group[] = []
   let current: Group = { act: null, effects: [] }
   for (const effect of effects) {
@@ -244,10 +293,16 @@ export class StageTimeline {
   private landing: Landing[] = []
   /** Each entry's last view row and where it was seen: what its staged row needs once departed. */
   private seen = new Map<string, Omit<Lined, 'departed'>>()
+  /** The scene of the last observe: where a travel leaves from. */
+  private scene: Scene | null = null
+  /** Each travel until its party has stepped on, in start order. */
+  private travels: Travel[] = []
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
+    this.travels = this.travels.filter((t) => t.end > now)
+    this.scene = { zone: view.zone, zoneName: view.zoneName, wave: view.wave }
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
     const predicted = this.seenHp
     this.seenHp = new Map([...view.heroes, ...view.enemies].map((a) => [a.id, a.hp]))
@@ -260,22 +315,36 @@ export class StageTimeline {
       // It leaves with the HP its burst leaves it: 0 for a kill, its last HP when it left alive.
       // The world boss's bar was never its row's.
       const seen = this.seen.get(id)
-      if (seen) {
-        const hp = known.kind === 'world_boss' ? 0 : (predicted.get(id) ?? 0)
-        this.seen.set(id, { ...seen, row: { ...seen.row, hp } })
+      const hp = known.kind === 'world_boss' ? 0 : (predicted.get(id) ?? 0)
+      if (seen) this.seen.set(id, { ...seen, row: { ...seen.row, hp } })
+      // Left by a travel: it stands until the backdrop changes, with no dissolve.
+      if (this.motions.some((m) => m.actor === id && m.kind === 'leave')) {
+        this.calm(id, now)
+        continue
       }
       // It fades once the last action shown on it is over: its death flash, or its own blow.
       const from = this.lastShownEnd(id, now)
-      this.motions.push({ kind: 'dissolve', actor: id, from, until: from + DISSOLVE_MS })
+      const faded = from + DISSOLVE_MS
+      this.motions.push({ kind: 'dissolve', actor: id, from, until: faded })
       // Gone before its hit: the tint fades with it.
       this.calm(id, from)
+      // A zone boss killed: the party holds its victory pose once it has faded.
+      if (known.kind === 'zone_boss' && hp <= 0) {
+        for (const hero of this.heroes.keys()) {
+          this.motions.push({
+            kind: 'victory',
+            actor: hero,
+            boss: id,
+            from: faded,
+            until: faded + VICTORY_MS,
+          })
+        }
+      }
     }
     // A kill plays out before the next enemy enters: its fade, its chest, then a pause.
     for (const [id, until] of this.gaps) if (until <= now) this.gaps.delete(id)
     for (const id of this.departed) {
-      const end = this.motions
-        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest'))
-        .reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
+      const end = this.heldBy(id).reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
       // Once its fade and chest are over and pruned, the pause they set stands.
       if (Number.isFinite(end)) this.gaps.set(id, end + WAVE_GAP_MS)
     }
@@ -351,10 +420,7 @@ export class StageTimeline {
    */
   private settleAt(now: number): number {
     let at = Math.max(now, this.actionEnd)
-    for (const m of this.motions) {
-      if (m.actor === null || !this.departed.has(m.actor)) continue
-      if (m.kind === 'dissolve' || m.kind === 'chest') at = Math.max(at, m.until)
-    }
+    for (const id of this.departed) for (const m of this.heldBy(id)) at = Math.max(at, m.until)
     return at
   }
 
@@ -447,6 +513,8 @@ export class StageTimeline {
       const faded = from + DISSOLVE_MS
       this.motions = this.motions.map((m) => {
         if (m === dissolve) return { ...m, from, until: faded }
+        if (m.kind === 'victory' && m.boss === id)
+          return { ...m, from: faded, until: faded + VICTORY_MS }
         if (m.actor === id && m.kind === 'chest' && m.from > faded - CHEST_FALL_MS) {
           const from = faded - CHEST_FALL_MS
           return { ...m, from, until: from + chestMs(m.rarity) }
@@ -504,9 +572,7 @@ export class StageTimeline {
           (m.kind === 'flash' || m.kind === 'number' || m.kind === 'chest'),
       )
       if (showing) continue
-      const end = this.motions
-        .filter((m) => m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest'))
-        .reduce((e, m) => Math.max(e, m.until), 0)
+      const end = this.heldBy(id).reduce((e, m) => Math.max(e, m.until), 0)
       const known = this.entries.get(id)
       if (known && end < evictEnd) {
         evict = known
@@ -520,10 +586,20 @@ export class StageTimeline {
     return evict.slot
   }
 
-  /** A departed enemy is held by its dissolve and any chest, not by a number still rising. */
+  /**
+   * A departed enemy is held by its dissolve and any chest, by the party's victory pose over it,
+   * or until the backdrop changes when a travel left it; not by a number still rising.
+   */
   private holds(id: string, now: number): boolean {
-    return this.motions.some(
-      (m) => m.actor === id && m.until > now && (m.kind === 'dissolve' || m.kind === 'chest'),
+    return this.heldBy(id).some((m) => m.until > now)
+  }
+
+  /** The motions that hold `id` on the stage once departed. */
+  private heldBy(id: string): Motion[] {
+    return this.motions.filter((m) =>
+      m.kind === 'victory'
+        ? m.boss === id
+        : m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest' || m.kind === 'leave'),
     )
   }
 
@@ -545,7 +621,7 @@ export class StageTimeline {
    * at `arrivedAt`, the wall time the batch came in, which a delivery's stale `now` is not.
    */
   onEffects(
-    effects: readonly Effect[],
+    effects: readonly StageEffect[],
     now: number,
     cadenceMs: number = TICK_MS,
     arrivedAt: number = now,
@@ -553,6 +629,7 @@ export class StageTimeline {
     // observe prunes too, but nothing observes while the band is hidden or on another tab.
     this.motions = this.motions.filter((m) => m.until > now)
     this.actions_ = this.actions_.filter((a) => a.keep > now)
+    this.travels = this.travels.filter((t) => t.end > now)
     const starts: number[] = []
     // The HP each actor holds as the burst plays: what a hit can take, an overkill no more.
     const hp = new Map(this.seenHp)
@@ -655,6 +732,15 @@ export class StageTimeline {
           this.camp(effect.heals, start, hp)
           continue
         }
+        if (effect.k === 'level_up') {
+          // With the blow that earned it, or as the tick lands when no action is shown.
+          this.levelUp(effect, attacker !== null ? impact : start)
+          continue
+        }
+        if (effect.k === 'traveled') {
+          this.travel(effect, start)
+          continue
+        }
         if (effect.k === 'hit') {
           if (this.isActor(effect.target)) {
             effectOn(effect.target)
@@ -721,6 +807,54 @@ export class StageTimeline {
     this.actions_.sort((a, b) => a.start - b.start)
     this.seenHp = hp
     return starts
+  }
+
+  /** The hero's gold flash at `at`, and its stat deltas rising as gold numbers. */
+  private levelUp(effect: Extract<StageEffect, { k: 'level_up' }>, at: number): void {
+    const actor = effect.heroId
+    if (!this.heroes.has(actor)) return
+    this.motions.push({ kind: 'gold_flash', actor, from: at, until: at + FLASH_MS })
+    const text = deltasText(effect.deltas ?? {})
+    if (text === '') return
+    this.motions.push({
+      kind: 'number',
+      actor,
+      text,
+      rgb: LEVEL_RGB,
+      from: at,
+      until: at + NUMBER_MS,
+    })
+  }
+
+  /**
+   * A travel from `at`: the heroes step off and fade, the backdrop changes (its show time), and
+   * they step on. The encounter it ended stands until the backdrop changes, then is gone; no
+   * newcomer and no action comes before the party has stepped on. On a stage never drawn it
+   * plays nothing and has no show time.
+   */
+  private travel(effect: Extract<Effect, { k: 'traveled' }>, at: number): void {
+    if (!this.observed) return
+    const show = at + TRAVEL_OFF_MS
+    const end = show + TRAVEL_ON_MS
+    for (const actor of this.heroes.keys()) {
+      this.motions.push({ kind: 'travel_off', actor, from: at, until: show })
+      this.motions.push({ kind: 'travel_on', actor, from: show, until: end })
+    }
+    for (const id of this.entries.keys()) {
+      if (!this.departed.has(id))
+        this.motions.push({ kind: 'leave', actor: id, from: at, until: show })
+    }
+    const from =
+      this.scene?.zone === effect.from
+        ? this.scene
+        : {
+            zone: effect.from,
+            zoneName: zoneAt(effect.from)?.def.name ?? `Zone ${effect.from}`,
+            wave: 1,
+          }
+    this.travels.push({ to: effect.to, show, end, from })
+    this.gaps.set(`travel:${show}`, end)
+    this.actionEnd = Math.max(this.actionEnd, end)
   }
 
   /** A red flash on `actor` at `at`, and its tint from then until its next hit lands. */
@@ -824,12 +958,30 @@ export class StageTimeline {
     )?.id
     if (id === undefined) return null
     const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
+    // Predicted, the party's victory pose follows the dissolve.
     let end = dissolve
       ? dissolve.until
-      : this.lastShownEnd(id, Number.NEGATIVE_INFINITY) + DISSOLVE_MS
-    for (const m of this.motions)
-      if (m.actor === id && m.kind === 'chest') end = Math.max(end, m.until)
+      : this.lastShownEnd(id, Number.NEGATIVE_INFINITY) + DISSOLVE_MS + VICTORY_MS
+    for (const m of this.heldBy(id)) end = Math.max(end, m.until)
     return Number.isFinite(end) ? end : null
+  }
+
+  /**
+   * The show time of the latest travel to `zone` on the timeline: the backdrop's change, as the
+   * party has stepped off. Null with no such travel.
+   */
+  travelShowAt(zone: number): number | null {
+    return this.travels.findLast((t) => t.to === zone)?.show ?? null
+  }
+
+  /** The show times of the travels on the timeline, in order: when the backdrop changes. */
+  travelShows(): readonly number[] {
+    return this.travels.map((t) => t.show)
+  }
+
+  /** The scene the party is leaving at `now`: the first travel whose backdrop has not changed. */
+  travelSceneAt(now: number): Scene | null {
+    return this.travels.find((t) => t.show > now)?.from ?? null
   }
 
   /** How many chests have a show time still to come after `now`. */

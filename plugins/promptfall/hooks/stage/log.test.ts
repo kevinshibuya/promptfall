@@ -453,6 +453,10 @@ test("the zone line is held to the zone's show time and takes its place at relea
   const show = t.zoneShowAt(1) ?? 0
   // The boss's drop reveals before its row leaves: its line lands first.
   expect(t.showAt('i1') ?? show).toBeLessThan(show)
+  // The next draw departs the boss and schedules its dissolve, its chest and the party's victory
+  // pose: the show time stands.
+  t.observe(next, NOW + 1)
+  expect(t.zoneShowAt(1)).toBe(show)
   // A later tick's hit, in the new zone, once the drop's line has typed and while the zone line
   // is held.
   const tick = NOW + 3000
@@ -460,7 +464,6 @@ test("the zone line is held to the zone's show time and takes its place at relea
   const hitting: Effect[] = [act('h2', 0), hit('h2', 'e1', 4)]
   const [start = 0] = t.onEffects(hitting, tick, 2000)
   log.onEffects(hitting, [start], next, tick, 2000, t)
-  // A draw departs the boss and schedules its dissolve and chest: the show time stands.
   t.observe(next, tick + 1)
   expect(t.zoneShowAt(1)).toBe(show)
   const texts = (now: number) => log.shown(now, 'still').map((l) => l.text)
@@ -744,4 +747,40 @@ test('a reactive line behind a burst more than a tick long is never dropped', ()
   expect(texts).toContain('Claude stumbles. Goblin Scout is enraged!')
   expect(texts).toContain('The party stands guard.')
   expect(texts).toContain('The party quickens.')
+})
+
+const arrived = (zone: number): GameView => ({ ...wave(), enemies: [], zone, wave: 1 })
+
+test('the travel line is held for the backdrop change and lands at its show time, no sooner', () => {
+  const v = wave()
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  t.observe(v, NOW - 1)
+  log.onEffects([], [], v, NOW - 1, 2000, t)
+  const effects: Effect[] = [{ k: 'traveled', from: 1, to: 3 }]
+  const starts = t.onEffects(effects, NOW, 2000)
+  log.onEffects(effects, starts, arrived(3), NOW, 2000, t)
+  const show = t.travelShowAt(3) ?? 0
+  expect(show).toBeGreaterThan(NOW)
+  const line = 'The party travels to zone 3, Marsh of Sighs.'
+  expect(log.shown(show - 1, 'still').map((l) => l.text)).not.toContain(line)
+  expect(log.isBusy(show - 1, 'still')).toBe(true)
+  expect(log.upcoming(show - 1, 10_000)[0]).toMatchObject({ text: line, key: true, at: show })
+  expect(log.shown(show, 'still').at(-1)?.text).toBe(line)
+})
+
+test('with no stage drawn the travel line lands with the state', () => {
+  // A timeline that never drew a stage has no show time for it.
+  const log = new MessageLog()
+  const t = new StageTimeline()
+  const effects: Effect[] = [{ k: 'traveled', from: 1, to: 3 }]
+  log.onEffects(effects, t.onEffects(effects, NOW, 2000), arrived(3), NOW, 2000, t)
+  expect(log.shown(NOW, 'still').map((l) => l.text)).toEqual([
+    'The party travels to zone 3, Marsh of Sighs.',
+  ])
+})
+
+test('the travel line carries the tier past zone 12', () => {
+  const { texts } = run([{ k: 'traveled', from: 14, to: 13 }])
+  expect(texts).toEqual(['The party travels to tier 2, zone 1, Greenmeadow Road.'])
 })
