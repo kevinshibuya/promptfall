@@ -399,6 +399,14 @@ trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" i
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
+A session that becomes primary more than ten minutes after this account was last seen playing on
+this machine says what the party did since, in a toast and for 20 seconds in the message window:
+"Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.
+Today's goal: kill 40 enemies." It names the weekday when a day or more has passed and says
+"Since your last session" under a day, leaves out what did not change, and says nothing when
+nothing did.
+A shorter break says nothing and loses nothing: the next summary still counts it. The play counted
+runs from the last summary, and a reset starts it over.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
@@ -426,7 +434,8 @@ toast lands at its reveal, as the item rises out of the chest, and a zone arriva
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
 Routine combat, the reactive events, farming clears and chat never toast, the open pane holds toasts until it closes,
-and a first launch toasts a welcome that points at the Heroes tab.
+and the session raises two toasts of its own: a first launch's welcome that points at the Heroes tab,
+and the session summary when a session becomes primary after a break (under Primary session).
 
 **Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
 world boss appearing, a zone arrival (the zone-cleared cue), a recruit and a retreat; a wipe plays
