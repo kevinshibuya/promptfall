@@ -78,6 +78,10 @@ type Io = {
   /** Shows a toast; `timeoutMs` left out is the host's default. */
   toast: (text: string, timeoutMs?: number) => void
   leaseOwner: () => Promise<string | null>
+  /** Which of the agents view's background processes this is, if any; see BgKind. */
+  bgKind: () => Promise<BgKind>
+  /** No surface draws the session: on a terminal, its REPL is gone (the agents view took it). */
+  drawsNowhere: () => Promise<boolean>
   mode: () => Promise<Mode>
   paneNotice: (text: string | null) => Promise<void>
   /** Shows or clears the device-flow code in the dialog. */
@@ -138,6 +142,19 @@ const TURN_CADENCE_MS = 2000
 const IDLE_CADENCE_MS = 5000
 const FLUSH_MS = 15_000
 const LEASE_RENEW_MS = 10_000
+/** How often a terminal session checks it is still drawn, and a job retries a free lease. */
+const QUICK_MS = 2000
+/** How long a job keeps retrying a free lease at QUICK_MS before it waits for its renewals. */
+const PICK_UP_MS = 60_000
+
+/**
+ * Claude Code's agents view runs conversations in background processes, and keeps a spare one warm
+ * for the next new task. `job`: the process a conversation was moved into, the one the player comes
+ * back to (`CLAUDE_BG_SOURCE=slash`). `spare`: the warm one, which nobody looks at until a prompt in
+ * it (`spare`, or unset at its launch). `plain`: anything else. Read from the engine's own
+ * environment (2.1.296), which no API exposes: missing, it is `plain`.
+ */
+type BgKind = 'plain' | 'job' | 'spare'
 
 const WELCOME = 'Welcome to Promptfall. /promptfall heroes to meet your party'
 /**
@@ -172,6 +189,7 @@ class GameSession implements GameHandle {
   private cadence = 0
   private tickTimer: Timer | null = null
   private timers: Timer[] = []
+  private steppingAside = false
   private pending: Promise<void> = Promise.resolve()
   private firstRun = false
   /** A play here was skipped or refused: no cue is tried for the rest of the session. */
@@ -368,12 +386,19 @@ class GameSession implements GameHandle {
     this.owner = (await this.io.leaseOwner()) ?? crypto.randomUUID()
     this.off = (await this.io.mode()) === 'off'
     await this.io.publish({ leaseOwner: this.owner })
-    if (await acquire(this.kv, this.owner, await this.io.now())) await this.becomePrimary()
+    // A spare plays only once a prompt in it claims: the lease it would take is the player's.
+    const kind = await this.io.bgKind()
+    if (kind !== 'spare' && (await acquire(this.kv, this.owner, await this.io.now())))
+      await this.becomePrimary()
     else await this.becomeSecondary()
     this.setCadence(IDLE_CADENCE_MS)
     // A demoted primary discards its engine, so nothing it held is ever submitted.
     this.timers.push(this.io.every(FLUSH_MS, () => void this.flushIfOwner()))
     this.timers.push(this.io.every(LEASE_RENEW_MS, () => void this.renew()))
+    if (this.io.surface === 'terminal') {
+      this.timers.push(this.io.every(QUICK_MS, () => void this.checkDrawn()))
+    }
+    if (kind === 'job') this.pickUp()
     this.timers.push(this.io.every(STAMP_MS, () => void this.stamp()))
   }
 
@@ -834,8 +859,54 @@ class GameSession implements GameHandle {
     await this.poller.start()
   }
 
+  /**
+   * A terminal session that draws nowhere plays for nobody: the agents view took its REPL, and no
+   * hook says so. Within QUICK_MS it flushes what it holds while the lease is still its own, steps
+   * back and gives the lease up, so the process the player went to picks it up.
+   */
+  private async checkDrawn(): Promise<void> {
+    if (this.role !== 'primary' || this.steppingAside) return
+    if (!(await this.io.drawsNowhere())) return
+    this.steppingAside = true
+    try {
+      const held = await holds(this.kv, this.owner)
+      if (held) await this.engine.flush()
+      await this.becomeSecondary()
+      if (held) await release(this.kv, this.owner)
+    } finally {
+      this.steppingAside = false
+    }
+  }
+
+  /**
+   * The process the conversation moved into starts while the one it left still holds the lease:
+   * it tries a free lease every QUICK_MS for its first minute, so the band plays a moment after
+   * the old process lets go, rather than at the next renewal.
+   */
+  private pickUp(): void {
+    let left = PICK_UP_MS / QUICK_MS
+    const timer = this.io.every(QUICK_MS, () => {
+      left -= 1
+      if (left <= 0) timer.cancel()
+      void this.pickUpOnce()
+    })
+    this.timers.push(timer)
+  }
+
+  private async pickUpOnce(): Promise<void> {
+    if (this.role !== 'secondary' || (await this.io.drawsNowhere())) return
+    if (!(await acquire(this.kv, this.owner, await this.io.now()))) return
+    await this.followSetting()
+    await this.becomePrimary()
+  }
+
   private async renew(): Promise<void> {
+    // Nothing here is seen any more: no renewal, and no read-only refresh either. checkDrawn steps
+    // back.
+    if (this.io.surface === 'terminal' && (await this.io.drawsNowhere())) return
     if (this.role === 'secondary') await this.followSetting()
+    // A spare only follows: it never takes a free lease (see BgKind).
+    if (this.role === 'secondary' && (await this.io.bgKind()) === 'spare') return this.refresh()
     const ok = await acquire(this.kv, this.owner, await this.io.now())
     if (ok && this.role === 'secondary') await this.becomePrimary()
     else if (!ok && this.role === 'primary') await this.becomeSecondary()
@@ -1018,6 +1089,21 @@ export const register: Register = (on) => {
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
+        bgKind: async () => {
+          try {
+            if ((await $.env.get('CLAUDE_CODE_SESSION_KIND')) !== 'bg') return 'plain'
+            const source = await $.env.get('CLAUDE_BG_SOURCE')
+            if (source === 'slash') return 'job'
+            return source === undefined || source === 'spare' ? 'spare' : 'plain'
+          } catch {
+            return 'plain'
+          }
+        },
+        drawsNowhere: () =>
+          $.session.surfaces().then(
+            (s) => s.length === 0,
+            () => false,
+          ),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))
@@ -1105,6 +1191,21 @@ export const register: Register = (on) => {
         toast: (text, timeoutMs) =>
           timeoutMs === undefined ? $.ui.toast(text) : $.ui.toast(text, { timeoutMs }),
         leaseOwner: () => read($, leaseOwnerAtom),
+        bgKind: async () => {
+          try {
+            if ((await $.env.get('CLAUDE_CODE_SESSION_KIND')) !== 'bg') return 'plain'
+            const source = await $.env.get('CLAUDE_BG_SOURCE')
+            if (source === 'slash') return 'job'
+            return source === undefined || source === 'spare' ? 'spare' : 'plain'
+          } catch {
+            return 'plain'
+          }
+        },
+        drawsNowhere: () =>
+          $.session.surfaces().then(
+            (s) => s.length === 0,
+            () => false,
+          ),
         mode: () => read($, modeAtom),
         paneNotice: async (text) => {
           await update($, dialogAtom, (d) => ({ ...DIALOG_DEFAULT, ...d, paneNotice: text }))

@@ -240,7 +240,8 @@ test('Link GitHub goes when linked, read-only, or while a code is pending', () =
   const pending = accountPane(input({ link }, { view: unlinked() }))
   expect(keys(pending)).not.toContain('row:link')
   expect(pending.link).toEqual({ url: 'https://github.com/login/device' })
-  expect(linesOf(win(pending, 'detail')).slice(-2)).toEqual([
+  // First, under the title: a window stacked under the list keeps only its top lines.
+  expect(linesOf(win(pending, 'detail')).slice(1, 3)).toEqual([
     ' Enter ABCD1234 at',
     ' the link under this window.',
   ])

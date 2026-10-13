@@ -147,7 +147,8 @@ Deeper zones and bosses roll rarer drops. A kill that drops an item leaves a che
 enemy stood: it falls out of the enemy as it fades, sits closed, opens, and the item rises out of
 it on a glow in its rarity colour, wider the rarer the item. The item holds there longer the
 rarer it is (under a second for a Common, two for a Legendary), then the item, its glow and the
-chest fade; the next enemy steps on after it. An auto-vendored drop plays the same chest, and a
+chest fade; the next enemy steps on after it. A monster killed in the tick it arrived, before the
+band ever drew it, still leaves its chest, on the ground of the lowest free slot. An auto-vendored drop plays the same chest, and a
 sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
 the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
 the reveal: they land together once the item has risen, not at the kill, while sales and
@@ -204,8 +205,9 @@ in returns and arrives the moment a slot frees; returns are never vendored.
 
 **Linking.** Browsing is open to every account, but listing, buying, ordering and posting to chat
 need an account linked to a GitHub login. Link GitHub on the Account tab runs the device flow: the
-code the server gives in the detail window, the URL to enter it at under the picture, and a poll
-at the interval the server gives. A server started with `--link github` runs GitHub's own device
+code the server gives at the top of the detail window, so a narrow pane or the dock still shows it,
+the URL to enter it at under the picture, and a poll at the interval the server gives. A resize
+keeps the code, the poll and whatever else the dialog had open. A server started with `--link github` runs GitHub's own device
 flow with the OAuth app's client id from `PROMPTFALL_GITHUB_CLIENT_ID`: GitHub's code and URL, the
 link completing on the first poll after the player authorises, and the GitHub login as the
 account's name. When GitHub asks the server to slow down, the server answers the player's polls
@@ -457,6 +459,12 @@ trades, `farm`, `autovendor`, `travel` and the sandbox verbs with "Promptfall is
 what the old one already toasted, nor leaves out what arrived after the old one last looked.
 Claude's work reaches the fight only in the primary: another session's tool calls, turns,
 failures, compactions and permission prompts spawn and change nothing.
+Claude Code's agents view (← from an empty prompt) moves the conversation into a background process
+of its own and keeps a spare one warm beside it; coming back attaches the terminal to the
+conversation's process. The process left behind draws nowhere, so within a couple of seconds it
+flushes, steps back and lets the lease go, and the process the conversation moved to picks it up a
+couple of seconds later: the band plays on with no command. The spare never takes a free lease; it
+plays only once a prompt or a `/promptfall` verb in it claims one.
 A session that becomes primary more than ten minutes after this account was last seen playing on
 this machine says what the party did since, in a toast and for 20 seconds in the message window:
 "Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.

@@ -14,3 +14,5 @@ Where things live. Open one when the task touches it.
 A PR that adds, removes or changes a feature updates `docs/features.md` in the same PR.
 
 A ticket that touches `plugins/` carries `pnpm typecheck:plugin` in its Verify gate.
+
+No ticket's gate runs `pnpm test:arc`; the closing ticket of a sim-changing batch runs it once and pastes the per-seed table (ADR 0017).

@@ -1,7 +1,8 @@
-import type { On, UiBlitArgs } from 'claude-code'
+import type { On, RenderSurface, SessionUsage, UiBlitArgs } from 'claude-code'
 import { expect, mock, type TestBody } from 'claude-code/testing'
 import type { GameView, WorldState } from '../types'
 import { DELETED_NOTICE, NOT_DELETED, OLD_VERSION_NOTICE, RETRYING_NOTICE } from './engine'
+import { release } from './lease'
 import { SANDBOX_PINS_SERVER } from './sandbox'
 import { PUBLIC_SERVER } from './server'
 import { bandKey } from './stage/loop'
@@ -366,6 +367,185 @@ test('a primary that lost the lease between renewals does not flush', async ($, 
   data.set(LEASE, { owner: 'other-tab', until: 9_999_999_999_999 })
   await time.advance(5_000)
   expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
+  expect(last.get('mode')).toBe('secondary')
+})
+
+/**
+ * The surfaces the session draws on, as the engine reports them. In the agents view's log (#185)
+ * the process a conversation left draws on none.
+ */
+function session(on: On) {
+  const drawn = { surfaces: ['terminal'] as RenderSurface[] }
+  on('session.surfaces', () => ({ value: drawn.surfaces }))
+  return drawn
+}
+
+/** The agents view's background processes, as the engine's environment marks them (2.1.296). */
+const JOB_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'slash' }
+const SPARE_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'spare' }
+/** The spare as `ps` saw its launch, before the engine marks it. */
+const SPARE_AT_LAUNCH_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg' }
+
+/** The machine's save as another process of the plugin reaches it: the same store. */
+function elsewhere(data: Map<string, unknown>): StoreKeyValue {
+  return new StoreKeyValue({
+    get: async (key) => data.get(key),
+    set: async (key, value) => void data.set(key, value),
+    delete: async (key) => void data.delete(key),
+    keys: async () => [...data.keys()],
+  })
+}
+
+const IN_PLAY = {
+  component: 'AbovePrompt' as const,
+  requestId: 'band-return',
+  props: {
+    hasSurvey: false,
+    isWorking: false,
+    maxRows: 34,
+    bodyColumns: 135,
+    scroll: { offset: 0, bodyRows: 33 },
+    view: {},
+  },
+}
+
+test('the agents view sequence from the log keeps the lease and the band primary', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], JOB_ENV)
+  // ← hands the conversation to a new process, this one. The process it left fires nothing: it
+  // still holds the lease until its next check finds it draws nowhere.
+  session(on)
+  data.set(LEASE, { owner: 'left-behind', until: 1_020_000 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  // The process left behind lets the lease go; this one picks it up at its next quick try.
+  await release(elsewhere(data), 'left-behind')
+  await time.advance(2000)
+  expect(last.get('mode')).toBe('primary')
+  const mine = last.get('leaseOwner')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
+  // Enter attaches the terminal to this process: nothing fires, and the band plays here.
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('primary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(mine)
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...IN_PLAY })
+  expect(await ui.find({ text: /^playing in another session/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a session that lost the lease takes it back on its return', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], JOB_ENV)
+  // An empty conversation: the new process is a new session, and nothing ties it to the old one.
+  session(on)
+  data.set(LEASE, { owner: 'left-behind', until: 1_020_000 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  // Still held: the quick tries leave it alone.
+  await time.advance(4000)
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe('left-behind')
+  await release(elsewhere(data), 'left-behind')
+  await time.advance(2000)
+  expect(last.get('mode')).toBe('primary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(last.get('leaseOwner'))
+})
+
+test('the spare session never takes a free lease; a prompt in it claims one', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], SPARE_ENV)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
+  // A new task typed in the agents view runs here: its prompt claims, and it plays from then.
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
+  expect(last.get('mode')).toBe('primary')
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('primary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe(last.get('leaseOwner'))
+})
+
+test('a spare not yet marked takes no free lease either', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on, [], SPARE_AT_LAUNCH_ENV)
+  session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await time.advance(30_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect(data.has(LEASE)).toBe(false)
+})
+
+test('a resumed conversation in a second terminal stays secondary until a prompt', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('prompt.submit', (_$, e) => ({ text: e.text }))
+  session(on)
+  // The first terminal still plays and is drawn; this one resumed the same conversation, so it
+  // keeps the same start time, and a lease that carried it would match.
+  on('session.usage', () => ({ value: { startedAt: 900_000 } as SessionUsage }))
+  data.set(LEASE, { owner: 'first-terminal', until: 9_999_999_999_999, startedAt: 900_000 })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  expect(last.get('mode')).toBe('secondary')
+  await time.advance(10_000)
+  expect(last.get('mode')).toBe('secondary')
+  expect((data.get(LEASE) as { owner: string }).owner).toBe('first-terminal')
+  await $.prompt.submit({ text: 'hi', wait: false, origin: { kind: 'composer' } })
+  await time.settle()
+  expect(last.get('mode')).toBe('primary')
+})
+
+test('a terminal that draws nowhere flushes, gives the lease up and stops renewing', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data, writes } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const drawn = session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  // ← unmounts the REPL: from here this process draws on no surface, and no hook says so.
+  drawn.surfaces = []
+  await time.advance(2000)
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(true)
+  expect(data.has(LEASE)).toBe(false)
+  expect(last.get('mode')).toBe('secondary')
+  // Free or not, the lease stays with the session the player went to.
+  await time.advance(30_000)
+  expect(data.has(LEASE)).toBe(false)
+  expect(last.get('mode')).toBe('secondary')
+})
+
+test('a process that still renews after its conversation left flushes nothing once claimed', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  const { data, writes } = store(on)
+  const last = states(on)
+  engineBottom(on)
+  on('tool.call', () => ({ result: 'ok', text: 'ok' }))
+  const drawn = session(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (let i = 0; i < 3; i++) await $.tool.call({ tool: 'Bash', command: 'ls' })
+  // The new process claimed (a prompt there) before this one's first check.
+  drawn.surfaces = []
+  data.set(LEASE, { owner: 'moved-on', until: 9_999_999_999_999 })
+  await time.advance(10_000)
+  expect(writes.some((w) => seqOf(w) === 1)).toBe(false)
+  expect((data.get(LEASE) as { owner: string }).owner).toBe('moved-on')
   expect(last.get('mode')).toBe('secondary')
 })
 
@@ -1045,6 +1225,48 @@ test('a server switch clears a pending link code', async ($, on) => {
   await ui.press({ key: 'row:link' })
   expect(await paneText(ui)).toMatch(/Enter [0-9A-Z]{8} at/)
   await $.command.run({ ...RUN, command: 'promptfall', args: `server ${URL_A}` })
+  expect((last.get('dialog') as { link: unknown }).link).toBeNull()
+  await ui.unmount()
+})
+
+test('a resize mid link flow keeps the device code, the poll and the open dialog', async ($, on) => {
+  const time = mock.clock(on, { now: 1_000_000 })
+  store(on)
+  const last = states(on)
+  engineBottom(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // The dialog docked at 140 columns, as `/promptfall account` opens it in the log.
+  const dock = { ...PANE.props, bodyColumns: 62, placement: 'dock' as const }
+  const band = (bodyColumns: number) => ({ ...IN_PLAY, props: { ...IN_PLAY.props, bodyColumns } })
+  let ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE, props: dock })
+  await ui.press({ key: 'tab-account' })
+  await ui.press({ key: 'row:link' })
+  // The Reset row's Yes/No: a command window open over the list, the cursor on its row.
+  await ui.press({ key: 'row:reset' })
+  const open = last.get('dialog') as { link: { code: string } | null; menu: unknown }
+  expect(open.link?.code).toMatch(/^[0-9A-Z]{8}$/)
+  expect(open.menu).toMatchObject({ kind: 'confirm', action: 'reset' })
+  // The log's resize: the pane and the band drawn again at each width, and no session event.
+  for (const [pane, columns] of [
+    [{ ...PANE.props, bodyColumns: 56 }, 60],
+    [dock, 72],
+    [{ ...PANE.props, bodyColumns: 96 }, 100],
+    [dock, 72],
+  ] as const) {
+    await ui.unmount()
+    const above = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(columns) })
+    await above.unmount()
+    ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE, props: pane })
+    // The Yes/No holds the window's state rows: it shows over the code, on the open tab.
+    expect(await paneText(ui)).toMatch(/▶Account[\s\S]*Reset this machine's data\?/)
+  }
+  expect(last.get('dialog')).toEqual(open)
+  expect(last.get('dialogTab')).toBe('account')
+  await ui.press({ key: 'no' })
+  expect(await paneText(ui)).toMatch(new RegExp(`Enter ${open.link?.code} at`))
+  // The poll carried on through it: the in-process ledger approves at its first, 5 s in.
+  await time.advance(5_000)
+  expect((last.get('view') as GameView).account.linked).toBe('player')
   expect((last.get('dialog') as { link: unknown }).link).toBeNull()
   await ui.unmount()
 })
@@ -1981,7 +2203,7 @@ test('with motion still, a held toast lands at the same show time', async ($, on
 
 /**
  * A state whose next tick spawns a Goblin Scout and kills it before any view holds it, dropping a
- * rare item: the stage never stood the monster up, so no chest holds the drop.
+ * rare item: the stage never stood the monster up, so its chest falls on the empty ground.
  */
 function spawnedAndKilled(): GameState {
   for (let seed = 1; seed < 5_000; seed++) {
@@ -2011,17 +2233,27 @@ function spawnedAndKilled(): GameState {
   throw new Error('no tick that spawns and kills a monster with a rare drop')
 }
 
-test('a drop toast whose item has no chest is raised at once', async ($, on) => {
+test('a drop whose monster the stage never drew falls on the ground, its toast at the reveal', async ($, on) => {
   const state = spawnedAndKilled()
-  const { time, raised, plays } = staging(on, { ...record(state), ...STAGED })
+  const { time, raised, plays, blits } = staging(on, { ...record(state), ...STAGED })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PARTY_BAND })
-  expect(revealsOf(state, time.now(), time.now() + 5_000)).toEqual([])
+  const [show] = revealsOf(state, time.now(), time.now() + 5_000)
+  if (!show) throw new Error('the tick drops no item with a chest')
   await time.advance(5_000)
   const kill = time.now()
-  const drops = raised.filter((t) => t.text.startsWith('Rare drop: '))
-  expect(drops.map((t) => t.at)).toEqual([kill])
-  expect(plays).toEqual([{ asset: 'cues/drop.wav', at: kill }])
+  // The chest falls on the front slot's ground as the tick arrives.
+  expect(show.at).toBe(kill + CHEST_SHOW_MS)
+  const drops = () => raised.filter((t) => t.text.startsWith('Rare drop: '))
+  expect(drops()).toEqual([])
+  expect(plays).toEqual([])
+  await time.advance(show.at - time.now() + 3 * EVENT_FRAME_MS)
+  const frame = firstFrameFrom(blits, show.at)
+  expect(drops()).toHaveLength(1)
+  const at = drops()[0]?.at ?? 0
+  expect(at).toBeGreaterThanOrEqual(show.at)
+  expect(at).toBeLessThanOrEqual(frame)
+  expect(plays).toEqual([{ asset: 'cues/drop.wav', at }])
   await ui.unmount()
 })
 
