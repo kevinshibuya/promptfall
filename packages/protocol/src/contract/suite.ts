@@ -2,8 +2,11 @@ import {
   baseTier,
   content,
   createInitialState,
+  dailyGoal,
   GAUGE_FULL,
   type GameState,
+  type GoalKind,
+  goalGold,
   type Hero,
   hashState,
   heroStats,
@@ -16,6 +19,7 @@ import {
 } from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { type Auth, type BatchAck, BUDGETS, type Delivery, type ServerClient } from '../client'
+import { dayOf, type Journal, nextMonday } from '../journal'
 import { type KeyValue, MemoryKeyValue } from '../kv'
 import type { MarketResult } from '../market'
 import { Mirror } from '../mirror'
@@ -59,6 +63,11 @@ export type ContractHost = {
    * log kept. The migration rules skip a host without it.
    */
   rewind?(accountId: string, v: number): Promise<void>
+  /**
+   * Test hosts only: rewrites the account's stored state, effective and committed, through `fn`.
+   * The journal rules skip a host without it.
+   */
+  patch?(accountId: string, fn: (state: GameState) => GameState): Promise<void>
 }
 
 export type ContractMake = (
@@ -261,6 +270,34 @@ async function infoOf(client: ServerClient, auth: Auth) {
   if ('reason' in info) throw new Error('unauthorized')
   return info
 }
+
+async function journalOf(client: ServerClient, auth: Auth): Promise<Journal> {
+  const j = await client.journal(auth)
+  if ('reason' in j) throw new Error(j.reason)
+  return j
+}
+
+/** Raises the count a goal of this kind reads by `n`, as play would. */
+function raise(kind: GoalKind, n: number): (s: GameState) => GameState {
+  return (s) => {
+    const t = s.tallies
+    switch (kind) {
+      case 'kills':
+        return { ...s, stats: { ...s.stats, kills: s.stats.kills + n } }
+      case 'zone_bosses':
+        return { ...s, tallies: { ...t, zoneBosses: t.zoneBosses + n } }
+      case 'rare_drops':
+        return { ...s, tallies: { ...t, drops: { ...t.drops, rare: t.drops.rare + n } } }
+      case 'turn_boss':
+        return { ...s, tallies: { ...t, turnBosses: t.turnBosses + n } }
+    }
+  }
+}
+
+const creditReasons = (d: Delivery, prefix: string) =>
+  eventsOf(d, 'credited')
+    .map((e) => e.reason)
+    .filter((r) => r.startsWith(prefix))
 
 function lowerThan(version: string): string | null {
   return compareSemver(version, '0.0.0') > 0 ? '0.0.0' : null
@@ -526,6 +563,8 @@ export function runServerContract(name: string, make: ContractMake): void {
         const ack = await client.submit(mirror.batch(events), mirror.auth())
         expect({ batch: i, ok: ack.ok }).toEqual({ batch: i, ok: true })
         mirror.commit(events)
+        // An hour of play crosses the first kills step: the client applies what the ledger pays.
+        if (ack.ok) mirror.receive(ack.delivery)
       }
     }, 60_000)
 
@@ -1705,6 +1744,151 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(refusals).toHaveLength(1)
       expect(refusals[0]).toContain(`v${SIM_VERSION - 1}`)
       expect(refusals[0]).toContain('gap')
+    })
+
+    it('rule 46: the journal read answers the record under the token, and is refused without one', async () => {
+      const { client, clock, boot, mirror } = await setup()
+      expect(await client.journal({ deviceToken: 'nobody' })).toEqual({ reason: 'unauthorized' })
+      const day = dayOf(await clock.now())
+      expect(await journalOf(client, mirror.auth())).toEqual({
+        achievements: [],
+        day: {
+          index: day,
+          goal: dailyGoal(day, boot.account.accountId, 1),
+          progress: 0,
+          met: false,
+          resetsAt: (day + 1) * DAY,
+        },
+        goalsMet: 0,
+        streak: { length: 0, lastMet: null },
+        restDays: { current: [6, 7], next: null },
+      })
+    })
+
+    it('rule 47: rest days are two distinct weekdays from next Monday; the read says both sets', async () => {
+      const { client, clock, mirror } = await setup()
+      expect(await client.setRestDays({ deviceToken: 'nobody' }, [1, 2])).toEqual({
+        ok: false,
+        reason: 'unauthorized',
+      })
+      const refused = [
+        [[6], 'rest_days_count'],
+        [[1, 2, 3], 'rest_days_count'],
+        [[4, 4], 'rest_days_same'],
+        [[0, 3], 'rest_days_range'],
+        [[3, 8], 'rest_days_range'],
+      ] as const
+      for (const [days, reason] of refused) {
+        expect(await client.setRestDays(mirror.auth(), [...days])).toEqual({ ok: false, reason })
+      }
+      const day = dayOf(await clock.now())
+      const monday = nextMonday(day)
+      const written = await client.setRestDays(mirror.auth(), [3, 1])
+      const both = { current: [6, 7], next: { days: [1, 3], from: monday } }
+      expect(written).toMatchObject({ ok: true, journal: { restDays: both } })
+      expect((await journalOf(client, mirror.auth())).restDays).toEqual(both)
+      clock.advance((monday - day) * DAY)
+      expect((await journalOf(client, mirror.auth())).restDays).toEqual({
+        current: [1, 3],
+        next: null,
+      })
+    })
+
+    it('rule 48: the commit whose kills cross a thousand pays achievement kills step 2 once', async (ctx) => {
+      const { client, clock, trader } = await market(ctx)
+      const a = await trader('Ann', traderState(48, { stats: { kills: 999, bosses: 0, wipes: 0 } }))
+      const paid: string[][] = []
+      for (let i = 0; i < 40 && a.mirror.committed.stats.kills < 1000; i++) {
+        clock.advance(2000)
+        const { ack } = await commitTicks(client, a, 1)
+        if (ack.ok) paid.push(creditReasons(ack.delivery, 'achievement:kills:'))
+      }
+      expect(a.mirror.committed.stats.kills).toBeGreaterThanOrEqual(1000)
+      // Step 1 at the first commit, a veteran's; step 2 at the crossing one, and the last.
+      expect(paid[0]).toContain('achievement:kills:1')
+      expect(paid.flat().filter((r) => r === 'achievement:kills:2')).toHaveLength(1)
+      expect(paid.at(-1)).toContain('achievement:kills:2')
+      const { ack } = await commitTicks(client, a, 1)
+      if (ack.ok) expect(creditReasons(ack.delivery, 'achievement:')).toEqual([])
+      const kills = (await journalOf(client, a.auth)).achievements.find((x) => x.id === 'kills')
+      expect(kills?.steps.map((s) => s.step)).toEqual([1, 2])
+    })
+
+    /** A trader whose goal the host can meet: `meet` opens the day if needed and meets it. */
+    const goalTrader = async (ctx: { skip: () => void }, seed: number) => {
+      const m = await market(ctx)
+      const patch = m.host.patch
+      if (!patch) {
+        ctx.skip()
+        throw new Error('skipped')
+      }
+      const a = await m.trader('Ann', traderState(seed))
+      let t: Trader = a
+      const reboot = async () => {
+        const boot = await booted(m.client, {
+          clientVersion: '0.1.0',
+          deviceToken: a.auth.deviceToken,
+        })
+        t = { ...a, mirror: new Mirror(boot) }
+      }
+      return {
+        ...m,
+        auth: a.auth,
+        commit: async () => (await commitTicks(m.client, t, 1)).ack,
+        async meet() {
+          await reboot()
+          await commitTicks(m.client, t, 1)
+          const { goal } = (await journalOf(m.client, a.auth)).day
+          await patch(a.accountId, raise(goal.kind, goal.target))
+          await reboot()
+          return (await commitTicks(m.client, t, 1)).ack
+        },
+      }
+    }
+
+    it("rule 49: the commit that meets the day's goal pays once, and the streak grows on the next work day", async (ctx) => {
+      const g = await goalTrader(ctx, 49)
+      const day = dayOf(await g.clock.now())
+      const met = await g.meet()
+      if (!met.ok) throw new Error('expected a commit')
+      expect(
+        eventsOf(met.delivery, 'credited').filter((e) => e.reason.startsWith('goal:')),
+      ).toEqual([{ t: 'credited', gold: goalGold(1), reason: `goal:${day}` }])
+      const again = await g.commit()
+      if (again.ok) expect(creditReasons(again.delivery, 'goal:')).toEqual([])
+      const j = await journalOf(g.client, g.auth)
+      expect(j.day).toMatchObject({ index: day, met: true })
+      expect(j.goalsMet).toBe(1)
+      expect(j.streak).toEqual({ length: 1, lastMet: day })
+      // The suite's clock starts on a Tuesday: Wednesday is the next work day.
+      g.clock.advance(DAY)
+      await g.meet()
+      expect((await journalOf(g.client, g.auth)).streak).toEqual({ length: 2, lastMet: day + 1 })
+      // Thursday goes unmet: on Friday the read answers zero.
+      g.clock.advance(2 * DAY)
+      expect((await journalOf(g.client, g.auth)).streak.length).toBe(0)
+      await g.meet()
+      expect((await journalOf(g.client, g.auth)).streak).toEqual({ length: 1, lastMet: day + 3 })
+    })
+
+    it('rule 50: a rest day between two met work days neither grows nor breaks the streak', async (ctx) => {
+      const g = await goalTrader(ctx, 50)
+      const tuesday = dayOf(await g.clock.now())
+      // Friday met, Saturday met on a rest day, Sunday not, Monday met.
+      g.clock.advance(3 * DAY)
+      await g.meet()
+      g.clock.advance(DAY)
+      const saturday = await g.meet()
+      if (saturday.ok) expect(creditReasons(saturday.delivery, 'goal:')).toHaveLength(1)
+      expect((await journalOf(g.client, g.auth)).streak).toEqual({
+        length: 1,
+        lastMet: tuesday + 3,
+      })
+      g.clock.advance(2 * DAY)
+      await g.meet()
+      const j = await journalOf(g.client, g.auth)
+      expect(j.streak).toEqual({ length: 2, lastMet: tuesday + 6 })
+      expect(j.goalsMet).toBe(3)
     })
   })
 }

@@ -186,3 +186,42 @@ The tavern's odds, and its guarantee: a recruit of the rarity or better within t
 | rare | 40 | 9.5% | 20 |
 | epic | 45 | 2% | 80 |
 | legendary | 50 | 0.5% | 400 |
+
+## Achievements
+
+Paid by the ledger once per step, with reason `achievement:<id>:<step>`; steps count from 1.
+
+| Id | Name | Reads | Steps |
+| --- | --- | --- | --- |
+| `kills` | Kills | kills | 100 (100 gold), 1,000 (400 gold), 10,000 (1,500 gold), 100,000 (5,000 gold) |
+| `zone_bosses` | Zone bosses | zone_bosses | 10 (100 gold), 50 (400 gold), 200 (1,500 gold), 1,000 (5,000 gold) |
+| `turn_bosses` | Turn bosses | turn_bosses | 10 (100 gold), 100 (400 gold), 1,000 (1,500 gold) |
+| `rare_drops` | Rare finds | rare_drops | 10 (100 gold), 100 (400 gold), 1,000 (1,500 gold) |
+| `legendary_drops` | Legendary finds | legendary_drops | 1 (100 gold), 10 (400 gold), 50 (1,500 gold) |
+| `recruits` | Recruits | recruits | 5 (100 gold), 25 (400 gold), 100 (1,500 gold) |
+| `reforges` | Reforges | reforges | 10 (100 gold), 100 (400 gold) |
+| `gold_earned` | Gold earned | gold_earned | 10,000 (100 gold), 100,000 (400 gold), 1,000,000 (1,500 gold) |
+| `goals_met` | Daily goals | goals_met | 10 (100 gold), 50 (400 gold), 200 (1,500 gold) |
+| `streak` | Streak | streak | 5 (100 gold), 20 (400 gold), 60 (1,500 gold), 250 (5,000 gold) |
+| `zones_complete` | Bestiary | zones_complete | 1 (100 gold), 4 (400 gold), 8 (1,500 gold), 12 (5,000 gold) |
+| `bases_complete` | Collection | bases_complete | 1 (100 gold), 10 (400 gold), 35 (1,500 gold) |
+| `first_epic` | a first Epic | epic_held | 1 (500 gold) |
+| `first_legendary` | a first Legendary | legendary_held | 1 (500 gold) |
+| `zone_6` | zone 6 reached | highest_zone | 6 (500 gold) |
+| `zone_12` | zone 12 cleared | highest_zone | 13 (500 gold) |
+| `tier_2` | tier 2 reached | tier | 2 (500 gold) |
+| `tier_3` | tier 3 reached | tier | 3 (500 gold) |
+| `clean_boss` | a zone boss beaten with no wipe | clean_zone_bosses | 1 (500 gold) |
+| `all_capped` | all four classes at their cap | classes_capped | 4 (500 gold) |
+
+## Daily goals
+
+One row a day per account, its target `base + step × ⌊(zone − 1) / every⌋` at the day's first
+commit. Met, it pays the zone's wave gold midpoint × 300 with reason `goal:<day>`.
+
+| Kind | Base | Step | Every (zones) |
+| --- | --- | --- | --- |
+| kills | 150 | 10 | 1 |
+| zone_bosses | 2 | 1 | 12 |
+| rare_drops | 3 | 1 | 6 |
+| turn_boss | 1 | 0 | 1 |
