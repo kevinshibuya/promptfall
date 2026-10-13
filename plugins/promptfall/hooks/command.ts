@@ -231,7 +231,8 @@ export function registerCommand(
         after,
       )
     }
-    if (running && tab === 'journal') {
+    // The Account tab's rest days are the journal's.
+    if (running && (tab === 'journal' || tab === 'account')) {
       await loadJournal(
         running,
         async (fn) => {

@@ -1,6 +1,7 @@
 import type { GameView } from '../types'
 import type { Cue } from './cues'
-import type { Effect, Goods, Rarity } from './vendor/sim.js'
+import { formatCount } from './ui/format'
+import { content, type Effect, type Goods, type Rarity } from './vendor/sim.js'
 import { heroName, tradeName } from './view'
 import { zoneWords } from './zone-words'
 
@@ -22,6 +23,8 @@ export type ToastRow =
   | 'rare_drop'
   | 'vendored'
   | 'level_up'
+  | 'achievement'
+  | 'goal_met'
   | 'sold'
   | 'bought'
   | 'returned'
@@ -118,6 +121,24 @@ function foldLevels(inputs: EffectInput[]): string {
     .map((h, i) => (i === 0 ? `${h.name} reached level ${h.level}` : `${h.name} level ${h.level}`))
     .join(', ')
 }
+
+/**
+ * A credit's achievement step, from its reason `achievement:<id>:<step>`, or null: a reason the
+ * table does not name, a goal's, a stipend's.
+ */
+function achievementStep(effect: Effect): { words: string; gold: number } | null {
+  if (effect.k !== 'gold' || !effect.reason?.startsWith('achievement:')) return null
+  const [, id, step] = effect.reason.split(':')
+  const words = content.achievements.find((a) => a.id === id)?.steps[Number(step) - 1]?.words
+  return words === undefined ? null : { words, gold: effect.amount }
+}
+
+/** A credit for the day's goal, from its reason `goal:<day>`. */
+const goalCredit = (effect: Effect): effect is Extract<Effect, { k: 'gold' }> =>
+  effect.k === 'gold' && effect.reason?.startsWith('goal:') === true
+
+const creditSum = (inputs: EffectInput[]) =>
+  inputs.reduce((sum, { effect }) => sum + (effect.k === 'gold' ? effect.amount : 0), 0)
 
 /** Reward goods by name: an item by its base, a hero by its full name with the epithet. */
 function goodsName(goods: Goods): string {
@@ -238,6 +259,24 @@ const TABLE = {
         : null,
     fold: foldLevels,
   },
+  achievement: {
+    purpose: 'rare good news',
+    tier: 'short',
+    cue: 'goal',
+    single: ({ effect }: EffectInput) => {
+      const step = achievementStep(effect)
+      return step ? `Achievement: ${step.words}, ${formatCount(step.gold)} gold` : null
+    },
+    fold: (inputs: EffectInput[]) =>
+      `${inputs.length} achievements, ${formatCount(creditSum(inputs))} gold`,
+  },
+  goal_met: {
+    purpose: 'rare good news',
+    tier: 'short',
+    cue: 'goal',
+    single: ({ effect }: EffectInput) =>
+      goalCredit(effect) ? `Daily goal met: ${formatCount(effect.amount)} gold` : null,
+  },
   sold: {
     purpose: 'money moved',
     tier: 'short',
@@ -287,6 +326,8 @@ const EFFECT_ROWS = [
   'rare_drop',
   'vendored',
   'level_up',
+  'achievement',
+  'goal_met',
   'sold',
   'bought',
   'returned',

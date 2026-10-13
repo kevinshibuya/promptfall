@@ -934,6 +934,26 @@ for (const surface of SURFACES) {
   })
 }
 
+test('Account loads the journal for its rest days; the pick sends the pair, which applies from Monday', async ($, on) => {
+  const { states } = harness(on, seeded())
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-account' })
+  expect(await paneText(ui)).toMatch(/Rest days:? +Sat, Sun/)
+  await ui.press({ key: 'row:restdays' })
+  expect(await paneText(ui)).toMatch(/Pick two rest days/)
+  await ui.press({ key: 'menu:1' })
+  await ui.press({ key: 'menu:3' })
+  expect((states.get('dialog') as { menu: unknown }).menu).toBeNull()
+  const journal = states.get('journal') as {
+    journal: { restDays: { current: number[]; next: { days: number[] } | null } }
+  }
+  expect(journal.journal.restDays.current).toEqual([6, 7])
+  expect(journal.journal.restDays.next?.days).toEqual([2, 4])
+  expect(await paneText(ui)).toMatch(/Rest days:? +Sat, Sun \(Tue, Thu from Monday\)/)
+  await ui.unmount()
+})
+
 test('an Account press merges into the stored settings, not an older copy in this session', async ($, on) => {
   const { data } = harness(on, seeded())
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1035,14 +1055,15 @@ test('a refused link start and an ended link say why in a toast and leave the ac
   await ui.unmount()
 })
 
-test('the Odds tab draws the table, and the inventory row buys the expansion', async ($, on) => {
+test('the Odds tab draws the table and the guarantees, and the inventory row buys the expansion', async ($, on) => {
   const { states } = harness(on, { ...seeded(), gold: 2000 })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
   await ui.press({ key: 'tab-odds' })
   const text = await paneText(ui)
   expect(text).toMatch(/Rarity +Zone +Boss +Tavern/)
-  expect(text).toMatch(/Inventory \+10 slots/)
+  expect(text).toMatch(/Rare guaranteed in 20 recruits/)
+  // The expansions sit on the list's second page here; their stops are mounted all the same.
   const cap = (states.get('view') as GameView).inventoryCap
   await ui.press({ key: 'row:expand-inventory' })
   expect((states.get('view') as GameView).inventoryCap).toBe(cap + 10)
