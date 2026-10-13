@@ -6,6 +6,7 @@ export type DialogTab =
   | 'orders'
   | 'account'
   | 'odds'
+  | 'journal'
   | 'chat'
   | 'leaderboards'
 export type Mode = 'primary' | 'secondary' | 'paused' | 'off'
@@ -227,6 +228,9 @@ export type PaneMenu =
     }
   | { kind: 'filter'; at: number } // the Market filter window
   | { kind: 'pick'; field: PickField; at: number }
+  | { kind: 'journal_zone'; zone: number; at: number } // a base zone's bestiary page
+  | { kind: 'journal_collection'; at: number }
+  | { kind: 'journal_achievements'; at: number }
 /** The ▶ row of a list: the id it was on, and its index then (for when the id is gone). */
 export type PaneCursor = { id: string; index: number }
 export type DialogState = {
@@ -286,6 +290,23 @@ export type Boards = { highestZone: BoardRow[]; damage: BoardRow[]; weekStart: n
 export type ChatState = { draft: string; busy: boolean; error: string | null }
 export type BoardsState = { boards: Boards | null; busy: boolean; error: string | null }
 
+/** What a daily goal counts, structurally the sim's `DailyGoal`. */
+export type DailyGoalView = {
+  kind: 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss'
+  target: number
+}
+/** The journal read, structurally the protocol's `Journal`: never sim state. */
+export type JournalView = {
+  /** Each achievement with a step crossed: its crossed steps, numbered from 1, with the server time of each. */
+  achievements: { id: string; steps: { step: number; at: number }[] }[]
+  day: { index: number; goal: DailyGoalView; progress: number; met: boolean; resetsAt: number }
+  goalsMet: number
+  streak: { length: number; lastMet: number | null }
+  /** ISO weekdays, 1 Monday to 7 Sunday. */
+  restDays: { current: number[]; next: { days: number[]; from: number } | null }
+}
+export type JournalState = { journal: JournalView | null; busy: boolean; error: string | null }
+
 /** The world poll's result, published by the session's poller. */
 export type WorldState = {
   snapshot: WorldSnapshot | null
@@ -341,6 +362,7 @@ declare module 'claude-code' {
       world: WorldState
       chat: ChatState
       boards: BoardsState
+      journal: JournalState
       /** The store's settings, mirrored for the drawings. */
       settings: PromptfallSettings
       /** Per session, owned by ui/band.tsx. */
