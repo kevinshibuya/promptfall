@@ -98,7 +98,7 @@ compaction makes the party camp: a campfire burns between the party and the enem
 seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
 "The party makes camp while Claude gathers its thoughts." While Claude Code shows a permission
 prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
-raises a small shield on the stages that draw the streaks, and the heroes take half damage and
+standing raises a small shield on the stages that draw the streaks, and the heroes take half damage and
 attack nobody while the enemies fight on. The log says "The party stands guard." The party lowers
 its guard when the call resolves, allowed or denied, or after two minutes of battle with no answer.
 Guard comes from Claude Code's permission-request hook, which fires only as a permission prompt

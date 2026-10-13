@@ -9,8 +9,11 @@ export const PACE_MS = {
   turn_start: 60_000,
   tool_mishap: 5_000,
   camp: 60_000,
-  /** One guard pair: an on admitted starts the wait, its off follows whenever the call resolves. */
-  guard: 2_000,
+  /**
+   * One guard pair: an on admitted starts the wait, its off follows whenever the call resolves. A
+   * pair is two events, so one per 4 seconds meets the bucket's one per 2 and never drains it.
+   */
+  guard: 4_000,
 } as const
 
 type Paced = keyof typeof PACE_MS

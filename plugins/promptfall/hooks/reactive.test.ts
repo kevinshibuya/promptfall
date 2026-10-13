@@ -10,7 +10,10 @@ const T0 = 1_000_000
 /** A player event as a batch the server accepted carried it. */
 type Sent = { t: string; at: number; hint?: string; on?: boolean }
 
-/** A clock in memory that moves when the test moves it, recording each `every` period's interval. */
+/**
+ * A clock in memory that records each `every` period's interval. It answers each timer's first
+ * period only, so a test on it sees the cadence the plugin asks for, not ticks or timed flushes.
+ */
 function clock(on: On) {
   let t = T0
   const waits: { due: number; resolve: () => void }[] = []
@@ -52,11 +55,13 @@ function clock(on: On) {
 
 /**
  * A session on the vendored ledger behind a mocked `$.http.fetch`, recording every player event a
- * batch it accepted carried, and each `$.clock.every` period the plugin asked for. `seed` is
- * stored before the session starts.
+ * batch it accepted carried and the reason of each it refused. `seed` is stored before the session
+ * starts. With `cadence`, the clock records the periods the plugin asks for instead of running its
+ * timers.
  */
-function playing(on: On, seed: Record<string, unknown> = {}) {
-  const time = clock(on)
+function playing(on: On, seed: Record<string, unknown> = {}, cadence = false) {
+  const recording = cadence ? clock(on) : null
+  const time = recording ?? mock.clock(on, { now: T0 })
   const data = new Map<string, unknown>(Object.entries({ 'promptfall:server': URL, ...seed }))
   on('store.get', (_$, e) => ({ value: data.get(e.key) }))
   on('store.set', (_$, e) => {
@@ -110,6 +115,7 @@ function playing(on: On, seed: Record<string, unknown> = {}) {
     linkApprover: approveAs('remote-player'),
   })
   const sent: Sent[] = []
+  const refused: string[] = []
   on('http.fetch', async (_$, e) => {
     const path = (e.url.split('?')[0] ?? '').replace(/^https?:\/\/[^/]+/, '')
     const auth = { deviceToken: (e.init?.headers?.authorization ?? '').replace(/^Bearer /, '') }
@@ -119,13 +125,14 @@ function playing(on: On, seed: Record<string, unknown> = {}) {
     else if (path === '/v1/batches') {
       const ack = await ledger.submit(body, auth)
       if (ack.ok) sent.push(...(body.events as Sent[]))
+      else refused.push(ack.reason)
       result = ack
     } else if (path === '/v1/world') result = await ledger.world(auth, 0)
     else if (path === '/v1/account') result = await ledger.account(auth)
     else return { value: { status: 404, ok: false, headers: {}, text: '{"error":"route"}' } }
     return { value: { status: 200, ok: true, headers: {}, text: JSON.stringify(result) } }
   })
-  return { time, periods: time.periods, sent, prompt }
+  return { time, periods: recording?.periods ?? [], sent, refused, prompt }
 }
 
 /** What the session sent of the reactive kinds, a guard named by its side. */
@@ -321,7 +328,7 @@ test('a second request while the guard is up sends nothing', async ($, on) => {
   expect(reactive(sent)).toEqual(['guard on', 'guard off'])
 })
 
-test('guard pairs keep to one per 2 seconds; an auto-allowed call stands no guard', async ($, on) => {
+test('guard pairs keep to one per 4 seconds; an auto-allowed call stands no guard', async ($, on) => {
   const { sent, time } = playing(on)
   let ask = true
   on('tool.call', async (_$, e) => {
@@ -330,14 +337,31 @@ test('guard pairs keep to one per 2 seconds; an auto-allowed call stands no guar
   })
   await start($)
   await $.tool.call({ tool: 'Bash', command: 'make' })
-  await time.advance(500)
+  await time.advance(3_500)
   await $.tool.call({ tool: 'Bash', command: 'make' })
-  await time.advance(2_000)
+  await time.advance(500)
   await $.tool.call({ tool: 'Bash', command: 'make' })
   ask = false
   await $.tool.call({ tool: 'Read', file_path: '/repo/a.ts' })
   await quit($)
   expect(reactive(sent)).toEqual(['guard on', 'guard off', 'guard on', 'guard off'])
+})
+
+test('a prompt answered every 2 seconds for 4 minutes never meets the guard bucket', async ($, on) => {
+  const { sent, refused, time } = playing(on)
+  on('tool.call', async (_$, e) => {
+    await $.classic.PermissionRequest({ tool_name: e.tool, tool_input: {} })
+    return answered()
+  })
+  await start($)
+  for (let i = 0; i < 120; i++) {
+    await $.tool.call({ tool: 'Bash', command: 'make' })
+    await time.advance(2_000)
+  }
+  await quit($)
+  // A cursor behind is the server handing the world boss over, answered by a resend: not a cap.
+  expect(refused).not.toContain('rate_capped')
+  expect(reactive(sent)).toHaveLength(120)
 })
 
 test('a turn hastes the party: its start and its main-loop steps, not a subagent step', async ($, on) => {
@@ -365,7 +389,7 @@ test('a turn of 200 steps refreshes haste at most once a minute', async ($, on) 
 })
 
 test('a subagent step leaves the turn cadence alone', async ($, on) => {
-  const { periods } = playing(on)
+  const { periods } = playing(on, {}, true)
   await start($)
   await $.turn.start({ text: 'go', turnId: 't1' })
   const atStart = periods.length
@@ -377,7 +401,7 @@ test(
   'an aborted main turn ends it: turn_end and the idle cadence',
   { plugins: [ABORTER] },
   async ($, on) => {
-    const { sent, periods } = playing(on)
+    const { sent, periods } = playing(on, {}, true)
     await start($)
     await $.turn.start({ text: 'go', turnId: 't1' })
     const atStart = periods.length

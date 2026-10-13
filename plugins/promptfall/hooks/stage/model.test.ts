@@ -692,6 +692,16 @@ const guarding = (on = true): GameView => {
   return v
 }
 
+test('with the front hero fallen, the first hero standing wears the shield', () => {
+  const v = guarding()
+  const h1 = v.heroes.find((h) => h.id === 'h1')
+  if (h1) Object.assign(h1, { hp: 0, alive: false })
+  const hi = at(v, [], NOW, BOX, HI)
+  expect(actor(hi.actors, 'h1').shield ?? null).toBe(null)
+  expect(actor(hi.actors, 'h2').shield).not.toBe(null)
+  expect(actor(hi.actors, 'h3').shield ?? null).toBe(null)
+})
+
 test('hasted heroes trail a streak in their class colour behind them at 1.5, and bob twice as fast', () => {
   const m = at(hasted(), [], NOW, BOX, HI)
   for (const key of ['h1', 'h2', 'h3']) {

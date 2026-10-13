@@ -153,7 +153,7 @@ export type BudgetKind =
 /**
  * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
  * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
- * a guard one per 2 seconds with room for every prompt's on and off.
+ * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
  */
 export const BUDGETS: Record<BudgetKind, { refillMs: number; capacity: number }> = {
   tick: { refillMs: 2000, capacity: 70 },
