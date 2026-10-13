@@ -157,7 +157,7 @@ test('a short pane draws no tab window but keeps the tab stops for their hotkeys
   const b = listPane(paneInput({ rows: 14 }), spec({ rows: [row('a')] }))
   expect(win(b, 'tab')).toBeUndefined()
   expect(win(b, 'list')?.y).toBe(0)
-  expect(b.stops.filter((s) => s.key.startsWith('tab-')).length).toBe(8)
+  expect(b.stops.filter((s) => s.key.startsWith('tab-')).length).toBe(9)
   for (const w of b.scene.windows)
     expect(tilePositions(b.scene).get(w.key)).toEqual({ x: w.x, y: w.y ?? 0 })
 })
