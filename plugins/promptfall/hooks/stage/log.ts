@@ -1,17 +1,17 @@
 // The combat log the message window types out (grill 1.8, 1.13, 1.16): one line per action, then
 // what it caused, in Dragon Quest's words. Lines start no earlier than their action on the stage,
 // queue behind each other, and hit lines are dropped only when the queue falls a tick behind. A
-// drop's line waits for its reveal, and a zone arrival's for the backdrop change: held aside until
-// its show time, then takes its place in the queue at that time. The log is also the holder for
-// held toasts: a toast with a wait is kept here until its show time and handed out once, by
-// `release`.
+// drop's line waits for its reveal, and a zone arrival's and a travel's for the backdrop change:
+// held aside until its show time, then takes its place in the queue at that time. The log is also
+// the holder for held toasts: a toast with a wait is kept here until its show time and handed out
+// once, by `release`.
 import type { GameView, Settings } from '../../types'
 import { heroNameById, type Toast, type ToastWait } from '../toasts'
 import type { Effect, Rarity } from '../vendor/sim.js'
 import { tradeName } from '../view'
 import { CHAR_FAST_MS, CHAR_MS, LINE_MIN_MS, LOG_KEEP } from '../windows/tuning'
 import { zoneHead, zonePhrase, zoneWords } from '../zone-words'
-import { groups, type StageTimeline } from './timeline'
+import { groups, type StageEffect, type StageTimeline } from './timeline'
 import { RARITY_RGB } from './tuning'
 
 export type LogLine = {
@@ -29,13 +29,16 @@ type Known = { name: string; kind: string; hp?: number }
 
 type Said = { text: string; key: boolean; rgb?: number }
 
+/** What a held line or toast waits for: a toast's wait, or a travel's backdrop change. */
+type Wait = ToastWait | { travel: number }
+
 /**
  * A held line or toast: what it waits for, and `showAt`, the show time the timeline last answered
  * for it. A chest the timeline no longer holds leaves its entry due then.
  */
-type Waiting = { wait: ToastWait; showAt: number }
+type Waiting = { wait: Wait; showAt: number }
 
-/** A drop or vendored line waiting for its item's reveal, or an arrival's for its zone's. */
+/** A drop or vendored line waiting for its item's reveal, an arrival's or a travel's for its zone's. */
 type Held = Waiting & { line: Said; cadenceMs: number }
 
 /** A toast waiting for its show time, raised when `release` hands it out. */
@@ -72,7 +75,7 @@ export class MessageLog {
 
   /** Every applied batch, after timeline.onEffects; `starts` is its answer. */
   onEffects(
-    effects: readonly Effect[],
+    effects: readonly StageEffect[],
     starts: readonly number[],
     view: GameView,
     now: number,
@@ -150,7 +153,7 @@ export class MessageLog {
     if (this.lines.length > LOG_KEEP) this.lines = this.lines.slice(-LOG_KEEP)
   }
 
-  private consequence(e: Effect, view: GameView, name: (id: string) => string): Said | null {
+  private consequence(e: StageEffect, view: GameView, name: (id: string) => string): Said | null {
     switch (e.k) {
       case 'drop':
         return {
@@ -186,6 +189,8 @@ export class MessageLog {
         return { text: 'The party fell.', key: true }
       case 'retreat':
         return { text: `The party retreats to ${zonePhrase(e.zone)}.`, key: true }
+      case 'traveled':
+        return { text: `The party travels to ${zoneWords(e.to)}.`, key: true }
       case 'traded': {
         const t = e.entry
         // Grill 1.16's table has the sale only; purchases and returns print nothing.
@@ -258,16 +263,21 @@ export class MessageLog {
     return at
   }
 
-  /** What `e`'s line waits for: a drop's item, an advance's zone cleared; a farming clear none. */
-  private waitOf(e: Effect): ToastWait | null {
+  /**
+   * What `e`'s line waits for: a drop's item, an advance's zone cleared, a travel's destination;
+   * a farming clear none.
+   */
+  private waitOf(e: StageEffect): Wait | null {
     if (e.k === 'drop' || e.k === 'drop_vendored') return { item: e.item.id }
+    if (e.k === 'traveled') return { travel: e.to }
     return e.k === 'zone_cleared' && e.advancedTo > e.zone ? { zone: e.zone } : null
   }
 
   /** The show time the timeline answers for `wait`; null when it has none. */
-  private showOf(wait: ToastWait): number | null {
+  private showOf(wait: Wait): number | null {
     const t = this.timeline
     if (t === null) return null
+    if ('travel' in wait) return t.travelShowAt(wait.travel)
     return 'item' in wait ? t.showAt(wait.item) : t.zoneShowAt(wait.zone)
   }
 

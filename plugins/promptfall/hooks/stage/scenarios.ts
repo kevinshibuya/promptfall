@@ -58,6 +58,8 @@ import {
   STAGE_MAX_COLUMNS,
   STAGE_ROWS,
   STEP_OUT_MS,
+  TRAVEL_OFF_MS,
+  VICTORY_MS,
   WINDUP_HOLD_MS,
 } from './tuning'
 
@@ -85,6 +87,9 @@ export const SCENARIOS = [
   'enrage',
   'camp',
   'guard',
+  'travel',
+  'level-up',
+  'victory',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -264,6 +269,44 @@ export function stage(name: Scenario): Staged {
       const v = party({ guarding: true })
       t.observe(v, NOW)
       return staged(v, t, FULL)
+    }
+    // The stage moments (spec #132). A travel from zone 1 to 3 halfway through the party's step
+    // off: the heroes stepped right and half faded, the encounter it left standing on zone 1's
+    // backdrop until it changes.
+    case 'travel': {
+      t.observe(wave(), NOW - 1000)
+      t.onEffects([{ k: 'traveled', from: 1, to: 3 }], NOW - TRAVEL_OFF_MS / 2)
+      const next = { ...empty(), zone: 3, zoneName: 'Marsh of Sighs', wave: 1 }
+      t.observe(next, NOW)
+      return staged(next, t, FULL)
+    }
+    // A level-up 40 ms ago: the knight mid gold flash, its deltas rising in gold.
+    case 'level-up': {
+      t.observe(wave(), NOW - 1000)
+      t.onEffects(
+        [{ k: 'level_up', heroId: 'h1', level: 6, deltas: { hp: 9, atk: 2, def: 2, spd: 0 } }],
+        NOW - 40,
+      )
+      t.observe(wave(), NOW)
+      return staged(wave(), t, FULL)
+    }
+    // The bandit captain fell and dissolved; at NOW the party holds its victory pose, a quarter
+    // into the hold, over zone 1's backdrop.
+    case 'victory': {
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + VICTORY_MS / 4)
+      t.observe(boss(), t1 - 1000)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+          { k: 'hit', by: 'h1', target: 'e9', amount: 500 },
+          { k: 'zone_cleared', zone: 1, advancedTo: 2 },
+        ],
+        t1,
+      )
+      const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+      t.observe(next, t1 + 10)
+      t.observe(next, NOW)
+      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
     }
     case 'boss': {
       // The boss spawned half a spawn ago.

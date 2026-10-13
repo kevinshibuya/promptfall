@@ -20,6 +20,7 @@ import {
   type StageModel,
   stageAt,
   stepOffset,
+  travelAt,
   variant,
 } from './model'
 import { svgFrame } from './playfield'
@@ -37,6 +38,7 @@ import {
   HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
+  LEVEL_RGB,
   LUNGE_PX,
   NUMBER_RISE_PX,
   REVEAL_FADE_MS,
@@ -45,26 +47,34 @@ import {
   STEP_PX,
   SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
+  TRAVEL_PX,
 } from './tuning'
 
-type PoseMotion = Extract<Motion, { kind: 'windup' | 'strike' | 'follow' | 'hit' }>
+type PoseMotion = Extract<Motion, { kind: 'windup' | 'strike' | 'follow' | 'hit' | 'victory' }>
 const POSE_RANK: Readonly<Record<PoseMotion['kind'], number>> = {
   hit: 4,
   follow: 3,
   strike: 2,
   windup: 1,
+  victory: 0,
 }
 const isPoseMotion = (m: Motion): m is PoseMotion =>
-  m.kind === 'windup' || m.kind === 'strike' || m.kind === 'follow' || m.kind === 'hit'
+  m.kind === 'windup' ||
+  m.kind === 'strike' ||
+  m.kind === 'follow' ||
+  m.kind === 'hit' ||
+  m.kind === 'victory'
 
 /**
  * The pose motions whose frames a redraw at `now` carries (reading 10): live at `now` or starting
  * before the next redraw, and any that follows on from one of those without a gap (the rest of
- * the same action).
+ * the same action). A victory pose is carried from the kill, so the hold plays with no redraw.
  */
 export function framesInUse(mine: readonly Motion[], now: number): PoseMotion[] {
   const poses = mine.filter(isPoseMotion).filter((m) => m.until > now)
-  const used = new Set(poses.filter((m) => m.from < now + SVG_FALLBACK_FRAME_MS))
+  const used = new Set(
+    poses.filter((m) => m.from < now + SVG_FALLBACK_FRAME_MS || m.kind === 'victory'),
+  )
   let grew = true
   while (grew) {
     grew = false
@@ -102,6 +112,23 @@ function poseSpans(
   }
   return spans
 }
+
+/** The flood filters: the white flash, Enrage's red, a level-up's gold. */
+type Flash = 'flash' | 'redflash' | 'goldflash'
+const FLASH_OF: Partial<Record<Motion['kind'], Flash>> = {
+  flash: 'flash',
+  red_flash: 'redflash',
+  gold_flash: 'goldflash',
+}
+/** The flood filter a motion blinks, if it is a flash. */
+const flashOf = (m: Motion): Flash | null => FLASH_OF[m.kind] ?? null
+/**
+ * An actor still to appear: spawning, or stepping on after a travel whose step off this picture no
+ * longer carries. It starts transparent and its animation fades it in.
+ */
+const appearing = (mine: readonly Motion[]): boolean =>
+  mine.some((m) => m.kind === 'spawn') ||
+  (mine.some((m) => m.kind === 'travel_on') && !mine.some((m) => m.kind === 'travel_off'))
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
 const seconds = (ms: number) => `${Number((ms / 1000).toFixed(3))}s`
@@ -255,8 +282,18 @@ export function renderSvg(
   const begin = (m: Motion) => seconds(m.from - opts.now)
   const dur = (m: Motion) => seconds(m.until - m.from)
   const bobPx = px(IDLE_BOB_PX)
-  /** The step and the lunge as translates on the actor's group, summed with its place. */
+  const travelPx = px(TRAVEL_PX)
+  /**
+   * The step and the lunge as translates on the actor's group, summed with its place; a travel's
+   * step off and on with their fades.
+   */
   const moveAnim = (m: Motion): string | null => {
+    if (m.kind === 'travel_off') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${travelPx} 0" begin="${begin(m)}" dur="${dur(m)}"/><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
+    if (m.kind === 'travel_on') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="-${travelPx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/><animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
     if (m.kind === 'lunge') {
       const dx = m.dir * px(LUNGE_PX)
       return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/>`
@@ -294,21 +331,20 @@ export function renderSvg(
 
   /** Enrage's red is in the document: its filter goes in the defs. */
   let red = false
+  /** A level-up's gold is in the document: its filter goes in the defs. */
+  let gold = false
   /**
    * One pose of an actor, drawn from its art's def; the hit pose leans through row clips. A flash
    * filter (white or red) floods the art, so it carries no colour.
    */
-  const poseMarkup = (
-    actor: StageActor,
-    pose: Pose,
-    filter: 'hit' | 'flash' | 'redflash' | null,
-  ): string => {
+  const poseMarkup = (actor: StageActor, pose: Pose, filter: 'hit' | Flash | null): string => {
     const shown = actor.poses[pose]
     const slot = shown.raritySlot
     // The hit's palette is already lightened; its filter lightens the idle colour instead.
     const tint = pose === 'hit' ? actor.poses.idle.palette : shown.palette
-    const flood = filter === 'flash' || filter === 'redflash'
+    const flood = filter !== null && filter !== 'hit'
     if (filter === 'redflash') red = true
+    if (filter === 'goldflash') gold = true
     const color = slot === null || flood ? '' : ` color="${hex(tint[slot] ?? 0)}"`
     const filt = filter ? ` filter="url(#${filter})"` : ''
     const derivedFrom = pose === 'hit' || pose === 'idle_b' ? actor.poses.idle : shown
@@ -437,25 +473,23 @@ export function renderSvg(
         `<g visibility="hidden">${sets.join('')}${poseMarkup(actor, pose, pose === 'hit' ? 'hit' : null)}${tinted(pose)}</g>`,
       )
     }
-    // The white blink, and Enrage's red one: over the hit frame while it shows, else over the art
-    // at rest.
+    // The white blink, Enrage's red one and a level-up's gold: over the hit frame while it shows,
+    // else over the art at rest.
     for (const m of mine) {
-      if (m.kind !== 'flash' && m.kind !== 'red_flash') continue
+      const filter = flashOf(m)
+      if (filter === null) continue
       const onHit = byPose.has('hit') && !actor.fallen
-      const filter = m.kind === 'flash' ? 'flash' : 'redflash'
       parts.push(
         `<g opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${seconds(BLINK_MS)}"/>${poseMarkup(actor, onHit ? 'hit' : rest, filter)}</g>`,
       )
     }
-    const spawning = mine.some((m) => m.kind === 'spawn')
-    const op = actor.fallen ? ' opacity="0.5"' : spawning ? ' opacity="0"' : ''
+    const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     return `<g transform="translate(${x} ${actor.y})"${op}>${anim.join('')}${parts.join('')}${markUse(actor.shield)}</g>`
   }
 
   for (const actor of model.actors) {
     const mine = live.filter((m) => m.actor === actor.key)
-    const spawning = mine.some((m) => m.kind === 'spawn')
-    if (actor.alpha <= 0 && !(opts.smil && spawning)) {
+    if (actor.alpha <= 0 && !(opts.smil && appearing(mine))) {
       // Not drawn, but a chest still on its ground needs its anchor.
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
@@ -477,6 +511,7 @@ export function renderSvg(
         use: `<use href="#${id}"${flip}${color}/>`,
         flashUse: `<use href="#${id}"${flip} filter="url(#flash)"`,
         redUse: `<use href="#${id}"${flip} filter="url(#redflash)"`,
+        goldUse: `<use href="#${id}"${flip} filter="url(#goldflash)"`,
       }
     }
     // Haste's streak, drawn under the idle pair from the idle's place.
@@ -487,10 +522,11 @@ export function renderSvg(
         : ''
 
     if (!opts.smil) {
-      const { use, flashUse, redUse } = drawNow()
+      const { use, flashUse, redUse, goldUse } = drawNow()
       const opacity = actor.fallen ? 0.5 : actor.alpha
       const op = opacity < 1 ? ` opacity="${Number(opacity.toFixed(2))}"` : ''
-      const flash = actor.flashing ? `${flashUse}/>` : ''
+      if (actor.goldFlashing) gold = true
+      const flash = actor.flashing ? `${flashUse}/>` : actor.goldFlashing ? `${goldUse}/>` : ''
       if (actor.redFlashing || actor.tinted) red = true
       const enraged = actor.redFlashing
         ? `${redUse}/>`
@@ -513,14 +549,17 @@ export function renderSvg(
     // Back out the offsets the model baked in at `now`; the animations reapply them.
     const started = (kind: Motion['kind']) =>
       mine.find((m) => m.kind === kind && m.from <= opts.now)
-    const x = actor.x - actionOffset(started('step'), started('lunge'), opts.now, scale)
+    const x =
+      actor.x -
+      actionOffset(started('step'), started('lunge'), opts.now, scale) -
+      travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
       body.push(hiresActor(actor, mine, x))
       continue
     }
-    const { use, flashUse, redUse } = drawNow()
+    const { use, flashUse, redUse, goldUse } = drawNow()
     // Back out the model's lift on the actor's own bob clock.
     const bobMs = bobMsOf(actor)
     const y = actor.y + (bobMs === null ? 0 : bobbingAt(opts.now, bobMs) * bobPx)
@@ -547,17 +586,20 @@ export function renderSvg(
         `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -${bobPx}" calcMode="discrete" begin="${seconds(-phase)}" dur="${seconds(bobMs * 2)}" repeatCount="indefinite"/>`,
       )
     }
+    const uses = { flash: flashUse, redflash: redUse, goldflash: goldUse } as const
     const flashes = mine
-      .filter((m) => m.kind === 'flash' || m.kind === 'red_flash')
-      .map(
-        (m) =>
-          `${m.kind === 'flash' ? flashUse : redUse} opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
-      )
+      .map((m) => {
+        const filter = flashOf(m)
+        return filter === null
+          ? ''
+          : `${uses[filter]} opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${dur(m)}"/></use>`
+      })
       .join('')
     const tints = tintSets(mine)
     if (tints || flashes.includes('redflash')) red = true
+    if (flashes.includes('goldflash')) gold = true
     const tinted = tints ? `${redUse} opacity="0">${tints}</use>` : ''
-    const op = actor.fallen ? ' opacity="0.5"' : spawning ? ' opacity="0"' : ''
+    const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     body.push(
       `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${actor.fallen ? '' : markUse(actor.streak)}${use}${tinted}${flashes}${markUse(actor.shield)}</g>`,
     )
@@ -719,8 +761,12 @@ export function renderSvg(
   const redFilter = red
     ? `<filter id="redflash"><feFlood flood-color="${hex(ENRAGE_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
     : ''
+  // A level-up's gold, beside the white.
+  const goldFilter = gold
+    ? `<filter id="goldflash"><feFlood flood-color="${hex(LEVEL_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
+    : ''
   const head = (w: number, h: number, fill = '') =>
-    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${opts.width}" height="${Math.round((opts.width * h) / w)}" shape-rendering="crispEdges"${fill}><defs>${flashFilter}${redFilter}${hitFilter}${defs.join('')}</defs>`
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${opts.width}" height="${Math.round((opts.width * h) / w)}" shape-rendering="crispEdges"${fill}><defs>${flashFilter}${redFilter}${goldFilter}${hitFilter}${defs.join('')}</defs>`
   if (opts.fit === undefined) return `${head(W, H)}${body.join('')}</svg>`
   // The band's stage Svg (spec #45): the band's width on the windows' grid, the shell under the
   // stage and the line's top and sides over it. A stage fitted to `fit` of its height sits

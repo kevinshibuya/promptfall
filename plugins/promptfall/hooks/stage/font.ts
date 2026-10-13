@@ -5,8 +5,11 @@ export const GLYPH_HEIGHT = 5
 /** Advance per glyph: the glyph and a 1 px gap. */
 export const GLYPH_ADVANCE = 4
 
-/** A 3 × 5 pixel font for '0'-'9' and '-', rows top to bottom. */
-export const DIGITS: Readonly<Record<string, readonly string[]>> = {
+/**
+ * A 3 × 5 pixel font for the numbers the stage raises, rows top to bottom: '0'-'9' and '-', and
+ * '+' and the stat words of a level-up's deltas. A space is an advance with no glyph.
+ */
+export const GLYPHS: Readonly<Record<string, readonly string[]>> = {
   '0': ['###', '#.#', '#.#', '#.#', '###'],
   '1': ['.#.', '##.', '.#.', '.#.', '###'],
   '2': ['###', '..#', '###', '#..', '###'],
@@ -18,6 +21,15 @@ export const DIGITS: Readonly<Record<string, readonly string[]>> = {
   '8': ['###', '#.#', '###', '#.#', '###'],
   '9': ['###', '#.#', '###', '..#', '###'],
   '-': ['...', '...', '###', '...', '...'],
+  '+': ['...', '.#.', '###', '.#.', '...'],
+  a: ['...', '##.', '..#', '#.#', '.##'],
+  d: ['..#', '.##', '#.#', '#.#', '.##'],
+  e: ['...', '.##', '###', '#..', '.##'],
+  f: ['.##', '#..', '###', '#..', '#..'],
+  k: ['#..', '#.#', '##.', '#.#', '#.#'],
+  p: ['...', '##.', '#.#', '##.', '#..'],
+  s: ['.##', '#..', '.#.', '..#', '##.'],
+  t: ['.#.', '###', '.#.', '.#.', '.##'],
 }
 
 /** The glyph pixel's size in stage pixels: 2 × 2 blocks on the 1.5x stage, 1 at scale 1. */
@@ -62,7 +74,7 @@ export function drawText(
   block = 1,
 ): void {
   for (let c = 0; c < text.length; c++) {
-    const glyph = DIGITS[text[c] ?? '']
+    const glyph = GLYPHS[text[c] ?? '']
     if (!glyph) continue
     for (let gy = 0; gy < GLYPH_HEIGHT; gy++) {
       for (let gx = 0; gx < GLYPH_WIDTH; gx++) {
