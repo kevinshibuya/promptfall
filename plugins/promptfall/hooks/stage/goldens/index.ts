@@ -66,7 +66,7 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-orders': {imageHash: "9bc3804fccc00665", cellsHash: "163c7d59054dc725", svgHash: "e4ed997bb2dae0da", svgChars: 23122},
   'pane-orders-form': {imageHash: "90745d78e051dd18", cellsHash: "4d46414a508ade22", svgHash: "d97f4b2204a9cc66", svgChars: 23743},
   'pane-account': {imageHash: "059cc10755fd24d1", cellsHash: "eafeb081f66b6286", svgHash: "b955125487992f31", svgChars: 28136},
-  'pane-account-link': {imageHash: "30e465c2aec99640", cellsHash: "337a3ada3a057ac9", svgHash: "ce5ab8c992a6ed60", svgChars: 29638},
+  'pane-account-link': {imageHash: "ea90de9342c8a270", cellsHash: "9dcf52c8dd0e27fd", svgHash: "10f1472ca48f372b", svgChars: 29641},
   'pane-account-rest-days': {imageHash: "faef419487cba219", cellsHash: "6b9f6d9b744849a9", svgHash: "e1fd37ac027255f8", svgChars: 28330},
   'pane-odds': {imageHash: "6ab7d59e417ec44a", cellsHash: "c8b67e22f72dbaa4", svgHash: "cd39c7baa08ee397", svgChars: 32547},
   'pane-journal': {imageHash: "71ef9e206b448a53", cellsHash: "a9e61ad6cae3c62b", svgHash: "c6c1c16d6b4fb577", svgChars: 27324},
