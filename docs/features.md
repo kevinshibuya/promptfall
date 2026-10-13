@@ -33,12 +33,16 @@ fallen heroes get up at 50%.
 ## Combat
 
 **Encounters and waves.** Each tool call Claude makes spawns an enemy into the encounter: at most
-three fight at once and up to ten more wait. When nobody is left to fight, the next enemy of the
-current wave walks in, so an idle session still plays. A zone is ten waves of one to three of its
-own enemies, and clearing a wave heals every hero 15% and gets the fallen back up at 15%. A wave
-enemy pays for its toughness: its XP, gold and drop chance follow its share of HP, so a zone's
-tank pays about 1.3 times the zone's base and its swift about 0.74, and no kind pays better per
-point of HP it takes to kill.
+three fight at once and up to ten more wait. Every zone has four wave enemies, a swift, a brute, a
+caster and a tank, and the tool picks which one comes: a read or a web lookup brings out the swift,
+an edit or a write the brute, a shell command the caster, and any other tool, an MCP tool or a
+subagent's call the tank. A search runs through the shell today, so it brings out the caster. When
+nobody is left to fight, the next enemy of the current wave walks in, drawn from all four, so an
+idle session still plays. A zone is ten waves of one to three of its own enemies, and clearing a
+wave heals every hero 15% and gets the fallen back up at 15%. A kill pays by the enemy's toughness:
+its XP, gold and drop chance follow its share of HP, so a zone's tank pays about 1.3 times the
+zone's base and its swift about 0.74, and no kind pays better per point of HP it takes to kill. A
+day of edits plays differently from a day of reads and earns the same.
 
 **Action gauge and action queue.** Every hero and enemy has an action gauge that fills with
 battle time, faster with more speed, and a full gauge joins the action queue. Units act one at a
@@ -81,9 +85,32 @@ Sighs".
 `/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
 moving on.
 
+**Reactive events.** The fight answers what Claude is doing, on the stage and in the combat log, and
+never with a toast or a cue. While Claude works on a prompt the party has Haste: the heroes' gauges
+fill a quarter faster and they bob twice as fast, each trailing a speed streak in its class's
+colour, and the log says "The party quickens." A half-block terminal and the compact stage show the
+faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three minutes of
+battle with no sign of work, and the log says "The party slows." A subagent's turn leaves it alone.
+A failed tool call enrages the front enemy: it flashes red and stays tinted red until its next hit,
+which lands half again as hard, and the log says "Claude stumbles. Wood Goblin is enraged!" With no
+enemy on the field nothing happens, and stopping Claude or answering no to a prompt is no stumble. A
+compaction makes the party camp: a campfire burns between the party and the enemies for about four
+seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
+"The party makes camp while Claude gathers its thoughts." While Claude Code shows a permission
+prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
+raises a small shield on the stages that draw the streaks, and the heroes take half damage and
+attack nobody while the enemies fight on. The log says "The party stands guard." The party lowers
+its guard when the call resolves, allowed or denied, or after two minutes of battle with no answer.
+Guard comes from Claude Code's permission-request hook, which fires only as a permission prompt
+shows and never for an auto-allowed call. Haste, Enrage, Camp and Guard leave XP, gold and drops
+alone, and a tool's enemy pays by its toughness, so faking an event buys nothing but the picture.
+The server caps each kind on its own clock, and the plugin paces them under those caps. Under Motion
+still the streaks and the stance still draw and the bob stays stopped.
+
 **Combat log.** The Party tab's message window types out each action as the stage plays it, in
 Dragon Quest's words: "Aldric hits Wood Goblin for 12.", "Wood Goblin is defeated!". Hit lines
-that fall behind are dropped; kills, drops, level-ups, deaths and sales always get their line.
+that fall behind are dropped; kills, drops, level-ups, deaths, sales and reactive
+events always get their line.
 
 ## Loot
 
@@ -359,9 +386,9 @@ when the server answers. Every other session draws read-only and says "playing i
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
 trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
-what the old one already toasted, nor leaves out what arrived after the old one last looked. The
-party stands guard when Claude Code raises its permission-request hook, which fires only as a
-permission prompt shows and never for an auto-allowed call, and lowers it when the call resolves.
+what the old one already toasted, nor leaves out what arrived after the old one last looked.
+Claude's work reaches the fight only in the primary: another session's tool calls, turns,
+failures, compactions and permission prompts spawn and change nothing.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
@@ -388,7 +415,7 @@ its own. Toasts follow the game, not the stage, except a held line: a drop's or 
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
-Routine combat, farming clears and chat never toast, the open pane holds toasts until it closes,
+Routine combat, the reactive events, farming clears and chat never toast, the open pane holds toasts until it closes,
 and a first launch toasts a welcome that points at the Heroes tab.
 
 **Cues.** Seven toasts also play a cue: a Rare or Epic drop, a Legendary drop, a level-up, a
