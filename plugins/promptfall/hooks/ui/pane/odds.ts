@@ -26,6 +26,20 @@ export function percent(weight: number, total: number): string {
   return `${Math.floor(hundredths / 100)}.${String(hundredths % 100).padStart(2, '0')}%`
 }
 
+/** The tavern guarantees, lowest rarity first, with their words. */
+export const GUARANTEED = [
+  ['rare', 'Rare'],
+  ['epic', 'Epic'],
+  ['legendary', 'Legendary'],
+] as const
+
+/** "Rare guaranteed in 13 recruits"; "Rare guaranteed on the next recruit" at 1. */
+function guaranteeLine(word: string, count: number): string {
+  return count <= 1
+    ? `${word} guaranteed on the next recruit`
+    : `${word} guaranteed in ${count} recruits`
+}
+
 const share = (weights: Record<string, number> | undefined, rarity: string): string => {
   if (!weights) return '-'
   const total = RARITIES.reduce((sum, r) => sum + (weights[r] ?? 0), 0)
@@ -65,6 +79,11 @@ export function oddsPane(input: PaneInput): PaneBuild {
       action: { t: 'none' },
       alt: `${r}: zone ${columns[0]}, boss ${columns[1]}, tavern ${columns[2]}`,
     })
+  }
+  // The tavern's floor, published beside its odds.
+  for (const [r, word] of GUARANTEED) {
+    const t = guaranteeLine(word, view.guarantees[r])
+    rows.push({ spans: [{ text: t }], alt: t })
   }
   rows.push({ spans: [{ text: RARITY_NOTE, rgb: DIM_RGB }], alt: RARITY_NOTE })
   rows.push({ spans: [{ text: REFORGE_NOTE, rgb: DIM_RGB }], alt: REFORGE_NOTE })

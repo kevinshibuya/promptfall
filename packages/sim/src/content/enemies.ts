@@ -1,5 +1,5 @@
 import type { EnemyKind, Stats } from '../types'
-import type { Archetype, EnemyDef } from './types'
+import type { Archetype, BossMove, EnemyDef } from './types'
 
 // Multipliers on the zone baseline, in basis points; spd is a flat offset.
 const ARCHETYPES: Record<Archetype, { hpBp: number; atkBp: number; defBp: number; spd: number }> = {
@@ -88,6 +88,38 @@ function baseline(t: EnemyTuning, z: number): Baseline {
     goldMin: grow(zone1.goldMin, growthBp.gold, z),
     goldMax: grow(zone1.goldMax, growthBp.gold, z),
   }
+}
+
+/**
+ * Each base zone's boss move, zone 1 first: four behaviours spread over the twelve (#169), so a
+ * boss is a known threat. The tiers' bosses are their base zone's, and so are their moves.
+ */
+export const BOSS_MOVES: readonly BossMove[] = [
+  'strike_twice',
+  'heal_self',
+  'hit_all',
+  'rage',
+  'strike_twice',
+  'heal_self',
+  'hit_all',
+  'rage',
+  'strike_twice',
+  'heal_self',
+  'hit_all',
+  'rage',
+]
+
+/**
+ * A zone boss's atk multiplier by its move, in basis points, in place of the boss archetype's:
+ * each holds the feel probe's 3 to 4 boss hits with the move modelled (#169). A strike-twice
+ * action lands two 70% hits, a whole-party hit 60% on the Knight, a raging hit 150%; a heal is
+ * no hit, so heal_self keeps the archetype's.
+ */
+export const MOVE_ATK_BP: Record<BossMove, number> = {
+  strike_twice: 15000,
+  heal_self: 20000,
+  hit_all: 22000,
+  rage: 13500,
 }
 
 // Per zone: four wave enemies (brute, swift, tank, caster), the zone boss, the turn boss.
@@ -211,7 +243,7 @@ function scale(value: number, bp: number): number {
 
 /**
  * One enemy at a baseline: its archetype's share of each number, its kind's xp and gold, and a
- * zone boss's hp scaled by `bossHpBp`.
+ * zone boss's hp scaled by `bossHpBp` and its base zone's move.
  */
 function enemyOf(
   [id, name, archetype]: [string, string, Archetype],
@@ -219,13 +251,15 @@ function enemyOf(
   b: Baseline,
   spdZone: number,
   bossHpBp: number,
+  move: BossMove | undefined,
 ): EnemyDef {
   const a = ARCHETYPES[archetype]
   const kind = kindOf(archetype)
   const hp = scale(b.hp, a.hpBp)
+  const atk = scale(b.atk, a.atkBp)
   const stats: Stats = {
     hp: kind === 'zone_boss' ? scale(hp, bossHpBp) : hp,
-    atk: scale(b.atk, a.atkBp),
+    atk: kind === 'zone_boss' && move ? scale(b.atk, MOVE_ATK_BP[move]) : atk,
     def: scale(b.def, a.defBp),
     spd: a.spd + Math.floor(spdZone / 3),
   }
@@ -245,6 +279,7 @@ function enemyOf(
     gold: [pay(b.goldMin), pay(b.goldMax)],
     dropBp: kind === 'zone_boss' ? 10000 : kind === 'turn_boss' ? 6000 : pay(1500),
     contractBp: kind === 'zone_boss' ? 1500 : kind === 'turn_boss' ? 400 : 0,
+    ...(kind === 'zone_boss' && move ? { move, baseAtk: atk } : {}),
   }
 }
 
@@ -254,7 +289,8 @@ export function buildEnemies(t: EnemyTuning): Record<string, EnemyDef> {
   ROSTERS.forEach((roster, i) => {
     const b = baseline(t, i)
     const bossHpBp = t.zoneBossHpBp[i] ?? 10000
-    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp)
+    const move = BOSS_MOVES[i]
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp, move)
   })
   return out
 }
@@ -309,8 +345,10 @@ export function buildTierEnemies(
       goldMax: growThrough(b12.goldMax, steps),
     }
     const at: Record<string, EnemyDef> = {}
-    for (const roster of ROSTERS)
-      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp)
+    ROSTERS.forEach((roster, i) => {
+      for (const entry of roster)
+        at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp, BOSS_MOVES[i])
+    })
     out[zone] = at
   }
   return out

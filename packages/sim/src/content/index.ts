@@ -1,8 +1,11 @@
+import { achievements } from './achievements'
 import { affixes } from './affixes'
 import { enemies } from './enemies'
 import { epithets } from './epithets'
 import { expansions } from './expansions'
+import { goals } from './goals'
 import { heroTemplates } from './heroes'
+import { hunts } from './hunts'
 import { itemBases } from './items'
 import { rarity } from './rarity'
 import { tactics } from './tactics'
@@ -13,14 +16,29 @@ import type { Content } from './types'
 import { xpToNext } from './xp'
 import { zones } from './zones'
 
+export {
+  achievementCount,
+  type JournalCounts,
+  LADDER_GOLD,
+  ONE_OFF_GOLD,
+} from './achievements'
 export { TIER_GROWTH_BP } from './enemies'
+export { huntAt, huntCount } from './hunts'
 export { ZONES_PER_ITEM_TIER } from './tiers'
 export type {
+  AchievementMetric,
+  AchievementRow,
+  AchievementStep,
   AffixDef,
   Archetype,
+  BossMove,
   Content,
   EnemyDef,
+  GoalKind,
+  GoalRow,
   HeroTemplate,
+  HuntKind,
+  HuntRow,
   ItemBase,
   RarityRule,
   Tactic,
@@ -47,4 +65,7 @@ export const content: Content = {
   tactics,
   xpToNext,
   itemTierMultBp,
+  achievements,
+  goals,
+  hunts,
 }

@@ -82,10 +82,23 @@ function view(enemies: EnemyView[], zone = 1, wave = 2): GameView {
       presenceOpen: false,
       leaderboardsOpen: false,
       bossOpen: false,
+      huntOpen: false,
       returns: 0,
       sandbox: false,
     },
     boss: null,
+    tallies: {
+      enemies: {},
+      collection: {},
+      zoneBosses: 0,
+      cleanZoneBosses: 0,
+      turnBosses: 0,
+      drops: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 },
+      recruits: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 },
+      reforges: 0,
+      goldEarned: 0,
+    },
+    guarantees: { rare: 20, epic: 80, legendary: 400 },
   }
 }
 

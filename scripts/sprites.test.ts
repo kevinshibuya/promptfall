@@ -451,6 +451,27 @@ describe('sprites build', () => {
       expect(emitModule(build([...heroes('fr/one.png')].reverse()))).toBe(out)
     })
 
+    it('gives a hero without a drawn victory pose its idle 1.5x art, by identity, and an enemy none', () => {
+      const r = build([
+        ...heroes('fr/one.png'),
+        enemy({ windup: 'fr/24b.png', strike: 'fr/24.png' }),
+      ])
+      expect(r.errors).toEqual([])
+      const knight = r.sprites.find((s) => s.id === 'hero:knight')
+      expect(knight?.frames?.victory?.art).toBe(r.art.get(knight?.stem ?? '')?.hires)
+      expect(knight?.frames?.victory?.raritySlot).toBe(knight?.raritySlotHires)
+      expect(r.sprites.find((s) => s.id === 'enemy:a')?.frames?.victory).toBe(null)
+      const out = emitModule(r)
+      expect(out).toMatch(/'hero:knight': \{[^\n]*victory: \{ art: a\d+\.hires, raritySlot: \d+ \}/)
+      expect(out).toMatch(/'enemy:a': \{[^\n]*victory: null/)
+    })
+
+    it('fails a victory pose on a non-hero', () => {
+      expect(
+        build([enemy({ windup: 'fr/24b.png', strike: 'fr/24.png', victory: 'fr/24.png' })]).errors,
+      ).toEqual(['enemy:a: frames.victory: only a hero holds a victory pose'])
+    })
+
     it('fails a hero frame whose rarity colour lands in two regions', () => {
       expect(build(heroes('fr/two.png')).errors).toEqual([
         'hero:knight: frameRarityColors.windup is not one region',

@@ -14,11 +14,20 @@ export {
   STEP_MS,
   TICK_MS,
 } from './battle'
+export { tavernGuarantees } from './commands'
 export type {
+  AchievementMetric,
+  AchievementRow,
+  AchievementStep,
   AffixDef,
+  BossMove,
   Content,
   EnemyDef,
+  GoalKind,
+  GoalRow,
   HeroTemplate,
+  HuntKind,
+  HuntRow,
   ItemBase,
   RarityRule,
   TraitDef,
@@ -26,13 +35,20 @@ export type {
   ZoneDef,
 } from './content'
 export {
+  achievementCount,
   content,
   enemyAt,
+  huntAt,
+  huntCount,
+  type JournalCounts,
   LADDER_END,
+  LADDER_GOLD,
+  ONE_OFF_GOLD,
   oddsAt,
   TIER_GROWTH_BP,
   zoneAt,
 } from './content'
+export { type DailyGoal, dailyGoal, GOAL_GOLD_KILLS, goalCount, goalGold } from './goal'
 export { GOLDEN_HASH, GOLDEN_SEED, goldenEvents } from './golden'
 export { hashState } from './hash'
 export { affixValue, baseTier, dropTier, reforgeCost, rollRewardItem, vendorValue } from './loot'
@@ -61,6 +77,7 @@ export type {
   EventKind,
   GameState,
   Goods,
+  GuaranteeRarity,
   Hero,
   HeroClass,
   Item,
@@ -68,7 +85,9 @@ export type {
   PlayerEvent,
   PlayerEventKind,
   Rarity,
+  RarityCounts,
   RecruitVia,
+  RewardSource,
   SandboxEvent,
   SandboxEventKind,
   ServerEvent,
@@ -77,11 +96,13 @@ export type {
   Stat,
   Stats,
   StepResult,
+  Tallies,
   TradeKind,
   Trait,
   WaveArchetype,
 } from './types'
 export {
+  GUARANTEE_RARITIES,
   RARITIES,
   SANDBOX_EVENT_KINDS,
   SERVER_EVENT_KINDS,

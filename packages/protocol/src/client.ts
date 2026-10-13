@@ -1,4 +1,5 @@
 import type { GameState, PlayerEventKind, ServerEvent, TradeKind } from '@promptfall/sim'
+import type { Journal, RestDaysResult, Weekday } from './journal'
 import type {
   Banned,
   ListingPage,
@@ -132,6 +133,10 @@ export interface ServerClient {
   world(auth: Auth, since: number): Promise<WorldSnapshot | Unauthorized | Banned>
   chat(auth: Auth, text: string): Promise<ChatResult>
   leaderboards(auth: Auth): Promise<Boards | Unauthorized | Banned>
+  /** The caller's journal: a read that writes nothing. */
+  journal(auth: Auth): Promise<Journal | Unauthorized | Banned>
+  /** Two distinct weekdays, stored as the rest days from next Monday; answers the journal. */
+  setRestDays(auth: Auth, days: Weekday[]): Promise<RestDaysResult>
 }
 
 /**
@@ -144,6 +149,7 @@ export type BudgetKind =
   | 'tick'
   | 'tool_call'
   | 'rest'
+  | 'travel'
   | 'turn_end'
   | 'turn_start'
   | 'tool_mishap'
@@ -154,11 +160,13 @@ export type BudgetKind =
  * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
  * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
  * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
+ * Travel (#161) is capped as a rest is.
  */
 export const BUDGETS: Record<BudgetKind, { refillMs: number; capacity: number }> = {
   tick: { refillMs: 2000, capacity: 70 },
   tool_call: { refillMs: 1000, capacity: 140 },
   rest: { refillMs: 5000, capacity: 30 },
+  travel: { refillMs: 5000, capacity: 30 },
   turn_end: { refillMs: 5000, capacity: 30 },
   turn_start: { refillMs: 5000, capacity: 30 },
   tool_mishap: { refillMs: 5000, capacity: 30 },

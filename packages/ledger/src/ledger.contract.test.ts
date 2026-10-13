@@ -1,7 +1,8 @@
 import { MemoryKeyValue } from '@promptfall/protocol'
 import { runServerContract } from '@promptfall/protocol/contract'
+import type { GameState } from '@promptfall/sim'
 import { approveAs, Ledger } from './ledger'
-import { rewindRecord } from './testing'
+import { patchRecord, rewindRecord } from './testing'
 
 let counter = 0
 
@@ -20,6 +21,10 @@ runServerContract('Ledger over MemoryKeyValue', async (clock, { flags, kv, migra
   })
   return {
     client: ledger,
-    host: { ...ledger.host, rewind: (id: string, v: number) => rewindRecord(store, id, v) },
+    host: {
+      ...ledger.host,
+      rewind: (id: string, v: number) => rewindRecord(store, id, v),
+      patch: (id: string, fn: (s: GameState) => GameState) => patchRecord(store, id, fn),
+    },
   }
 })

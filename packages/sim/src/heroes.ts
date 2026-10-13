@@ -1,6 +1,7 @@
 import { content, oddsAt } from './content'
 import { draw, drawWeighted, heroStats, newId } from './progression'
 import { compareCodeUnits } from './rng'
+import { earn } from './tallies'
 import type { Effect, GameState, Hero, Rarity, RecruitVia, Trait } from './types'
 
 /** Rolls a hero on a draft state. Draw order: template, traits, epithet; then the id. */
@@ -41,6 +42,7 @@ export function generateHero(s: GameState, rarity: Rarity, templateId?: string):
 /** Adds a rolled hero to the roster on a draft state. */
 export function recruitHero(s: GameState, hero: Hero, via: RecruitVia, effects: Effect[]): void {
   s.roster.push(hero)
+  s.tallies.recruits[hero.rarity] += 1
   effects.push({ k: 'hero_recruited', hero, via })
   pushLog(s, { k: 'hero', heroId: hero.id, template: hero.template, rarity: hero.rarity, via })
 }
@@ -64,7 +66,7 @@ export function rollContract(s: GameState, effects: Effect[]): void {
     return
   }
   const gold = 3 * content.rarity[rarity].vendorGoldPerZone * s.zone
-  s.gold += gold
+  earn(s, gold)
   effects.push({ k: 'gold', amount: gold })
   pushLog(s, { k: 'item', itemId: hero.id, base: 'contract', rarity, vendoredFor: gold })
 }

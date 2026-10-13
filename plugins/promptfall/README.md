@@ -32,9 +32,11 @@ one zone at full health and costs nothing else.
 | `/promptfall heroes` | Opens it on Heroes (also `inventory`, `market`, `orders`, `account`, `odds`) |
 | `/promptfall chat` | Opens it on Chat; Enter on a row moves to the compose field |
 | `/promptfall leaderboards` | Opens it on Leaderboards and loads the boards |
+| `/promptfall journal` | Opens it on the Journal and loads the day's goal, the streak and the achievements |
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
 | `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
+| `/promptfall travel <zone>` | Moves the party to a zone it has reached, ending the fight with no drops and no XP |
 | `/promptfall server` | Says which server this machine plays on: the public server, `local`, or a URL |
 | `/promptfall server <url>` | Plays on the HTTP server at `<url>`, for every session on this machine |
 | `/promptfall server local` | Plays on the in-process ledger, offline: no chat, no world boss |
@@ -151,7 +153,7 @@ would answer a survey.
 | --- | --- | --- |
 | `p` / `l` / `w` | Party, loot log, world tabs | |
 | `c` | Collapse to one row, or expand | |
-| `i` / `h` / `m` / `r` / `a` / `o` | | Inventory, Heroes, Market, Orders, Account, Odds tabs |
+| `i` / `h` / `m` / `r` / `a` / `o` / `u` | | Inventory, Heroes, Market, Orders, Account, Odds, Journal tabs |
 | `c` / `b` | | Chat and Leaderboards tabs (outside a field) |
 | `y` / `n` | | Yes or No |
 
@@ -164,12 +166,13 @@ columns), and a message window at the foot saying what the keys do.
 | --- | --- |
 | Tab, Shift+Tab, ↑ ↓ | Move the ▶; long lists page, with a `16-30/40` footer |
 | Enter | Open the ▶ row's command window, or run the item under the ▶ |
-| `e` `u` `s` `v` `f` | Equip, Unequip, Sell, Vendor, Reforge (an item's command window) |
+| `e` `n` `s` `v` `f` | Equip, Unequip, Sell, Vendor, Reforge (an item's command window) |
 | `p` `s` `d` | Party (or Unpick), Sell, Dismiss (a hero's command window) |
 | `f` | Market: the filter window |
+| `t` | Journal: travel to the open zone page's zone |
 | `s` `n` `x` | Account: sound, motion, renderer |
 | Tab | Leave a field (the sell price, the order price, the chat line) |
-| `q` | Back out of a command window, a pick, a Yes/No, the sell window or the order form |
+| `q` | Back out of a command window, a pick, a Yes/No, a Journal page, the sell window or the order form |
 
 Vendor, Dismiss, Buy, the two cancels and Reset ask Yes or No first. Party picks three heroes one at a time; the third sends
 the new party, which takes the field at the next zone boss kill or wipe. The last row of Heroes recruits.

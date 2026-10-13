@@ -6,6 +6,7 @@ import type {
   DialogState,
   DialogTab,
   GameView,
+  JournalState,
   MarketState,
   Mode,
   OrdersState,
@@ -57,10 +58,13 @@ export type PaneInput = FrameInput & {
   /** The surface has an Input, but the pane is too short for its row: `hasInput` is false. */
   shortPane?: true
   remainingMs: (deadline: number) => number
+  /** The server's clock now as this session reckons it (the client's before any): the Journal's day. */
+  serverNow: number
   market: MarketState
   orders: OrdersState
   chat: ChatState
   boards: BoardsState
+  journal: JournalState
   account: AccountInput
 }
 

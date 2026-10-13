@@ -6,7 +6,7 @@ import { CLIENT_VERSION } from '../../version'
 import { tilePositions } from '../../windows/kit'
 import { GAUGE_FULL_RGB } from '../../windows/tuning'
 import { accountPane, type NoViewInput, noViewPane } from './account'
-import { paneInput, paneView } from './fixtures'
+import { journalLoaded, paneInput, paneView } from './fixtures'
 import type { AccountInput, PaneInput } from './input'
 import { linesOf, win } from './testing'
 
@@ -36,6 +36,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     ' | Motion | full',
     ' | Renderer | auto (image)',
     ' | Auto-vendor | off',
+    ' | Rest days | …',
     ' | Band | shown',
     ' | Band off',
     ' | Link GitHub',
@@ -51,6 +52,7 @@ test('the rows in order with their values; s and n gold; x not drawn', () => {
     ['row:motion', 'n'],
     ['row:renderer', 'x'],
     ['row:autovendor', undefined],
+    ['row:restdays', undefined],
     ['row:band', undefined],
     ['row:off', undefined],
     ['row:link', undefined],
@@ -66,6 +68,7 @@ test('the actions: settings, auto-vendor, the band, off, link, reset and delete 
     { t: 'setting', patch: { motion: 'still' } },
     { t: 'setting', patch: { renderer: 'image' } },
     { t: 'event', event: { t: 'set_auto_vendor', on: true } },
+    { t: 'none' },
     { t: 'band', collapsed: true },
     { t: 'off' },
     { t: 'link' },
@@ -84,7 +87,7 @@ test('the actions: settings, auto-vendor, the band, off, link, reset and delete 
   )
   const lines = linesOf(win(forced, 'list'))
   expect(lines[2]?.endsWith('raster (from next start)')).toBe(true)
-  expect(lines[4]?.endsWith('collapsed')).toBe(true)
+  expect(lines[5]?.endsWith('collapsed')).toBe(true)
   expect(cursors(forced)[2]?.action).toEqual({ t: 'setting', patch: { renderer: 'auto' } })
 })
 
@@ -138,6 +141,93 @@ test("Auto-vendor reads the account's setting and toggles it; read-only it shows
   const secondary = accountPane(input({}, { view: on, readOnly: true, mode: 'secondary' }))
   expect(lines(secondary)).toContain('| Auto-vendor | on')
   expect(row(secondary)?.action).toEqual({ t: 'none' })
+})
+
+// ---------------------------------------------------------------------------
+// Rest days: the account's, from the journal slice
+
+const DAY = 86_400_000
+/** Tuesday 2026-10-13, noon UTC: its next Monday is the 19th. */
+const TUESDAY = Date.UTC(2026, 9, 13, 12)
+const MONDAY_INDEX = Date.UTC(2026, 9, 19) / DAY
+
+function rested(next: { days: number[]; from: number } | null = null, current = [6, 7]) {
+  const loaded = journalLoaded()
+  const journal = loaded.journal
+  if (!journal) throw new Error('journalLoaded holds no journal')
+  return { ...loaded, journal: { ...journal, restDays: { current, next } } }
+}
+const restRow = (b: ReturnType<typeof accountPane>) =>
+  linesOf(win(b, 'list'))
+    .map((l) => l.replace(/ {2,}/g, ' | ').trim())
+    .find((l) => l.includes('Rest days'))
+const restStop = (b: ReturnType<typeof accountPane>) =>
+  cursors(b).find((s) => s.key === 'row:restdays')
+
+test('the Rest days row reads the set in force from the journal, under Auto-vendor', () => {
+  const b = accountPane(input({}, { journal: rested(), serverNow: TUESDAY }))
+  const lines = linesOf(win(b, 'list')).map((l) => l.replace(/ {2,}/g, ' | ').trim())
+  expect(lines.indexOf('| Rest days | Sat, Sun')).toBe(lines.indexOf('| Auto-vendor | off') + 1)
+  expect(restStop(b)?.action).toEqual({
+    t: 'open',
+    menu: { kind: 'rest_days', picked: [], at: 0 },
+  })
+  const odd = accountPane(input({}, { journal: rested(null, [3, 1]), serverNow: TUESDAY }))
+  expect(restRow(odd)).toBe('| Rest days | Mon, Wed')
+})
+
+test('Enter opens the pick of the seven days, the two in force marked, each toggling its day', () => {
+  const menu = { kind: 'rest_days' as const, picked: [2], at: 1 }
+  const b = accountPane(input({ menu }, { journal: rested(), serverNow: TUESDAY }))
+  const items = linesOf(win(b, 'menu')).map((l) => l.replace(/ {2,}/g, ' | ').trim())
+  expect(items).toEqual([
+    'Rest days',
+    'Monday',
+    '▶Tuesday | pick',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday | rest',
+    'Sunday | rest',
+  ])
+  expect(cursors(b).map((s) => s.action)).toEqual(
+    [1, 2, 3, 4, 5, 6, 7].map((day) => ({ t: 'rest_day', day })),
+  )
+  expect(b.focus).toBe('menu:1')
+  expect(message(b)).toEqual([
+    'Picked Tue: pick one more.',
+    'They apply from next Monday. q: back.',
+  ])
+  const fresh = accountPane(
+    input({ menu: { ...menu, picked: [] } }, { journal: rested(), serverNow: TUESDAY }),
+  )
+  expect(message(fresh)[0]).toBe('Pick two rest days.')
+})
+
+test('a set to come reads beside the set in force until its Monday passes', () => {
+  const next = { days: [2, 4], from: MONDAY_INDEX }
+  const before = accountPane(input({}, { journal: rested(next), serverNow: TUESDAY }))
+  expect(restRow(before)).toBe('| Rest days | Sat, Sun (Tue, Thu from Monday)')
+  const sunday = accountPane(input({}, { journal: rested(next), serverNow: TUESDAY + 5 * DAY }))
+  expect(restRow(sunday)).toBe('| Rest days | Sat, Sun (Tue, Thu from Monday)')
+  const monday = accountPane(input({}, { journal: rested(next), serverNow: TUESDAY + 6 * DAY }))
+  expect(restRow(monday)).toBe('| Rest days | Tue, Thu')
+})
+
+test('a secondary session shows the rest days read-only: no pick opens or draws', () => {
+  const menu = { kind: 'rest_days' as const, picked: [], at: 0 }
+  const b = accountPane(
+    input({ menu }, { journal: rested(), serverNow: TUESDAY, readOnly: true, mode: 'secondary' }),
+  )
+  expect(restRow(b)).toBe('| Rest days | Sat, Sun')
+  expect(restStop(b)?.action).toEqual({ t: 'none' })
+  expect(win(b, 'menu')).toBeUndefined()
+})
+
+test('a refused rest-days write flashes in the message window', () => {
+  const journal = { ...rested(), error: 'Pick two different days' }
+  const b = accountPane(input({}, { journal, serverNow: TUESDAY }))
+  expect(message(b)[0]).toBe('Pick two different days')
 })
 
 test('Link GitHub goes when linked, read-only, or while a code is pending', () => {
@@ -219,7 +309,7 @@ test('the detail lines and the message', () => {
   )
   expect(message(b)).toEqual([
     'Enter: change it. Tab or arrows: move.',
-    'Auto-vendor is kept per account, the rest per machine.',
+    'Auto-vendor and rest days are kept per account, the rest per machine.',
   ])
 })
 
@@ -251,6 +341,7 @@ test('the no-view pane: one line on Market; on Account with a game, Reset, the s
     'tab-orders',
     'tab-account',
     'tab-odds',
+    'tab-journal',
     'tab-chat',
     'tab-leaderboards',
     'row:empty',

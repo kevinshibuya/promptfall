@@ -1,15 +1,51 @@
-import { content } from './content'
+import { content, LADDER_END } from './content'
 import { draft, reject } from './draft'
 import { generateHero, recruitHero } from './heroes'
 import { reforgeCost, rerollAffix, vendorValue } from './loot'
-import { clampHp, drawWeighted, findHero } from './progression'
-import type { Event, GameState, StepResult } from './types'
+import {
+  applyPendingParty,
+  changeZone,
+  clampHp,
+  drawWeighted,
+  endEncounter,
+  findHero,
+} from './progression'
+import { earn } from './tallies'
+import type { Event, GameState, GuaranteeRarity, Rarity, StepResult } from './types'
+import { GUARANTEE_RARITIES, RARITIES } from './types'
 
 type Of<K extends Event['t']> = Extract<Event, { t: K }>
 
 export function tavernPrice(state: GameState): number {
   const { baseCost, costGrowthBp } = content.tavern
   return Math.floor((baseCost * (10000 + costGrowthBp * state.recruits)) / 10000)
+}
+
+/** Per guarantee, the recruits until one of its rarity or better is certain: 1 means the next. */
+export function tavernGuarantees(state: GameState): Record<GuaranteeRarity, number> {
+  const out = { rare: 0, epic: 0, legendary: 0 }
+  for (const r of GUARANTEE_RARITIES) {
+    out[r] = Math.max(1, content.tavern.guarantees[r] - (state.guarantee?.[r] ?? 0))
+  }
+  return out
+}
+
+const rank = (r: Rarity) => RARITIES.indexOf(r)
+
+/**
+ * A tavern recruit's rarity on a draft: every count rises, the odds roll, the floor is the highest
+ * rarity whose count reached its threshold, and the result resets every count at or below it.
+ */
+function tavernRarity(s: GameState): Rarity {
+  let floor: Rarity = 'common'
+  for (const r of GUARANTEE_RARITIES) {
+    s.guarantee[r] += 1
+    if (s.guarantee[r] >= content.tavern.guarantees[r]) floor = r
+  }
+  const roll = drawWeighted(s, content.tavern.odds)
+  const rarity = rank(roll) >= rank(floor) ? roll : floor
+  for (const r of GUARANTEE_RARITIES) if (rank(r) <= rank(rarity)) s.guarantee[r] = 0
+  return rarity
 }
 
 export function nextExpansionCost(state: GameState, which: 'inventory' | 'roster'): number | null {
@@ -66,7 +102,7 @@ export function vendor(state: GameState, event: Of<'vendor'>): StepResult {
   if (item.equippedBy !== null) return reject(state, event, 'item_equipped')
   return draft(state, (s) => {
     s.inventory = s.inventory.filter((i) => i.id !== event.itemId)
-    s.gold += vendorValue(item)
+    earn(s, vendorValue(item))
   })
 }
 
@@ -83,6 +119,7 @@ export function reforge(state: GameState, event: Of<'reforge'>): StepResult {
     const it = s.inventory.find((i) => i.id === event.itemId)
     if (!it) return
     s.gold -= cost
+    s.tallies.reforges += 1
     rerollAffix(s, it, index)
     const wearer = it.equippedBy ? findHero(s, it.equippedBy) : undefined
     if (wearer) clampHp(s, wearer)
@@ -112,8 +149,24 @@ export function recruit(state: GameState, event: Of<'recruit'>): StepResult {
   return draft(state, (s, effects) => {
     s.gold -= price
     s.recruits += 1
-    const rarity = drawWeighted(s, content.tavern.odds)
-    recruitHero(s, generateHero(s, rarity), 'tavern', effects)
+    recruitHero(s, generateHero(s, tavernRarity(s)), 'tavern', effects)
+  })
+}
+
+export function travel(state: GameState, event: Of<'travel'>): StepResult {
+  const { zone } = event
+  if (!Number.isInteger(zone)) return reject(state, event, 'bad_zone')
+  if (zone < 1) return reject(state, event, 'zone_below_1')
+  if (zone > Math.min(state.highestZone, LADDER_END))
+    return reject(state, event, 'zone_not_reached')
+  if (zone === state.zone) return reject(state, event, 'already_in_zone')
+  if (state.boss) return reject(state, event, 'boss_mode')
+  return draft(state, (s, effects) => {
+    const from = s.zone
+    endEncounter(s)
+    changeZone(s, zone)
+    effects.push({ k: 'traveled', from, to: zone })
+    applyPendingParty(s, effects)
   })
 }
 

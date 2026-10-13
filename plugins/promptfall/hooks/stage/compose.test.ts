@@ -2,9 +2,10 @@ import { expect, test } from 'claude-code/testing'
 import { encode } from '../sprites/base64'
 import { spriteFor } from '../sprites/index'
 import { artFrame, backdropOrigin, composeFrame, mirrored } from './compose'
-import { DIGITS } from './font'
+import { GLYPHS } from './font'
 import { fnv1a64 } from './hash'
 import { type StageModel, samePoses } from './model'
+import { deltasText } from './timeline'
 import { ZONE_GROUND } from './tuning'
 
 const slime = spriteFor('enemy', 'road_slime').full
@@ -83,11 +84,14 @@ test('numbers draw only when asked', () => {
   expect(at(composeFrame(model({ numbers }), { numbers: false }))).toBe(0)
 })
 
-test('artFrame is the art size; the font has 11 glyphs of 3 × 5; fnv1a64 of nothing', () => {
+test('artFrame is the art size; the font has 20 glyphs of 3 × 5; fnv1a64 of nothing', () => {
   const f = artFrame(slime)
   expect([f.width, f.height]).toEqual([16, 16])
-  expect(Object.keys(DIGITS)).toHaveLength(11)
-  for (const g of Object.values(DIGITS)) {
+  expect(Object.keys(GLYPHS)).toHaveLength(20)
+  // Every number the stage raises: damage, heals and a level-up's deltas, spaces between.
+  const raised = `-0123456789 ${deltasText({ hp: 9, atk: 3, def: 2, spd: 1 })}`
+  for (const c of raised) if (c !== ' ') expect(GLYPHS[c], c).toBeDefined()
+  for (const g of Object.values(GLYPHS)) {
     expect(g).toHaveLength(5)
     for (const row of g) expect(row).toHaveLength(3)
   }
@@ -111,7 +115,7 @@ test('at scale 1.5 the frame is 1.5 times the box, the ground 3 rows, a glyph pi
   for (const y of [27, 28, 29]) expect(rgbAt(0, y)).toBe(g)
   expect(rgbAt(0, 26)).toBe(null)
   // '1' row 0 is '.#.': glyph pixel (1, 0) covers frame pixels (6..7, 2..3).
-  const glyph = DIGITS['1'] ?? []
+  const glyph = GLYPHS['1'] ?? []
   for (let gy = 0; gy < 5; gy++) {
     for (let gx = 0; gx < 3; gx++) {
       const on = glyph[gy]?.[gx] === '#'

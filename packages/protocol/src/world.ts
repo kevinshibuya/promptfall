@@ -33,6 +33,19 @@ export type BossView = {
   yours: number
 }
 
+/** This week's hunt, as the World tab shows it. */
+export type HuntView = {
+  /** The row's name, as "casters". */
+  name: string
+  target: number
+  /** Everyone's count this week, bots left out; it may pass the target. */
+  count: number
+  /** Server epoch ms: the next Monday 00:00 UTC. */
+  endsAt: number
+  /** The caller's contribution. */
+  yours: number
+}
+
 export type WorldSnapshot = {
   serverNow: number
   /** The server clock's rate, as `ServerConfig.speed`; a secondary never bootstraps. */
@@ -43,6 +56,8 @@ export type WorldSnapshot = {
   /** Names in the caller's zone, caller excluded, at most `HERE_MAX`, most recent heartbeat first. */
   here: string[]
   boss: BossView | null
+  /** Null with `hunt.enabled` off, or before the first week opens. */
+  hunt: HuntView | null
   /** Ascending id. */
   chat: ChatMessage[]
   /** The resolved flags, the same object as `ServerConfig.flags`. */
@@ -80,7 +95,13 @@ export const BOSS_THRESHOLD_BP = 500
 /** The top contributors of a killed boss each get one bonus roll. */
 export const BOSS_TOP_BONUS = 3
 
+// The weekly hunt.
+
+/** A contribution at or above this share of the hunt's target, in basis points, is paid at the week's close. */
+export const HUNT_THRESHOLD_BP = 50
+
 const DAY_MS = 86_400_000
+export const WEEK_MS = 7 * DAY_MS
 
 /** Monday 00:00 UTC of the week holding `now` (day 0 was a Thursday). */
 export function weekStartOf(now: number): number {
@@ -127,6 +148,14 @@ export const BossViewSchema: z.ZodType<BossView> = z.object({
   yours: count,
 })
 
+export const HuntViewSchema: z.ZodType<HuntView> = z.object({
+  name: z.string().max(128),
+  target: z.number().int().positive(),
+  count,
+  endsAt: count,
+  yours: count,
+})
+
 export const WorldSnapshotSchema: z.ZodType<WorldSnapshot> = z.object({
   serverNow: count,
   speed: z.number().positive(),
@@ -136,6 +165,7 @@ export const WorldSnapshotSchema: z.ZodType<WorldSnapshot> = z.object({
   ),
   here: z.array(z.string().max(128)).max(HERE_MAX),
   boss: BossViewSchema.nullable(),
+  hunt: HuntViewSchema.nullable(),
   chat: z.array(ChatMessageSchema),
   flags: z.record(z.boolean()),
 })

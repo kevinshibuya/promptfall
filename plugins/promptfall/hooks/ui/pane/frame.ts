@@ -36,6 +36,8 @@ export const TAB_LABELS: readonly { tab: DialogTab; label: string; hotkey: strin
   { tab: 'orders', label: 'Orders', hotkey: 'r' },
   { tab: 'account', label: 'Account', hotkey: 'a' },
   { tab: 'odds', label: 'Odds', hotkey: 'o' },
+  // Not `j`: rung (c) keeps `j` and `k`, the one way those surfaces' keyboard moves the ▶.
+  { tab: 'journal', label: 'Journal', hotkey: 'u' },
   { tab: 'chat', label: 'Chat', hotkey: 'c' },
   { tab: 'leaderboards', label: 'Leaderboards', hotkey: 'b' },
 ]
@@ -203,7 +205,14 @@ export function listWindow(opts: {
   }
 }
 
-export type MenuItem = { label: string; hotkey?: string; rgb?: number }
+export type MenuItem = {
+  /** The item as text: drawn, unless `spans` draws it, and read by the alt. */
+  label: string
+  hotkey?: string
+  rgb?: number
+  /** Coloured columns in place of the label (the Journal's pages). */
+  spans?: Span[]
+}
 
 /** A command or pick window: a header line with a rule, then the items, paged by `at`. */
 export function menuWindow(opts: {
@@ -221,7 +230,10 @@ export function menuWindow(opts: {
   const lines: Line[] = [
     { spans: [{ gap: 1 }, ...opts.header], rule: true },
     ...opts.items.slice(start, start + shown).map((item, i) => ({
-      spans: [{ cursor: start + i === opts.at }, ...hotkeySpans(item.label, item.hotkey, item.rgb)],
+      spans: [
+        { cursor: start + i === opts.at },
+        ...(item.spans ?? hotkeySpans(item.label, item.hotkey, item.rgb)),
+      ],
     })),
   ]
   const footer = pageFooter(start, shown, opts.items.length)

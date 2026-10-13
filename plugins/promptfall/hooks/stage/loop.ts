@@ -253,6 +253,8 @@ export class StageLoop {
   } | null = null
   /** On the loop's clock, when the next busy frame is due; null re-anchors the beat on the next. */
   private beat: number | null = null
+  /** The clock at the last SMIL wake: a travel's backdrop change since then redraws. */
+  private wokeAt = Number.NEGATIVE_INFINITY
 
   constructor(
     private readonly io: LoopIo,
@@ -364,17 +366,25 @@ export class StageLoop {
 
   /**
    * SMIL plays the desktop's motion: no frame and no blit, only the drain and a wake for the next
-   * held toast's show time, or none until the next batch wakes the loop. It reads the clock alone,
-   * so no other read's latency lands between a show time and its release.
+   * held toast's show time or travel's backdrop change, or none until the next batch wakes the
+   * loop. It reads the clock alone, so no other read's latency lands between a show time and its
+   * release.
    */
   private async wakeFrame(gen: number): Promise<number | null> {
     const now = await this.io.now()
     if (gen !== this.gen || this.site === null) return null
     // SMIL plays the actors and the chest but not the backdrop, which is drawn: a release redraws,
-    // so the picture changes with the words and not at the next publish.
-    if (this.io.release(now)) this.io.invalidate()
-    const next = this.io.nextRelease(now)
-    return next === null ? null : next - now
+    // so the picture changes with the words and not at the next publish, and so does a travel's
+    // backdrop change, which holds no toast.
+    const shows = this.timeline.travelShows()
+    const traveled = shows.some((show) => show > this.wokeAt && show <= now)
+    this.wokeAt = now
+    const released = this.io.release(now)
+    if (released || traveled) this.io.invalidate()
+    const next = [this.io.nextRelease(now), ...shows.filter((show) => show > now)]
+      .filter((t): t is number => t !== null)
+      .reduce((a, b) => Math.min(a, b), Number.POSITIVE_INFINITY)
+    return Number.isFinite(next) ? next - now : null
   }
 
   /** One frame; answers the delay to the next, or null to stop until the next mount. */

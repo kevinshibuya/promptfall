@@ -244,7 +244,7 @@ function tabRows(input: StripInput, n: number, at = input.now): Line[] {
   }
   if (tab === 'world') {
     const [presence, , chat] = worldRows(view, world, at)
-    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n)
+    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n, at)
     return [
       { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
       { spans: [text(clip(second, n))] },

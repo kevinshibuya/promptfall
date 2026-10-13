@@ -121,6 +121,7 @@ test('a paused primary answers farm and the sandbox verbs as paused, not as anot
     'sandbox gold 100',
     `sandbox boss ${zoneBoss}`,
     `sandbox item ${base}`,
+    'travel 1',
   ]
   verbs.push('sandbox level Aria 5', 'sandbox zone 2', 'sandbox recruit', 'sandbox wipe')
   verbs.push('sandbox worldboss')
@@ -354,6 +355,88 @@ test(
     expect(view().roster.map((h) => h.id)).toEqual(ids)
   },
 )
+
+test('/promptfall travel 3 sends the travel event and answers the travel line', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $)
+  await run('zone 4')
+  await run('zone 1')
+  expect({ zone: view().zone, highest: view().highestZone }).toEqual({ zone: 1, highest: 4 })
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'travel 3' })
+  expect(r.text).toBe('The party travels to zone 3, Marsh of Sighs.')
+  expect({ zone: view().zone, wave: view().wave }).toEqual({ zone: 3, wave: 1 })
+})
+
+test('travel past the highest zone, to the current zone, or to no number answers its reason and moves nothing', async ($, on) => {
+  const { run, view } = await sandboxOn(on, $)
+  await run('zone 4')
+  await run('zone 3')
+  const travel = async (args: string) =>
+    (await $.command.run({ ...RUN, command: 'promptfall', args })).text
+  expect(await travel('travel 9')).toBe(
+    'The party has not reached zone 9: it can travel up to zone 4.',
+  )
+  expect(await travel('travel 3')).toBe('The party is already in zone 3, Marsh of Sighs.')
+  for (const args of ['travel x', 'travel', 'travel 0', 'travel 2.5']) {
+    expect({ args, text: await travel(args) }).toEqual({
+      args,
+      text: 'Usage: /promptfall travel <zone>, a zone number the party has reached',
+    })
+  }
+  expect(view().zone).toBe(3)
+})
+
+test('travel in boss mode answers that the world boss holds the party', async ($, on) => {
+  const { run, view, data } = await sandboxOn(on, $)
+  await run('zone 3')
+  await run('zone 1')
+  const store = {
+    get: async (key: string) => data.get(key),
+    set: async (key: string, value: unknown) => {
+      data.set(key, JSON.parse(JSON.stringify(value)))
+    },
+    delete: async (key: string) => {
+      data.delete(key)
+    },
+    keys: async () => [...data.keys()],
+  }
+  const ledger = new Ledger({
+    kv: new StoreKeyValue(store, SANDBOX_PREFIX),
+    now: async () => PAST_GRID_BOSS,
+    minClientVersion: '0.0.0',
+    seedSource: () => 1,
+    tokenSource: () => crypto.randomUUID(),
+    linkApprover: approveAs(null),
+    flags: { 'sandbox.enabled': true, 'worldboss.enabled': true },
+  })
+  const deviceToken = data.get(`${SANDBOX_PREFIX}deviceToken`) as string
+  await ledger.world({ deviceToken }, 0)
+  expect(await ledger.host.spawnBoss()).toEqual({ ok: true })
+  await run('gold 1')
+  expect(view().boss).not.toBeNull()
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'travel 3' })
+  expect(r.text).toBe('The party is fighting a world boss: travel waits until it ends.')
+  expect(view().zone).toBe(1)
+})
+
+// A typed command takes the lease, so a secondary session plays once it types: the session with
+// no game running is the one that answers as farm does.
+test('travel in a session with no game running answers that it is not playing', async ($, on) => {
+  harness(on)
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'travel 1' })
+  expect(r.text).toBe('Promptfall is not playing in this session')
+})
+
+test('/promptfall journal opens the Journal tab and loads the journal', async ($, on) => {
+  const { states, opened } = harness(on)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'journal' })
+  expect(r.text).toBe('Promptfall opened')
+  expect(opened).toEqual([{ id: 'promptfall', title: 'Promptfall' }])
+  expect(states.get('dialogTab')).toBe('journal')
+  const journal = states.get('journal') as { journal: { day: unknown } | null; busy: boolean }
+  expect(journal.busy).toBe(false)
+  expect(journal.journal?.day).toBeDefined()
+})
 
 test('sandbox wipe restarts the zone twice, and the third retreats one zone', async ($, on) => {
   const { run, view, toasts } = await sandboxOn(on, $)

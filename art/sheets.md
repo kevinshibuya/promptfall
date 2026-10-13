@@ -544,6 +544,9 @@ nearest other entry:
 three effect sprites from their frames sheets, as each sheet's section records, and writing the
 five hand-fixed hero frames back from their grids (`art/sheets/grids/hires-hero-<name>-<frame>.txt`).
 
+2026-10-13, the victory frames (spec #132): the script also cuts the four victory poses from
+`frames-victory.png` and writes them back from their grids with the other hero frames.
+
 ```sh
 # Re-cuts every shipped sprite from its sheet. Run from the repository root.
 set -e
@@ -651,7 +654,11 @@ cut art/sheets/frames-bosses-13.png /tmp/promptfall-frame-cuts --grid 2x2 --colo
 # frames-bosses-14
 cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 0 --names world_boss/the_context_leviathan-windup,world_boss/tokenmaw-windup
 cut art/sheets/frames-bosses-14.png /tmp/promptfall-frame-cuts --grid 2x2 --colours 16 --fit 48x34 --native art/sheets/native --hires art/sprites-frames --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
-for g in knight-windup knight-follow black_mage-windup white_mage-windup archer-windup; do
+# frames-victory (spec #132)
+cut art/sheets/frames-victory.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 0 --names hero/knight-victory,x/a,x/b,hero/archer-victory,x/c,x/d,x/e,x/f
+cut art/sheets/frames-victory.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 1 --names x/a,x/b,hero/white_mage-victory,x/c,x/d,x/e,x/f,x/g
+cut art/sheets/frames-victory.png /tmp/promptfall-frame-cuts --grid 8x4 --colours 4 --size 16 --native art/sheets/native --hires art/sprites-frames --row 2 --names x/a,hero/black_mage-victory,x/b,x/c,x/d,x/e,x/f,x/g
+for g in knight-windup knight-follow black_mage-windup white_mage-windup archer-windup knight-victory black_mage-victory white_mage-victory archer-victory; do
   pnpm -s grid --png art/sheets/grids/hires-hero-$g.txt art/sprites-frames/hero/$g.png >/dev/null
 done
 rm -rf art/sprites/x art/sprites-hires/x art/sprites-frames/x art/sheets/native/x /tmp/promptfall-frame-cuts
@@ -1476,6 +1483,64 @@ pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 0 --names world_boss/the_cont
 pnpm slice $D /tmp/promptfall-frame-cuts $=C --row 1 --names world_boss/the_context_leviathan-strike,world_boss/tokenmaw-strike
 ```
 
+## frames-victory.png
+
+2026-10-13, spec #132 (ticket #168): the heroes' victory poses, one drawn 1.5× frame per hero class,
+held on a zone boss's death. One run (`frames-victory`, 194 s). References:
+`art/sheets/ref-victory-heroes.png` (`pnpm refsheet art/sheets/ref-victory-heroes.png --columns 8
+--cell 192x256 --scale 7 hero/knight,hero/black_mage,hero/white_mage,hero/archer,hero_attack/knight,hero_attack/black_mage,hero_attack/white_mage,hero_attack/archer`),
+`art/sheets/dense-heroes-zone1-items.png`.
+
+Prompt (`bg.txt` + body + `frames-common.txt`; the body is `art/sheets/body-victory.txt`):
+
+```text
+HARD REQUIREMENT, READ FIRST: the entire background of the image is ONE flat solid pure magenta colour, #FF00FF, edge to edge, exactly like the attached reference sheet. NOT black, NOT dark, NOT a gradient, NO vignette. NO glow, NO light halo, NO bloom, NO particles around sprites. Any spell or magic effect is drawn as a few solid hard-edged pixels with a black outline, part of the sprite, never as a soft glow.
+
+Generate one landscape 1536x1024 sprite sheet: a strict grid of 8 columns x 4 rows, 32 small sprites, one per cell, every cell the same size (192 x 256 screen pixels). The attached reference sheet shows, left to right: column 1 the knight, column 2 the black mage, column 3 the white mage, column 4 the archer, and columns 5 to 8 the same four heroes attacking, in the same order (for their sword, staffs and bow only).
+Row 1, one per column, every hero celebrating a victory: 1 the knight raising the sword straight up in the front hand, shield on the other arm, chest out; 2 the black mage thrusting the staff up in one hand, the other fist raised, hat brim tipped back; 3 the white mage holding the staff up high in one hand, the other arm raised in a cheer; 4 the archer holding the bow up in one raised hand, the other fist pumped. Columns 5 to 8 are a second take of the same four heroes, in the same order (5 the knight, 6 the black mage, 7 the white mage, 8 the archer), in a different victory pose.
+Rows 2, 3 and 4: three more different takes of the same eight, in the same columns.
+Keep each pose compact: the raised weapon or hand reaches at most one head above the hat or helmet, and the figure is no wider than in the reference. The hero sprites keep the exact designs of the reference (same armour, hats, capes, colours, same size), only in these poses. Characters face right.
+
+STYLE (match the attached reference sheet's pixel style exactly, these are the SAME figures as the attached reference, in new poses: same design, same size, same colours, same pixel size):
+- Retro 8-bit console sprite art. Every sprite is built from large, perfectly square, equal-size pixel blocks on a hard grid; no anti-aliasing, no gradients, no blur, no soft shadows, no dithering on the small sprites.
+- A one-block-thick pure black outline around every sprite.
+- Flat fills. Each small sprite uses at most 3 colours plus the black outline.
+- Every sprite faces RIGHT, shown side-on (three-quarter side view), standing on an invisible ground line at the bottom of its cell.
+- Background: one flat pure magenta (#FF00FF) everywhere, edge to edge. No ground, no shadows, no frames, no borders.
+- Lay the sprites out on a strict, evenly spaced grid with generous magenta gaps so no two sprites touch or overlap.
+- No text, no letters, no numbers, no labels, no grid lines, no watermark.
+
+Use your image_gen tool (gpt-image-2). Save the result as a PNG to <repo>/art/sheets/frames-victory.png.
+```
+
+The sheet came back on magenta with all 32 cells filled: eight takes per hero (columns 1 to 4 and
+5 to 8, four rows). Picks, by eye: row 1 column 1 for the knight (the sword straight up, the shield
+cross clean), row 3 column 2 for the black mage (the staff and a fist raised), row 2 column 3 for
+the white mage (the staff up, the free arm out), row 1 column 4 for the archer (the bow up, the
+fist pumped). Every take cut to the 24 × 24 idle canvas, so the fit shrinks none of them.
+
+```sh
+D=art/sheets/frames-victory.png
+C="--grid 8x4 --colours 4 --size 16 --native art/sheets/native"
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 0 --names hero/knight-victory,x/a,x/b,hero/archer-victory,x/c,x/d,x/e,x/f
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 1 --names x/a,x/b,hero/white_mage-victory,x/c,x/d,x/e,x/f,x/g
+pnpm slice $D /tmp/promptfall-frame-cuts $=C --hires art/sprites-frames --row 2 --names x/a,hero/black_mage-victory,x/b,x/c,x/d,x/e,x/f,x/g
+rm -rf art/sprites-frames/x art/sheets/native/x /tmp/promptfall-frame-cuts
+```
+
+The four frames carry the one-region fix, kept as grids
+(`art/sheets/grids/hires-hero-<name>-victory.txt`) and written back by the canonical cut. On each,
+one 8-connected region on the frame's rarity entry is flattened to its `frameRarityColors.victory`,
+and every other pixel on that entry moves to the nearest other master entry
+(`.promptfall/frames/fix-rarity.ts`; for the knight, the same fix keeping the region that holds
+one seed pixel instead of the largest):
+
+- knight (`#f8180a`, the cape, 8 pixels, kept by its seed at 4,19: the plume, 14 pixels, is the
+  largest red region; the plume, the shield cross and a speck, 23 pixels, moved).
+- black mage (`#6c1ab7`, the robe; the hat, 38 pixels, and three specks moved).
+- white mage (`#06e5fd`, the staff orb; 8 cyan pixels on the body moved).
+- archer (`#fceb04`, the cape; a 3-pixel speck on the body moved).
+
 ## Redos (frames)
 
 Kevin, 2026-10-08: the frames ship as drawn. The 22 runs of PR 3 spent most of a weekly codex
@@ -1489,6 +1554,10 @@ candidates for a later pass that refines the sprites and frames, not a redo orde
 | `hero:black_mage` | windup | frames-heroes | frame size drift: native 28 against idle 20 (+40%); the staff flame adds height |
 | `hero:white_mage` | windup | frames-heroes | frame size drift: native 34 against idle 21 (+62%); the staff overhead adds height |
 | `hero:archer` | windup | frames-heroes | frame size drift: native 26 against idle 20 (+30%); the drawn bow adds width |
+| `hero:knight` | victory | frames-victory | frame size drift: native 29 against idle 21 (+38%); the raised sword adds height |
+| `hero:black_mage` | victory | frames-victory | frame size drift: native 27 against idle 20 (+35%) |
+| `hero:white_mage` | victory | frames-victory | frame size drift: native 31 against idle 21 (+48%); the raised staff adds height |
+| `hero:archer` | victory | frames-victory | frame size drift: native 29 against idle 20 (+45%); the raised bow adds height |
 | `enemy:road_slime` | strike | frames-monsters-1 | frame size drift: native 20 against idle 12 (+67%) |
 | `enemy:field_rat` | windup | frames-monsters-1 | frame size drift: native 26 against idle 20 (+30%) |
 | `enemy:field_rat` | strike | frames-monsters-1 | frame size drift: native 29 against idle 20 (+45%) |

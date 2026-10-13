@@ -163,12 +163,20 @@ describe('boss mode', () => {
       gold: 45,
     })
     expect(r.effects).toEqual([
-      { k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item: sword('r0') }, gold: 45 },
+      {
+        k: 'rewarded',
+        bossId: 'wb1',
+        goods: { kind: 'item', item: sword('r0') },
+        gold: 45,
+        source: 'boss',
+      },
     ])
     const goldOnly = step(s, { t: 'rewarded', bossId: 'wb1', goods: null, gold: 45 })
     expect(goldOnly.state.gold).toBe(s.gold + 45)
     expect(goldOnly.state.lootLog).toEqual(s.lootLog)
-    expect(goldOnly.effects).toEqual([{ k: 'rewarded', bossId: 'wb1', goods: null, gold: 45 }])
+    expect(goldOnly.effects).toEqual([
+      { k: 'rewarded', bossId: 'wb1', goods: null, gold: 45, source: 'boss' },
+    ])
   })
 
   it('rewarded into a full inventory is inventory_full', () => {
@@ -186,18 +194,18 @@ describe('boss mode', () => {
 })
 
 describe('scaledBossStats', () => {
+  /** A zone boss's stats with its atk before its move's multiplier: what the world boss scales by. */
   const zoneBoss = (zone: number) => {
-    const id = content.zones[zone - 1]?.boss ?? ''
-    const stats = content.enemies[id]?.stats
-    if (!stats) throw new Error(`no boss for zone ${zone}`)
-    return stats
+    const def = content.enemies[content.zones[zone - 1]?.boss ?? '']
+    if (!def?.baseAtk) throw new Error(`no boss for zone ${zone}`)
+    return { ...def.stats, atk: def.baseAtk }
   }
 
   it('at zone 1 is the carried stats plus the spd offset', () => {
     expect(scaledBossStats(engaged())).toEqual({ ...STATS, spd: STATS.spd + Math.floor(1 / 3) })
   })
 
-  it("at zone 5 scales atk and def by the zone boss's ratio to zone 1's", () => {
+  it("at zone 5 scales atk and def by the zone boss's ratio to zone 1's, its atk before its move", () => {
     const s = { ...engaged(), zone: 5 }
     const z1 = zoneBoss(1)
     const z5 = zoneBoss(5)
@@ -209,6 +217,12 @@ describe('scaledBossStats', () => {
     })
     expect(z1).toMatchObject({ atk: 16, def: 4 })
     expect(z5).toMatchObject({ atk: 30, def: 13 })
+  })
+
+  it('reads no move: zones 1 to 4 scale as their bosses did before the moves', () => {
+    // Zone 1 to 4's bosses at the boss archetype's ×2 atk: 16, 16, 20 and 22, whatever their moves.
+    const atks = [1, 2, 3, 4].map((zone) => scaledBossStats({ ...engaged(), zone }).atk)
+    expect(atks).toEqual([16, 16, 20, 22].map((a) => Math.floor((STATS.atk * a) / 16)))
   })
 })
 

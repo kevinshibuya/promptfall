@@ -3,7 +3,7 @@ import type { GameView } from '../types'
 import type { GaugeTrack } from './stage/gauges'
 import type { MessageLog } from './stage/log'
 import type { StageLoop } from './stage/loop'
-import type { StageTimeline } from './stage/timeline'
+import type { StageEffect, StageTimeline } from './stage/timeline'
 import { revokedToast } from './toasts'
 import type { LedgerHost } from './vendor/ledger.js'
 import type {
@@ -15,12 +15,14 @@ import type {
   Boards,
   ChatResult,
   Delivery,
+  Journal,
   KeyValue,
   ListingPage,
   ListingQuery,
   MarketResult,
   MyOrders,
   Order,
+  RestDaysResult,
   ServerClient,
   ServerConfig,
   TimedEvent,
@@ -31,6 +33,7 @@ import {
   type Effect,
   type GameState,
   hashState,
+  heroStats,
   type PlayerEvent,
   replay,
   type ServerEvent,
@@ -70,7 +73,7 @@ export type EngineDeps = {
    * delivery's wall time, when it reached the engine.
    */
   onEffects: (
-    effects: Effect[],
+    effects: StageEffect[],
     at: number | undefined,
     view: GameView | null,
     arrived?: number,
@@ -136,6 +139,10 @@ export type GameHandle = {
   chat: (text: string) => Promise<Exclude<ChatResult, Banned>>
   /** The boards, with the stored token. Throws `unreachable`, `not_started` or a ban's message. */
   leaderboards: () => Promise<Boards | Unauthorized>
+  /** The journal, with the stored token: a read that writes nothing, from any session. Throws as `leaderboards` does. */
+  journal: () => Promise<Journal | Unauthorized>
+  /** The rest days from next Monday, with the stored token: answers the journal or a refusal. Throws as `journal` does. */
+  setRestDays: (days: number[]) => Promise<Exclude<RestDaysResult, Banned>>
   /** The in-process ledger's host: the sandbox's grants go through it. Null on a remote server. */
   host: () => LedgerHost | null
   /** The account the engine plays, once bootstrapped. */
@@ -183,6 +190,28 @@ const STUCK_BEHIND = 5
 function strip(event: TimedEvent): PlayerEvent {
   const { at: _at, ...rest } = event
   return rest as PlayerEvent
+}
+
+/**
+ * One step's effects as the stage gets them: each hero's last level-up of the step carries the
+ * stats it gained over the step, the sim's stat function on `before` and on `after`.
+ */
+function withDeltas(before: GameState, after: GameState, effects: Effect[]): StageEffect[] {
+  const last = new Map<string, number>()
+  effects.forEach((e, i) => {
+    if (e.k === 'level_up') last.set(e.heroId, i)
+  })
+  if (last.size === 0) return effects
+  return effects.map((e, i) => {
+    if (e.k !== 'level_up' || last.get(e.heroId) !== i) return e
+    const was = before.roster.find((h) => h.id === e.heroId)
+    const is = after.roster.find((h) => h.id === e.heroId)
+    if (!was || !is) return e
+    const a = heroStats(before, was)
+    const b = heroStats(after, is)
+    const deltas = { hp: b.hp - a.hp, atk: b.atk - a.atk, def: b.def - a.def, spd: b.spd - a.spd }
+    return { ...e, deltas }
+  })
 }
 
 /**
@@ -368,7 +397,7 @@ export class GameEngine {
     const view = this.view()
     void this.publish({ view })
     // Every tick, effects or not: gauges fill on ticks where nobody acts.
-    this.deps.onEffects(r.effects, at, view)
+    this.deps.onEffects(withDeltas(local, r.state, r.effects), at, view)
   }
 
   /** Whether `apply` takes events now: not paused, and not past the outage's buffer window. */
@@ -534,12 +563,12 @@ export class GameEngine {
     const last = fresh.at(-1)?.n ?? 0
     this.cursor = Math.max(this.cursor, delivery.cursor, last)
     if (fresh.length === 0 || !this.committed) return
-    const effects: Effect[] = []
+    const effects: StageEffect[] = []
     let s = replay(this.committed, this.pending).state
     for (const { n, event } of fresh) {
       const r = step(s, event)
+      if (n > shownThrough) effects.push(...withDeltas(s, r.state, r.effects))
       s = r.state
-      if (n > shownThrough) effects.push(...r.effects)
       this.pending.push(event)
     }
     const restep = (events: TimedEvent[]) => {

@@ -1,9 +1,12 @@
+import { HIT_ALL_BP, RAGE_BP, SELF_HEAL_BP, STRIKE_TWICE_BP, scaled } from '../battle'
 import { enemyStats, hitDamage, NO_VARIANCE_BP } from '../combat'
-import { content, LADDER_END, zoneAt } from '../content'
+import { type BossMove, content, enemyAt, LADDER_END, zoneAt } from '../content'
+import { actionWeights } from '../picker'
 import { heroStats } from '../progression'
 import { compareCodeUnits } from '../rng'
 import { createInitialState } from '../state'
 import type {
+  ActionId,
   Affix,
   Enemy,
   EnemyKind,
@@ -26,9 +29,16 @@ export type ProbeZone = ReferenceRow & {
   knight: { hp: number; def: number }
   /** Hits survived, from the hardest-hitting wave enemy (min) to the softest (max). */
   knightWaveHits: { min: number; max: number }
+  /** The zone boss's move: the band counts its actions, each as the move lands it on the Knight. */
+  bossMove: BossMove | null
   knightBossHits: number
   /** Reported, not asserted. */
   knightTurnBossHits: number
+  /**
+   * Reported, not asserted: the Knight hits a healing boss's heals add to the fight, from the heals
+   * its need weight predicts over its under-half HP; 0 for any other move. A heal is no hit.
+   */
+  healKnightHits: number
 }
 
 export type Probe = { tier: number; band: typeof BAND; zones: ProbeZone[] }
@@ -133,7 +143,23 @@ export function referenceParty(row: ReferenceRow, seed = 0): GameState {
   return state
 }
 
-/** How many hits of this enemy the Knight takes and still stands. */
+/**
+ * One action's damage on the Knight from this atk: two 70% hits, a 60% sweep, an attack (raging at
+ * 150% under a rage move), or nothing for a heal.
+ */
+function actionDamage(atk: number, def: number, action: ActionId, move: BossMove | null): number {
+  const hit = (bp: number) => hitDamage(Math.floor((atk * bp) / 10000), def, NO_VARIANCE_BP)
+  if (action === 'attack_twice') return 2 * hit(STRIKE_TWICE_BP)
+  if (action === 'attack_all') return hit(HIT_ALL_BP)
+  if (action === 'attack') return hit(move === 'rage' ? RAGE_BP : 10000)
+  return 0
+}
+
+/**
+ * How many actions of this enemy the Knight takes and still stands. A zone boss's actions weigh as
+ * its tactics weigh them with the party standing: its expected action is the weighted mean of its
+ * actions' damage, and a heal weighs nothing at full HP.
+ */
 function hitsSurvived(
   s: GameState,
   hp: number,
@@ -142,8 +168,54 @@ function hitsSurvived(
   kind: EnemyKind,
 ): number {
   const enemy: Enemy = { id: 'probe_enemy', def: defId, kind, hp: 1, maxHp: 1, enraged: false }
-  const hit = hitDamage(enemyStats(s, enemy).atk, def, NO_VARIANCE_BP)
-  return Math.floor((hp - 1) / hit)
+  const { atk } = enemyStats(s, enemy)
+  if (kind !== 'zone_boss') return Math.floor((hp - 1) / actionDamage(atk, def, 'attack', null))
+  const move = content.enemies[defId]?.move ?? null
+  const fight: GameState = {
+    ...s,
+    encounter: { enemies: [enemy], queue: [], waveSize: 1, spawnedInWave: 1 },
+  }
+  let weight = 0
+  let dealt = 0
+  for (const [action, w] of Object.entries(actionWeights(fight, { side: 'enemy', enemy }))) {
+    if (!w) continue
+    weight += w
+    dealt += w * actionDamage(atk, def, action as ActionId, move)
+  }
+  return Math.floor(((hp - 1) * weight) / dealt)
+}
+
+/**
+ * The Knight hits a healing boss's heals add: through the boss's HP under half, at each of the
+ * Knight's hits the boss's chance to heal (its heal weight over all its weights, the party
+ * standing) times its heal, summed and over the Knight's hit, rounded. 0 for any other move.
+ */
+function healKnightHits(s: GameState, bossId: string): number {
+  const def = enemyAt(bossId, s.zone)
+  const knight = s.roster[0]
+  if (def?.move !== 'heal_self' || !knight) return 0
+  const max = def.stats.hp
+  const boss: Enemy = {
+    id: 'probe_boss',
+    def: bossId,
+    kind: 'zone_boss',
+    hp: max,
+    maxHp: max,
+    enraged: false,
+  }
+  const fight: GameState = {
+    ...s,
+    encounter: { enemies: [boss], queue: [], waveSize: 1, spawnedInWave: 1 },
+  }
+  const knightHit = hitDamage(heroStats(s, knight).atk, def.stats.def, NO_VARIANCE_BP)
+  const heal = scaled(Math.floor((def.stats.atk * SELF_HEAL_BP) / 10000))
+  let heals = 0
+  for (boss.hp = Math.floor((max - 1) / 2); boss.hp > 0; boss.hp -= knightHit) {
+    const w = actionWeights(fight, { side: 'enemy', enemy: boss })
+    const total = Object.values(w).reduce((n, v) => n + (v ?? 0), 0)
+    if (total > 0) heals += (w.heal ?? 0) / total
+  }
+  return Math.round((heals * heal) / knightHit)
 }
 
 /**
@@ -171,8 +243,10 @@ export function probe(tier: number): Probe {
       tier: at.tier,
       knight: { hp, def },
       knightWaveHits: { min: Math.min(...wave), max: Math.max(...wave) },
+      bossMove: content.enemies[at.def.boss]?.move ?? null,
       knightBossHits: hitsSurvived(s, hp, def, at.def.boss, 'zone_boss'),
       knightTurnBossHits: hitsSurvived(s, hp, def, at.def.turnBoss, 'turn_boss'),
+      healKnightHits: healKnightHits(s, at.def.boss),
     })
   }
   return { tier, band: BAND, zones }

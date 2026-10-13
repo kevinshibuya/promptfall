@@ -17,15 +17,16 @@ import {
 import { isBlocked } from './blocklist'
 import { type AccountRecord, type Books, isCurrent, publicName } from './books'
 import { BOSS_KEY, type BossRecord, engage, isLive, loadBoss, toBossView } from './boss'
+import { HUNT_KEY, type HuntRecord, loadHunt, toHuntView } from './hunt'
 
 /** Who polled, in the `Ledger` instance's memory only: never in the store. */
 export type Presence = Map<string, { zone: number; name: string; at: number }>
 
 /**
- * The world snapshot's shared parts (the presence counts and zones, the boss record, the chat
- * slice per mark), in the `Ledger` instance's memory. Each is built at most once a server-clock
+ * The world snapshot's shared parts (the presence counts and zones, the boss and hunt records,
+ * the chat slice per mark), in the `Ledger` instance's memory. Each is built at most once a server-clock
  * second and dropped sooner when what it was built from changes: the counts on an arrival, a zone
- * change or a lapse; the boss and the chat on a write to their key through this ledger. Another
+ * change or a lapse; the boss, the hunt and the chat on a write to their key through this ledger. Another
  * process writing the same store is seen within the second.
  */
 export class WorldMemo {
@@ -33,6 +34,7 @@ export class WorldMemo {
   private advanced = Number.NaN
   private counts: { online: number; zones: WorldSnapshot['zones'] } | null = null
   private boss: { record: BossRecord | null } | null = null
+  private hunt: { record: HuntRecord | null } | null = null
   private messages: ChatMessage[] | null = null
   private readonly slices = new Map<number, ChatMessage[]>()
 
@@ -51,6 +53,7 @@ export class WorldMemo {
     this.second = second
     this.counts = null
     this.boss = null
+    this.hunt = null
     this.dropChat()
   }
 
@@ -61,6 +64,7 @@ export class WorldMemo {
   /** The store's write hook. */
   written(key: string): void {
     if (key === BOSS_KEY) this.boss = null
+    if (key === HUNT_KEY) this.hunt = null
     if (key === CHAT_KEY) this.dropChat()
   }
 
@@ -82,6 +86,11 @@ export class WorldMemo {
   async bossRecord(kv: KeyValue): Promise<BossRecord | null> {
     this.boss ??= { record: await loadBoss(kv) }
     return this.boss.record
+  }
+
+  async huntRecord(kv: KeyValue): Promise<HuntRecord | null> {
+    this.hunt ??= { record: await loadHunt(kv) }
+    return this.hunt.record
   }
 
   async chatSince(kv: KeyValue, since: number): Promise<ChatMessage[]> {
@@ -211,6 +220,7 @@ export async function world(
     zones,
     here,
     boss: toBossView(ctx, boss, id),
+    hunt: toHuntView(ctx, await memo.huntRecord(ctx.books.kv), id),
     chat,
     flags: ctx.flags,
   }

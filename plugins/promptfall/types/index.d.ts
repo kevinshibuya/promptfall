@@ -6,6 +6,7 @@ export type DialogTab =
   | 'orders'
   | 'account'
   | 'odds'
+  | 'journal'
   | 'chat'
   | 'leaderboards'
 export type Mode = 'primary' | 'secondary' | 'paused' | 'off'
@@ -93,6 +94,7 @@ export type AccountView = {
   presenceOpen: boolean
   leaderboardsOpen: boolean
   bossOpen: boolean
+  huntOpen: boolean
   returns: number
   /** The sandbox save: the purse says `Sandbox` and the account never links. */
   sandbox: boolean
@@ -124,8 +126,30 @@ export type GameView = {
   account: AccountView
   /** Boss mode: the world boss this party is engaged with and what it has dealt (committed and local). */
   boss: { bossId: string; name: string; glyph: string; dealt: number } | null
+  tallies: TalliesView
+  guarantees: GuaranteesView
 }
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
+
+/** One integer per rarity. */
+export type RarityCountsView = Record<RarityName, number>
+/** The sim's tallies, counted from version 16: what the Journal's bestiary and collection read. */
+export type TalliesView = {
+  /** Per enemy definition: spawns met and kills. */
+  enemies: Record<string, { seen: number; defeated: number }>
+  /** Per item base: 1 at each rarity the party has held it in. */
+  collection: Record<string, RarityCountsView>
+  zoneBosses: number
+  /** Zone bosses beaten with no wipe in their zone. */
+  cleanZoneBosses: number
+  turnBosses: number
+  drops: RarityCountsView
+  recruits: RarityCountsView
+  reforges: number
+  goldEarned: number
+}
+/** Per tavern guarantee, the recruits until one of its rarity or better is certain: 1 is the next. */
+export type GuaranteesView = { rare: number; epic: number; legendary: number }
 
 export type TradeKindView = 'item' | 'hero'
 export type RarityName = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
@@ -204,6 +228,11 @@ export type PaneMenu =
     }
   | { kind: 'filter'; at: number } // the Market filter window
   | { kind: 'pick'; field: PickField; at: number }
+  | { kind: 'journal_zone'; zone: number; at: number } // a base zone's bestiary page
+  | { kind: 'journal_collection'; at: number }
+  | { kind: 'journal_achievements'; at: number }
+  /** The Account tab's rest-days pick: the days toggled so far; the second sends the pair. */
+  | { kind: 'rest_days'; picked: number[]; at: number }
 /** The ▶ row of a list: the id it was on, and its index then (for when the id is gone). */
 export type PaneCursor = { id: string; index: number }
 export type DialogState = {
@@ -221,7 +250,8 @@ export type DialogState = {
   formAt: number
 }
 
-// The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`):
+// The world poll's shapes, structurally the protocol's (`WorldSnapshot`, `ChatMessage`, `BossView`,
+// `HuntView`):
 // the contract imports nothing.
 export type ChatMessage = { id: number; name: string; text: string; at: number }
 export type BossView = {
@@ -234,6 +264,14 @@ export type BossView = {
   endsAt: number
   yours: number
 }
+/** This week's hunt: everyone's count against the target, the end, and the caller's part. */
+export type HuntView = {
+  name: string
+  target: number
+  count: number
+  endsAt: number
+  yours: number
+}
 export type WorldSnapshot = {
   serverNow: number
   speed: number
@@ -241,6 +279,8 @@ export type WorldSnapshot = {
   zones: { zone: number; count: number }[]
   here: string[]
   boss: BossView | null
+  /** Null with the hunt off. */
+  hunt: HuntView | null
   chat: ChatMessage[]
   flags: Record<string, boolean>
 }
@@ -251,6 +291,23 @@ export type Boards = { highestZone: BoardRow[]; damage: BoardRow[]; weekStart: n
 /** The Chat tab's compose box: the draft is the Input's value, cleared after a post. */
 export type ChatState = { draft: string; busy: boolean; error: string | null }
 export type BoardsState = { boards: Boards | null; busy: boolean; error: string | null }
+
+/** What a daily goal counts, structurally the sim's `DailyGoal`. */
+export type DailyGoalView = {
+  kind: 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss'
+  target: number
+}
+/** The journal read, structurally the protocol's `Journal`: never sim state. */
+export type JournalView = {
+  /** Each achievement with a step crossed: its crossed steps, numbered from 1, with the server time of each. */
+  achievements: { id: string; steps: { step: number; at: number }[] }[]
+  day: { index: number; goal: DailyGoalView; progress: number; met: boolean; resetsAt: number }
+  goalsMet: number
+  streak: { length: number; lastMet: number | null }
+  /** ISO weekdays, 1 Monday to 7 Sunday. */
+  restDays: { current: number[]; next: { days: number[]; from: number } | null }
+}
+export type JournalState = { journal: JournalView | null; busy: boolean; error: string | null }
 
 /** The world poll's result, published by the session's poller. */
 export type WorldState = {
@@ -307,6 +364,7 @@ declare module 'claude-code' {
       world: WorldState
       chat: ChatState
       boards: BoardsState
+      journal: JournalState
       /** The store's settings, mirrored for the drawings. */
       settings: PromptfallSettings
       /** Per session, owned by ui/band.tsx. */

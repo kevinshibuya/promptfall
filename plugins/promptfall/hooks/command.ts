@@ -1,11 +1,21 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { BoardsState, DialogTab, MarketState, Mode, OrdersState, Settings } from '../types'
+import type {
+  BoardsState,
+  DialogTab,
+  GameView,
+  JournalState,
+  MarketState,
+  Mode,
+  OrdersState,
+  Settings,
+} from '../types'
 import { type GameHandle, PAUSED_LINE } from './engine'
 import { runSandbox, SANDBOX_PINS_SERVER } from './sandbox'
 import { SERVER_KEY, serverReport } from './server'
 import {
   BOARDS_DEFAULT,
   DIALOG_DEFAULT,
+  JOURNAL_DEFAULT,
   MARKET_DEFAULT,
   ORDERS_DEFAULT,
   parseSettings,
@@ -14,22 +24,25 @@ import {
   settingCommand,
 } from './state'
 import { PREFIX } from './storage'
+import { loadJournal } from './ui/journal'
 import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
 import { loadOrders } from './ui/orders'
+import { LADDER_END } from './vendor/sim.js'
 import { PANE_ROWS } from './windows/tuning'
+import { zonePhrase, zoneWords } from './zone-words'
 
 export const PANE_ID = 'promptfall'
 
 const HINT =
-  'inventory|heroes|market|orders|account|odds|chat|leaderboards|off|on|farm|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
+  'inventory|heroes|market|orders|account|odds|journal|chat|leaderboards|off|on|farm|travel <zone>|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
 
 /** The command, its hint naming the sandbox verb only while the sandbox is on. */
 export function commandSpec(sandbox: boolean) {
   return {
     name: 'promptfall',
     description:
-      'Promptfall: open the game, or off / on / farm / autovendor / server / sound / motion / renderer',
+      'Promptfall: open the game, or off / on / farm / travel / autovendor / server / sound / motion / renderer',
     argumentHint: `[${HINT}${sandbox ? '|sandbox <verb>' : ''}]`,
     immediate: true,
   } as const
@@ -42,6 +55,7 @@ const TABS: readonly DialogTab[] = [
   'orders',
   'account',
   'odds',
+  'journal',
   'chat',
   'leaderboards',
 ]
@@ -53,9 +67,25 @@ const dialogAtom = atom({ plugin: 'promptfall', key: 'dialog' } as const, DIALOG
 const marketAtom = atom({ plugin: 'promptfall', key: 'market' } as const, MARKET_DEFAULT)
 const ordersAtom = atom({ plugin: 'promptfall', key: 'orders' } as const, ORDERS_DEFAULT)
 const boardsAtom = atom({ plugin: 'promptfall', key: 'boards' } as const, BOARDS_DEFAULT)
+const journalAtom = atom({ plugin: 'promptfall', key: 'journal' } as const, JOURNAL_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 
 const AUTOVENDOR_USAGE = 'Usage: /promptfall autovendor on or /promptfall autovendor off'
+
+const TRAVEL_USAGE = 'Usage: /promptfall travel <zone>, a zone number the party has reached'
+
+/**
+ * Why the sim would refuse a travel to `zone`, in its order, or null: the reply is composed here
+ * from the view, so the command answers in one line without waiting on the event's effects.
+ */
+function travelRefusal(view: GameView, zone: number): string | null {
+  const top = Math.min(view.highestZone, LADDER_END)
+  if (zone > top)
+    return `The party has not reached ${zonePhrase(zone)}: it can travel up to ${zonePhrase(top)}.`
+  if (zone === view.zone) return `The party is already in ${zoneWords(zone)}.`
+  if (view.boss) return 'The party is fighting a world boss: travel waits until it ends.'
+  return null
+}
 
 const SERVER_USAGE =
   'Usage: /promptfall server, /promptfall server <http(s) URL> or /promptfall server local'
@@ -129,6 +159,22 @@ export function registerCommand(
       return { text: `Promptfall farm is ${view.farm ? 'off' : 'on'}` }
     }
 
+    if (arg === 'travel' || arg.startsWith('travel ')) {
+      const word = arg.slice('travel'.length).trim()
+      const view = await read($, viewAtom)
+      const running = game()
+      if (running?.isPaused()) return { text: PAUSED_LINE }
+      if (!view || !running?.canApply())
+        return { text: 'Promptfall is not playing in this session' }
+      if (!/^[1-9]\d*$/.test(word)) return { text: TRAVEL_USAGE }
+      const zone = Number(word)
+      const refusal = travelRefusal(view, zone)
+      if (refusal) return { text: refusal }
+      running.apply({ t: 'travel', zone }, await $.clock.now())
+      await running.settled()
+      return { text: `The party travels to ${zoneWords(zone)}.` }
+    }
+
     if (arg === 'autovendor' || arg.startsWith('autovendor ')) {
       const word = arg.slice('autovendor'.length).trim()
       if (word !== 'on' && word !== 'off') return { text: AUTOVENDOR_USAGE }
@@ -181,6 +227,16 @@ export function registerCommand(
         running,
         async (fn) => {
           await update($, boardsAtom, (b: BoardsState | undefined) => fn(b ?? BOARDS_DEFAULT))
+        },
+        after,
+      )
+    }
+    // The Account tab's rest days are the journal's.
+    if (running && (tab === 'journal' || tab === 'account')) {
+      await loadJournal(
+        running,
+        async (fn) => {
+          await update($, journalAtom, (j: JournalState | undefined) => fn(j ?? JOURNAL_DEFAULT))
         },
         after,
       )

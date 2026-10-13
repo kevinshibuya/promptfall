@@ -102,6 +102,15 @@ export const HASTE_FRAME_MS = IDLE_FRAME_MS / 2
 export const CAMPFIRE_MS = 4000
 export const CAMPFIRE_FADE_MS = 400
 export const EVENT_FRAME_MS = 83
+/**
+ * A travel: the heroes step off toward the right and fade over TRAVEL_OFF_MS, the backdrop
+ * changes as they are gone, and they step on from the left over TRAVEL_ON_MS, TRAVEL_PX each way.
+ */
+export const TRAVEL_OFF_MS = 500
+export const TRAVEL_ON_MS = 500
+export const TRAVEL_PX = 12
+/** The party's victory pose after a zone boss's dissolve, before the backdrop changes. */
+export const VICTORY_MS = 2000
 export const IDLE_BOB_PX = 1
 
 // Surfaces and budgets.
@@ -195,3 +204,5 @@ export const NUMBER_RGB_HERO = 0xff5050
 export const NUMBER_RGB_ENEMY = 0xffffff
 /** HP a heal restored. */
 export const NUMBER_RGB_HEAL = 0x58d858
+/** A level-up's gold: the hero's flash and its stat deltas rising. */
+export const LEVEL_RGB = 0xf0c040

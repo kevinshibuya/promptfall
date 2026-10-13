@@ -1,4 +1,4 @@
-export const SIM_VERSION = 15 as const
+export const SIM_VERSION = 17 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -66,11 +66,43 @@ export type Battle = {
   /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
   busy: number
 }
-export type ActionId = 'attack' | 'attack_all' | 'heal'
+/** `attack_twice` is a zone boss's strike twice: two hits on one target in one act. */
+export type ActionId = 'attack' | 'attack_all' | 'attack_twice' | 'heal'
 export type TradeKind = 'item' | 'hero'
 export type Goods = { kind: 'item'; item: Item } | { kind: 'hero'; hero: Hero }
 
 export type RecruitVia = 'contract' | 'tavern' | 'sandbox'
+/** Who a reward pays for: a world boss's fight, or the weekly hunt. */
+export type RewardSource = 'boss' | 'hunt'
+
+/** The rarities the tavern guarantee promises, each within its own count of recruits. */
+export type GuaranteeRarity = 'rare' | 'epic' | 'legendary'
+export const GUARANTEE_RARITIES: readonly GuaranteeRarity[] = ['rare', 'epic', 'legendary']
+
+/** One integer per rarity. */
+export type RarityCounts = Record<Rarity, number>
+
+/**
+ * What the party has seen and done since version 16, counted in the state because the ledger
+ * replays state and never effects. Every field an integer, every one in the hash.
+ */
+export type Tallies = {
+  /** Per enemy definition: spawns met and kills. */
+  enemies: Record<string, { seen: number; defeated: number }>
+  /** Per item base: 1 at each rarity the party has held it in, by a drop, a purchase, a reward or a return. */
+  collection: Record<string, RarityCounts>
+  zoneBosses: number
+  /** Zone bosses beaten with the zone's wipe count at zero at the kill. */
+  cleanZoneBosses: number
+  turnBosses: number
+  /** Drops by rarity, kept or vendored on pickup. */
+  drops: RarityCounts
+  /** Heroes joined by rarity: tavern, contract and sandbox alike. */
+  recruits: RarityCounts
+  reforges: number
+  /** Kill gold, vendoring, a sale's net, a reward's gold and credits; never a refund or escrow. */
+  goldEarned: number
+}
 
 export type LootEntry =
   | { k: 'item'; itemId: string; base: string; rarity: Rarity; vendoredFor: number | null }
@@ -92,6 +124,8 @@ export type PlayerEvent =
   | { t: 'turn_start' }
   | { t: 'turn_end' }
   | { t: 'rest' }
+  /** Moves the party to a zone it has reached, ending the fight with no drops and no XP. */
+  | { t: 'travel'; zone: number }
   | { t: 'tool_mishap' }
   | { t: 'camp' }
   | { t: 'guard'; on: boolean }
@@ -137,8 +171,11 @@ export type ServerEvent =
   /** Boss mode: the encounter becomes one undying `world_boss` with these (zone 1 baseline) stats. */
   | { t: 'boss_engaged'; bossId: string; name: string; glyph: string; stats: Stats }
   | { t: 'boss_disengaged'; bossId: string }
-  /** One reward roll; `goods` null when the item waited in returns. */
-  | { t: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
+  /**
+   * One reward roll; `goods` null when the item waited in returns. `source` absent reads as
+   * boss, as every event logged before it does.
+   */
+  | { t: 'rewarded'; bossId: string; goods: Goods | null; gold: number; source?: RewardSource }
   | SandboxEvent
 
 /** Authored only by a host with the sandbox on. Each hands out what play would earn, through play's own path. */
@@ -184,7 +221,8 @@ export type Effect =
   | { k: 'drop'; item: Item }
   /** A drop sold on pickup: `full` for a full inventory, `setting` for the auto-vendor setting. */
   | { k: 'drop_vendored'; item: Item; gold: number; cause: 'full' | 'setting' }
-  | { k: 'gold'; amount: number }
+  /** `reason` is a `credited` event's own; kill gold and a vendored contract carry none. */
+  | { k: 'gold'; amount: number; reason?: string }
   | { k: 'level_up'; heroId: string; level: number }
   | { k: 'wave_cleared'; zone: number; wave: number }
   | { k: 'zone_cleared'; zone: number; advancedTo: number }
@@ -197,7 +235,9 @@ export type Effect =
   | { k: 'party_applied'; heroIds: [string, string, string] }
   | { k: 'hero_recruited'; hero: Hero; via: RecruitVia }
   | { k: 'rejected'; event: Event; reason: string }
-  | { k: 'rewarded'; bossId: string; goods: Goods | null; gold: number }
+  | { k: 'rewarded'; bossId: string; goods: Goods | null; gold: number; source: RewardSource }
+  /** The party traveled from one zone to another. */
+  | { k: 'traveled'; from: number; to: number }
   | { k: 'traded'; entry: Extract<LootEntry, { k: 'trade' }> }
   /** Output only: one per attack, by and target actor ids (Hero.id or Enemy.id); feeds no hash. */
   | { k: 'hit'; by: string; target: string; amount: number }
@@ -211,6 +251,8 @@ export type Effect =
   | { k: 'guard'; on: boolean }
   /** A mishap enraged this enemy (an Enemy.id). */
   | { k: 'enraged'; enemyId: string }
+  /** A raging zone boss's HP went under half at this hit: its hits land half again as hard from here. */
+  | { k: 'raging'; enemyId: string }
   /** The party camped: each party hero and the HP it restored. */
   | { k: 'camp'; heals: { heroId: string; amount: number }[] }
 
@@ -245,6 +287,9 @@ export type GameState = {
   guardTicks: number
   lootLog: LootEntry[]
   stats: { kills: number; bosses: number; wipes: number }
+  tallies: Tallies
+  /** Tavern recruits since the last of each rarity or better: the tavern guarantee's counts. */
+  guarantee: Record<GuaranteeRarity, number>
   /** Boss mode: set by boss_engaged, cleared by boss_disengaged. `dealt` is the party's tally for this boss. */
   boss: { bossId: string; name: string; glyph: string; stats: Stats; dealt: number } | null
   battle: Battle

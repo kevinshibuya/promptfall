@@ -340,8 +340,34 @@ describe('server events', () => {
     it('adds gold with a gold effect', () => {
       const r = step(rich, { t: 'credited', gold: 1000, reason: 'bot_stipend' })
       expect(r.state.gold).toBe(2000)
-      expect(r.effects).toEqual([{ k: 'gold', amount: 1000 }])
+      expect(r.effects).toEqual([{ k: 'gold', amount: 1000, reason: 'bot_stipend' }])
       expect(r.state.lootLog).toEqual(rich.lootLog)
+    })
+
+    it("carries the event's reason on the gold effect, so a toast can tell an achievement from a goal", () => {
+      for (const reason of ['achievement:kills:2', 'goal:20374', 'bot_stipend']) {
+        const r = step(rich, { t: 'credited', gold: 5, reason })
+        expect(r.effects).toEqual([{ k: 'gold', amount: 5, reason }])
+      }
+    })
+  })
+
+  describe('rewarded', () => {
+    it('without a source applies as a boss reward and its effect says so', () => {
+      const r = step(rich, { t: 'rewarded', bossId: 'wb1', goods: null, gold: 45 })
+      expect(r.effects).toEqual([
+        { k: 'rewarded', bossId: 'wb1', goods: null, gold: 45, source: 'boss' },
+      ])
+    })
+
+    it('with a source carries it on the effect', () => {
+      for (const source of ['boss', 'hunt'] as const) {
+        const r = step(rich, { t: 'rewarded', bossId: 'hunt1', goods: null, gold: 45, source })
+        expect(r.effects).toEqual([
+          { k: 'rewarded', bossId: 'hunt1', goods: null, gold: 45, source },
+        ])
+        expect(r.state.gold).toBe(rich.gold + 45)
+      }
     })
   })
 

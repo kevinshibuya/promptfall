@@ -74,7 +74,12 @@ function randomServerEvent(r: (n: number) => number, s: GameState): ServerEvent 
     return { t: 'boss_disengaged', bossId }
   }
   if (roll === 5) {
-    if (r(2) === 0) return { t: 'rewarded', bossId: 'wb1', goods: null, gold: 1 + r(200) }
+    if (r(2) === 0) {
+      // A reward without a source reads as the boss's; the hunt's names itself.
+      const gold = 1 + r(200)
+      if (r(2) === 0) return { t: 'rewarded', bossId: 'wb1', goods: null, gold }
+      return { t: 'rewarded', bossId: 'hunt1', goods: null, gold, source: 'hunt' }
+    }
     return {
       t: 'rewarded',
       bossId: 'wb1',
@@ -144,7 +149,9 @@ function randomEvent(r: (n: number) => number, s: GameState): Event {
     return { t: 'camp' }
   }
   if (roll < 64) return { t: 'turn_end' }
-  if (roll < 67) return { t: 'rest' }
+  if (roll < 66) return { t: 'rest' }
+  // Travel takes a third of the rest's share: zone 0 to one past the highest, so each refusal comes up.
+  if (roll < 67) return { t: 'travel', zone: r(s.highestZone + 2) }
   if (roll < 74) return { t: 'equip', heroId, itemId }
   if (roll < 77) return { t: 'unequip', heroId, slot: pick(r, SLOTS, 'weapon') }
   if (roll < 81) return { t: 'vendor', itemId }

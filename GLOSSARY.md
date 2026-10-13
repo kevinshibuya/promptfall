@@ -183,8 +183,10 @@ be.
 _Avoid_: wipe, defeat, demotion
 
 **Travel**:
-The player's move of the party to any zone up to the highest it has reached, at once, the
-encounter cleared with no drops and no XP. Navigation, never a cost.
+The player's move of the party to any zone up to the highest it has reached, at once, from a
+Journal zone page or `/promptfall travel <zone>`: the encounter cleared with no drops and no XP,
+wave 1, the wipe count reset and the pending party applied. Never to the zone the party is in,
+never in boss mode. Navigation, never a cost: it can take the party straight back after a retreat.
 _Avoid_: teleport, warp, zone select, fast travel
 
 **Tier**:
@@ -231,26 +233,30 @@ _Avoid_: defend, pause, block, shield wall
 
 **Tavern guarantee**:
 The tavern's promise that a recruit of at least a given rarity comes within a set number of
-recruits, one count per rarity, published on the Odds tab beside the odds. Contracts from
-bosses are drops and never count.
+recruits: a Rare or better within 20, an Epic or better within 80, a Legendary within 400, one
+count per rarity, the recruits remaining to each published on the Odds tab beside the odds.
+Contracts from bosses are drops and never count, nor do the sandbox's recruits.
 _Avoid_: pity, pity counter, pity timer, mercy
 
 **Session summary**:
-What the game tells the player on the first tick of a session about the play since the last
-one: kills, zones, levels, rare drops, gold and sales. One toast and the message window's first
-line. Nothing is summarised after a short break.
+What the game tells the player when a session becomes primary about the play since this
+account was last seen playing on the machine: kills, zone bosses, levels, Rare or better drops,
+gold earned, the zone reached and the day's goal. One toast and the message window's first line
+for 20 seconds. Nothing is summarised after a break of ten minutes or less.
 _Avoid_: recap, while you were away (there is no away progress), report
 
 **Achievement**:
 A thing done once and kept for good, counted in play that happens anyway (kills, bosses, zones,
-drops, recruits, collections). Never counted in logins, tool calls or turns.
+drops, recruits, collections, goals, the streak). A count is a ladder of steps, a first is a
+one-off; each step pays gold on the commit that crosses it. Never counted in logins, tool calls
+or turns.
 _Avoid_: trophy, badge, milestone, quest
 
 **Daily goal**:
-One target a day per account, in play that happens anyway (kills, zone bosses, rare drops, a
-turn boss, a world boss), scaled to the party's zone and paid in gold when met. Set the same
-way on client and server from the day and the account, so nobody has to deliver it. A missed
-goal costs nothing but the streak.
+One target a day per account, in play that happens anyway (kills, zone bosses, Rare or better
+drops, or one turn boss), scaled to the party's zone and paid in gold when met. Drawn the same
+way on client and server from the day and the account, so nobody has to deliver it; the ledger
+counts the progress. A missed goal costs nothing but the streak.
 _Avoid_: daily quest, daily, task, mission, challenge
 
 **Streak**:
@@ -260,18 +266,20 @@ nothing.
 _Avoid_: login streak (nothing counts a login), combo, chain, run
 
 **Rest day**:
-A weekday the player names as off, two a week, Saturday and Sunday unless changed. A change
-takes effect from the next Monday.
+A day of the week the player names as off, two a week, Saturday and Sunday unless changed on
+the Account tab. A change takes effect from the next Monday.
 _Avoid_: freeze, skip, forgiveness, grace day
 
 **Weekly hunt**:
 One target a week shared by every player on the server, counted in play that happens anyway,
-with a progress bar on the World tab and a reward to every contributor when it is met.
+with a progress bar on the World tab and a reward to every contributor when the week closes,
+whether or not the target was reached. Bots never count.
 _Avoid_: event, community goal, raid, world quest
 
 **Journal**:
-The pane's tab for what the player has seen and done: the bestiary by zone, the item
-collection, the achievements, the daily goal and the streak, each with its mark.
+The pane's tab, on `u`, for what the player has seen and done: the daily goal and the streak,
+the bestiary by zone, the item collection and the achievements, each with its mark. A zone's page
+is also where the party travels from.
 _Avoid_: bestiary tab, collection, codex, trophies
 
 ### Presentation
@@ -331,20 +339,20 @@ _Avoid_: drop animation, unboxing, loot pop
 
 **Show time**:
 The moment the stage plays an event the words also tell: a drop's item fully risen, a zone
-arrival's backdrop changed. A line or toast about such an event lands at its show time, not
+arrival's or a travel's backdrop changed. A line or toast about such an event lands at its show time, not
 before; an event the stage never plays, or plays while no band is drawn, has none, and its words
 land with the state.
 _Avoid_: reveal time (that is one show time), animation end, delay
 
 **Held line**:
-A combat log line or toast that waits for its show time. A drop's and a zone arrival's are held;
-a hit line, a wipe's or a level-up's is not.
+A combat log line or toast that waits for its show time. A drop's, a zone arrival's and a
+travel's are held; a hit line, a wipe's or a level-up's is not.
 _Avoid_: delayed line, queued toast, deferred message
 
 **Window**:
 A framed box of the game's interface, as Dragon Quest V draws it: a charcoal field, a thin white
-line with cut corners, text in the game's pixel font. The band's strip and all eight of the
-pane's tabs are made of windows.
+line with cut corners, text in the game's pixel font. The band's strip and all
+nine of the pane's tabs are made of windows.
 _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
 **Strip**:
@@ -375,7 +383,7 @@ The message window's first row, `▶Party Loot World ▾`: the band tabs, ▶ on
 _Avoid_: tab bar, menu
 
 **Tab window**:
-The pane's top window: the eight tab labels, ▶ on the current one, each hotkey letter gold.
+The pane's top window: the nine tab labels, ▶ on the current one, each hotkey letter gold.
 _Avoid_: tab bar, header
 
 **Command window**:
@@ -432,8 +440,8 @@ _Avoid_: batch (that is a submission of player events), tick (one of the two kin
 
 **Fold**:
 Several effects of one kind in a burst becoming one toast that carries the count and the sum.
-A legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe or a zone arrival
-never folds: a toast with a show time lands at its own.
+A legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat, a zone
+arrival or a goal met never folds: a toast with a show time lands at its own.
 _Avoid_: group, coalesce, merge, summary toast
 
 **Cue**:

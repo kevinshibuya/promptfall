@@ -24,9 +24,12 @@ describe('content reference', () => {
     expect(lines).toContain('| 3 | 25 to 36 | 6 |')
   })
 
-  it('lists enemies and bosses by id, name and archetype', () => {
-    expect(lines).toContain('| `elder_treant` | Elder Treant | boss |')
-    expect(lines).toContain("| `will_o_wisp` | Will-o'-Wisp | caster |")
+  it('lists enemies and bosses by id, name, archetype and a zone boss’s move', () => {
+    expect(lines).toContain('| `elder_treant` | Elder Treant | boss | heals itself |')
+    expect(lines).toContain('| `bandit_captain` | Bandit Captain | boss | strikes twice |')
+    expect(lines).toContain('| `sigh_hag` | The Sighing Hag | boss | hits the whole party |')
+    expect(lines).toContain('| `barrow_king` | The Barrow King | boss | rages under half HP |')
+    expect(lines).toContain("| `will_o_wisp` | Will-o'-Wisp | caster |  |")
   })
 
   it('lists item bases by id, name, glyph, slot, minimum zone and tier, escaping a pipe glyph', () => {
@@ -45,9 +48,27 @@ describe('content reference', () => {
     expect(lines).toContain('| `knight_1` | Aldric | knight |')
   })
 
-  it('lists the rarities with their level caps', () => {
-    expect(lines).toContain('| common | 20 |')
-    expect(lines).toContain('| legendary | 50 |')
+  it('lists the rarities with their level caps, the tavern odds and the tavern guarantee', () => {
+    expect(lines).toContain('| common | 20 | 60% | — |')
+    expect(lines).toContain('| rare | 40 | 9.5% | 20 |')
+    expect(lines).toContain('| legendary | 50 | 0.5% | 400 |')
+  })
+
+  it('lists the achievements with what each reads and every step with its gold', () => {
+    expect(lines).toContain(
+      '| `kills` | Kills | kills | 100 (100 gold), 1,000 (400 gold), 10,000 (1,500 gold), 100,000 (5,000 gold) |',
+    )
+    expect(lines).toContain('| `zone_6` | zone 6 reached | highest_zone | 6 (500 gold) |')
+  })
+
+  it('lists the daily goals with their base and how they scale with the zone', () => {
+    expect(lines).toContain('| kills | 150 | 10 | 1 |')
+    expect(lines).toContain('| turn_boss | 1 | 0 | 1 |')
+  })
+
+  it('lists the weekly hunts in turn with what they count and their target', () => {
+    expect(lines).toContain('| `casters` | casters | caster | 20,000 |')
+    expect(lines).toContain('| `zone_bosses` | zone bosses | zone_boss | 1,000 |')
   })
 
   it('holds one row per registry entry', () => {
@@ -59,7 +80,10 @@ describe('content reference', () => {
       Object.keys(content.heroTemplates).length +
       Object.keys(content.rarity).length +
       content.itemTierMultBp.length +
-      LADDER_END / content.zones.length
+      LADDER_END / content.zones.length +
+      content.achievements.length +
+      content.goals.length +
+      content.hunts.length
     expect(rows).toHaveLength(expected)
   })
 })
