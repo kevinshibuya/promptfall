@@ -464,7 +464,10 @@ of its own and keeps a spare one warm beside it; coming back attaches the termin
 conversation's process. The process left behind draws nowhere, so within a couple of seconds it
 flushes, steps back and lets the lease go, and the process the conversation moved to picks it up a
 couple of seconds later: the band plays on with no command. The spare never takes a free lease; it
-plays only once a prompt or a `/promptfall` verb in it claims one.
+plays only once a prompt or a `/promptfall` verb in it claims one. Claude Code starts those
+background processes with pictures off; one started from Ghostty, cmux or kitty, outside tmux or
+screen, turns them back on for itself unless the renderer is set to raster, so the band comes back
+as the same image it left.
 A session that becomes primary more than ten minutes after this account was last seen playing on
 this machine says what the party did since, in a toast and for 20 seconds in the message window:
 "Since Tuesday: 412 kills, 3 bosses, 2 levels, 1 Legendary, 2 Epics, 1,200 gold, zone 5 reached.

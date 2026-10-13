@@ -1039,6 +1039,23 @@ export const register: Register = (on) => {
     const hadGame = (await read($, leaseOwnerAtom)) !== null
     const settings = parseSettings(await $.store.get(`promptfall:${SETTINGS_KEY}`))
     await update($, settingsAtom, () => settings)
+    // Claude Code settles "no pictures" in a background worker before a terminal attaches, and its
+    // re-check on attach rules the same unless told to force them (2.1.296). A worker started from
+    // a terminal that draws pictures (Ghostty, cmux, kitty), outside tmux or screen, forces them, so
+    // a conversation back from the agents view keeps its image band. It skips the probe too: run
+    // before the attach, the probe would hear "no pictures" and settle the band on half-blocks.
+    if (
+      e.surface === 'terminal' &&
+      settings.renderer !== 'raster' &&
+      (await $.env.get('CLAUDE_CODE_SESSION_KIND')) === 'bg' &&
+      (await $.env.get('TMUX')) === undefined &&
+      (await $.env.get('STY')) === undefined &&
+      ((await $.env.get('GHOSTTY_RESOURCES_DIR')) !== undefined ||
+        (await $.env.get('KITTY_WINDOW_ID')) !== undefined)
+    ) {
+      await $.env.set('CLAUDE_CODE_FORCE_TERMINAL_IMAGES', '1')
+      await update($, rendererAtom, () => 'image')
+    }
     // A forced renderer skips the probe; `auto` leaves the atom to the band's probe.
     if (e.surface === 'terminal' && settings.renderer !== 'auto') {
       await update($, rendererAtom, () => settings.renderer)
