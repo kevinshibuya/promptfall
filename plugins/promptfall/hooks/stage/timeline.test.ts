@@ -1181,6 +1181,32 @@ test('the departed encounter stays put until the backdrop changes, with no disso
   expect(lineAt(show)).toEqual([])
 })
 
+test('a travel first observed after its step-off still departs the encounter with no dissolve', () => {
+  const t = observed()
+  t.onEffects([traveled], NOW)
+  const show = t.travelShowAt(3) ?? 0
+  const next = arrived()
+  t.observe(next, show + 1)
+  expect(of(t.active(show + 1), 'dissolve')).toEqual([])
+  expect(stagedState(next, WORLD_DEFAULT, t, show + 1).zone).toBe(3)
+})
+
+test('a hero the travel brings in from a pending party steps off and on with the rest', () => {
+  const t = observed()
+  t.onEffects([traveled], NOW)
+  const show = NOW + TRAVEL_OFF_MS
+  const base = arrived()
+  const swapped = {
+    ...base,
+    heroes: base.heroes.map((h) => (h.id === 'h3' ? { ...h, id: 'h4' } : h)),
+  }
+  t.observe(swapped, NOW + 1)
+  const off = of(t.active(NOW + 1), 'travel_off').filter((m) => m.actor === 'h4')
+  expect(off.map((m) => [m.from, m.until])).toEqual([[NOW, show]])
+  const on = of(t.active(NOW + 1), 'travel_on').filter((m) => m.actor === 'h4')
+  expect(on.map((m) => [m.from, m.until])).toEqual([[show, show + TRAVEL_ON_MS]])
+})
+
 test("a travel waits for the action under way, and the next action waits for the party's step-on", () => {
   const t = observed()
   t.onEffects([act('h1', 0), hit('h1', 'e1')], NOW)

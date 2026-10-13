@@ -102,6 +102,18 @@ describe('achievementCount', () => {
     expect(achievementCount('tier', s0, none)).toBe(1)
   })
 
+  it('counts a bought Epic or Legendary hero as a rarity held, with no recruit and no mark', () => {
+    const [first, ...rest] = s0.roster
+    if (!first) throw new Error('no hero')
+    const none = { goalsMet: 0, streak: 0 }
+    expect(achievementCount('epic_held', s0, none)).toBe(0)
+    const epic = { ...s0, roster: [{ ...first, rarity: 'epic' as const }, ...rest] }
+    expect(epic.tallies.recruits.epic).toBe(0)
+    expect(achievementCount('epic_held', epic, none)).toBe(1)
+    const legendary = { ...s0, roster: [{ ...first, rarity: 'legendary' as const }, ...rest] }
+    expect(achievementCount('legendary_held', legendary, none)).toBe(1)
+  })
+
   it('counts a zone whose six enemies all fell, a base held in every rarity, and the journal', () => {
     const zone = content.zones[0]
     if (!zone) throw new Error('no zone')

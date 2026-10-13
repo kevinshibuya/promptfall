@@ -181,6 +181,18 @@ describe('achievements', () => {
     expect(reasons(await p.commit()).filter((r) => r.startsWith('achievement:'))).toEqual([])
   })
 
+  it('a hero bought in a rarity pays the first-rarity one-off, with no recruit and no mark', async () => {
+    const s = createInitialState(5)
+    const p = await play(MON, s)
+    expect(reasons(await p.commit())).not.toContain('achievement:first_epic:1')
+    // A bought hero arrives in the roster alone: no recruit tally, no collection mark.
+    await p.patch((st) => ({
+      ...st,
+      roster: st.roster.map((h, i) => (i === 0 ? { ...h, rarity: 'epic' as const } : h)),
+    }))
+    expect(reasons(await p.commit())).toContain('achievement:first_epic:1')
+  })
+
   it('the no-wipe one-off reads the clean zone boss tally, not the boss total', async () => {
     const s = createInitialState(5)
     const p = await play(MON, { ...s, tallies: { ...s.tallies, zoneBosses: 5 } })

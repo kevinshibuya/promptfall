@@ -1626,6 +1626,9 @@ var Ledger = class {
       const batch = BatchSchema.parse(input);
       const owner = await this.books.accountFor(auth.deviceToken);
       if (!owner || owner !== batch.accountId) return { ok: false, reason: "unauthorized" };
+      const now = await this.options.now();
+      const worldCtx = await this.worldContext(now);
+      await advanceHunt(worldCtx);
       const record = await this.books.load(owner);
       if (!record) return { ok: false, reason: "unauthorized" };
       const banned = refusedBanned(record);
@@ -1655,7 +1658,6 @@ var Ledger = class {
         return { ok: false, reason: "cursor_behind", delivery: deliveryOf(record) };
       }
       if (batch.baseHash !== record.committedHash) return this.adopt(record, "hash_mismatch");
-      const now = await this.options.now();
       const buckets = {};
       const refillAt = {};
       for (const kind of KINDS) {
@@ -1685,7 +1687,6 @@ var Ledger = class {
       record.buckets = buckets;
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING);
       settle(record);
-      const worldCtx = await this.worldContext(now);
       await contribute(worldCtx, record, prevDealt);
       await countHunt(worldCtx, record, before);
       await this.books.deliverReturns(record);

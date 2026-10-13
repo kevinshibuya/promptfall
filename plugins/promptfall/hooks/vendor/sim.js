@@ -508,10 +508,12 @@ function achievementCount(metric, state, journal) {
       ).length;
     case "bases_complete":
       return Object.values(t.collection).filter((marks) => Object.values(marks).every((m) => m > 0)).length;
+    // A rarity held by any route (#162): a recruit, a collection mark, or a hero in the roster,
+    // which is how a bought hero arrives.
     case "epic_held":
-      return t.recruits.epic + Object.values(t.collection).filter((m) => m.epic > 0).length;
+      return t.recruits.epic + Object.values(t.collection).filter((m) => m.epic > 0).length + state.roster.filter((h) => h.rarity === "epic").length;
     case "legendary_held":
-      return t.recruits.legendary + Object.values(t.collection).filter((m) => m.legendary > 0).length;
+      return t.recruits.legendary + Object.values(t.collection).filter((m) => m.legendary > 0).length + state.roster.filter((h) => h.rarity === "legendary").length;
     case "highest_zone":
       return state.highestZone;
     case "tier":
