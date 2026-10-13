@@ -204,6 +204,8 @@ export class MessageLog {
         const what = !goods
           ? ''
           : ` and ${goods.kind === 'item' ? itemName(goods.item.base) : tradeName('hero', goods.hero.template)}`
+        if (e.source === 'hunt')
+          return { text: `Your share of the hunt: ${e.gold}G${what}.`, key: true }
         return { text: `Your share of the boss: ${e.gold}G${what}.`, key: true }
       }
       // The reactive events (spec #131): one line each, never toasted.

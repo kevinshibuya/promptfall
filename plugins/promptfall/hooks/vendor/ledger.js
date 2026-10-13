@@ -390,7 +390,7 @@ import {
   BOSS_THRESHOLD_BP,
   BOSS_TOP_BONUS,
   BOSS_WINDOW_MS,
-  weekStartOf as weekStartOf2
+  weekStartOf as weekStartOf3
 } from './protocol.js';
 import {
   content,
@@ -406,13 +406,82 @@ import {
   CHAT_REFILL_MS,
   CHAT_SERVE,
   HERE_MAX,
+  weekStartOf as weekStartOf2
+} from './protocol.js';
+
+// packages/ledger/src/hunt.ts
+import {
+  HUNT_THRESHOLD_BP,
+  WEEK_MS as WEEK_MS2,
   weekStartOf
 } from './protocol.js';
+import { huntAt, huntCount } from './sim.js';
+var HUNT_KEY = "pf:world:hunt";
+var huntOn = (ctx) => ctx.flags["hunt.enabled"] !== false;
+async function loadHunt(kv) {
+  const raw = await kv.get(HUNT_KEY);
+  return raw ?? null;
+}
+function newHunt(weekStart) {
+  const week = Math.floor(weekStart / WEEK_MS2);
+  const row = huntAt(week);
+  return {
+    huntId: `h${week.toString(36)}`,
+    row: row.id,
+    name: row.name,
+    kind: row.kind,
+    target: row.target,
+    weekStart,
+    endsAt: weekStart + WEEK_MS2,
+    count: 0,
+    contributions: {},
+    closed: false
+  };
+}
+function toHuntView(ctx, hunt, accountId) {
+  if (!hunt || !huntOn(ctx) || hunt.closed || ctx.now >= hunt.endsAt) return null;
+  const { name, target, count, endsAt } = hunt;
+  return { name, target, count, endsAt, yours: hunt.contributions[accountId] ?? 0 };
+}
+async function closeHunt(ctx, hunt) {
+  for (const [id, contribution] of Object.entries(hunt.contributions)) {
+    if (contribution * 1e4 < hunt.target * HUNT_THRESHOLD_BP) continue;
+    const record = await ctx.books.load(id);
+    if (!record || !isCurrent(record)) continue;
+    await payReward(ctx, record, hunt.huntId, "hunt");
+    await ctx.books.syncReturnsQueue(record);
+    await ctx.books.save(record);
+  }
+  hunt.closed = true;
+  await ctx.books.kv.set(HUNT_KEY, hunt);
+}
+async function advanceHunt(ctx) {
+  if (!huntOn(ctx)) return;
+  const stored = await loadHunt(ctx.books.kv);
+  if (stored && !stored.closed && ctx.now >= stored.endsAt) await closeHunt(ctx, stored);
+  const weekStart = weekStartOf(ctx.now);
+  if (stored && stored.weekStart === weekStart) return;
+  await ctx.books.kv.set(HUNT_KEY, newHunt(weekStart));
+}
+async function countHunt(ctx, record, before) {
+  if (record.bot || !huntOn(ctx)) return;
+  const hunt = await loadHunt(ctx.books.kv);
+  if (!hunt || hunt.closed || ctx.now < hunt.weekStart || ctx.now >= hunt.endsAt) return;
+  const delta = huntCount(hunt.kind, record.state) - huntCount(hunt.kind, before);
+  if (delta <= 0) return;
+  const id = record.account.accountId;
+  hunt.count += delta;
+  hunt.contributions[id] = (hunt.contributions[id] ?? 0) + delta;
+  await ctx.books.kv.set(HUNT_KEY, hunt);
+}
+
+// packages/ledger/src/world.ts
 var WorldMemo = class {
   second = Number.NaN;
   advanced = Number.NaN;
   counts = null;
   boss = null;
+  hunt = null;
   messages = null;
   slices = /* @__PURE__ */ new Map();
   /** True on the first call in each second: the boss advance runs then, as it ran on every poll. */
@@ -429,6 +498,7 @@ var WorldMemo = class {
     this.second = second;
     this.counts = null;
     this.boss = null;
+    this.hunt = null;
     this.dropChat();
   }
   presenceChanged() {
@@ -437,6 +507,7 @@ var WorldMemo = class {
   /** The store's write hook. */
   written(key) {
     if (key === BOSS_KEY) this.boss = null;
+    if (key === HUNT_KEY) this.hunt = null;
     if (key === CHAT_KEY) this.dropChat();
   }
   presenceCounts(presence) {
@@ -454,6 +525,10 @@ var WorldMemo = class {
   async bossRecord(kv) {
     this.boss ??= { record: await loadBoss(kv) };
     return this.boss.record;
+  }
+  async huntRecord(kv) {
+    this.hunt ??= { record: await loadHunt(kv) };
+    return this.hunt.record;
   }
   async chatSince(kv, since) {
     const cached = this.slices.get(since);
@@ -476,7 +551,7 @@ async function loadChat(kv) {
 }
 async function loadBoards(kv, now) {
   const raw = await kv.get(BOARDS_KEY);
-  return raw ?? { zone: [], week: { start: weekStartOf(now), damage: {} } };
+  return raw ?? { zone: [], week: { start: weekStartOf2(now), damage: {} } };
 }
 function prune(ctx) {
   let dropped = false;
@@ -525,6 +600,7 @@ async function world(ctx, record, since, engageCaller = true) {
     zones,
     here,
     boss: toBossView(ctx, boss, id),
+    hunt: toHuntView(ctx, await memo.huntRecord(ctx.books.kv), id),
     chat: chat2,
     flags: ctx.flags
   };
@@ -563,7 +639,7 @@ async function chat(ctx, record, text) {
   return { ok: true, message };
 }
 async function leaderboards(ctx) {
-  const weekStart = weekStartOf(ctx.now);
+  const weekStart = weekStartOf2(ctx.now);
   if (ctx.flags["leaderboards.enabled"] === false) {
     return { highestZone: [], damage: [], weekStart };
   }
@@ -671,6 +747,30 @@ function partyClasses(state) {
 function rewardGold(rarity, zone) {
   return 3 * content.rarity[rarity].vendorGoldPerZone * zone;
 }
+async function payReward(ctx, record, rewardId, source) {
+  const tagged = source ? { source } : {};
+  const zone = record.state.zone;
+  const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
+  if (!rolled) {
+    author(record, {
+      t: "rewarded",
+      bossId: rewardId,
+      goods: null,
+      gold: rewardGold("rare", zone),
+      ...tagged
+    });
+    return;
+  }
+  const item = { ...rolled, id: await nextLedgerId(ctx.books.kv, "r") };
+  const goods = { kind: "item", item };
+  const gold = rewardGold(item.rarity, zone);
+  if (hasRoom(record.state, goods)) {
+    author(record, { t: "rewarded", bossId: rewardId, goods, gold, ...tagged });
+  } else {
+    record.returns.push({ listingId: rewardId, goods });
+    author(record, { t: "rewarded", bossId: rewardId, goods: null, gold, ...tagged });
+  }
+}
 async function settleBoss(ctx, boss, options) {
   const kv = ctx.books.kv;
   const threshold = Math.floor(BOSS_BASE_HP * BOSS_THRESHOLD_BP / 1e4);
@@ -679,28 +779,7 @@ async function settleBoss(ctx, boss, options) {
     const record = options.inHand?.account.accountId === id ? options.inHand : await ctx.books.load(id);
     if (!record || !isCurrent(record)) continue;
     const rolls = (options.allPaid || contribution >= threshold ? 1 : 0) + (!options.expired && top.includes(id) ? 1 : 0);
-    for (let i = 0; i < rolls; i++) {
-      const zone = record.state.zone;
-      const rolled = rollRewardItem(ctx.seedSource() >>> 0, zone, partyClasses(record.state));
-      if (!rolled) {
-        author(record, {
-          t: "rewarded",
-          bossId: boss.bossId,
-          goods: null,
-          gold: rewardGold("rare", zone)
-        });
-        continue;
-      }
-      const item = { ...rolled, id: await nextLedgerId(kv, "r") };
-      const goods = { kind: "item", item };
-      const gold = rewardGold(item.rarity, zone);
-      if (hasRoom(record.state, goods)) {
-        author(record, { t: "rewarded", bossId: boss.bossId, goods, gold });
-      } else {
-        record.returns.push({ listingId: boss.bossId, goods });
-        author(record, { t: "rewarded", bossId: boss.bossId, goods: null, gold });
-      }
-    }
+    for (let i = 0; i < rolls; i++) await payReward(ctx, record, boss.bossId);
     await ctx.books.syncReturnsQueue(record);
     disengage(ctx, record, boss.bossId);
     await ctx.books.save(record);
@@ -790,7 +869,7 @@ async function contribute(ctx, record, prevDealt) {
 }
 async function offerDamage(kv, now, record, delta) {
   const id = record.account.accountId;
-  const weekStart = weekStartOf2(now);
+  const weekStart = weekStartOf3(now);
   const boards = await kv.get(BOARDS_KEY) ?? {
     zone: [],
     week: { start: weekStart, damage: {} }
@@ -1270,6 +1349,7 @@ var SETTABLE_FLAGS = [
   "worldboss.enabled",
   "presence.enabled",
   "leaderboards.enabled",
+  "hunt.enabled",
   "maintenance"
 ];
 function settable(raw) {
@@ -1378,6 +1458,7 @@ var Ledger = class {
       "worldboss.enabled": true,
       "presence.enabled": true,
       "leaderboards.enabled": true,
+      "hunt.enabled": true,
       maintenance: false,
       "sandbox.enabled": false,
       ...this.options.flags,
@@ -1594,6 +1675,7 @@ var Ledger = class {
       );
       const result = replay3(record.state, events).state;
       const prevDealt = dealtBefore(record.state, result);
+      const before = record.state;
       const hash = hashState3(result);
       const seq = record.seq + 1;
       for (const kind of KINDS) buckets[kind] -= counts[kind];
@@ -1603,7 +1685,9 @@ var Ledger = class {
       record.buckets = buckets;
       record.batches = [...record.batches, { batchId: batch.batchId, hash, seq }].slice(-BATCH_RING);
       settle(record);
-      await contribute(await this.worldContext(now), record, prevDealt);
+      const worldCtx = await this.worldContext(now);
+      await contribute(worldCtx, record, prevDealt);
+      await countHunt(worldCtx, record, before);
       await this.books.deliverReturns(record);
       await onCommit(this.kv, record, now);
       await this.offerZone(record, now);
@@ -1799,7 +1883,10 @@ var Ledger = class {
   world(auth, since, { advance = true } = {}) {
     return this.run(async () => {
       const ctx = await this.worldContext();
-      if (advance && this.memo.advanceDue(ctx.now)) await advanceBoss(ctx);
+      if (advance && this.memo.advanceDue(ctx.now)) {
+        await advanceBoss(ctx);
+        await advanceHunt(ctx);
+      }
       const record = await this.books.authenticate(auth);
       if (!record) return unauthorized;
       const banned = bannedOf(record);
@@ -1941,7 +2028,9 @@ var Ledger = class {
     await this.books.save(record);
   }
   async sweep() {
-    await advanceBoss(await this.worldContext());
+    const ctx = await this.worldContext();
+    await advanceBoss(ctx);
+    await advanceHunt(ctx);
     await expireDue(await this.marketContext());
     for (const accountId of await this.books.returnsQueue()) {
       const record = await this.books.load(accountId);

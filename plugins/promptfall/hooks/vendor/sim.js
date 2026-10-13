@@ -620,6 +620,28 @@ var heroTemplates = {
   }
 };
 
+// packages/sim/src/content/hunts.ts
+var hunts = [
+  { id: "casters", name: "casters", kind: "caster", target: 2e4 },
+  { id: "brutes", name: "brutes", kind: "brute", target: 2e4 },
+  { id: "zone_bosses", name: "zone bosses", kind: "zone_boss", target: 1e3 },
+  { id: "tanks", name: "tanks", kind: "tank", target: 2e4 },
+  { id: "swifts", name: "swifts", kind: "swift", target: 2e4 }
+];
+function huntAt(week, table = hunts) {
+  const row = table[(week % table.length + table.length) % table.length];
+  if (!row) throw new Error("the hunt table is empty");
+  return row;
+}
+function huntCount(kind, state) {
+  if (kind === "zone_boss") return state.tallies.zoneBosses;
+  let sum2 = 0;
+  for (const [def, row] of Object.entries(state.tallies.enemies)) {
+    if (enemies[def]?.archetype === kind) sum2 += row.defeated;
+  }
+  return sum2;
+}
+
 // packages/sim/src/content/items.ts
 var K = ["knight"];
 var BM = ["black_mage"];
@@ -832,7 +854,8 @@ var content = {
   xpToNext,
   itemTierMultBp,
   achievements,
-  goals
+  goals,
+  hunts
 };
 
 // packages/sim/src/draft.ts
@@ -2524,6 +2547,8 @@ export {
   hashState,
   heroFill,
   heroStats,
+  huntAt,
+  huntCount,
   migrate,
   migrateGoods,
   oddsAt,

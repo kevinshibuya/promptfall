@@ -97,6 +97,11 @@ export type GoalKind = 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss'
 /** A goal row: its target is `base`, plus `step` for every `everyZones` zones past zone 1. */
 export type GoalRow = { kind: GoalKind; base: number; step: number; everyZones: number }
 
+/** What a weekly hunt counts: kills of one wave archetype across every zone, or zone bosses. */
+export type HuntKind = 'brute' | 'swift' | 'tank' | 'caster' | 'zone_boss'
+/** A weekly hunt: its id, the name the World tab shows, what it counts and the server-wide target. */
+export type HuntRow = { id: string; name: string; kind: HuntKind; target: number }
+
 /** What an achievement row reads, from the state or from the account's journal. */
 export type AchievementMetric =
   | 'kills'
@@ -155,4 +160,6 @@ export type Content = {
   achievements: AchievementRow[]
   /** The daily goal's pool: data no sim rule reads. */
   goals: GoalRow[]
+  /** The weekly hunts, one a week in turn: data no sim rule reads. */
+  hunts: HuntRow[]
 }
