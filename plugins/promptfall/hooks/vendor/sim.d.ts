@@ -27,7 +27,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 16;
+declare const SIM_VERSION: 17;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -102,7 +102,8 @@ type Battle = {
     /** Steps left in the running action; 0 when nobody is acting. Carries across ticks. */
     busy: number;
 };
-type ActionId = 'attack' | 'attack_all' | 'heal';
+/** `attack_twice` is a zone boss's strike twice: two hits on one target in one act. */
+type ActionId = 'attack' | 'attack_all' | 'attack_twice' | 'heal';
 type TradeKind = 'item' | 'hero';
 type Goods = {
     kind: 'item';
@@ -440,6 +441,11 @@ type Effect = {
     k: 'enraged';
     enemyId: string;
 }
+/** A raging zone boss's HP went under half at this hit: its hits land half again as hard from here. */
+ | {
+    k: 'raging';
+    enemyId: string;
+}
 /** The party camped: each party hero and the HP it restored. */
  | {
     k: 'camp';
@@ -505,6 +511,8 @@ type StepResult = {
 declare function tavernGuarantees(state: GameState): Record<GuaranteeRarity, number>;
 
 type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss';
+/** A zone boss's one behaviour: two hits on one target, a heal of itself, a hit on every hero, or rage under half HP. */
+type BossMove = 'strike_twice' | 'heal_self' | 'hit_all' | 'rage';
 type EnemyDef = {
     id: string;
     name: string;
@@ -517,6 +525,10 @@ type EnemyDef = {
     gold: [number, number];
     dropBp: number;
     contractBp: number;
+    /** A zone boss's move, its base zone's in every tier; absent on every other enemy. */
+    move?: BossMove;
+    /** A zone boss's atk at the boss archetype's multiplier, before its move's: what the world boss scales by. */
+    baseAtk?: number;
 };
 type ZoneDef = {
     index: number;
@@ -574,6 +586,12 @@ type WeightRule = {
     kind: 'ally_need';
     belowBp: number;
     scale: number;
+}
+/** As ally_need, on the unit's own HP share. */
+ | {
+    kind: 'self_need';
+    belowBp: number;
+    scale: number;
 };
 type TargetRule = 
 /** No target to choose (attack_all). */
@@ -602,6 +620,10 @@ type TargetRule =
 /** One candidate, weight 1: the living ally with the lowest HP %, first in order on a tie. */
  | {
     kind: 'ally_lowest';
+}
+/** One candidate, weight 1: the unit itself. */
+ | {
+    kind: 'self';
 };
 type Tactic = {
     action: ActionId;
@@ -613,6 +635,8 @@ type Tactic = {
 type Tactics = {
     heroes: Record<HeroClass, Tactic[]>;
     enemies: Record<Archetype | 'world_boss', Tactic[]>;
+    /** Keyed by enemy definition, looked up before the archetype: the zone bosses' moves. */
+    byEnemy: Record<string, Tactic[]>;
 };
 /** What a daily goal counts: kills, zone bosses, Rare or better drops, or one turn boss. */
 type GoalKind = 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss';
@@ -772,7 +796,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "ea3cd5be0f52d490";
+declare const GOLDEN_HASH = "5a9469dfea696461";
 
 declare function hashState(state: GameState): string;
 
@@ -851,4 +875,4 @@ declare function createInitialState(seed: number): GameState;
 declare function step(state: GameState, event: Event): StepResult;
 declare function replay(state: GameState, events: readonly Event[]): StepResult;
 
-export { ACTION_STEPS, type AchievementMetric, type AchievementRow, type AchievementStep, type ActionId, type Affix, type AffixDef, type Battle, type Content, type DailyGoal, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOAL_GOLD_KILLS, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type GoalKind, type GoalRow, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type HuntKind, type HuntRow, type Item, type ItemBase, type JournalCounts, LADDER_END, LADDER_GOLD, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, ONE_OFF_GOLD, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, achievementCount, affixValue, baseTier, content, createInitialState, dailyGoal, dropTier, enemyAt, fill, goalCount, goalGold, goldenEvents, hashState, heroFill, heroStats, huntAt, huntCount, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };
+export { ACTION_STEPS, type AchievementMetric, type AchievementRow, type AchievementStep, type ActionId, type Affix, type AffixDef, type Battle, type BossMove, type Content, type DailyGoal, ENRAGE_BP, type Effect, type Encounter, type Enemy, type EnemyDef, type EnemyKind, type Event, type EventKind, FILL_BP, FILL_K, GAUGE_FULL, GOAL_GOLD_KILLS, GOLDEN_HASH, GOLDEN_SEED, GUARANTEE_RARITIES, GUARD_DAMAGE_BP, GUARD_TICKS, type GameState, type GoalKind, type GoalRow, type Goods, type GuaranteeRarity, HASTE_BP, HASTE_TICKS, type Hero, type HeroClass, type HeroTemplate, type HuntKind, type HuntRow, type Item, type ItemBase, type JournalCounts, LADDER_END, LADDER_GOLD, type LootEntry, MIGRATIONS, type MigrateOptions, type MigrateRefusal, type MigrateResult, type Migration, type MigrationChain, ONE_OFF_GOLD, POWER_BP, type PlayerEvent, type PlayerEventKind, RARITIES, type Rarity, type RarityCounts, type RarityRule, type RecruitVia, type RewardSource, SANDBOX_EVENT_KINDS, SERVER_EVENT_KINDS, SIM_VERSION, SPAWN_GAUGE_MAX, STEP_MS, type SandboxEvent, type SandboxEventKind, type ServerEvent, type ServerEventKind, type Slot, type Stat, type Stats, type StepResult, TICK_MS, TIER_GROWTH_BP, type Tallies, type TradeKind, type Trait, type TraitDef, type VersionedState, WAVE_ARCHETYPES, type WaveArchetype, type ZoneAt, type ZoneDef, achievementCount, affixValue, baseTier, content, createInitialState, dailyGoal, dropTier, enemyAt, fill, goalCount, goalGold, goldenEvents, hashState, heroFill, heroStats, huntAt, huntCount, migrate, migrateGoods, oddsAt, reforgeCost, replay, rollRewardItem, step, tavernGuarantees, vendorValue, zoneAt };

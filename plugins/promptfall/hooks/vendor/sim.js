@@ -11,6 +11,10 @@ var HASTE_TICKS = 90;
 var GUARD_TICKS = 60;
 var GUARD_DAMAGE_BP = 5e3;
 var ENRAGE_BP = 15e3;
+var STRIKE_TWICE_BP = 7e3;
+var HIT_ALL_BP = 6e3;
+var SELF_HEAL_BP = 5e3;
+var RAGE_BP = 15e3;
 var SPAWN_GAUGE_MAX = 5e3;
 function fill(spd) {
   return Math.max(1, Math.floor((spd + FILL_K) * FILL_BP / 1e3));
@@ -110,6 +114,26 @@ function baseline(t, z) {
     goldMax: grow(zone1.goldMax, growthBp.gold, z)
   };
 }
+var BOSS_MOVES = [
+  "strike_twice",
+  "heal_self",
+  "hit_all",
+  "rage",
+  "strike_twice",
+  "heal_self",
+  "hit_all",
+  "rage",
+  "strike_twice",
+  "heal_self",
+  "hit_all",
+  "rage"
+];
+var MOVE_ATK_BP = {
+  strike_twice: 15e3,
+  heal_self: 2e4,
+  hit_all: 29400,
+  rage: 13500
+};
 var ROSTERS = [
   [
     ["road_slime", "Road Slime", "tank"],
@@ -224,13 +248,14 @@ function kindOf(archetype) {
 function scale(value, bp) {
   return Math.max(1, Math.floor(value * bp / 1e4));
 }
-function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
+function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp, move) {
   const a = ARCHETYPES[archetype];
   const kind = kindOf(archetype);
   const hp = scale(b.hp, a.hpBp);
+  const atk = scale(b.atk, a.atkBp);
   const stats = {
     hp: kind === "zone_boss" ? scale(hp, bossHpBp) : hp,
-    atk: scale(b.atk, a.atkBp),
+    atk: kind === "zone_boss" && move ? scale(b.atk, MOVE_ATK_BP[move]) : atk,
     def: scale(b.def, a.defBp),
     spd: a.spd + Math.floor(spdZone / 3)
   };
@@ -247,7 +272,8 @@ function enemyOf([id, name, archetype], zone, b, spdZone, bossHpBp) {
     xp: pay(b.xp),
     gold: [pay(b.goldMin), pay(b.goldMax)],
     dropBp: kind === "zone_boss" ? 1e4 : kind === "turn_boss" ? 6e3 : pay(1500),
-    contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0
+    contractBp: kind === "zone_boss" ? 1500 : kind === "turn_boss" ? 400 : 0,
+    ...kind === "zone_boss" && move ? { move, baseAtk: atk } : {}
   };
 }
 function buildEnemies(t) {
@@ -255,7 +281,8 @@ function buildEnemies(t) {
   ROSTERS.forEach((roster, i) => {
     const b = baseline(t, i);
     const bossHpBp = t.zoneBossHpBp[i] ?? 1e4;
-    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp);
+    const move = BOSS_MOVES[i];
+    for (const entry of roster) out[entry[0]] = enemyOf(entry, i + 1, b, i + 1, bossHpBp, move);
   });
   return out;
 }
@@ -285,8 +312,10 @@ function buildTierEnemies(t, growthBp, last) {
       goldMax: growThrough(b12.goldMax, steps)
     };
     const at = {};
-    for (const roster of ROSTERS)
-      for (const entry of roster) at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp);
+    ROSTERS.forEach((roster, i) => {
+      for (const entry of roster)
+        at[entry[0]] = enemyOf(entry, zone, b, top, bossHpBp, BOSS_MOVES[i]);
+    });
     out[zone] = at;
   }
   return out;
@@ -705,13 +734,9 @@ var LIST2 = [
 var itemBases = Object.fromEntries(LIST2.map((b) => [b.id, b]));
 
 // packages/sim/src/content/tactics.ts
+var KNIGHT_PULL = { kind: "class", cls: "knight", match: 11, other: 2 };
 var ENEMY_ATTACK = [
-  // A knight weighs 11 against 2 for any other hero: 11/15 ≈ 73% with a full party, today's pull.
-  {
-    action: "attack",
-    weight: { kind: "fixed", weight: 10 },
-    target: { kind: "class", cls: "knight", match: 11, other: 2 }
-  }
+  { action: "attack", weight: { kind: "fixed", weight: 10 }, target: KNIGHT_PULL }
 ];
 var heroTactics = {
   knight: [
@@ -755,7 +780,32 @@ var enemyTactics = {
   turn_boss: ENEMY_ATTACK,
   world_boss: ENEMY_ATTACK
 };
-var tactics = { heroes: heroTactics, enemies: enemyTactics };
+var MOVE_TACTICS = {
+  strike_twice: [
+    { action: "attack_twice", weight: { kind: "fixed", weight: 10 }, target: KNIGHT_PULL }
+  ],
+  // Weighted by need as the White Mage's heal is, on its own HP share.
+  heal_self: [
+    ...ENEMY_ATTACK,
+    {
+      action: "heal",
+      weight: { kind: "self_need", belowBp: 5e3, scale: 30 },
+      target: { kind: "self" }
+    }
+  ],
+  hit_all: [
+    { action: "attack_all", weight: { kind: "fixed", weight: 10 }, target: { kind: "none" } }
+  ],
+  rage: ENEMY_ATTACK
+};
+var enemyDefTactics = Object.fromEntries(
+  Object.values(enemies).flatMap((def) => def.move ? [[def.id, MOVE_TACTICS[def.move]]] : [])
+);
+var tactics = {
+  heroes: heroTactics,
+  enemies: enemyTactics,
+  byEnemy: enemyDefTactics
+};
 
 // packages/sim/src/content/tavern.ts
 var tavern = {
@@ -960,7 +1010,7 @@ function earn(s, gold) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 16;
+var SIM_VERSION = 17;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var WAVE_ARCHETYPES = ["swift", "brute", "caster", "tank"];
 var GUARANTEE_RARITIES = ["rare", "epic", "legendary"];
@@ -1785,7 +1835,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "ea3cd5be0f52d490";
+var GOLDEN_HASH = "5a9469dfea696461";
 
 // packages/sim/src/migrate.ts
 var MIGRATIONS = {
@@ -1865,7 +1915,10 @@ var MIGRATIONS = {
         guarantee: { rare: 0, epic: 0, legendary: 0 }
       };
     }
-  }
+  },
+  // 16 → 17: the zone bosses' moves (#169). Rules, tactics and the bosses' atk moved; a move is read
+  // from content and rage from a boss's HP at the hit, so nothing changes shape.
+  16: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -1968,6 +2021,8 @@ function enemyBodies(s) {
 function tacticsOf(unit) {
   if (unit.side === "hero") return content.tactics.heroes[unit.hero.cls] ?? [];
   if (unit.enemy.kind === "world_boss") return content.tactics.enemies.world_boss;
+  const own = content.tactics.byEnemy[unit.enemy.def];
+  if (own) return own;
   const archetype = content.enemies[unit.enemy.def]?.archetype;
   return archetype ? content.tactics.enemies[archetype] : [];
 }
@@ -1976,15 +2031,15 @@ function lowestShare(bodies) {
   for (const b of bodies) if (!best || b.hp * best.max < best.hp * b.max) best = b;
   return best;
 }
-function tacticWeight(rule, allies) {
+function tacticWeight(rule, allies, self) {
   if (rule.kind === "fixed") return rule.weight;
-  const lowest = lowestShare(allies);
+  const lowest = rule.kind === "self_need" ? self : lowestShare(allies);
   if (!lowest) return 0;
   const d = rule.belowBp - Math.floor(lowest.hp * 1e4 / lowest.max);
   if (d <= 0) return 0;
   return Math.floor(rule.scale * d * d * 4 / (rule.belowBp * rule.belowBp));
 }
-function targets(rule, allies, foes) {
+function targets(rule, allies, foes, self) {
   switch (rule.kind) {
     case "none":
       return foes.length > 0 ? [[null, 1]] : [];
@@ -2001,26 +2056,34 @@ function targets(rule, allies, foes) {
       const lowest = lowestShare(allies);
       return lowest ? [[lowest.id, 1]] : [];
     }
+    case "self":
+      return self ? [[self.id, 1]] : [];
   }
 }
-function pickAction(s, unit) {
+function pairs(s, unit) {
   const heroes = heroBodies(s);
   const enemies2 = enemyBodies(s);
   const allies = unit.side === "hero" ? heroes : enemies2;
   const foes = unit.side === "hero" ? enemies2 : heroes;
+  const selfId = unit.side === "hero" ? unit.hero.id : unit.enemy.id;
+  const self = allies.find((b) => b.id === selfId);
   const weights2 = {};
   const byKey = /* @__PURE__ */ new Map();
   for (const tactic of tacticsOf(unit)) {
     if (tactic.minAllies !== void 0 && tactic.minAllies > allies.length) continue;
-    const w = tacticWeight(tactic.weight, allies);
+    const w = tacticWeight(tactic.weight, allies, self);
     if (w <= 0) continue;
-    for (const [targetId, tw] of targets(tactic.target, allies, foes)) {
+    for (const [targetId, tw] of targets(tactic.target, allies, foes, self)) {
       if (tw <= 0) continue;
       const key = `${tactic.action}:${targetId ?? "*"}`;
       weights2[key] = (weights2[key] ?? 0) + w * tw;
       byKey.set(key, { action: tactic.action, targetId });
     }
   }
+  return { weights: weights2, byKey };
+}
+function pickAction(s, unit) {
+  const { weights: weights2, byKey } = pairs(s, unit);
   if (byKey.size === 0) return null;
   return byKey.get(drawWeighted(s, weights2)) ?? null;
 }
@@ -2038,7 +2101,8 @@ function damage(s, atk, def) {
 }
 var NO_STATS = { hp: 1, atk: 1, def: 0, spd: 0 };
 function zoneBossStats(zone) {
-  return enemyAt(zoneAt(zone)?.def.boss ?? "", zone)?.stats ?? NO_STATS;
+  const def = enemyAt(zoneAt(zone)?.def.boss ?? "", zone);
+  return def ? { ...def.stats, atk: def.baseAtk ?? def.stats.atk } : NO_STATS;
 }
 function scaledBossStats(s) {
   const carried = s.boss?.stats ?? NO_STATS;
@@ -2055,14 +2119,24 @@ function enemyStats(s, enemy) {
   if (enemy.kind === "world_boss") return scaledBossStats(s);
   return enemyAt(enemy.def, s.zone)?.stats ?? NO_STATS;
 }
+function moveOf(enemy) {
+  return enemy.kind === "zone_boss" ? content.enemies[enemy.def]?.move : void 0;
+}
+function underHalf(enemy) {
+  return enemy.hp * 2 < enemy.maxHp;
+}
 function hitEnemy(s, by, enemy, amount, effects) {
   effects.push({ k: "hit", by, target: enemy.id, amount });
   if (enemy.kind === "world_boss") {
     if (s.boss) s.boss.dealt += amount;
     return;
   }
+  const wasUnder = underHalf(enemy);
   enemy.hp = Math.max(0, enemy.hp - amount);
   if (enemy.hp === 0) onEnemyKilled(s, enemy, effects);
+  else if (!wasUnder && underHalf(enemy) && moveOf(enemy) === "rage") {
+    effects.push({ k: "raging", enemyId: enemy.id });
+  }
 }
 function gaugeOf(s, id) {
   let entry = s.battle.gauges.find((e) => e.id === id);
@@ -2112,20 +2186,46 @@ function heroAction(s, hero, choice, effects) {
     }
   }
 }
-function enemyAction(s, enemy, choice, effects) {
-  const target = findHero(s, choice.targetId ?? "");
-  if (!target || target.hp <= 0) return;
-  const atk = enemyStats(s, enemy).atk;
-  let amount = damage(
-    s,
-    enemy.enraged ? Math.floor(atk * ENRAGE_BP / 1e4) : atk,
-    heroStats(s, target).def
-  );
+function hitHero(s, enemy, target, shareBp, effects) {
+  let atk = Math.floor(enemyStats(s, enemy).atk * shareBp / 1e4);
+  if (moveOf(enemy) === "rage" && underHalf(enemy)) atk = Math.floor(atk * RAGE_BP / 1e4);
+  if (enemy.enraged) atk = Math.floor(atk * ENRAGE_BP / 1e4);
   enemy.enraged = false;
+  let amount = damage(s, atk, heroStats(s, target).def);
   if (s.guardTicks > 0) amount = Math.max(1, Math.floor(amount * GUARD_DAMAGE_BP / 1e4));
   target.hp = Math.max(0, target.hp - amount);
   effects.push({ k: "hit", by: enemy.id, target: target.id, amount });
   if (target.hp === 0) fall(s, target, effects);
+}
+function enemyAction(s, enemy, choice, effects) {
+  switch (choice.action) {
+    case "attack": {
+      const target = findHero(s, choice.targetId ?? "");
+      if (!target || target.hp <= 0) return;
+      hitHero(s, enemy, target, 1e4, effects);
+      return;
+    }
+    case "attack_twice": {
+      const target = findHero(s, choice.targetId ?? "");
+      for (let i = 0; i < 2 && target && target.hp > 0; i++)
+        hitHero(s, enemy, target, STRIKE_TWICE_BP, effects);
+      return;
+    }
+    case "attack_all": {
+      for (const target of livingParty(s)) hitHero(s, enemy, target, HIT_ALL_BP, effects);
+      return;
+    }
+    case "heal": {
+      const amount = Math.min(
+        Math.max(0, enemy.maxHp - enemy.hp),
+        scaled(Math.floor(enemyStats(s, enemy).atk * SELF_HEAL_BP / 1e4))
+      );
+      if (amount <= 0) return;
+      enemy.hp += amount;
+      effects.push({ k: "heal", by: enemy.id, target: enemy.id, amount });
+      return;
+    }
+  }
 }
 function unitOf(s, id) {
   const hero = livingParty(s).find((h) => h.id === id);

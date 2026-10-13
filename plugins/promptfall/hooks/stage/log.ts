@@ -112,7 +112,10 @@ export class MessageLog {
       const start = starts[i] ?? now
       const out: Said[] = []
       const hits = g.effects.filter((e): e is Extract<Effect, { k: 'hit' }> => e.k === 'hit')
-      if (hits.length >= 2 && hits.every((h) => h.by === hits[0]?.by)) {
+      // A boss's strike twice (#169): its line at the act, then each hit on the one target.
+      const twice = g.act?.action === 'attack_twice'
+      if (twice && g.act) out.push({ text: `${name(g.act.actor)} strikes twice!`, key: true })
+      if (!twice && hits.length >= 2 && hits.every((h) => h.by === hits[0]?.by)) {
         out.push({
           text: `${name(hits[0]?.by ?? '')} hits ${hits.length} foes for ${list(hits.map((h) => h.amount))}.`,
           key: false,
@@ -122,8 +125,13 @@ export class MessageLog {
           out.push({ text: `${name(h.by)} hits ${name(h.target)} for ${h.amount}.`, key: false })
       }
       for (const e of g.effects)
-        if (e.k === 'heal')
-          out.push({ text: `${name(e.by)} heals ${name(e.target)} for ${e.amount}.`, key: false })
+        if (e.k === 'heal') {
+          // An enemy's heal is a boss healing itself; a hero's names whom it heals.
+          const self = e.by === e.target && this.known.get(e.by)?.kind !== 'hero'
+          if (self) out.push({ text: `${name(e.by)} heals itself for ${e.amount}.`, key: true })
+          else
+            out.push({ text: `${name(e.by)} heals ${name(e.target)} for ${e.amount}.`, key: false })
+        }
       for (const h of hits) {
         const hp = hpLeft.get(h.target)
         if (hp !== undefined) hpLeft.set(h.target, hp - h.amount)
@@ -215,6 +223,9 @@ export class MessageLog {
         return { text: `Claude stumbles. ${name(e.enemyId)} is enraged!`, key: true }
       case 'camp':
         return { text: 'The party makes camp while Claude gathers its thoughts.', key: true }
+      // A boss move's line (#169), never toasted.
+      case 'raging':
+        return { text: `${name(e.enemyId)}'s rage grows!`, key: true }
       case 'guard':
         return { text: e.on ? 'The party stands guard.' : 'The party lowers its guard.', key: true }
       default:

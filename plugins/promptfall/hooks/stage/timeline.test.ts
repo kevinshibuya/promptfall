@@ -44,7 +44,7 @@ const hit = (by: string, target: string, amount = 5): Effect => ({ k: 'hit', by,
 const act = (
   actor: string,
   at: number,
-  action: 'attack' | 'attack_all' | 'heal' = 'attack',
+  action: 'attack' | 'attack_all' | 'attack_twice' | 'heal' = 'attack',
 ): Effect => ({
   k: 'act',
   actor,
@@ -678,6 +678,55 @@ test("a white mage's heal bursts on the healed ally, with no hit and no flash", 
   expect(of(m, 'hit')).toEqual([])
   expect(of(m, 'flash')).toEqual([])
   expect(of(m, 'number').map((x) => x.from - NOW)).toEqual([H + 220])
+})
+
+test("a boss's whole-party hit is one lunge, every hero's hit landing at its one impact", () => {
+  const t = observed(boss())
+  t.onEffects([act('e9', 0, 'attack_all'), hit('e9', 'h1'), hit('e9', 'h2'), hit('e9', 'h3')], NOW)
+  const m = t.active(NOW)
+  expect(of(m, 'lunge').map((x) => x.actor)).toEqual(['e9'])
+  expect(of(m, 'hit').map((x) => [x.actor, x.from - NOW])).toEqual([
+    ['h1', H + 120],
+    ['h2', H + 120],
+    ['h3', H + 120],
+  ])
+  expect(of(m, 'number').map((x) => x.actor)).toEqual(['h1', 'h2', 'h3'])
+  expect(of(m, 'effect')).toEqual([])
+})
+
+test("a boss's strike twice lands both hits at the lunge's one impact, two numbers on its target", () => {
+  const t = observed(boss())
+  t.onEffects([act('e9', 0, 'attack_twice'), hit('e9', 'h1', 12), hit('e9', 'h1', 13)], NOW)
+  const m = t.active(NOW)
+  expect(of(m, 'lunge').map((x) => x.actor)).toEqual(['e9'])
+  expect(
+    of(m, 'number').map((x) => (x.kind === 'number' ? [x.actor, x.text, x.from - NOW] : null)),
+  ).toEqual([['h1', '12 13', H + 120]])
+})
+
+test("a boss's heal bursts on itself in place, as the white mage's heal on a hero", () => {
+  const t = observed(boss())
+  t.onEffects([act('e9', 0, 'heal'), { k: 'heal', by: 'e9', target: 'e9', amount: 40 }], NOW)
+  const m = t.active(NOW)
+  expect(of(m, 'lunge')).toEqual([])
+  expect(of(m, 'strike').map((x) => (x.kind === 'strike' ? x.shape : null))).toEqual(['burst'])
+  expect(of(m, 'effect')).toEqual([
+    {
+      kind: 'effect',
+      actor: 'e9',
+      target: 'e9',
+      effect: 'light_burst',
+      from: NOW + H + 120,
+      until: NOW + H + 320,
+      shape: 'burst',
+    },
+  ])
+  expect(of(m, 'hit')).toEqual([])
+  expect(
+    of(m, 'number').map((x) =>
+      x.kind === 'number' ? [x.actor, x.text, x.rgb, x.from - NOW] : null,
+    ),
+  ).toEqual([['e9', '40', NUMBER_RGB_HEAL, H + 220]])
 })
 
 test('ACTION_MS is 500, the hold plus the knight; the wind-up past the hold is the lunge out', () => {

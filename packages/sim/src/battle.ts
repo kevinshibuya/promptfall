@@ -22,6 +22,12 @@ export const GUARD_TICKS = 60
 export const GUARD_DAMAGE_BP = 5000
 /** An enraged enemy's next attack uses its atk × ENRAGE_BP / 10000. */
 export const ENRAGE_BP = 15000
+/** A zone boss's moves (#169), each in basis points of its atk: a strike-twice hit, a whole-party hit, its self-heal. */
+export const STRIKE_TWICE_BP = 7000
+export const HIT_ALL_BP = 6000
+export const SELF_HEAL_BP = 5000
+/** A raging zone boss under half its HP hits from its atk × RAGE_BP / 10000. */
+export const RAGE_BP = 15000
 /** A spawned enemy's gauge starts at draw(SPAWN_GAUGE_MAX + 1). */
 export const SPAWN_GAUGE_MAX = 5000
 

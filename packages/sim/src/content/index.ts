@@ -31,6 +31,7 @@ export type {
   AchievementStep,
   AffixDef,
   Archetype,
+  BossMove,
   Content,
   EnemyDef,
   GoalKind,

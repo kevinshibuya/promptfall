@@ -4,13 +4,21 @@
 // tsx scripts/content.ts
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
+import { type BossMove, baseTier, type Content, dropTier, LADDER_END } from '@promptfall/sim'
 
 /** A table cell: pipes escaped so a glyph like `|` stays in its column. */
 const cell = (s: string | number) => String(s).replaceAll('|', '\\|')
 const code = (s: string) => `\`${cell(s)}\``
 /** `×3.5`: a multiplier in basis points. */
 const times = (bp: number) => `×${bp / 10000}`
+
+/** A zone boss's move in the combat log's words. */
+const MOVE_WORDS: Record<BossMove, string> = {
+  strike_twice: 'strikes twice',
+  heal_self: 'heals itself',
+  hit_all: 'hits the whole party',
+  rage: 'rages under half HP',
+}
 
 function table(head: string[], rows: (string | number)[][]): string[] {
   return [
@@ -60,8 +68,13 @@ export function contentReference(c: Content): string {
     '## Enemies and bosses',
     '',
     ...table(
-      ['Id', 'Name', 'Archetype'],
-      Object.values(c.enemies).map((e) => [code(e.id), cell(e.name), e.archetype]),
+      ['Id', 'Name', 'Archetype', 'Move'],
+      Object.values(c.enemies).map((e) => [
+        code(e.id),
+        cell(e.name),
+        e.archetype,
+        e.move ? MOVE_WORDS[e.move] : '',
+      ]),
     ),
     '',
     '## Item bases',

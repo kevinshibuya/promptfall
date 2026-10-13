@@ -36,6 +36,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
   travel: {rasterHash: "4be93cd6ebc42c60", imageHash: "f2a1dc57f0ac37d1", svgHash: "3194a75321daab4b", svgChars: 36239, rasterPairs: 108, imageHashHires: "14dfa30acc55c5d4", svgHashLo: "520f7a0b1e395f4c"},
   'level-up': {rasterHash: "3e560c9d710f1ce9", imageHash: "211fced18cd71a36", svgHash: "85d9ab802f490623", svgChars: 35638, rasterPairs: 108, imageHashHires: "fe8c94dd4f44ffd1", svgHashLo: "65a72cca6e7e9639"},
   victory: {rasterHash: "fd1b72f9fac615d6", imageHash: "cdda0de0b2be7dae", svgHash: "226e7a4516a1a051", svgChars: 30063, rasterPairs: 86, imageHashHires: "79ad2dd080d1a70d", svgHashLo: "55661d43ec237bd3"},
+  boss_move: {rasterHash: "d1ffd77bbb64476d", imageHash: "6f75dd2dacb0c7a0", svgHash: "9e109ac79d01bfff", svgChars: 49052, rasterPairs: 122, imageHashHires: "5a42e7924860172b", svgHashLo: "96334c2054f0d6f0"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
@@ -64,16 +65,16 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
   'pane-market-narrow': {imageHash: "6b810b052abcb51a", cellsHash: "365f6f532350edb1", svgHash: "0dca80b60cc73826", svgChars: 25360},
   'pane-orders': {imageHash: "9bc3804fccc00665", cellsHash: "163c7d59054dc725", svgHash: "e4ed997bb2dae0da", svgChars: 23122},
   'pane-orders-form': {imageHash: "90745d78e051dd18", cellsHash: "4d46414a508ade22", svgHash: "d97f4b2204a9cc66", svgChars: 23743},
-  'pane-account': {imageHash: "8f89f0876ed903b1", cellsHash: "9ed571a0410934e6", svgHash: "43ad8df8d847d6c3", svgChars: 28161},
-  'pane-account-link': {imageHash: "a1e89dade1cbf770", cellsHash: "8007848f7bf793a9", svgHash: "182c2613ff976626", svgChars: 29663},
-  'pane-account-rest-days': {imageHash: "f9a529edfb3d5449", cellsHash: "a8a8032f7536dec9", svgHash: "ef79d943189883e6", svgChars: 28355},
+  'pane-account': {imageHash: "059cc10755fd24d1", cellsHash: "eafeb081f66b6286", svgHash: "b955125487992f31", svgChars: 28136},
+  'pane-account-link': {imageHash: "30e465c2aec99640", cellsHash: "337a3ada3a057ac9", svgHash: "ce5ab8c992a6ed60", svgChars: 29638},
+  'pane-account-rest-days': {imageHash: "faef419487cba219", cellsHash: "6b9f6d9b744849a9", svgHash: "e1fd37ac027255f8", svgChars: 28330},
   'pane-odds': {imageHash: "6ab7d59e417ec44a", cellsHash: "c8b67e22f72dbaa4", svgHash: "cd39c7baa08ee397", svgChars: 32547},
   'pane-journal': {imageHash: "71ef9e206b448a53", cellsHash: "a9e61ad6cae3c62b", svgHash: "c6c1c16d6b4fb577", svgChars: 27324},
   'pane-journal-zone': {imageHash: "53271b5d7b28d75f", cellsHash: "19593d63f994fdec", svgHash: "ca0834f51270b9e5", svgChars: 29695},
   'pane-chat': {imageHash: "3ac9d7696328e46b", cellsHash: "f0204c26f4028d35", svgHash: "1a6acbdef2f0cfa5", svgChars: 25260},
   'pane-leaderboards': {imageHash: "d6b744bad0206231", cellsHash: "cb904e7ffa90f329", svgHash: "8f04ae67b1375b99", svgChars: 26892},
   'pane-short': {imageHash: "e68134c378f16623", cellsHash: "b84e798c19e1f5ec", svgHash: "6d514a62425b5490", svgChars: 22782},
-  'pane-no-view': {imageHash: "0019e860f2933cbf", cellsHash: "70326d51f742c5ef", svgHash: "656bf4840a5b132e", svgChars: 15209},
+  'pane-no-view': {imageHash: "81bb84f96247bf87", cellsHash: "58a90608eb954e2f", svgHash: "853a41121a52bccc", svgChars: 15184},
 }
 
 export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {

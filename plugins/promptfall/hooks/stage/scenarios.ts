@@ -90,6 +90,7 @@ export const SCENARIOS = [
   'travel',
   'level-up',
   'victory',
+  'boss_move',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -307,6 +308,23 @@ export function stage(name: Scenario): Staged {
       t.observe(next, t1 + 10)
       t.observe(next, NOW)
       return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+    }
+    // A boss move (#169): the bandit captain's whole-party hit 20 ms past its lunge's one impact,
+    // every hero in its hit frame with its number rising.
+    case 'boss_move': {
+      const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + 20)
+      t.observe(boss(), t1)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e9', action: 'attack_all', at: 0 },
+          { k: 'hit', by: 'e9', target: 'h1', amount: 19 },
+          { k: 'hit', by: 'e9', target: 'h2', amount: 24 },
+          { k: 'hit', by: 'e9', target: 'h3', amount: 22 },
+        ],
+        t1,
+      )
+      t.observe(boss(), NOW)
+      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
     }
     case 'boss': {
       // The boss spawned half a spawn ago.

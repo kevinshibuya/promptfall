@@ -11,6 +11,9 @@ import type {
 
 export type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss'
 
+/** A zone boss's one behaviour: two hits on one target, a heal of itself, a hit on every hero, or rage under half HP. */
+export type BossMove = 'strike_twice' | 'heal_self' | 'hit_all' | 'rage'
+
 export type EnemyDef = {
   id: string
   name: string
@@ -23,6 +26,10 @@ export type EnemyDef = {
   gold: [number, number]
   dropBp: number
   contractBp: number
+  /** A zone boss's move, its base zone's in every tier; absent on every other enemy. */
+  move?: BossMove
+  /** A zone boss's atk at the boss archetype's multiplier, before its move's: what the world boss scales by. */
+  baseAtk?: number
 }
 export type ZoneDef = {
   index: number
@@ -70,6 +77,8 @@ export type WeightRule =
   | { kind: 'fixed'; weight: number }
   /** 0 while the lowest ally is at or above belowBp of max HP; then scale × d² / (belowBp/2)², d = belowBp − lowestBp */
   | { kind: 'ally_need'; belowBp: number; scale: number }
+  /** As ally_need, on the unit's own HP share. */
+  | { kind: 'self_need'; belowBp: number; scale: number }
 export type TargetRule =
   /** No target to choose (attack_all). */
   | { kind: 'none' }
@@ -81,6 +90,8 @@ export type TargetRule =
   | { kind: 'class'; cls: HeroClass; match: number; other: number }
   /** One candidate, weight 1: the living ally with the lowest HP %, first in order on a tie. */
   | { kind: 'ally_lowest' }
+  /** One candidate, weight 1: the unit itself. */
+  | { kind: 'self' }
 export type Tactic = {
   action: ActionId
   weight: WeightRule
@@ -91,6 +102,8 @@ export type Tactic = {
 export type Tactics = {
   heroes: Record<HeroClass, Tactic[]>
   enemies: Record<Archetype | 'world_boss', Tactic[]>
+  /** Keyed by enemy definition, looked up before the archetype: the zone bosses' moves. */
+  byEnemy: Record<string, Tactic[]>
 }
 /** What a daily goal counts: kills, zone bosses, Rare or better drops, or one turn boss. */
 export type GoalKind = 'kills' | 'zone_bosses' | 'rare_drops' | 'turn_boss'

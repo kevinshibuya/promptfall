@@ -2,6 +2,7 @@ import type { EnemyView, GameView } from '../../types'
 import { spriteFor, worldBossKey } from '../sprites/index'
 import {
   ACTION_STEPS,
+  type ActionId,
   type Effect,
   type Rarity,
   STEP_MS,
@@ -607,10 +608,15 @@ export class StageTimeline {
     return this.heroes.has(id) || this.entries.has(id)
   }
 
-  /** Enemies lunge; heroes by class: the knight follows through, the mages and the archer cast. */
-  shapeOf(actor: string): AttackShape {
+  /**
+   * Enemies lunge, but a boss's heal bursts in place as the white mage's does (#169); heroes by
+   * class: the knight follows through, the mages and the archer cast.
+   */
+  shapeOf(actor: string, action?: ActionId): AttackShape {
     const cls = this.heroes.get(actor)
-    return (cls !== undefined ? SHAPE_OF_CLASS[cls] : undefined) ?? 'lunge'
+    if (cls === undefined)
+      return action === 'heal' ? (SHAPE_OF_CLASS.white_mage ?? 'burst') : 'lunge'
+    return SHAPE_OF_CLASS[cls] ?? 'lunge'
   }
 
   /**
@@ -649,14 +655,19 @@ export class StageTimeline {
         })
       }
       const act = group.act
-      const shape = act ? this.shapeOf(act.actor) : 'lunge'
+      const shape = act ? this.shapeOf(act.actor, act.action) : 'lunge'
       let shown = false
       const attacker = act && this.isActor(act.actor) ? act.actor : null
       // An attack holds its wind-up in place first; an effect with no attacker lands unheralded.
       const begin = attacker !== null ? start + WINDUP_HOLD_MS : start
       const impact = begin + impactOf(shape)
+      // A hero's effect is its class's; an enemy's heal plays the white mage's light burst.
       const effectId =
-        attacker !== null ? EFFECT_OF_CLASS[this.heroes.get(attacker) ?? ''] : undefined
+        attacker === null
+          ? undefined
+          : EFFECT_OF_CLASS[
+              this.heroes.get(attacker) ?? (act?.action === 'heal' ? 'white_mage' : '')
+            ]
       if (attacker !== null) {
         const strikeFrom = begin + WINDUP_MS
         // Heroes face the enemies on their left; enemies the party on their right.
@@ -721,6 +732,8 @@ export class StageTimeline {
         })
       }
       let last: { target: string; flashEnd: number } | null = null
+      // A target's number this action: a second hit on it (a strike twice) adds its own beside it.
+      const numbers = new Map<string, Extract<Motion, { kind: 'number' }>>()
       for (const effect of group.effects) {
         if (effect.k === 'hit' || effect.k === 'heal') this.land(effect, impact, hp)
         if (effect.k === 'hit') this.calm(effect.by, impact)
@@ -756,14 +769,20 @@ export class StageTimeline {
               from: impact,
               until: impact + FLASH_MS,
             })
-            this.motions.push({
-              kind: 'number',
-              actor: effect.target,
-              text: String(effect.amount),
-              rgb: this.heroes.has(effect.target) ? NUMBER_RGB_HERO : NUMBER_RGB_ENEMY,
-              from: impact,
-              until: impact + NUMBER_MS,
-            })
+            const twice = numbers.get(effect.target)
+            if (twice) twice.text = `${twice.text} ${effect.amount}`
+            else {
+              const number: Extract<Motion, { kind: 'number' }> = {
+                kind: 'number',
+                actor: effect.target,
+                text: String(effect.amount),
+                rgb: this.heroes.has(effect.target) ? NUMBER_RGB_HERO : NUMBER_RGB_ENEMY,
+                from: impact,
+                until: impact + NUMBER_MS,
+              }
+              numbers.set(effect.target, number)
+              this.motions.push(number)
+            }
             shown = true
           }
           last = { target: effect.target, flashEnd: impact + FLASH_MS }
