@@ -9,6 +9,8 @@ import {
   BOLT_MS,
   BOSS_MIN_ROWS,
   BURST_MS,
+  CAMPFIRE_FADE_MS,
+  CAMPFIRE_MS,
   DISSOLVE_MS,
   FLASH_MS,
   LUNGE_MS,
@@ -996,4 +998,73 @@ test('with no boss row on the timeline a zone arrival has no show time', () => {
   const t = observed()
   t.onEffects([act('h1', 0), hit('h1', 'e1', 500)], NOW, 2000)
   expect(t.zoneShowAt(1)).toBeNull()
+})
+
+test('a mishap flashes the enemy red and tints it until its next hit lands on the stage', () => {
+  const t = observed()
+  const [at] = t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW + 100)
+  const red = of(t.active(NOW + 100), 'red_flash')
+  expect(red).toEqual([{ kind: 'red_flash', actor: 'e1', from: at, until: (at ?? 0) + FLASH_MS }])
+  const tint = () => of(t.active(NOW + 100), 'enraged')
+  expect(tint().map((m) => [m.actor, m.from])).toEqual([['e1', at]])
+  // It holds across ticks while the enemy waits for its turn: another actor's hit leaves it.
+  t.onEffects([act('h1', 0), hit('h1', 'e1', 3)], NOW + 2000)
+  expect(tint()[0]?.until).toBe(Number.POSITIVE_INFINITY)
+  // The sim clears the flag in the tick that resolves the hit; the tint ends at the hit's impact.
+  const [start] = t.onEffects([act('e1', 0), hit('e1', 'h1', 9)], NOW + 4000)
+  const impact = (start ?? 0) + H + LUNGE_MS / 2
+  expect(of(t.active(NOW + 4000), 'hit').find((m) => m.actor === 'h1')?.from).toBe(impact)
+  expect(tint()[0]?.until).toBe(impact)
+  expect(of(t.active(impact), 'enraged')).toEqual([])
+  // No white flash at the mishap.
+  expect(of(t.active(NOW + 100), 'flash').filter((m) => m.from === at)).toEqual([])
+})
+
+test('a tint is not busy work: an enraged enemy waiting for its turn lets the stage rest', () => {
+  const t = observed()
+  t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW)
+  expect(t.isBusy(NOW + FLASH_MS + 1)).toBe(false)
+})
+
+test('an enraged enemy that leaves before its hit takes its tint with it', () => {
+  const t = observed()
+  t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW)
+  const after = wave()
+  after.enemies = after.enemies.filter((e) => e.id !== 'e1')
+  t.observe(after, NOW + 1000)
+  const tint = of(t.active(NOW + 1000), 'enraged')
+  for (const m of tint) expect(m.until).toBeLessThan(Number.POSITIVE_INFINITY)
+})
+
+test('a camp sets the campfire for its sit and fade, and each healed hero rises a green number', () => {
+  const t = observed()
+  const [at] = t.onEffects(
+    [
+      {
+        k: 'camp',
+        heals: [
+          { heroId: 'h1', amount: 25 },
+          { heroId: 'h2', amount: 0 },
+        ],
+      },
+    ],
+    NOW + 100,
+  )
+  const from = at ?? 0
+  expect(of(t.active(NOW + 100), 'campfire')).toEqual([
+    { kind: 'campfire', actor: null, from, until: from + CAMPFIRE_MS + CAMPFIRE_FADE_MS },
+  ])
+  expect(of(t.active(NOW + 100), 'number')).toEqual([
+    {
+      kind: 'number',
+      actor: 'h1',
+      text: '25',
+      rgb: NUMBER_RGB_HEAL,
+      from,
+      until: from + NUMBER_MS,
+    },
+  ])
+  expect(t.pending(from - 1)).toEqual([{ actor: 'h1', delta: 25, at: from }])
+  expect(t.isBusy(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS - 1)).toBe(true)
+  expect(of(t.active(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS), 'campfire')).toEqual([])
 })

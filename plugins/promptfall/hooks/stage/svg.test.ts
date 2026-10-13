@@ -1,15 +1,23 @@
 import { expect, test } from 'claude-code/testing'
+import type { GameView } from '../../types'
 import { encode } from '../sprites/base64'
+import { stance } from '../sprites/derive'
 import { spriteFor } from '../sprites/index'
 import { WORLD_DEFAULT } from '../state'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
-import { effectAt, stageAt } from './model'
+import { effectAt, SHIELD, stageAt } from './model'
 import { stage } from './scenarios'
 import { stagedState } from './staged'
 import { artPaths, backdropPlacements, renderSvg, svgWithFallback } from './svg'
 import { StageTimeline } from './timeline'
 import {
+  CAMPFIRE_FADE_MS,
+  CAMPFIRE_MS,
+  CLASS_RGB,
+  ENRAGE_RGB,
+  ENRAGE_TINT,
+  HASTE_FRAME_MS,
   HIRES_SCALE,
   IDLE_BOB_PX,
   LUNGE_MS,
@@ -543,4 +551,99 @@ test('backdropPlacements covers a frame of any width with mirrored copies, every
     { x: -100, mirror: false },
     { x: 860, mirror: false },
   ])
+})
+
+/** The Svg of `v` after `effects` at `at`, at `scale`. */
+function svgOf(
+  v: GameView,
+  effects: Effect[] = [],
+  at = NOW,
+  scale: 1 | 1.5 = HIRES_SCALE,
+  opts: Opts = { smil: true, motion: 'full' },
+) {
+  const t = new StageTimeline()
+  t.observe(v, NOW)
+  t.onEffects(effects, NOW)
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: opts.motion,
+    scale,
+  })
+  return renderSvg(model, t.active(at), { ...opts, now: at, width: 960 })
+}
+const party = (patch: Partial<GameView['heroes'][number]>): GameView => {
+  const v = wave()
+  v.heroes = v.heroes.map((h) => ({ ...h, ...patch }))
+  return v
+}
+
+test('hasted, the idle pair turns on a half-second clock with the streak under it; at 1 the bob does', () => {
+  const hi = svgOf(party({ hasted: true }))
+  expect(balanced(hi)).toBe(true)
+  expect(hi).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
+  for (const h of wave().heroes) {
+    expect(hi).toContain(`fill="#${(CLASS_RGB[h.cls] ?? 0).toString(16).padStart(6, '0')}"`)
+  }
+  const calm = svgOf(wave())
+  expect(calm).not.toContain(`fill="#${(CLASS_RGB.knight ?? 0).toString(16)}"`)
+  const lo = svgOf(party({ hasted: true }), [], NOW, 1)
+  expect(lo).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
+  expect(lo).not.toContain(`fill="#${(CLASS_RGB.knight ?? 0).toString(16)}"`)
+  // Under still the streak draws and nothing bobs.
+  const still = svgOf(party({ hasted: true }), [], NOW, HIRES_SCALE, {
+    smil: true,
+    motion: 'still',
+  })
+  expect(still).toContain(`fill="#${(CLASS_RGB.knight ?? 0).toString(16)}"`)
+  expect(still).not.toContain('repeatCount')
+})
+
+test('a mishap flashes red beside the white flash filter and holds the tint until the hit', () => {
+  const enraged: Effect[] = [{ k: 'enraged', enemyId: 'e1' }]
+  for (const scale of [1, HIRES_SCALE] as const) {
+    const s = svgOf(wave(), enraged, NOW + 10, scale)
+    expect(balanced(s), `${scale}`).toBe(true)
+    expect(s, `${scale}`).toContain(
+      `<filter id="redflash"><feFlood flood-color="#${ENRAGE_RGB.toString(16)}"/>`,
+    )
+    expect(s, `${scale}`).toContain(`<filter id="flash"><feFlood flood-color="#ffffff"/>`)
+    expect(s, `${scale}`).toContain(
+      `<set attributeName="opacity" to="${ENRAGE_TINT}" begin="-0.01s"/>`,
+    )
+    const flat = svgOf(wave(), enraged, NOW + 1000, scale, { smil: false, motion: 'full' })
+    expect(flat, `${scale}`).toContain(`filter="url(#redflash)" opacity="${ENRAGE_TINT}"`)
+  }
+  // No mishap, no red in the document.
+  expect(svgOf(wave())).not.toContain('redflash')
+})
+
+test('a camp lights the campfire, then fades it, under SMIL and without it', () => {
+  const camp: Effect[] = [{ k: 'camp', heals: [] }]
+  const campfire = spriteFor('effect', 'campfire')
+  for (const scale of [1, HIRES_SCALE] as const) {
+    const s = svgOf(wave(), camp, NOW + 1000, scale)
+    expect(s, `${scale}`).toContain(
+      `keyTimes="0;${Number((CAMPFIRE_MS / (CAMPFIRE_MS + CAMPFIRE_FADE_MS)).toFixed(3))};1" begin="-1s"`,
+    )
+    const art = scale === 1 ? campfire.full : campfire.hires
+    expect(s, `${scale}`).toContain(artPaths(art, null))
+    const flat = svgOf(wave(), camp, NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS / 2, scale, {
+      smil: false,
+      motion: 'full',
+    })
+    expect(flat, `${scale}`).toContain('opacity="0.5"/>')
+  }
+})
+
+test('guarding heroes hold the stance with no idle clock; the front hero wears the shield at 1.5', () => {
+  const hi = svgOf(party({ guarding: true }))
+  expect(balanced(hi)).toBe(true)
+  // Only the enemies still bob.
+  expect(hi.match(/repeatCount="indefinite"/g)?.length).toBe(2 * wave().enemies.length)
+  expect(hi).toContain(artPaths(SHIELD, null))
+  const lo = svgOf(party({ guarding: true }), [], NOW, 1)
+  expect(lo.match(/repeatCount="indefinite"/g)?.length).toBe(wave().enemies.length)
+  expect(lo).not.toContain(artPaths(SHIELD, null))
+  const knight = spriteFor('hero', 'knight')
+  expect(lo).toContain(artPaths(stance(knight.full).art, knight.raritySlot))
 })

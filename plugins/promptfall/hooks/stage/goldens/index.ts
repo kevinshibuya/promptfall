@@ -29,6 +29,10 @@ export const GOLDENS: Record<Scenario, Golden> = {
   'boss-strike': {rasterHash: "6411b1c3045a981e", imageHash: "15cd57463bcd8b81", svgHash: "1527a64ecf46aba2", svgChars: 53279, rasterPairs: 138, imageHashHires: "b0c35d6161422f30", svgHashLo: "c3176783a1625f5c"},
   step: {rasterHash: "b95476e71c0c6ab8", imageHash: "eca5e6a8656154a2", svgHash: "71cbae2f65160f6b", svgChars: 41901, rasterPairs: 111, imageHashHires: "f92535d6ca48202f", svgHashLo: "9ebd085f678cd90e"},
   'step-boss': {rasterHash: "86f7ec6f1a8d7698", imageHash: "9a06ece43db1d75f", svgHash: "b77cf6ce9afc5bed", svgChars: 60510, rasterPairs: 128, imageHashHires: "d074ad901eea3125", svgHashLo: "7f6f4de798848d0a"},
+  haste: {rasterHash: "875487380c61cf2c", imageHash: "cb4548dadc372cf2", svgHash: "ea451f5a0494907a", svgChars: 35582, rasterPairs: 110, imageHashHires: "bf51d030ff9208ee", svgHashLo: "4f0ea5969ee4aba9"},
+  enrage: {rasterHash: "ca96962c96089617", imageHash: "0ec45d15e2dd39c7", svgHash: "a2439d012355613e", svgChars: 35236, rasterPairs: 107, imageHashHires: "f6df367e4b460412", svgHashLo: "f4e9d7346eb8427b"},
+  camp: {rasterHash: "215a7aed96e8c346", imageHash: "675f78de92afbe93", svgHash: "89cae90ceecbe10e", svgChars: 37631, rasterPairs: 117, imageHashHires: "38604b3c26cb81a0", svgHashLo: "05817677d20712b9"},
+  guard: {rasterHash: "64c399da5edbdad6", imageHash: "f845e7ac11166b9d", svgHash: "3b14648e61710dde", svgChars: 33526, rasterPairs: 110, imageHashHires: "f4eeccef88681dd9", svgHashLo: "a8b75af2e1a92885"},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
