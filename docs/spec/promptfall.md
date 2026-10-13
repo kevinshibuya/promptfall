@@ -2,7 +2,8 @@
 
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
 phase 3 on 2026-10-03, for phase 4 on 2026-10-04, for the staged state on
-2026-10-09, for the curve on 2026-10-12 and for sound on 2026-10-12. Every
+2026-10-09, for the curve on 2026-10-12, for sound on 2026-10-12 and for the
+reactive events on 2026-10-12. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -117,7 +118,8 @@ Checked against Claude Code v2.1.287's mods API.
   a wipe empties them all. Only the party's gauges are shown.
 - `tool.call` spawns one enemy into the current encounter. At most 3 enemies
   fight at once; up to 10 more queue; beyond that new spawns are dropped so a
-  very long turn cannot create a death wall.
+  very long turn cannot create a death wall. Which enemy is the tool kind's
+  (spawn by tool kind, below).
 - `turn.complete` after a turn with 10 or more tool calls spawns a turn boss: a
   mini-boss with raised drop rates and a hero contract chance. It is not the
   zone boss. One that spawns mid-wave joins the wave's encounter and leaves its
@@ -126,6 +128,86 @@ Checked against Claude Code v2.1.287's mods API.
   revive at 50%.
 - When no enemy is present a tick spawns the next enemy of the current wave, so
   idle sessions still fight.
+- Reactive events (spec #131, ADR 0014): five changes in the fight that answer
+  what Claude is doing, each seen on the stage and read in the combat log
+  (§10). **A reactive event shapes the fight and never the reward.** Four are
+  player events of their own, `turn_start`, `tool_mishap`, `camp` and `guard`
+  (carrying on or off); the fifth is a hint on `tool_call`. The state holds a
+  haste countdown and a guard countdown in ticks (zero is off) and each enemy
+  an enraged flag; a save migrated from before them starts with both
+  countdowns at zero and no enemy enraged. The plugin raises them from Claude
+  Code's hooks; hooks fire in every session, and only the primary records
+  them, as it does every event.
+  - **Haste**, while a turn runs. `turn_start` sets the haste countdown to 90
+    ticks (3 minutes of battle), refreshing it when already on. The plugin
+    sends it at the main loop's turn start and again from the turn's model
+    steps, at most once per 60 seconds, so a long turn stays hasted and a dead
+    one runs out; a subagent's steps send nothing. `turn_end`, `rest` and the
+    tick that takes the countdown to zero end it; an aborted main-loop turn
+    sends `turn_end` too. While on, every hero's per-step gauge fill is scaled by
+    12,500 basis points (`HASTE_BP`, at least 1); enemies fill as before. The
+    gain is bounded: a quarter more hero actions, only during time already
+    spent in turns, which the turn cadence already pays for. A haste effect
+    with on or off is emitted on the change only.
+  - **Spawn by tool kind.** `tool_call` carries an optional archetype hint,
+    `swift`, `brute`, `caster` or `tank`, read in the plugin from a table of
+    tool names (`hooks/tool-kinds.ts`, plugin content, not sim content): Read,
+    WebFetch, WebSearch, LSP, Grep and Glob are swift; Edit, Write,
+    NotebookEdit and MultiEdit brute; Bash caster; every other tool, every MCP
+    tool and every call a subagent makes, whatever its tool, tank. The engine
+    build of 2.1.296 has no Grep or Glob tool, so a search runs through Bash
+    and spawns a caster. When the hint names an archetype the zone's wave list
+    holds (every zone holds one of each), the wave draw spawns that enemy; with
+    no hint, or one the list lacks, it draws uniformly. A hint never touches the
+    zone boss, the turn boss or the world boss (boss mode spawns nothing from a
+    tool call), and never changes the queue cap or the wave size.
+  - **Rewards follow toughness.** A wave enemy's XP, its gold range and its
+    drop chance are the zone's base scaled by its archetype's HP share over the
+    four shares' mean, floored, at least 1. The shares are brute 12,000, swift
+    8,000, tank 14,000 and caster 9,000 basis points, mean 10,750, so a tank
+    pays about 1.30 times the base and a swift about 0.74. Reward per point of
+    enemy HP is the same for every kind, so a claimed hint buys no farming
+    rate, and an unhinted zone pays on average the base, less at most the one
+    unit the floor drops per kind. Rarity weights, boss multiples, boss drop
+    chances and boss drop tables are untouched.
+  - **Enrage**, on a failed tool call. `tool_mishap` enrages the front enemy,
+    the first in the encounter's line, the engaged world boss included, and
+    emits an enraged effect naming it. Its next attack uses its attack stat
+    scaled by 15,000 basis points (`ENRAGE_BP`), floored, in place of its own,
+    through the same variance, mitigation and doubling; then the flag clears.
+    An enemy that dies enraged takes its flag with it. A mishap on an empty
+    field, or on an enemy already enraged, does nothing. The plugin sends it
+    from the classic post-tool-failure hook, at most one per 5 seconds, never
+    for an interrupt by the user nor for a call the permission-denied hook
+    named; a user's no at a prompt raises no failure hook at all.
+  - **Camp**, on a compaction. `camp` heals every party hero 50% of max HP and
+    revives the fallen at 50%, exactly as a rest heals, in boss mode in place,
+    and emits a camp effect carrying each hero's id and heal. It leaves Haste
+    and Guard alone. The plugin sends it from the classic post-compaction hook,
+    manual and auto alike, at most one per minute; the engine raises no such
+    hook for its own precompute or a forked compaction.
+  - **Guard**, while a permission prompt waits. `guard` on sets the guard
+    countdown to 60 ticks (2 minutes of battle); `guard` off, `rest` and the
+    tick that takes it to zero end it; on while on, or off while off, is a
+    no-op. While on, a hero's gauge fill is zero whatever Haste says, a hero at
+    the head of the action queue does not act and keeps its place while the
+    enemies behind it act, and the damage a hero takes is scaled by 5,000
+    basis points (`GUARD_DAMAGE_BP`). A guard effect with on or off is emitted
+    on the change only. The plugin sends on from the classic permission-request
+    hook before its `next(e)`: a live check on 2.1.296 showed it is the one hook
+    that fires as a prompt shows and never for an auto-allowed call. The tool
+    check answering ask is not the signal, since a permission mode settles an
+    ask after it. The plugin sends off when the awaited tool call resolves,
+    allowed, denied or failed, or when the classic permission-denied hook
+    fires. It keeps a flag of its own so a
+    duplicate on or off sends nothing, and paces pairs at most one per 2
+    seconds. Guard off follows any call that resolves, so a concurrent call
+    resolving under a showing prompt lowers the guard early.
+  - The plugin drops a reactive event sent faster than its pace, since a
+    dropped one loses a flash at most, and its paces sit under the server's
+    buckets (§7). Any later reactive event passes ADR 0014's test before it is
+    designed: if faking it would pay, it is not a reactive event. A summon on a
+    subagent start fails it and stays out.
 
 ### 4.2 Zones
 
@@ -373,12 +455,28 @@ inventory and roster expansions, market listing fee, 5 percent market sale fee.
   token buckets on the server's own clock, one per event kind: rounds refill at
   one per 2 seconds, tool calls at one per second, rests and turn ends at one per
   5 seconds, each with a capacity worth about two minutes, so a gap never banks
-  more than that and a burst of tiny batches cannot outrun the clock. A batch
-  over any bucket is rejected whole. Every submission is authenticated by the
+  more than that and a burst of tiny batches cannot outrun the clock. The
+  reactive events (§4.1) have four buckets of their own, so a flood of claimed
+  compactions heals the party no faster than a flood of prompts: `turn_start`
+  and `tool_mishap` at one per 5 seconds with the turn ends' capacity of 30,
+  `camp` at one per minute with a capacity of 5, and `guard` at one per 2
+  seconds with a capacity of 60, since every prompt costs an on and an off
+  (`BUDGETS` in `@promptfall/protocol`). A record from before them gets the
+  four buckets full on its first load. A batch over any bucket is rejected
+  whole, and the player sees a resync. Since a human paces only rests and
+  prompts, the plugin paces the reactive events itself, under the buckets: a
+  turn's `turn_start` refresh at most once per 60 seconds after its start,
+  `tool_mishap` one per 5 seconds, `camp` one per minute and a `guard` pair
+  one per 2 seconds, dropping what comes faster (`hooks/reactive.ts`).
+  Every submission is authenticated by the
   device token and must name its own account. Client timestamps order events
   within a batch and nothing else.
 - The sim's events are of two kinds. Player events originate on a client and
-  travel in batches: combat, rests, equips, vendoring. Server events are
+  travel in batches: combat, rests, the reactive events, equips, vendoring.
+  The batch schema knows each kind by name and refuses one it does not, and
+  `tool_call` takes an optional `hint` that must be one of the four
+  archetypes; the server accepts a hint without judging it, since it cannot
+  see Claude's tools and a hint buys no reward (ADR 0014). Server events are
   authored only by the ledger: the effects of trades on an account's inventory,
   roster and gold (`listed`, `returned`, `sold`, `bought`, `order_placed`,
   `order_refunded`, `order_filled`, `order_sold`, `credited`) and the world boss
@@ -770,6 +868,44 @@ flags. No second server program, no Postgres, no Redis, no worker.
   impact without a redraw. A monster that enters mid-tick plays its first
   actions animated on every surface. Account setting "Motion: full / still",
   default full; still drops the idle bob.
+- Reactive events on the stage and in the log (§4.1, spec #131). Each shows on
+  the stage and prints a line; none toasts and none plays a cue, so the toast
+  table and the cue set are unchanged. Spawn by tool kind shows as the enemy
+  that walks in and has no line of its own. The other four:
+  - **Haste**: while the view says a hero is hasted its idle bob runs on a
+    250 ms clock instead of 500 ms, and at 1.5× and in the SMIL picture it
+    trails a streak two pixels tall in its class colour (`CLASS_RGB`) behind its
+    back; at 1× and on the compact stage the faster bob alone. The streak
+    follows the state, so it holds across ticks and goes when Haste ends; under
+    Motion still it draws and the bob stays stopped. The party window's gauges
+    fill at the sim's effective per-step rate (`heroFill`, Haste and Guard
+    applied), so the strip agrees with the stage.
+  - **Enrage**: at the mishap the enemy flashes red, the white flash's
+    mechanism in `ENRAGE_RGB` (a blink at 1.5×, the whole flash at 1×), with a
+    `redflash` SMIL filter beside `flash`, emitted only in a document that uses
+    it. From then until its next hit's impact the enemy's palette is mixed 40%
+    toward red (the filter at opacity 0.4 in the SMIL picture). The sim clears
+    the flag in the tick that resolves the hit, before the stage plays it, so
+    the timeline holds the tint to that hit's show time, and drops it when the
+    enemy departs or a later view no longer has it enraged.
+  - **Camp**: the `effect:campfire` sprite, 1× and 1.5× art, sits on the
+    ground between the enemies' line and the party for 4 seconds, then fades
+    over 400 ms; each hero's heal lands at the camp's start with a green
+    rising number, from the amounts the effect carries.
+  - **Guard**: while the view says the party is guarding, each hero holds the
+    `guard` pose derived from its idle (`stance()` in `sprites/derive.ts`: a
+    one-row squash leaned one column per 12 rows toward the enemies, feet kept,
+    no drawn frame, within ADR 0007) and the idle bob stops; a hit still shows
+    the hit frame. At 1.5× and in the SMIL picture a small shield drawn in code
+    sits over the party's front hero; at 1× the stance alone.
+  - The log prints six lines for four effects, each at its effect's time and
+    keyed as a line that is never dropped: "The party quickens." and "The
+    party slows." for haste on and off; "Claude stumbles. Wood Goblin is
+    enraged!", naming the enemy; "The party makes camp while Claude gathers
+    its thoughts."; "The party stands guard." and "The party lowers its
+    guard." for guard on and off.
+  - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
+    at both densities and in the SMIL picture, under the size caps.
 - The staged state: what the band shows during a fight is the **staged
   state**, the fight as the stage has played it so far: the sim's state less
   every hit, heal and death the stage has not landed yet (GLOSSARY). One
@@ -926,7 +1062,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
   and the log show it), a party change the player made, a farming clear, a
-  common or uncommon drop, a common item vendored, chat.
+  common or uncommon drop, a common item vendored, chat, a reactive event (the
+  stage and the log show it, and it plays no cue).
 
   Rules behind the rows:
 
