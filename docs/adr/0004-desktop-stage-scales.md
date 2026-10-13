@@ -24,7 +24,8 @@ Kevin chose this knowing the stage can take much of a small window.
 
 ## Consequences
 
-- Spec §10's "one geometry for all" now holds for the art, not for the thresholds: the
+- Spec §10's "one geometry for all" now holds for the art, not for the thresholds (and
+  since ADR 0018 the art is one scene on every surface): the
   compact stage and the one-line band are terminal escapes. On the desktop the band
   collapses only when the person collapses it, the session is not primary, or a survey is
   showing.
