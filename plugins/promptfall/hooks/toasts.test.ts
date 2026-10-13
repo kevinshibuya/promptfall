@@ -94,12 +94,18 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward of gold alone',
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
     { row: 'reward', text: 'Your share of The Promptwyrm: 120 gold', timeoutMs: LONG, cue: null },
   ],
   [
     'a reward of gold and an item',
-    { k: 'rewarded', bossId: 'wb1', goods: { kind: 'item', item: oakStaff('rare') }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb1',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of The Promptwyrm: 120 gold and Oak Staff',
@@ -109,7 +115,13 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward of gold and a hero',
-    { k: 'rewarded', bossId: 'wb1', goods: { kind: 'hero', hero: MORWEN }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb1',
+      goods: { kind: 'hero', hero: MORWEN },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of The Promptwyrm: 120 gold and Morwen the Bold',
@@ -119,7 +131,13 @@ const SINGLE: [string, Effect, Toast][] = [
   ],
   [
     'a reward from a boss whose name is unknown',
-    { k: 'rewarded', bossId: 'wb9', goods: { kind: 'item', item: oakStaff('rare') }, gold: 120 },
+    {
+      k: 'rewarded',
+      bossId: 'wb9',
+      goods: { kind: 'item', item: oakStaff('rare') },
+      gold: 120,
+      source: 'boss',
+    },
     {
       row: 'reward',
       text: 'Your share of the world boss: 120 gold and Oak Staff',
@@ -401,7 +419,7 @@ test('drop and vendored toasts wait for their item, a zone arrival for its zone;
   const effects: Effect[] = [
     drop('rune_staff', 'legendary', 'i-l'),
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
     { k: 'retreat', zone: 3 },
     { k: 'wipe', zone: 4 },
     { k: 'zone_cleared', zone: 3, advancedTo: 4 },
@@ -527,8 +545,8 @@ test('rows that never fold give one toast per effect', () => {
   const effects: Effect[] = [
     { k: 'hero_recruited', hero: MORWEN, via: 'tavern' },
     { k: 'hero_recruited', hero: { ...MORWEN, id: 'h-2', epithet: 'the Wise' }, via: 'tavern' },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120 },
-    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80 },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 120, source: 'boss' },
+    { k: 'rewarded', bossId: 'wb1', goods: null, gold: 80, source: 'boss' },
     { k: 'retreat', zone: 3 },
     { k: 'retreat', zone: 2 },
     { k: 'wipe', zone: 4 },

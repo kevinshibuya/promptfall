@@ -124,8 +124,30 @@ export type GameView = {
   account: AccountView
   /** Boss mode: the world boss this party is engaged with and what it has dealt (committed and local). */
   boss: { bossId: string; name: string; glyph: string; dealt: number } | null
+  tallies: TalliesView
+  guarantees: GuaranteesView
 }
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
+
+/** One integer per rarity. */
+export type RarityCountsView = Record<RarityName, number>
+/** The sim's tallies, counted from version 16: what the Journal's bestiary and collection read. */
+export type TalliesView = {
+  /** Per enemy definition: spawns met and kills. */
+  enemies: Record<string, { seen: number; defeated: number }>
+  /** Per item base: 1 at each rarity the party has held it in. */
+  collection: Record<string, RarityCountsView>
+  zoneBosses: number
+  /** Zone bosses beaten with no wipe in their zone. */
+  cleanZoneBosses: number
+  turnBosses: number
+  drops: RarityCountsView
+  recruits: RarityCountsView
+  reforges: number
+  goldEarned: number
+}
+/** Per tavern guarantee, the recruits until one of its rarity or better is certain: 1 is the next. */
+export type GuaranteesView = { rare: number; epic: number; legendary: number }
 
 export type TradeKindView = 'item' | 'hero'
 export type RarityName = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'

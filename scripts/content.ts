@@ -96,9 +96,15 @@ export function contentReference(c: Content): string {
     '',
     '## Rarities',
     '',
+    "The tavern's odds, and its guarantee: a recruit of the rarity or better within that many recruits.",
+    '',
     ...table(
-      ['Rarity', 'Level cap'],
-      Object.entries(c.rarity).map(([r, rule]) => [r, rule.levelCap]),
+      ['Rarity', 'Level cap', 'Tavern odds', 'Tavern guarantee'],
+      Object.entries(c.rarity).map(([r, rule]) => {
+        const rarity = r as keyof Content['tavern']['odds']
+        const within = (c.tavern.guarantees as Partial<Record<string, number>>)[r]
+        return [r, rule.levelCap, `${c.tavern.odds[rarity] / 100}%`, within ?? '—']
+      }),
     ),
     '',
   ].join('\n')

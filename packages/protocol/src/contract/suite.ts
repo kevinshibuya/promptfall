@@ -537,12 +537,14 @@ export function runServerContract(name: string, make: ContractMake): void {
       expect(await client.submit(mirror.batch(full), mirror.auth())).toMatchObject({ ok: true })
     })
 
-    // The reactive events' buckets (#156): each kind is capped at its own capacity, by name.
+    // The reactive events' buckets (#156) and travel's (#161): each kind is capped at its own
+    // capacity, by name. Travel to the zone the party is in is refused by the sim, never the cap.
     for (const [kind, event] of [
       ['camp', { t: 'camp' }],
       ['turn_start', { t: 'turn_start' }],
       ['tool_mishap', { t: 'tool_mishap' }],
       ['guard', { t: 'guard', on: true }],
+      ['travel', { t: 'travel', zone: 1 }],
     ] as const) {
       it(`rule 8: a batch over the ${kind} bucket is capped naming it, and a full one passes`, async () => {
         const { client, boot, mirror } = await setup()

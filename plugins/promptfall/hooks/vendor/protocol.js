@@ -10,6 +10,7 @@ var BUDGETS = {
   tick: { refillMs: 2e3, capacity: 70 },
   tool_call: { refillMs: 1e3, capacity: 140 },
   rest: { refillMs: 5e3, capacity: 30 },
+  travel: { refillMs: 5e3, capacity: 30 },
   turn_end: { refillMs: 5e3, capacity: 30 },
   turn_start: { refillMs: 5e3, capacity: 30 },
   tool_mishap: { refillMs: 5e3, capacity: 30 },
@@ -4087,6 +4088,7 @@ var PlayerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("turn_start"), at }),
   external_exports.object({ t: external_exports.literal("turn_end"), at }),
   external_exports.object({ t: external_exports.literal("rest"), at }),
+  external_exports.object({ t: external_exports.literal("travel"), zone: positive, at }),
   external_exports.object({ t: external_exports.literal("tool_mishap"), at }),
   external_exports.object({ t: external_exports.literal("camp"), at }),
   external_exports.object({ t: external_exports.literal("guard"), on: external_exports.boolean(), at }),
@@ -4109,6 +4111,7 @@ var PLAYER_EVENT_KINDS = [
   "turn_start",
   "turn_end",
   "rest",
+  "travel",
   "tool_mishap",
   "camp",
   "guard",
@@ -4157,7 +4160,7 @@ var StatsSchema = external_exports.object({
   def: count,
   spd: count
 });
-var ServerEventSchema = external_exports.discriminatedUnion("t", [
+var ServerEventUnion = external_exports.discriminatedUnion("t", [
   external_exports.object({
     t: external_exports.literal("listed"),
     listingId: id,
@@ -4201,7 +4204,9 @@ var ServerEventSchema = external_exports.discriminatedUnion("t", [
     t: external_exports.literal("rewarded"),
     bossId: id,
     goods: GoodsSchema.nullable(),
-    gold: count
+    gold: count,
+    // Absent on every reward logged before it, which reads as boss.
+    source: external_exports.enum(["boss", "hunt"]).optional()
   }),
   // Sandbox grants: only a host with the sandbox on authors them.
   external_exports.object({
@@ -4215,6 +4220,7 @@ var ServerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("sandbox_recruit"), rarity: RaritySchema }),
   external_exports.object({ t: external_exports.literal("sandbox_wipe") })
 ]);
+var ServerEventSchema = ServerEventUnion;
 var GameStateSchema = external_exports.object({
   v: count,
   seed: count,

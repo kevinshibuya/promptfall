@@ -8,6 +8,7 @@ import type {
   LootView,
   OrderView,
   RosterHeroView,
+  TalliesView,
   WorldState,
 } from '../types'
 import type { Account, Listing, Order, ServerConfig } from './vendor/protocol.js'
@@ -20,6 +21,8 @@ import {
   type Item,
   type LootEntry,
   reforgeCost,
+  type Tallies,
+  tavernGuarantees,
   zoneAt,
 } from './vendor/sim.js'
 
@@ -325,5 +328,26 @@ export function toGameView(
           dealt: state.boss.dealt,
         }
       : null,
+    tallies: talliesView(state.tallies),
+    guarantees: tavernGuarantees(state),
+  }
+}
+
+const noRarities = () => ({ common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 })
+
+/** A copy of the tallies; a state from before version 16 has none and reads as zero. */
+function talliesView(t: Tallies | undefined): TalliesView {
+  return {
+    enemies: Object.fromEntries(Object.entries(t?.enemies ?? {}).map(([k, v]) => [k, { ...v }])),
+    collection: Object.fromEntries(
+      Object.entries(t?.collection ?? {}).map(([k, v]) => [k, { ...v }]),
+    ),
+    zoneBosses: t?.zoneBosses ?? 0,
+    cleanZoneBosses: t?.cleanZoneBosses ?? 0,
+    turnBosses: t?.turnBosses ?? 0,
+    drops: { ...noRarities(), ...t?.drops },
+    recruits: { ...noRarities(), ...t?.recruits },
+    reforges: t?.reforges ?? 0,
+    goldEarned: t?.goldEarned ?? 0,
   }
 }

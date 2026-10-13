@@ -14,6 +14,7 @@ export {
   STEP_MS,
   TICK_MS,
 } from './battle'
+export { tavernGuarantees } from './commands'
 export type {
   AffixDef,
   Content,
@@ -61,6 +62,7 @@ export type {
   EventKind,
   GameState,
   Goods,
+  GuaranteeRarity,
   Hero,
   HeroClass,
   Item,
@@ -68,7 +70,9 @@ export type {
   PlayerEvent,
   PlayerEventKind,
   Rarity,
+  RarityCounts,
   RecruitVia,
+  RewardSource,
   SandboxEvent,
   SandboxEventKind,
   ServerEvent,
@@ -77,11 +81,13 @@ export type {
   Stat,
   Stats,
   StepResult,
+  Tallies,
   TradeKind,
   Trait,
   WaveArchetype,
 } from './types'
 export {
+  GUARANTEE_RARITIES,
   RARITIES,
   SANDBOX_EVENT_KINDS,
   SERVER_EVENT_KINDS,

@@ -1,4 +1,13 @@
-import type { ActionId, EnemyKind, HeroClass, Rarity, Slot, Stat, Stats } from '../types'
+import type {
+  ActionId,
+  EnemyKind,
+  GuaranteeRarity,
+  HeroClass,
+  Rarity,
+  Slot,
+  Stat,
+  Stats,
+} from '../types'
 
 export type Archetype = 'brute' | 'swift' | 'tank' | 'caster' | 'boss' | 'turn_boss'
 
@@ -92,7 +101,13 @@ export type Content = {
   traits: Record<string, TraitDef>
   epithets: string[]
   rarity: Record<Rarity, RarityRule>
-  tavern: { baseCost: number; costGrowthBp: number; odds: Record<Rarity, number> }
+  tavern: {
+    baseCost: number
+    costGrowthBp: number
+    odds: Record<Rarity, number>
+    /** The tavern guarantee: a recruit of each rarity or better comes within this many recruits. */
+    guarantees: Record<GuaranteeRarity, number>
+  }
   expansions: {
     inventory: { step: number; max: number; costs: number[] }
     roster: { step: number; max: number; costs: number[] }

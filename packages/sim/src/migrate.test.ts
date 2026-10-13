@@ -43,6 +43,13 @@ function migrated(state: GameState, chain: MigrationChain, to = NEXT): GameState
   return r.state
 }
 
+/** A step's result walked the rest of the chain: only a current state steps on the current rules. */
+function current(s: GameState): GameState {
+  const r = migrate(s)
+  if (!r.ok) throw new Error(`refused: ${r.reason}`)
+  return r.state
+}
+
 function hero(s: GameState, id: string) {
   const h = s.roster.find((x) => x.id === id)
   if (!h) throw new Error(`no hero ${id}`)
@@ -71,6 +78,16 @@ describe('the deep fixture', () => {
       .map((i) => content.itemBases[i.base]?.minZone)
     expect(minZones).toContain(7)
     expect(minZones).toContain(10)
+  })
+
+  it("holds tallies and the tavern guarantee's counts above zero", () => {
+    expect(Object.keys(deep.tallies.enemies).length).toBeGreaterThan(0)
+    expect(Object.keys(deep.tallies.collection).length).toBeGreaterThan(0)
+    expect(Object.values(deep.tallies.drops).some((n) => n > 0)).toBe(true)
+    expect(Object.values(deep.tallies.recruits).some((n) => n > 0)).toBe(true)
+    expect(deep.tallies.reforges).toBeGreaterThan(0)
+    expect(deep.tallies.goldEarned).toBeGreaterThan(0)
+    expect(Object.values(deep.guarantee).every((n) => n > 0)).toBe(true)
   })
 
   it('holds a reactive event in play: Haste and Guard on, the world boss enraged', () => {
@@ -280,7 +297,9 @@ describe('the 5→6 step: ratio mitigation and the flatter xp curve', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -337,7 +356,9 @@ describe('the 6→7 step: hero rarity multiplies base stats and growth', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -380,7 +401,9 @@ describe('the 7→8 step: an item carries its tier', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -439,7 +462,9 @@ describe('the 8→9 step: a wipe restarts the zone, the third is a retreat', () 
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -484,7 +509,9 @@ describe('the 9→10 step: the auto-vendor setting', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -518,7 +545,9 @@ describe('the 10→11 step: tiers', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -552,7 +581,9 @@ describe('the 11→12 step: the arc retuned for the dedicated player', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -586,7 +617,9 @@ describe('the 12→13 step: tier odds for contracts, the tier ramp', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -623,7 +656,9 @@ describe('the 13→14 step: the tier-1 arc slowed outside the kill rate', () => 
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -666,7 +701,9 @@ describe('the 14→15 step: the reactive events', () => {
 
     it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
       expect(hashState(after)).toBe(PINNED[kind])
-      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+      expect(step(current(after), { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual(
+        [],
+      )
     })
   }
 
@@ -689,6 +726,69 @@ describe('the 14→15 step: the reactive events', () => {
       { kind: 'hero', hero },
     ] as const) {
       expect(migrateGoods(goods, 14, { to: 15 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
+describe('the 15→16 step: the tallies, travel and the tavern guarantee', () => {
+  // Every tally at zero but the zone boss count, seeded from the boss total; the guarantee's
+  // counts at zero.
+  const PINNED = { golden: 'db3c5b83722435b5', deep: '114a718ec0b2c6b4' } as const
+  const ZERO = { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0 }
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v15-deep.json' : 'v15.json')
+    const r = migrate(before, { to: 16 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`starts the ${kind} fixture's tallies at zero but the zone bosses, and its counts at zero`, () => {
+      expect(after.v).toBe(16)
+      expect(after.tallies).toEqual({
+        enemies: {},
+        collection: {},
+        zoneBosses: before.stats.bosses,
+        cleanZoneBosses: 0,
+        turnBosses: 0,
+        drops: ZERO,
+        recruits: ZERO,
+        reforges: 0,
+        goldEarned: 0,
+      })
+      expect(after.guarantee).toEqual({ rare: 0, epic: 0, legendary: 0 })
+    })
+
+    it(`keeps every other field of the ${kind} fixture`, () => {
+      const { v: _v, encounter: _e, battle: _b, tallies: _t, guarantee: _g, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it("seeds the zone boss tally from a veteran's boss total, turn bosses and all", () => {
+    const veteran = { ...fixture('v15.json'), stats: { kills: 4100, bosses: 37, wipes: 9 } }
+    const r = migrate(veteran, { to: 16 })
+    if (!r.ok) throw new Error(r.reason)
+    expect(r.state.tallies.zoneBosses).toBe(37)
+    expect(r.state.tallies.turnBosses).toBe(0)
+    expect(r.state.stats).toEqual(veteran.stats)
+  })
+
+  it('leaves goods alone', () => {
+    const v15 = fixture('v15-deep.json')
+    const [item] = v15.inventory
+    const [hero] = v15.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 15, { to: 16 })).toEqual({ ok: true, goods })
     }
   })
 })

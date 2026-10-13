@@ -45,9 +45,10 @@ describe('content reference', () => {
     expect(lines).toContain('| `knight_1` | Aldric | knight |')
   })
 
-  it('lists the rarities with their level caps', () => {
-    expect(lines).toContain('| common | 20 |')
-    expect(lines).toContain('| legendary | 50 |')
+  it('lists the rarities with their level caps, the tavern odds and the tavern guarantee', () => {
+    expect(lines).toContain('| common | 20 | 60% | — |')
+    expect(lines).toContain('| rare | 40 | 9.5% | 20 |')
+    expect(lines).toContain('| legendary | 50 | 0.5% | 400 |')
   })
 
   it('holds one row per registry entry', () => {

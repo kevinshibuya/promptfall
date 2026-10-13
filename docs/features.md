@@ -23,9 +23,12 @@ before the first kill, at once), and the stage draws the party in the list's ord
 starts with one Common hero of each class, three of them already in the party.
 
 **Recruiting.** The Heroes tab's last row recruits a hero at the tavern for gold, at the odds the
-Odds tab publishes, each recruit dearer than the last. Zone bosses, and turn bosses less often,
-drop recruit contracts that bring a hero straight into the roster. A contract that finds the
-roster full is vendored for gold.
+Odds tab publishes, each recruit dearer than the last. The tavern guarantee puts a floor under the
+odds: a Rare or better comes within 20 tavern recruits, an Epic or better within 80 and a
+Legendary within 400, so the recruit that would break the promise comes up at least that rare.
+Zone bosses, and turn bosses less often, drop recruit contracts that bring a hero straight into
+the roster; a contract never counts toward the guarantee. A contract that finds the roster full
+is vendored for gold.
 
 **Rests.** Each prompt the player submits is a short rest: every hero heals 50% of max HP, and
 fallen heroes get up at 50%.

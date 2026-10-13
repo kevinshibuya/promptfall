@@ -33,6 +33,10 @@ describe('golden replay', () => {
   // moves it through `v` alone: zone 1's boss stays at ×1 and its waves are untouched.
   // SIM_VERSION 15 (the reactive events) changes the script: every turn opens hasted, the calls
   // carry hints, mishaps enrage, a guard and two camps; and a wave kill pays by its hp share.
+  // SIM_VERSION 16 (the tallies, travel, the tavern guarantee) changes the script: a travel past
+  // the highest zone is refused, a credit pays for two more recruits whose counts move the
+  // guarantee, and the sandbox moves the party to zone 2 for a travel straight back; every spawn,
+  // kill, drop and gold gain lands in the tallies.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -41,7 +45,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('62144fd6f78c2048')
+    expect(GOLDEN_HASH).toBe('ea3cd5be0f52d490')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)
