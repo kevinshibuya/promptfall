@@ -359,7 +359,9 @@ when the server answers. Every other session draws read-only and says "playing i
 session"; on the in-process save it writes nothing either, so expired listings and the world boss
 wait for the primary. A primary that has paused (an update to install, a save to reset) answers
 trades, `farm`, `autovendor` and the sandbox verbs with "Promptfall is paused" instead. A session that stops playing drops its banner, and the new primary does not toast again
-what the old one already toasted, nor leaves out what arrived after the old one last looked.
+what the old one already toasted, nor leaves out what arrived after the old one last looked. The
+party stands guard when Claude Code raises its permission-request hook, which fires only as a
+permission prompt shows and never for an auto-allowed call, and lowers it when the call resolves.
 
 **Server status.** When the server stops answering or refuses a batch, the band says "server
 unreachable, retrying" and play goes on for two minutes, then pauses until the server answers
