@@ -54,6 +54,8 @@ export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
   'strip-world': {imageHash: "cb4451275c6cde48", cellsHash: "caa4ddebbbdaa305", svgHash: "3ee197891207c96d", svgChars: 17594},
   'strip-notice': {imageHash: "78adba10dc8555ce", cellsHash: "75718deb99a0ab4c", svgHash: "01dce77bc3b676cf", svgChars: 17172},
   'strip-waiting': {imageHash: "d770102d9cb655fc", cellsHash: "d69339aabcfdf6fc", svgHash: "fe8ee227233f6577", svgChars: 20749},
+  'strip-camping': {imageHash: "b4590328f2cda7a5", cellsHash: "f2d7fe25393ed912", svgHash: "807e00f509c93336", svgChars: 16236},
+  'strip-compact-camping': {imageHash: "002603a2d78c22af", cellsHash: "24995e0b3bb48c77", svgHash: "1be8b9d188eec5fc", svgChars: 9371},
 }
 
 export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {

@@ -54,7 +54,7 @@ export type StripInput = {
 }
 
 export type Hotspot = {
-  hotkey: 'p' | 'l' | 'w' | 'c' | 'f'
+  hotkey: 'p' | 'l' | 'w' | 'c' | 'f' | 'g'
   label: string
   x: number
   y: number
@@ -72,6 +72,10 @@ type HpSlot = { id: string; line: number; span: number }
 type Built = { win: Win; hotspots: Hotspot[]; slots: Slots[]; hp: HpSlot[] }
 
 const FULL_MIN = 116
+/** The message window's row while the party camps, in the row a notice takes: `g` breaks camp. */
+const BACK_TO_FIGHT = 'g: back to the fight'
+/** The enemy window's first row and the compact window's front enemy while the party camps. */
+const CAMPING = 'camping'
 const pad = (n: number): Span => ({ gap: n })
 const text = (t: string, rgb?: number): Span => (rgb === undefined ? { text: t } : { text: t, rgb })
 const width = (spans: readonly Span[]) => spans.reduce((n, s) => n + spanCells(s), 0)
@@ -179,12 +183,19 @@ function enemyRow(
 
 function enemyWindow(input: StripInput, x: number): Built {
   const { title } = enemyLabel(input)
-  const list = enemies(input).slice(0, 3)
+  // A camp holds the encounter off the field: its rows blank but a dim word, title and footer kept.
+  const camping = input.view.camping
+  const list = camping ? [] : enemies(input).slice(0, 3)
   const inner = ENEMY_COLUMNS - 2
-  const lines: Line[] = list.map((e) => ({ spans: [pad(1), ...enemyRow(e, inner - 2), pad(1)] }))
+  const lines: Line[] = camping
+    ? [{ spans: [pad(1), text(CAMPING, DIM_RGB)] }]
+    : list.map((e) => ({ spans: [pad(1), ...enemyRow(e, inner - 2), pad(1)] }))
   // The three rows are the field's: the queue behind them is the footer, the sim's count.
   const { waiting } = input.view
-  const alt = `${title}. ${list.map((e) => `${e.name} ${e.hp} of ${e.maxHp} HP`).join(', ') || 'No enemies'}.${waiting > 0 ? ` ${waiting} more waiting.` : ''}`
+  const field = camping
+    ? 'Camping'
+    : list.map((e) => `${e.name} ${e.hp} of ${e.maxHp} HP`).join(', ') || 'No enemies'
+  const alt = `${title}. ${field}.${waiting > 0 ? ` ${waiting} more waiting.` : ''}`
   const hp = list.map((e, line) => ({ id: e.id, line, span: 1 + ENEMY_BAR_SPAN }))
   return {
     win: {
@@ -267,13 +278,29 @@ function tabRows(input: StripInput, n: number, at = input.now): Line[] {
   return rows.slice(-2)
 }
 
+/** Whether the message window shows `g: back to the fight`: camping, and no notice holds its row. */
+const backToFight = (input: StripInput) => input.view.camping && !input.notice
+
+/** The Party tab's newest log line on one row, clipped, still typing as it was. */
+function newestRow(input: StripInput, n: number, at: number): Line {
+  const l = input.log.shown(at, input.motion).at(-1)
+  if (!l) return { spans: [] }
+  const row = clip(l.text, n)
+  const reveal = Math.max(0, Math.min(chars(row).length, l.revealed))
+  return { spans: [text(row, l.rgb)], ...(reveal < chars(row).length ? { reveal } : {}) }
+}
+
 function messageLines(input: StripInput, columns: number, at = input.now): Line[] {
   const inner = columns - 2
   const n = inner - 2
   const cmd = commandLine(input.tab, n)
-  const rows = tabRows(input, n, at).map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
+  const back = backToFight(input)
+  // Camping on the Party tab: the newest line whole above the camp's row, not a wrapped tail.
+  const tab = back && input.tab === 'party' ? [newestRow(input, n, at)] : tabRows(input, n, at)
+  const rows = tab.map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
   while (rows.length < 2) rows.push({ spans: [] })
   if (input.notice) rows[1] = { spans: [pad(1), text(clip(input.notice, n))] }
+  else if (back) rows[1] = { spans: [pad(1), text(clip(BACK_TO_FIGHT, n))] }
   return [{ spans: [pad(1), ...cmd.spans] }, ...rows]
 }
 
@@ -281,13 +308,22 @@ function messageWindow(input: StripInput, x: number, columns: number): Built {
   const n = columns - 4
   const cmd = commandLine(input.tab, n)
   const lines = messageLines(input, columns)
-  const hotspots = cmd.at.map((c) => ({
+  const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
     label: c.label,
     x: x + 2 + c.x,
     y: 1,
     columns: c.hotkey === 'c' ? 1 : chars(c.label).length + 1,
   }))
+  // The row a notice takes, the window's third line, under the top border.
+  if (backToFight(input))
+    hotspots.push({
+      hotkey: 'g',
+      label: BACK_TO_FIGHT,
+      x: x + 2,
+      y: 3,
+      columns: Math.min(n, chars(BACK_TO_FIGHT).length),
+    })
   const shown = lines
     .slice(1)
     .map((l) =>
@@ -431,8 +467,9 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     slots.push({ hero: h, cursor: { line: lines.length, span: 1 }, gauge })
     lines.push({ spans })
   }
-  const front = enemies(input)[0]
+  const front = view.camping ? undefined : enemies(input)[0]
   if (input.notice) lines[3] = { spans: [pad(1), text(clip(input.notice, inner - 2))] }
+  else if (view.camping) lines[3] = { spans: [pad(1), text(CAMPING, DIM_RGB)] }
   else if (front) {
     lines[3] = { spans: [pad(1), ...enemyRow(front, Math.min(inner - 2, 27))] }
     bars.push({ id: front.id, line: 3, span: 1 + ENEMY_BAR_SPAN })
@@ -446,7 +483,12 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     columns: c.hotkey === 'c' ? 1 : chars(c.label).length + 1,
   }))
   hotspots.push({ hotkey: 'f', label: title, x: x + 2, y: 0, columns: chars(title).length })
-  const alt = `${title}. Party: ${view.heroes.map((h) => heroAlt(input, h)).join('; ')}.${front ? ` Front enemy ${front.name} ${front.hp} of ${front.maxHp} HP.` : ''}`
+  const field = view.camping
+    ? ' Camping.'
+    : front
+      ? ` Front enemy ${front.name} ${front.hp} of ${front.maxHp} HP.`
+      : ''
+  const alt = `${title}. Party: ${view.heroes.map((h) => heroAlt(input, h)).join('; ')}.${field}`
   return {
     win: {
       key: 'compact',
@@ -580,8 +622,9 @@ export function stripTracks(input: StripInput, horizonMs: number): Track[] {
         })
     }
     if (b.win.key === 'message' && input.tab === 'party') {
-      // A notice holds the typing row, and motion still shows lines whole: no typing then.
-      const types = input.motion !== 'still' && !input.notice
+      // A notice or the camp's row holds the typing row, and motion still shows lines whole: no
+      // typing then.
+      const types = input.motion !== 'still' && !input.notice && !input.view.camping
       const width = b.win.columns - 4
       const lastRow = (text: string, revealed: number) => {
         // Cells of the line's last row already shown: its leading gap, then what typed into it.

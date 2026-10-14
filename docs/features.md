@@ -129,7 +129,12 @@ compaction makes the party camp: a campfire burns between the party and the enem
 seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
 "The party makes camp while Claude gathers its thoughts." The fight then holds where it stands, every
 gauge, enemy and queued enemy kept, until camp breaks at the next prompt or tool call, a travel or a
-world boss appearing, and the log says "The party breaks camp." A failed tool call while camped
+world boss appearing, the session ending, or `g` on the band or `/promptfall go`, and the log says
+"The party breaks camp." The camp starts as the compaction starts, from a manual, auto or plugin
+compaction of the main conversation, never the engine's precompute or a subagent's own. While the
+party camps the enemy window's rows go blank but a dim `camping`, the message window shows
+`g: back to the fight` under the newest log line, and the compact window shows `camping` for the
+front enemy. A failed tool call while camped
 enrages nobody. With a world boss engaged the party heals and fights on. While Claude Code shows a permission
 prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
 standing raises a small shield on the full stage, and the heroes take half damage and
