@@ -195,6 +195,12 @@ between them, never below zone 1; the wipe count starts again. The weighty event
 be.
 _Avoid_: wipe, defeat, demotion
 
+**Falls**:
+The zone's wipe count out of the three that make a retreat, shown in the purse as `Falls 1/3`; at
+`2/3` the next wipe retreats. It starts again at 0 on a retreat, a travel or a zone boss kill, and
+a world boss fight counts none, so the purse shows none then.
+_Avoid_: deaths, lives, wipes (that is the lifetime count)
+
 **Travel**:
 The player's move of the party to any zone up to the highest it has reached, at once, from a
 Journal zone page or `/promptfall travel <zone>`: the encounter cleared with no drops and no XP,
@@ -470,7 +476,8 @@ nets, then Set a price (or preset prices where there is no price field).
 _Avoid_: sell panel (the text form it replaced), sell dialog
 
 **Purse**:
-The strip's last window: the gold and the tactics (Push on, or Farm here; `f` toggles).
+The strip's last window: the gold, the tactics (Push on, or Farm here; `f` toggles) and the
+falls.
 _Avoid_: wallet, status window
 
 **Combat log**:
