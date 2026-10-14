@@ -51,6 +51,8 @@ const last = new Map<string, { build: PaneBuild; tab: DialogTab }>()
  * can sit on another row than the ▶: a drawing whose stops differ from the last puts it back.
  */
 const lastStops = new Map<string, string>()
+/** The latest drawing's refocus per instance: an older one's sends, or one the person overtook, stand down. */
+const refocusTurn = new Map<string, object>()
 /** The instances whose ring sits on a field now. */
 const onInput = new Set<string>()
 /**
@@ -65,6 +67,7 @@ export function remember(requestId: string, tab: DialogTab, build: PaneBuild): v
 export function forget(requestId: string): void {
   last.delete(requestId)
   lastStops.set(requestId, '')
+  refocusTurn.delete(requestId)
   onInput.delete(requestId)
   fromField.delete(requestId)
 }
@@ -131,6 +134,62 @@ export function refocusKey(
 }
 export function placed(requestId: string, signature: string): void {
   lastStops.set(requestId, signature)
+}
+
+/**
+ * When a drawing sends its refocus, in ms after it. A `$.ui.focus` lands on the tree mounted when
+ * it arrives, and on the next tick that can still be the last drawing: after a recruit the ▶'s key
+ * sat one stop up there, the request was answered `{}`, and the mount then kept the ring by
+ * position, on the hero just recruited (#191). The last send comes once the drawing is on screen;
+ * only it records the place.
+ */
+export const REFOCUS_MS = [0, 50, 150] as const
+
+/** What the refocus needs of the engine: its clock, and `$.ui.focus` on this instance. */
+export type RefocusIo = {
+  after: (ms: number, fn: () => void) => void
+  focus: (key: string) => Promise<{ deny?: string }>
+}
+
+/**
+ * Puts the ring back where `refocusKey` says, after a drawing: not from inside it, since
+ * `$.ui.focus` waits for the drawing that brings a new key, and again at each `REFOCUS_MS`, since
+ * a key the last drawing had too resolves on the tree still mounted. Recorded only once the last
+ * send took: a pane without the keyboard tries again next drawing. A later drawing's refocus, the
+ * person's move or a field's focus stands the sends still to come down.
+ */
+export function refocus(
+  io: RefocusIo,
+  requestId: string,
+  signature: string,
+  build: PaneBuild,
+  fieldRefocus: boolean,
+): void {
+  const key = refocusKey(requestId, signature, build, fieldRefocus)
+  if (key === false) return
+  if (key === null) {
+    refocusTurn.delete(requestId)
+    placed(requestId, signature)
+    return
+  }
+  const turn = {}
+  refocusTurn.set(requestId, turn)
+  REFOCUS_MS.forEach((ms, i) => {
+    io.after(ms, () => {
+      if (refocusTurn.get(requestId) !== turn) return
+      void io.focus(key).then(
+        (r) => {
+          if (r.deny === undefined && i === REFOCUS_MS.length - 1) placed(requestId, signature)
+        },
+        () => undefined,
+      )
+    })
+  })
+}
+
+/** The ring was put somewhere on purpose (the person's move, a field's focus): no refocus follows. */
+export function endRefocus(requestId: string): void {
+  refocusTurn.delete(requestId)
 }
 
 /** What a field's typing and Enter do, by the field's key. */
@@ -407,6 +466,8 @@ export function closed(d: DialogState): DialogState {
 /** The `ui.focus` hook: the ▶ follows the ring, and the ring skips the non-cursor stops. */
 export function registerPaneHooks(on: On): void {
   on('ui.focus', { requestId: PANE_ID }, async ($, e, next) => {
+    // The person's move wins over a refocus still to be sent.
+    if (e.origin.kind === 'person') endRefocus(e.requestId)
     const l = last.get(e.requestId)
     if (!l) return next(e)
     // Leaving a field puts the ring back on the ▶, past an engine stop too (Shift+Tab).
