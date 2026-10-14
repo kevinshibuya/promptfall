@@ -36,7 +36,6 @@ import {
   ENRAGE_RGB,
   ENRAGE_TINT,
   GLOW_ALPHA,
-  HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
@@ -653,8 +652,8 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       if (m.kind === 'chest') {
         const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
-        const closed = variant(CHESTS.closed, compact, scale)
-        const item = variant(sprite, compact, scale)
+        const closed = variant(CHESTS.closed, compact)
+        const item = variant(sprite, compact)
         // Where the actor stood, on the ground whatever its bob; with no actor, its slot's ground.
         const at = m.actor === null ? undefined : base.get(m.actor)
         const idle = at?.actor.poses.idle.art
@@ -684,7 +683,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
           { sprite: CHESTS.open, from: opens + CHEST_OPEN_MS / 2, until: m.until },
         ].filter((a) => a.until > opts.now)
         const uses = arts.map((a) => {
-          const href = `#${define(variant(a.sprite, compact, scale), null)}`
+          const href = `#${define(variant(a.sprite, compact), null)}`
           if (arts.length === 1 && a.from <= opts.now) return `<use href="${href}"/>`
           return `<use href="${href}" visibility="hidden"><set attributeName="visibility" to="visible" begin="${seconds(a.from - opts.now)}" dur="${seconds(a.until - a.from)}"/></use>`
         })
@@ -731,7 +730,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         const to = base.get(m.target)
         const sprite = SPRITES[`effect:${m.effect}`]
         if (!to || !sprite) continue
-        const art = variant(sprite, compact, scale)
+        const art = variant(sprite, compact)
         // The attacker throws from where it stands as it throws: stepped out, in its own action's
         // step (a second queued action has its own).
         const step = live.find(
@@ -809,28 +808,8 @@ export function fitSvg(
 }
 
 /**
- * The 1.5x Svg on the ladder's rung that fits the engine's cap, else the 1x Svg (grill Q12): the
- * rendered size is the same either way; only the viewBox differs. No legal frame passes the last
- * rung (ticket #210), so the 1x Svg is dead code until the one-model cut deletes it.
- */
-export function svgWithFallback(
-  hi: StageModel,
-  lo: StageModel,
-  motions: readonly Motion[],
-  opts: Omit<SvgOpts, 'rung'>,
-): string {
-  return svgOrFallback(fitSvg(hi, motions, opts).svg, () => renderSvg(lo, motions, opts))
-}
-
-/** The 1.5x Svg while it is under the cap, else the 1x one, `lo` rendered only then. */
-export function svgOrFallback(hi: string, lo: () => string): string {
-  return hi.length < SVG_MAX_CHARS ? hi : lo()
-}
-
-/**
- * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the 1.5x model
- * on the ladder, falling back to the 1x one past its last rung. `view` is the staged state at
- * `now`.
+ * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the one model on
+ * the ladder's rung that fits the engine's cap. `view` is the staged state at `now`.
  */
 export function stageSvg(
   view: GameView,
@@ -839,10 +818,8 @@ export function stageSvg(
   box: Box,
   opts: { smil: boolean; width: number; motion: 'full' | 'still'; fit: number },
 ): string {
-  const at = { compact: false, motion: opts.motion }
-  const hi = stageAt(view, timeline, now, box, { ...at, scale: HIRES_SCALE })
-  const lo = stageAt(view, timeline, now, box, at)
-  return svgWithFallback(hi, lo, timeline.active(now), { ...opts, now })
+  const model = stageAt(view, timeline, now, box, { compact: false, motion: opts.motion })
+  return fitSvg(model, timeline.active(now), { ...opts, now }).svg
 }
 
 /** One art alone at its own size, in its own colours: the dialog's list sprites. */

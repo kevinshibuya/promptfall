@@ -23,7 +23,6 @@ import {
   ALT_REMOUNT_MS,
   EVENT_FRAME_MS,
   HASTE_FRAME_MS,
-  HIRES_SCALE,
   IDLE_FRAME_MS,
   IMAGE_ALT_DENY,
   SVG_FALLBACK_FRAME_MS,
@@ -137,12 +136,10 @@ export function stageFrame(
   motion: Settings['motion'],
 ): { cells: string } | { source: { png: string } } {
   if (!layout.box) throw new Error('no stage in a collapsed layout')
-  // The full stage draws the 1.5x scene on both; the Raster resamples it into its cells. The
-  // compact stage stays at 1.
+  // The full stage is the 1.5x scene on both; the Raster resamples it into its cells.
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
-    scale: HIRES_SCALE,
   })
   if (renderer === 'raster') {
     const { frame, numbers } = rasterStage(model, layout)
@@ -206,7 +203,6 @@ export function bandFrame(
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
-    scale: HIRES_SCALE,
   })
   return pngImage(composeBand(band, composeFrame(model, { numbers: true }), strip), WINDOW_SCALE)
 }
@@ -231,7 +227,6 @@ export function bandCells(
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
-    scale: HIRES_SCALE,
   })
   const { frame, numbers, heads } = rasterStage(model, layout)
   return { cells: composeBandCells(band, frame, numbers, strip, heads) }

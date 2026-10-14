@@ -74,7 +74,7 @@ for (const name of SCENARIOS) {
   )
   writeFileSync(join(OUT, `${name}.svg`), `${r.svg}\n`)
   // The Raster's cells as the terminal draws them: one cell CELL_W × CELL_H, numbers as glyphs.
-  png(`${name}.raster`, cellsPicture(r.cells, s.hires.box.columns), 1)
+  png(`${name}.raster`, cellsPicture(r.cells, s.model.box.columns), 1)
 }
 lines.push('}', '', 'export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {')
 for (const name of STRIP_SCENARIOS) {
