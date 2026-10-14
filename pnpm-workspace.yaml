@@ -2,8 +2,5 @@ packages:
   - packages/*
   - plugins/*
   - servers/*
-# Ticket worktrees borrow node_modules; pnpm sees a changed workspace structure.
-# Keep the warning, but leave dependency installation to an explicit pnpm install.
-verifyDepsBeforeRun: warn
 allowBuilds:
   esbuild: true
