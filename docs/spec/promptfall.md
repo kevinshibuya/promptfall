@@ -117,18 +117,29 @@ Checked against Claude Code v2.1.287's mods API.
   the actor's gauge empties. Heroes keep their gauges across waves and through a
   rest; a spawned enemy starts between 0 and 50%; a fallen hero's gauge empties;
   a wipe empties them all. Only the party's gauges are shown.
-- `tool.call` spawns one enemy into the current encounter. At most 3 enemies
-  fight at once; up to 10 more queue; beyond that new spawns are dropped so a
+- `tool.call` adds one enemy to the current wave: it goes into the encounter
+  queue and counts toward the wave, which clears only when every enemy it got,
+  drawn or joined, is dead. At most 3 enemies fight at once; up to 10 more
+  queue; beyond that a call's enemy is dropped and counts toward nothing, so a
   very long turn cannot create a death wall. Which enemy is the tool kind's
-  (spawn by tool kind, below).
+  (spawn by tool kind, below). A call with no wave open (no encounter, or a
+  turn boss alone) opens one with its draw, the call's enemy queued first. At
+  wave 11, the zone boss's, a call opens no wave: its enemy joins the encounter
+  and counts toward nothing, and that encounter never clears as a wave.
+- Whenever the field has a free slot and the queue holds an enemy, that enemy
+  spawns: when a wave opens, on a tool call, and on a kill, in the same step as
+  the kill and before the clear check, so a refilled field never clears. A zone
+  boss kill ends the encounter and spawns nothing.
 - `turn.complete` after a turn with 10 or more tool calls spawns a turn boss: a
   mini-boss with raised drop rates and a hero contract chance. It is not the
-  zone boss. One that spawns mid-wave joins the wave's encounter and leaves its
-  progress alone: the wave clears, with its heal, when its last monster is gone.
+  zone boss. It arrives on an empty field, between waves, in an encounter of its
+  own, and counts toward no wave; a tool call during it opens the next wave in
+  that encounter, the turn boss outside its count.
 - `prompt.submit` is a short rest: every hero heals 50% of max HP, fallen heroes
   revive at 50%.
-- When no enemy is present a tick spawns the next enemy of the current wave, so
-  idle sessions still fight.
+- When no encounter is open a tick opens the next wave, its whole draw queued
+  and on the field at once, so idle sessions still fight; with one open it
+  refills from the queue.
 - Reactive events (spec #131, ADR 0014): five changes in the fight that answer
   what Claude is doing, each seen on the stage and read in the combat log
   (§10). **A reactive event shapes the fight and never the reward.** Four are
@@ -212,8 +223,9 @@ Checked against Claude Code v2.1.287's mods API.
 
 ### 4.2 Zones
 
-- 12 zones, each 10 waves then a zone boss. Waves have 1 to 3 enemies drawn
-  from the zone's enemy list.
+- 12 zones, each 10 waves then a zone boss. A wave opens with 1 to 3 enemies
+  drawn from the zone's enemy list, all queued at once, and grows by one with
+  each tool call made while it is open (§4.1).
 - Clearing the zone boss advances to the next zone unless the farm toggle is on
   or the party is at the ladder's end, in which case the zone restarts at wave 1.
 - Wave clear heals every hero 15% and revives fallen heroes at 15%.
@@ -554,10 +566,11 @@ market listing fee, 5 percent market sale fee.
 - Package `@promptfall/sim`, pure, versioned by `SIM_VERSION`. Any change to the
   sim bumps it, and the plugin's version moves with it; a state behind the
   client's sim version is reset (phase 3 bumps it to 3, the combat flow to 4,
-  the staged-state set to 5, the pull's tallies, travel and guarantee to 16
-  and its boss moves to 17). API: create an initial state from a seed, step a
-  state with one event into a new state plus effects, hash a state. Effects are
-  UI notifications and carry no authority.
+  the staged-state set to 5, the pull's tallies, travel and guarantee to 16,
+  its boss moves to 17 and waves that fill every free slot to 18). API: create
+  an initial state from a seed, step a state with one event into a new state
+  plus effects, hash a state. Effects are UI notifications and carry no
+  authority.
 - Tallies (spec #132): the ledger sees only state on replay, never effects, so
   what it counts for the journal and the hunt is state. `tallies` holds, per
   enemy definition, seen (raised at its spawn) and defeated counts; per item
@@ -901,11 +914,16 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the window strip (ADR 0005), Dragon Quest V's
   windows in its pixel font: the enemy window (titled with the zone and wave,
   `T2 Z1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
-  boss with its percentage), the message window (the command line, then the
+  boss with its percentage, and while the encounter queue holds N enemies a
+  dim `+N waiting` footer cut into its bottom border, the view's `waiting`,
+  never staged), the message window (the command line, then the
   combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
-  fills between ticks and turns gold when full) and the purse window (gold and
-  the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
+  fills between ticks and turns gold when full) and the purse window (gold,
+  the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
+  view's `zoneWipes` out of the sim's `RETREAT_AT`, never staged, left out in
+  boss mode).
+  Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
   the last two drops, or the World rows. While `hasSurvey` the band stays up at
   the layout its rows allow and the stage keeps playing. The band is

@@ -56,13 +56,23 @@ describe('the bestiary tallies', () => {
     expect(s0.tallies.zoneBosses).toBe(0)
   })
 
-  it('a spawn raises seen for its definition', () => {
-    const s = step(s0, { t: 'tool_call', hint: 'swift' }).state
-    const def = s.encounter?.enemies[0]?.def
+  it('a spawn raises seen for its definition, and a queued enemy is not seen yet', () => {
+    // A wave of one, open, with its enemy on the field: each swift call joins it.
+    const open = facing(s0, zone(1).enemies[1] ?? '', 'wave')
+    const s1: GameState = {
+      ...open,
+      encounter: open.encounter && { ...open.encounter, waveSize: 1 },
+    }
+    const swift = { t: 'tool_call', hint: 'swift' } as const
+    const s = step(s1, swift).state
+    const def = s.encounter?.enemies[1]?.def
     if (!def) throw new Error('no spawn')
     expect(s.tallies.enemies[def]).toEqual({ seen: 1, defeated: 0 })
-    const again = step(s, { t: 'tool_call', hint: 'swift' }).state
+    const again = step(s, swift).state
     expect(again.tallies.enemies[def]).toEqual({ seen: 2, defeated: 0 })
+    const queued = step(again, swift).state
+    expect(queued.encounter?.queue).toHaveLength(1)
+    expect(queued.tallies.enemies[def]).toEqual({ seen: 2, defeated: 0 })
   })
 
   it('a kill raises defeated for that definition', () => {

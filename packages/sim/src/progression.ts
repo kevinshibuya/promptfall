@@ -132,8 +132,13 @@ export function applyPendingParty(s: GameState, effects: Effect[]): void {
 // ---------------------------------------------------------------------------
 // Spawning
 
-function openEncounter(s: GameState, waveSize: number): Encounter {
-  const encounter: Encounter = { enemies: [], queue: [], waveSize, spawnedInWave: 0 }
+/**
+ * A wave's encounter counts what the wave has got: `waveSize` is every enemy that joined it, the
+ * draw at its open and each tool call's, and `spawnedInWave` how many of them reached the field.
+ * An encounter with a `waveSize` of 0 holds no wave: a turn boss alone, or wave 11's.
+ */
+function openEncounter(s: GameState): Encounter {
+  const encounter: Encounter = { enemies: [], queue: [], waveSize: 0, spawnedInWave: 0 }
   s.encounter = encounter
   return encounter
 }
@@ -159,14 +164,50 @@ function pickWaveEnemy(s: GameState, hint?: WaveArchetype): string {
   return drawWeighted(s, weights)
 }
 
+const FIELD_MAX = 3
+const QUEUE_MAX = 10
+
+/** Queues a wave enemy unless the queue is full; one that queues counts toward an open wave. */
+function enqueue(encounter: Encounter, defId: string, counts: boolean): void {
+  if (encounter.queue.length >= QUEUE_MAX) return
+  encounter.queue.push({ def: defId, kind: 'wave' })
+  if (counts) encounter.waveSize += 1
+}
+
+/** Queues a wave's draw: `size` uniform picks from the zone's four, each counting toward it. */
+function openWave(s: GameState, encounter: Encounter, size: number): void {
+  for (let i = 0; i < size; i++) enqueue(encounter, pickWaveEnemy(s), true)
+}
+
+/** Fills every free slot from the queue. */
+function refill(s: GameState, encounter: Encounter): void {
+  while (encounter.enemies.length < FIELD_MAX) {
+    const next = encounter.queue.shift()
+    if (!next) break
+    spawnEnemy(s, encounter, next.def, next.kind)
+    if (encounter.waveSize > 0) encounter.spawnedInWave += 1
+  }
+}
+
 export function onToolCall(s: GameState, hint?: WaveArchetype): void {
   s.turnToolCalls += 1
   // Boss mode: the call still counts toward the turn boss, and nothing spawns.
   if (s.boss) return
-  const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3))
-  const defId = pickWaveEnemy(s, hint)
-  if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, 'wave')
-  else if (encounter.queue.length < 10) encounter.queue.push({ def: defId, kind: 'wave' })
+  // Wave 11 is the zone boss's: the call's enemy joins the encounter and counts toward nothing.
+  if (s.wave === 11) {
+    const encounter = s.encounter ?? openEncounter(s)
+    enqueue(encounter, pickWaveEnemy(s, hint), false)
+    refill(s, encounter)
+    return
+  }
+  // No wave open, with no encounter or a turn boss alone: the call opens one with its draw. The
+  // call's enemy queues first, so a hinted enemy steps on at once.
+  const opens = !s.encounter || s.encounter.waveSize === 0
+  const size = opens ? 1 + draw(s, 3) : 0
+  const encounter = s.encounter ?? openEncounter(s)
+  enqueue(encounter, pickWaveEnemy(s, hint), true)
+  openWave(s, encounter, size)
+  refill(s, encounter)
 }
 
 export function onTurnEnd(s: GameState): void {
@@ -178,14 +219,9 @@ export function onRest(s: GameState): void {
   healParty(s, 5000)
 }
 
+/** A tick's backstop: every path that queues or kills refills on its own. */
 export function refillFromQueue(s: GameState): void {
-  const encounter = s.encounter
-  if (!encounter) return
-  while (encounter.enemies.length < 3) {
-    const next = encounter.queue.shift()
-    if (!next) break
-    spawnEnemy(s, encounter, next.def, next.kind)
-  }
+  if (s.encounter) refill(s, s.encounter)
 }
 
 /** Step 3 of a tick: nothing is alive, so something new arrives. */
@@ -193,21 +229,28 @@ export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
   const zone = zoneAt(s.zone)?.def
   if (!zone) return
   if (s.pendingTurnBoss) {
-    const encounter = s.encounter ?? openEncounter(s, 0)
+    const encounter = s.encounter ?? openEncounter(s)
     spawnEnemy(s, encounter, zone.turnBoss, 'turn_boss')
     s.pendingTurnBoss = false
     effects.push({ k: 'boss_spawned', kind: 'turn_boss', def: zone.turnBoss })
     return
   }
   if (s.wave === 11) {
-    const encounter = s.encounter ?? openEncounter(s, 0)
+    const encounter = s.encounter ?? openEncounter(s)
     spawnEnemy(s, encounter, zone.boss, 'zone_boss')
     effects.push({ k: 'boss_spawned', kind: 'zone_boss', def: zone.boss })
     return
   }
-  const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3))
-  spawnEnemy(s, encounter, pickWaveEnemy(s), 'wave')
-  encounter.spawnedInWave += 1
+  // An open wave with a free slot refills. One with nothing on the field and nothing queued is
+  // unreachable (the clear check removes it, the migration's finish clears a carried fight); were
+  // one ever left, it would stall play, so it closes and the next wave opens instead.
+  if (s.encounter && s.encounter.queue.length > 0) {
+    refill(s, s.encounter)
+    return
+  }
+  const encounter = openEncounter(s)
+  openWave(s, encounter, 1 + draw(s, 3))
+  refill(s, encounter)
 }
 
 // ---------------------------------------------------------------------------
@@ -283,10 +326,12 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
     return
   }
 
-  // A turn boss spawned mid-wave joined the wave's encounter: its death is checked like a
-  // wave monster's, so the wave keeps its progress and clears when its last monster is gone.
+  // The next in the queue takes the free slot before the clear check: a refilled field never
+  // clears. A turn boss the wave opened around is checked like a wave monster.
   const current = s.encounter
-  if (!current || current.enemies.length > 0 || current.queue.length > 0) return
+  if (!current) return
+  refill(s, current)
+  if (current.enemies.length > 0 || current.queue.length > 0) return
   if (current.waveSize > 0 && current.spawnedInWave >= current.waveSize) {
     healParty(s, 1500)
     effects.push({ k: 'wave_cleared', zone: s.zone, wave: s.wave })
@@ -298,7 +343,7 @@ export function onEnemyKilled(s: GameState, enemy: Enemy, effects: Effect[], dro
 }
 
 /** A zone's third wipe with no boss kill between them is a retreat. */
-const RETREAT_AT = 3
+export const RETREAT_AT = 3
 
 /** True when the wipe happened. */
 export function checkWipe(s: GameState, effects: Effect[]): boolean {

@@ -249,8 +249,11 @@ function axis(d: number, band: number): 'out' | 'margin' | 'white' | 'in' {
   return 'out'
 }
 
-/** The plate a title or footer sits on: picture-pixel x range, or null. */
-export function plateOf(
+/**
+ * The cells a title or footer's plate takes in its window's border row: from cell 1 to `to`
+ * inclusive (a blank, the text from cell 2, a blank), or null with no text.
+ */
+export function plateCells(
   win: Win,
   spans: readonly Span[] | undefined,
 ): { from: number; to: number } | null {
@@ -258,7 +261,29 @@ export function plateOf(
   const cells = spans.reduce((n, s) => n + spanCells(s), 0)
   const last = Math.min(win.columns - 2, 2 + cells)
   if (last < 1) return null
-  return { from: CELL_W, to: (last + 1) * CELL_W }
+  return { from: 1, to: last }
+}
+
+/** The plate a title or footer sits on: picture-pixel x range, or null. */
+export function plateOf(
+  win: Win,
+  spans: readonly Span[] | undefined,
+): { from: number; to: number } | null {
+  const cells = plateCells(win, spans)
+  return cells && { from: cells.from * CELL_W, to: (cells.to + 1) * CELL_W }
+}
+
+/**
+ * Every footer plate in a scene, as scene-cell x ranges (inclusive): the cells of its bottom row
+ * a line drawn over the scene's bottom border has to leave alone, so the footer reads through it.
+ */
+export function footerPlates(scene: Scene): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = []
+  for (const win of scene.windows) {
+    const plate = plateCells(win, win.footer)
+    if (plate) out.push({ from: win.x + plate.from, to: win.x + plate.to })
+  }
+  return out
 }
 
 /** The frame's role for picture pixel (px, py) of a window, plates included. */

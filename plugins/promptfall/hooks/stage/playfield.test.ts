@@ -393,3 +393,37 @@ test('the Raster band opens its top line where an actor’s art reaches the stag
   )
   expect(text(whole, 0).slice(1, 159)).toBe('─'.repeat(158))
 })
+
+test('a strip footer reads through the band’s bottom line: `+4 waiting` in the cells, the pixels and the Svg', () => {
+  const input = band('band-waiting')
+  const scene = input.strip
+  const enemy = scene.windows.find((w) => w.key === 'enemy')
+  if (!enemy?.footer) throw new Error('the waiting scenario has no footer')
+  // Cells: the bottom row holds the footer's text where the line would run.
+  const cells = new Uint32Array(decode(composeBandCells(input.box, input.stage, [], scene)).buffer)
+  const bottom = input.box.rows - 1
+  let row = ''
+  for (let x = 0; x < input.box.columns; x++)
+    row += String.fromCodePoint(cells[(bottom * input.box.columns + x) * 3] ?? 0x20)
+  expect(row).toContain('╰ +4 waiting ─')
+  expect(row.endsWith('╯')).toBe(true)
+  // Pixels: under the footer's plate the band shows the strip's own pixels, not the line's white.
+  const pic = bandPicture(input)
+  const at0 = playfieldOf(input.box)
+  const sy = (at0.y + at0.rows - scene.rows) * 16
+  const plateFrom = (enemy.x + 1) * 8
+  const plateTo = (enemy.x + 2 + 11) * 8
+  let text = 0
+  for (let y = pic.height - 16; y < pic.height; y++) {
+    for (let x = plateFrom; x < plateTo; x++) {
+      const px = at(pic, x, y)
+      expect(px).toBe(stripPixel(scene, x, y - sy))
+      if (px !== SHELL && px !== WHITE) text++
+    }
+  }
+  expect(text).toBeGreaterThan(0)
+  // The Svg: the footer's plate is drawn again after the line, so it reads over it.
+  const svg = input.svg.strip
+  const line = svg.lastIndexOf('<path fill="#')
+  expect(svg.slice(line)).toContain('<rect x="8" y="64"')
+})

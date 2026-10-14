@@ -974,6 +974,36 @@ test('a kill without a drop plays in beats: the fade, then a pause, then the nex
   expect(of(t.active(settled + WAVE_GAP_MS), 'spawn').map((m) => m.actor)).toEqual(['e4'])
 })
 
+test('a kill refilled in the same step plays the dissolve, the pause, then the newcomer’s entrance', () => {
+  const t = observed()
+  t.onEffects([hit('h1', 'e1')], NOW)
+  const flashEnd = NOW + LUNGE_MS / 2 + FLASH_MS
+  // One view: the dead enemy gone and the queue's next already on the field.
+  const v = wave()
+  v.enemies = [
+    ...v.enemies.filter((e) => e.id !== 'e1'),
+    {
+      ...(v.enemies[0] as GameView['enemies'][number]),
+      id: 'e4',
+      def: 'road_slime',
+      name: 'Road Slime',
+    },
+  ]
+  t.observe(v, NOW + 10)
+  expect(of(t.active(NOW + 10), 'dissolve')[0]).toMatchObject({ actor: 'e1', from: flashEnd })
+  const enter = flashEnd + DISSOLVE_MS + WAVE_GAP_MS
+  // Redraws through the dissolve and the pause keep the newcomer off stage.
+  for (const at of [flashEnd, flashEnd + DISSOLVE_MS, enter - 1]) {
+    t.observe(v, at)
+    expect(t.known().map((k) => k.id)).not.toContain('e4')
+    expect(of(t.active(at), 'spawn')).toEqual([])
+  }
+  t.observe(v, enter)
+  expect(of(t.active(enter), 'spawn')).toEqual([
+    { kind: 'spawn', actor: 'e4', from: enter, until: enter + SPAWN_MS },
+  ])
+})
+
 test('a chest falls as the enemy fades, sits, opens, rises, holds by rarity and fades before the pause', () => {
   const holds = { common: 800, uncommon: 1000, rare: 1200, epic: 1600, legendary: 2000 } as const
   for (const [rarity, hold] of Object.entries(holds) as [Rarity, number][]) {
