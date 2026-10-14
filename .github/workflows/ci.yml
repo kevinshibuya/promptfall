@@ -1,7 +1,10 @@
 name: ci
 
+# A branch runs CI through its pull request, once per push; only the long-lived branches also run
+# on push. Ticket branches, which never get a PR, spend no Actions minutes.
 on:
   push:
+    branches: [ai-staging, main]
   pull_request:
 
 jobs:
