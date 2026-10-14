@@ -166,6 +166,15 @@ function itemView(item: Item): ItemView {
       const def = content.affixes[a.id]
       return def ? `${def.name} +${affixValue(item, a)} ${def.stat}` : a.id
     }),
+    // A roll's ends read through the same scaling as the value, so they floor alike.
+    affixRolls: item.affixes.map((a) => {
+      const [min, max] = content.affixes[a.id]?.range ?? [a.value, a.value]
+      return {
+        value: affixValue(item, a),
+        min: affixValue(item, { id: a.id, value: min }),
+        max: affixValue(item, { id: a.id, value: max }),
+      }
+    }),
     equippedBy: item.equippedBy,
     classes: base?.classes ?? [],
     vendorValue: vendorValue(item),
