@@ -22,7 +22,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 | 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | #187, merged 2026-10-13 as `259ce09` | merged |
 | 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | #200, merged 2026-10-14 as `a49ef45` | merged |
 | 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 as `f08a125` | merged |
-| 4 | One stage | #209 | #210, #211, #212, #213, #214, #215, #216 | | | tickets published 2026-10-14 |
+| 4 | One stage | #209 | #210, #211, #212, #213, #214, #215, #216 | `afk run 209`, started 2026-10-14, stopped during #213 and resumed once | #218, merged 2026-10-14 as `6618f4e` | merged |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
 | 6 | Band polish | | #173 | | | not started |
 | 7 | Rerolls | | | | | not started |
@@ -180,6 +180,30 @@ What the build changed (PR #206):
   with a hit, a dissolve and spawn, and a chest, compared by eye once at the PR.
 - **Docs:** ADR 0006 superseded for the stage, ADRs 0007 and 0004 annotated, spec §10's density
   and Raster paragraphs, features.md's Interface section.
+
+What the build changed (PR #218):
+
+- **The desktop encoding is strokes, not embedded PNGs.** #212 read the research before Kevin's
+  yes on #210 landed, and built the best path encoding by its own rule. The yes stands: the
+  checker drew on the desktop app, so embedded images are a known-good option. ADR 0018 records
+  both. Strokes is pixel-identical to the old markup in every Chromium look and 40 to 46%
+  smaller: `step-boss` 34,007, the fuller frame at rest on the first rung at 84,894, lunging over
+  zone 10 on rung 3 (no backdrop) at 114,061. PNG is a follow-up ticket if the rung-3 frame
+  bothers in play; `pnpm svg:measure` stays to re-measure it.
+- **A boss on the Raster at a short band goes compact.** The Raster crops the sky and does not
+  zoom out (ADR 0010), so where the engine gives the band fewer rows than the 17 a boss needs the
+  boss fight is the compact stage. On a 46-row Ghostty that is every boss fight; the 17-row boss
+  stage on the Raster needs the band about 24 rows deep.
+- **The ladder's first rung holds idle A on the SMIL-off picture too** (the review's fix pass):
+  the flat branch had kept drawing idle B past rung 0. No production path reaches it.
+- **`pnpm sprites:check` compares bytes** through `scripts/sprites.ts --check` instead of
+  reading `git status` after a rebuild (#214's fix pass).
+- **The sprites module still names the drawn frames `hires`**: #219.
+- **The parity sheets live in the goldens folder** (596 KB, three sheets); the folder grows
+  288 KB net after the 1× backdrops leave.
+- **The run:** seven tickets, four attempts, one fix pass (#214's gate), one stop and resume
+  (a SIGTERM during #213, sent to restart #212 on PNG; by then #212 had landed, so the resume
+  kept strokes). The GREEN pass is `docs/manual-pass/2026-10-14-one-stage.md`.
 
 ## 5. Reactive revamp
 
