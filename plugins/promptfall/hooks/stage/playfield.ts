@@ -4,7 +4,7 @@
 // the Raster draws the same placement in cells, the Svg path reuses its placement.
 import { encode } from '../sprites/base64'
 import { windowFrame } from '../windows/image'
-import type { Scene } from '../windows/kit'
+import { footerPlates, type Scene } from '../windows/kit'
 import { sceneWords } from '../windows/raster'
 import { BORDER_PX, BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, PAD_PX } from '../windows/tuning'
 import type { Frame } from './compose'
@@ -191,7 +191,14 @@ function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
  * compact) its top sits over the strip windows' top lines, as its bottom does over their bottom
  * ones.
  */
-function drawLine(band: Frame, at: Placement, full: Box, stage: boolean, beside: boolean): void {
+function drawLine(
+  band: Frame,
+  at: Placement,
+  full: Box,
+  stage: boolean,
+  beside: boolean,
+  gaps: readonly { from: number; to: number }[] = [],
+): void {
   const pfLeft = at.x * CELL_W
   const pfRight = (at.x + at.columns) * CELL_W - 1
   const left = at.x > 0 ? pfLeft - BORDER_PX : pfLeft + LINE_IN
@@ -202,16 +209,32 @@ function drawLine(band: Frame, at: Placement, full: Box, stage: boolean, beside:
   const top = at.y * CELL_H + (stage ? LINE_IN : LINE_IN_STRIP)
   const bottom = (at.y + at.rows) * CELL_H - 1 - LINE_IN_STRIP
   const dst = words(band)
+  // A fill of [from, to) in a row that leaves the gaps alone: the strip's footer plates sit on
+  // the line's bottom bar and in the margin under it, and a footer reads through both.
+  const fill = (row: number, colour: number, from: number, to: number) => {
+    let x = from
+    for (const gap of gaps) {
+      dst.fill(colour, row + x, row + Math.max(x, Math.min(gap.from, to)))
+      x = Math.max(x, gap.to)
+    }
+    dst.fill(colour, row + x, row + to)
+  }
   for (let y = 0; y < band.height; y++) {
     const row = y * band.width
-    if (y < top || y > bottom) {
+    if (y < top) {
       dst.fill(FIELD, row, row + band.width)
+      continue
+    }
+    if (y > bottom) {
+      fill(row, FIELD, 0, band.width)
       continue
     }
     dst.fill(FIELD, row, row + Math.max(0, left))
     dst.fill(FIELD, row + right + 1, row + band.width)
-    if (y - top < BORDER_PX || bottom - y < BORDER_PX) {
+    if (y - top < BORDER_PX) {
       dst.fill(BORDER, row + left, row + right + 1)
+    } else if (bottom - y < BORDER_PX) {
+      fill(row, BORDER, left, right + 1)
     } else {
       dst.fill(BORDER, row + left, row + left + BORDER_PX)
       dst.fill(BORDER, row + right - BORDER_PX + 1, row + right + 1)
@@ -251,7 +274,11 @@ export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame
     drawStrip(out, strip, sx, sy)
   } else {
     drawStrip(out, strip, sx, sy)
-    drawLine(out, at, band, stage !== null, false)
+    const gaps = footerPlates(strip).map((p) => ({
+      from: sx + p.from * CELL_W,
+      to: sx + (p.to + 1) * CELL_W,
+    }))
+    drawLine(out, at, band, stage !== null, false, gaps)
   }
   return out
 }
@@ -414,6 +441,11 @@ export function composeBandCells(
 
   const top = at.y
   const bottom = at.y + at.rows - 1
+  // The strip's footer plates on the bottom row: the line leaves them, so a footer reads through it.
+  const keep = new Set<number>()
+  if (!beside && at.y + parts.strip.y + strip.rows - 1 === bottom) {
+    for (const p of footerPlates(strip)) for (let x = p.from; x <= p.to; x++) keep.add(stripX + x)
+  }
   const put = (x: number, y: number, ch: string) =>
     cells.set([cp(ch), BORDER_RGB, FIELD_RGB], (y * band.columns + x) * 3)
   const under = (x: number, y: number) => cells[(y * band.columns + x) * 3]
@@ -425,6 +457,7 @@ export function composeBandCells(
     // A window's side comes up to meet the top line (no stage) and down to meet the bottom one.
     const above = under(x, top) === cp('╭') || under(x, top) === cp('╮')
     if (stageX === null || !heads[x - stageX]) put(x, top, above ? '┬' : '─')
+    if (keep.has(x)) continue
     const below = under(x, bottom) === cp('╰') || under(x, bottom) === cp('╯')
     put(x, bottom, below ? '┴' : '─')
   }

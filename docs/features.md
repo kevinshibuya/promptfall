@@ -408,7 +408,8 @@ come the enemy window (titled with the zone and wave, an HP bar per enemy, and a
 cut into its bottom line while the wave's queue holds enemies), the message window, the party
 window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP and red at
 0) and the purse (the gold, the tactics or `Sandbox` in the sandbox, and the falls, `Falls 1/3`:
-the zone's wipes out of the three that make a retreat, none in a world boss fight). The compact
+the zone's wipes out of the three that make a retreat, none in a world boss fight). Both counts
+are the game's as it stands, not the stage's: a fall shows before its blow has played. The compact
 layout has neither the enemy window nor the purse, so it shows neither the queue nor the falls. The
 queue's count is the game's own, not the staged one: while a kill's replacement waits out the
 dissolve, the line already reads the shorter queue. The stage
