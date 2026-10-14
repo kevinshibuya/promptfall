@@ -18,6 +18,7 @@ import {
   ENRAGE_TINT,
   HASTE_FRAME_MS,
   HIRES_SCALE,
+  HUDDLE_MS,
   IDLE_BOB_PX,
   LEVEL_RGB,
   LUNGE_MS,
@@ -642,6 +643,53 @@ test('guarding heroes hold the stance with no idle clock; the front hero wears t
   // Only the enemies still bob.
   expect(hi.match(/repeatCount="indefinite"/g)?.length).toBe(2 * wave().enemies.length)
   expect(hi).toContain(strokePaths(SHIELD, null))
+})
+
+/** A stage that saw the party off or on guard, then the guard effect turning it `on` at NOW. */
+function guardTurned(on: boolean, at: number, smil = true) {
+  const t = new StageTimeline()
+  t.observe(party({ guarding: !on }), NOW - 1000)
+  t.onEffects([{ k: 'guard', on }], NOW)
+  const v = party({ guarding: on })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  return {
+    model,
+    svg: renderSvg(model, t.active(at), { smil, motion: 'full', now: at, width: 960 }),
+  }
+}
+
+test('the huddle slides each hero from its slot as a transform animation, frozen huddled, in idle A until it arrives', () => {
+  const xOf = (m: { model: { actors: { key: string; x: number; y: number }[] } }, key: string) =>
+    m.model.actors.find((a) => a.key === key) ?? { x: 0, y: 0 }
+  const slot = xOf(guardTurned(false, NOW + HUDDLE_MS), 'h3')
+  const huddled = xOf(guardTurned(true, NOW + HUDDLE_MS), 'h3')
+  const dx = huddled.x - slot.x
+  expect(dx).toBeLessThan(0)
+  const slide = (values: string) =>
+    `<animateTransform attributeName="transform" type="translate" additive="sum" values="${values}" begin="-0.05s" dur="0.2s" fill="freeze"/>`
+  // In: drawn 50 ms in, from the slot, frozen at the huddle.
+  const on = guardTurned(true, NOW + 50).svg
+  expect(balanced(on)).toBe(true)
+  expect(on).toContain(`<g transform="translate(${slot.x} ${slot.y})">${slide(`0 0;${dx} 0`)}`)
+  // Idle A shows through the rest of the slide; the stance is hidden under it.
+  expect(on).toContain('<set attributeName="visibility" to="visible" begin="-0.05s" dur="0.2s"/>')
+  expect(on).toContain('<set attributeName="visibility" to="hidden" begin="-0.05s" dur="0.2s"/>')
+  // Out: from the huddle back to the slot.
+  const off = guardTurned(false, NOW + 50).svg
+  expect(off).toContain(
+    `<g transform="translate(${huddled.x} ${huddled.y})">${slide(`0 0;${-dx} 0`)}`,
+  )
+  // Arrived, the huddle is the place and nothing slides; the flat picture draws the model's x.
+  const after = guardTurned(true, NOW + HUDDLE_MS + 10).svg
+  expect(after).not.toContain('fill="freeze"/>')
+  expect(after).toContain(`<g transform="translate(${huddled.x} ${huddled.y})">`)
+  const flat = guardTurned(true, NOW + 50, false)
+  const mid = xOf(flat, 'h3')
+  expect(mid.x).not.toBe(slot.x)
+  expect(flat.svg).toContain(`translate(${mid.x} ${mid.y})`)
 })
 
 test('a level-up flashes gold beside the white flash filter and its deltas rise as gold text', () => {
