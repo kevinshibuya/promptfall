@@ -137,9 +137,6 @@ function achievementStep(effect: Effect): { words: string; gold: number } | null
 const goalCredit = (effect: Effect): effect is Extract<Effect, { k: 'gold' }> =>
   effect.k === 'gold' && effect.reason?.startsWith('goal:') === true
 
-const creditSum = (inputs: EffectInput[]) =>
-  inputs.reduce((sum, { effect }) => sum + (effect.k === 'gold' ? effect.amount : 0), 0)
-
 /** Reward goods by name: an item by its base, a hero by its full name with the epithet. */
 function goodsName(goods: Goods): string {
   return goods.kind === 'hero'
@@ -267,8 +264,6 @@ const TABLE = {
       const step = achievementStep(effect)
       return step ? `Achievement: ${step.words}, ${formatCount(step.gold)} gold` : null
     },
-    fold: (inputs: EffectInput[]) =>
-      `${inputs.length} achievements, ${formatCount(creditSum(inputs))} gold`,
   },
   goal_met: {
     purpose: 'rare good news',

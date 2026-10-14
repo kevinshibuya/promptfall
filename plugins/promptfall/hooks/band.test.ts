@@ -206,30 +206,26 @@ const RASTER = { renderer: 'raster' } as const
 // a key, advances the clock or writes state after the start keeps a test of its own, and so does
 // one whose status is unclear. The kit has no `beforeAll`: the mounts live in the test body.
 describe('the raster band, read only', () => {
-  test('the strip under the stage, its survey pass, the zero-width hotkeys', async ($, on) => {
+  test('the strip under the stage, the same during a survey, the zero-width hotkeys', async ($, on) => {
     const { data, states } = harness(on)
     settings(data, RASTER)
     await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
 
-    // The band draws the strip under the stage, and passes during a survey.
+    // The band draws the strip under the stage, and keeps it while Claude asks.
     const view = states.get('view') as GameView
     expect(view.heroes, 'strip: three heroes').toHaveLength(3)
     for (const surface of SURFACES) {
-      const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
-      const text = await stripText(ui)
-      for (const hero of view.heroes) {
-        expect(text, `strip on ${surface}: ${hero.shortName}`).toContain(hero.shortName)
+      for (const asking of [false, true]) {
+        const at = `${asking ? 'survey' : 'strip'} on ${surface}`
+        const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20, asking) })
+        expect(await ui.find({ key: 'engine-band' }), `${at}: not the engine's`).toBeUndefined()
+        const text = await stripText(ui)
+        for (const hero of view.heroes) {
+          expect(text, `${at}: ${hero.shortName}`).toContain(hero.shortName)
+        }
+        expect(text, `${at}: the zone`).toContain('Zone 1')
+        await ui.unmount()
       }
-      expect(text, `strip on ${surface}: the zone`).toContain('Zone 1')
-      await ui.unmount()
-
-      const survey = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20, true) })
-      expect(await survey.find({ key: 'band' }), `survey on ${surface}: no band`).toBeUndefined()
-      expect(
-        await survey.find({ key: 'engine-band' }),
-        `survey on ${surface}: the engine's band`,
-      ).toBeDefined()
-      await survey.unmount()
     }
 
     // On terminals the hotkeys sit in a zero-width Box: no row, no column.
@@ -923,15 +919,39 @@ test('with motion still and nothing moving on the stage, the stage never blits',
   await ui.unmount()
 })
 
-test('a survey hides the stage and nothing blits', async ($, on) => {
-  const { data, blits, clock } = harness(on)
+test('a survey leaves the band up at its layout and the stage keeps blitting', async ($, on) => {
+  const { data, blits, clock, shown } = harness(on)
   settings(data, RASTER)
+  shown.view = wave()
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // A permission prompt or a question: the full band, as without one, and the loop draws it.
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20, true) })
-  expect(await ui.find({ key: 'stage' })).toBeUndefined()
+  const raster = await bandRaster(ui)
+  expect([raster?.props.columns, raster?.props.rows]).toEqual([120, 20])
+  const key = bandKey({ columns: 120, rows: 20 })
+  const before = blits.length
   await clock.advance(5_000)
-  expect(blits).toHaveLength(0)
+  expect(blits.slice(before).filter((b) => b.key === key).length).toBeGreaterThan(0)
   await ui.unmount()
+  // A prompt that leaves the band 5 rows: the one-line collapse, not nothing.
+  const short = await $.ui.mount({
+    plugin: 'promptfall',
+    surface: 'terminal',
+    ...band(120, 5, true),
+  })
+  expect(await rows(short)).toHaveLength(1)
+  expect(await short.find({ text: /^Promptfall · Z1/ })).toBeDefined()
+  await short.unmount()
+  // Off still hides it.
+  await $.command.run({ ...RUN, command: 'promptfall', args: 'off' })
+  const off = await $.ui.mount({
+    plugin: 'promptfall',
+    surface: 'terminal',
+    ...band(120, 20, true),
+  })
+  expect(await off.find({ key: 'band' })).toBeUndefined()
+  expect(await off.find({ key: 'engine-band' })).toBeDefined()
+  await off.unmount()
 })
 
 test('on a short desktop band the whole stage scales down to the rows the strip leaves, centred on the shell; a tall one shows it whole', async ($, on) => {

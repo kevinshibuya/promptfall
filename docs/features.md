@@ -58,8 +58,10 @@ the hero who is acting; enemies' gauges never show.
 over the small party. Beating it moves the party on to the next zone: twelve of them, from
 Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
-played, the party has held its victory pose and the boss's row has left, the backdrop changes, and only then does the combat log say "The
-party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
+played and the party has held its victory pose, the party walks off to the right as on a travel,
+the backdrop changes as it goes, and the party walks back on from the left; the combat log's "The
+party reached zone 2" and a toast naming the zone ahead land with the new backdrop. With Farm here
+the party holds its pose and stays. The enemy window shows a boss with its HP
 percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
 zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
 more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
@@ -170,7 +172,11 @@ plays as a full inventory's does and the combat log says `Oak Staff vendored, 3G
 **Reforging.** Reforging rerolls one affix of an item for gold: it rolls the same flat range and
 the item keeps its tier. The price is the rarity's price times the item tier's multiplier, shown on
 the Reforge row of the Inventory command window before the pick, and the Odds tab says reforge is
-priced by rarity and tier. The affix to reroll is chosen in a command window.
+priced by rarity and tier. The affix to reroll is chosen in a pick window that lists each affix
+with its value and the range a roll can give at the item's tier, as `Vicious +3 atk · 3-7`. A roll
+leaves the pick open with the new value in place and the price on its header, so the next roll is
+one press; a roll without the gold is refused in the message window and the pick stays. q closes
+it.
 
 **Expansions.** The inventory starts at 30 slots and grows to 90; the roster starts at 24 heroes
 and grows to 48. Each step is bought with gold from the Odds tab, which shows the next step's
@@ -240,8 +246,12 @@ Account tab, and the plain number inside tier 1.
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
 none ever holds a row on either leaderboard. A bot saved under an older name or sim version is
 minted again on the server's start, and its old account is deleted first, so the replaced bot
-leaves both boards with it. The public server runs six during the soft wave and
-none from the public listing on.
+leaves both boards with it. At normal speed each bot acts about once a minute and polls the
+world twice as often, so every bot stays online and joins each world boss. Bots buy item
+listings only below twice vendor value, keep listing at three times and up, and vendor their
+cheapest unequipped item through a batch when their inventory is full before trading. A player's
+bargain can sell while the bots' stock stays available to browse. The public server runs six
+during the soft wave with the same tuning and none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
 takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:
@@ -339,7 +349,11 @@ stage over the 5-row strip, and never more than Claude Code gives it. With fewer
 that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
 terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
-under 100 columns, and it hides while Claude asks a question.
+under 100 columns. It never hides itself while Claude asks for a permission or a question; it
+lays out at whatever size the rows left to it allow. In the terminal, though, Claude Code draws
+the prompt in the band's place and stops drawing the band until the answer, so the party is not on
+screen while a prompt waits (an engine finding, seen live on 2.1.299). The band comes back at the
+answer.
 
 **The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
 field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
@@ -369,9 +383,13 @@ Three moments get a scene of their own. When the party travels, the heroes step 
 and fade, the enemies it left stand until the backdrop changes to the destination's, and the
 heroes step back on from the left; the log's "The party travels to zone 3, Marsh of Sighs." lands
 as the backdrop changes. A level-up flashes the hero gold and its gains rise over it in gold,
-"+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
-the empty ground for about two seconds after the boss has dissolved, and only then does the
-backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
+"+3 atk  +2 def", for just over a second, slower than damage numbers so they can be read; when
+several heroes level at once, each flashes and rises a quarter second after the one before, in
+party order. When a zone boss falls, the party holds a victory pose over the empty ground for
+about two seconds after the boss has dissolved. With Push on it then walks to the next zone as on
+a travel: it steps off once the pose and any chest are over, the backdrop changes, the arrival's
+line and toast land, and it steps on. With Farm here it holds and stays; a turn boss and the world
+boss get no hold.
 The pose is a slot: at 1.5× it holds the class's drawn victory frame, the weapon raised, and the
 idle art where a class has none; at 1× it always holds the idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
@@ -498,9 +516,10 @@ daily goal met ("Daily goal met: 40 gold"). A gold credit whose reason is neithe
 stipend, toasts nothing, and neither of the two prints a log line. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
 recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
-once, fold into one toast with the count and the sum ("3 items sold for 410 gold", "3
-achievements, 2,000 gold"), while a legendary, epic or rare drop, a vendored item, a recruit, a
-reward, a wipe, a retreat, a zone arrival or a goal met keeps its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
+once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
+legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat, a zone
+arrival, an achievement or a goal met keeps its own. Achievements never fold: each toasts its
+step's words and gold, oldest first. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.

@@ -50,12 +50,12 @@ import { boardsPane } from './pane/leaderboards'
 import { marketPane } from './pane/market'
 import {
   type ActionContext,
+  endRefocus,
   hiddenRing,
   type PaneDraw,
   paneElement,
   paneWindow,
-  placed,
-  refocusKey,
+  refocus,
   registerPaneHooks,
   remember,
   ringOnInput,
@@ -242,22 +242,13 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
 
     const requestId = e.requestId
     const signature = stopsSignature(build, paneWindow(dialog, tab, orders.form !== null))
-    const key = refocusKey(requestId, signature, build, hiddenRing(e.surface))
-    if (key !== false) {
-      if (key === null) placed(requestId, signature)
-      else {
-        // Not from inside this drawing: $.ui.focus waits for the drawing that brings the key.
-        // Recorded only once it took: a pane without the keyboard tries again next drawing.
-        $.clock.after(0, () => {
-          void $.ui.focus({ requestId, key }).then(
-            (r) => {
-              if (r.deny === undefined) placed(requestId, signature)
-            },
-            () => undefined,
-          )
-        })
-      }
-    }
+    refocus(
+      { after: (ms, fn) => $.clock.after(ms, fn), focus: (key) => $.ui.focus({ requestId, key }) },
+      requestId,
+      signature,
+      build,
+      hiddenRing(e.surface),
+    )
     const ctx: ActionContext = {
       upd: updDialog,
       game,
@@ -273,6 +264,7 @@ export function registerDialog(on: On, game: () => GameHandle | null): void {
         return at === null ? undefined : formatRemaining(remainingMs(at))
       },
       focusField: async (key) => {
+        endRefocus(requestId)
         const r = await $.ui.focus({ requestId, key })
         if (r.deny === undefined) ringOnInput(requestId, true)
       },
