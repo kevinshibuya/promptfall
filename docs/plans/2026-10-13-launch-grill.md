@@ -21,7 +21,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 |---|---|---|---|---|---|---|
 | 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | #187, merged 2026-10-13 as `259ce09` | merged |
 | 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | #200, merged 2026-10-14 as `a49ef45` | merged |
-| 3 | #179 waves | #179 | the ticket itself | | | not started |
+| 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 | merged |
 | 4 | One stage | | | | | not started |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
 | 6 | Band polish | | #173 | | | not started |
@@ -140,6 +140,24 @@ What the build changed (PR #200):
 ## 3. #179 Waves
 
 Settled as filed. Straight to `/to-tickets`. Its arc paragraph moves to the closing ticket.
+
+What the build changed (PR #206):
+
+- **The spec's note on old saves was not followed.** ADR 0013's migration finish clears every fight
+  outside boss mode, so a v17 save loses its encounter at the bump and nothing needs rewriting; the
+  spec said the encounter would be kept.
+- **Wave 11 opens no wave.** A tool call during the zone boss fight joins the boss's encounter,
+  counts toward nothing, and killing those adds heals nothing. A turn boss now always arrives
+  between waves, in its own fight; a tool call during it opens the next wave around it.
+- **The waiting footer and the falls row are the view's counts, never staged.** The footer had
+  been erased by the band's bottom line on every surface until the review's fix pass made the line
+  leave the strip's footer plates alone (a `band-waiting` golden pins it).
+- **A newcomer refilled in a kill's step acts before the stage lets it on**, so its first action
+  plays with no lunge, against spec §10's first-action line. #207 tracks the timeline fix.
+- **The early-envelope wipe ceiling is red** (seeds 7 to 9 at 23 to 25 wipes against 20): waves
+  hitting together, as predicted. Left to the closing arc ticket (9) by ADR 0017.
+- **The in-play strip HP test** now allows the strip under every published state while a same-tick
+  heal is still to land; its random seed 42 failed the same way before #204.
 
 ## 4. One stage (ADR 0018)
 
