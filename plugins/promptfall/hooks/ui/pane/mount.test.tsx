@@ -15,11 +15,13 @@ import { marketPane } from './market'
 import {
   type ActionContext,
   closed,
+  endRefocus,
   focusFrom,
   focusMove,
   type PaneDraw,
   paneElement,
   placed,
+  refocus,
   refocusKey,
   ringMoved,
   ringOnInput,
@@ -29,6 +31,7 @@ import {
   withCursor,
   writesCursor,
 } from './mount'
+import { cliRing } from './testing'
 import type { PaneBuild, Stop } from './types'
 
 const w = (key: string, x: number, y: number, columns: number, rows: number): Win => ({
@@ -337,6 +340,71 @@ test('a row inserted while the ring is on a field puts the ring back on the fiel
   placed('p', stopsSignature(b, 'chat'))
   // The field is gone (the tab changed): the ring goes back on the ▶.
   expect(refocusKey('p', stopsSignature(BUILD, 'inventory'), BUILD)).toBe('row:a')
+})
+
+test('a drop above the ▶, or a row before the field, leaves the ring where it was, through the focus lifecycle', async () => {
+  const ring = cliRing()
+  const drawn = (id: string, b: PaneBuild) =>
+    refocus(ring.io, id, stopsSignature(b, 'inventory'), b, true)
+  // The ▶ on a later row; a drop inserts a row at the top.
+  const on: PaneBuild = { ...BUILD, focus: 'row:b' }
+  ring.mount(on)
+  drawn('drop', on)
+  ring.walk('row:b')
+  const dropped: PaneBuild = { ...on, stops: [row('new', 0), ...on.stops] }
+  drawn('drop', dropped)
+  await ring.advance(0)
+  ring.mount(dropped)
+  await ring.advance(1_000)
+  expect(ring.on()).toBe('row:b')
+  // The ring on the field: a message arriving keeps it there, not on the ▶.
+  const field = {
+    key: 'compose' as const,
+    label: 'say',
+    placeholder: 'a message',
+    value: 'hi',
+    submitLabel: 'send',
+  }
+  const typing: PaneBuild = { ...BUILD, field }
+  ring.mount(typing)
+  drawn('field', typing)
+  ring.walk('compose')
+  ringOnInput('field', true)
+  const arrived: PaneBuild = { ...typing, stops: [row('m1', 0), ...typing.stops] }
+  drawn('field', arrived)
+  await ring.advance(0)
+  ring.mount(arrived)
+  await ring.advance(1_000)
+  expect(ring.on()).toBe('compose')
+})
+
+test('the person moving the ring stands the sends down; a denied last send goes again next drawing', async () => {
+  const ring = cliRing()
+  const drawn = (b: PaneBuild) => refocus(ring.io, 'moved', stopsSignature(b, 'inventory'), b, true)
+  ring.mount(BUILD)
+  drawn(BUILD)
+  ring.walk('row:a')
+  const inserted: PaneBuild = { ...BUILD, stops: [row('new', 0), ...BUILD.stops] }
+  drawn(inserted)
+  await ring.advance(0)
+  ring.mount(inserted)
+  // The person's Tab lands before the next send: nothing pulls the ring back.
+  ring.walk('back')
+  endRefocus('moved')
+  await ring.advance(1_000)
+  expect(ring.on()).toBe('back')
+  // A pane without the keyboard: every send is denied, and nothing is recorded.
+  const denied = cliRing()
+  const deny = { ...denied.io, focus: async () => ({ deny: 'not holding the keys' }) }
+  const menu: PaneBuild = { ...BUILD, stops: [row('x', 0), ...BUILD.stops] }
+  refocus(deny, 'deny', stopsSignature(BUILD, 'inventory'), BUILD, true)
+  refocus(deny, 'deny', stopsSignature(menu, 'inventory'), menu, true)
+  await denied.advance(1_000)
+  // The next drawing, holding the keys now, sends again.
+  denied.mount(menu)
+  refocus(denied.io, 'deny', stopsSignature(menu, 'inventory'), menu, true)
+  await denied.advance(1_000)
+  expect(denied.on()).toBe('row:a')
 })
 
 /** A game handle stub: the market reads and trades the PR 3 actions reach, recorded. */

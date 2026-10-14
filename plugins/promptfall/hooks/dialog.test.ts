@@ -1,8 +1,12 @@
-import type { On } from 'claude-code'
+import type { On, UiFocusInput } from 'claude-code'
 import { expect, type Mounted, mock, type TestBody } from 'claude-code/testing'
-import type { GameView } from '../types'
+import type { DialogState, GameView } from '../types'
+import { DIALOG_DEFAULT } from './state'
 import { test } from './testing'
-import { paneText } from './ui/pane/testing'
+import { paneInput } from './ui/pane/fixtures'
+import { heroesPane } from './ui/pane/heroes'
+import { paneWindow, refocus, stopsSignature } from './ui/pane/mount'
+import { cliRing, paneText } from './ui/pane/testing'
 import { approveAs, Ledger, type LinkApprover } from './vendor/ledger.js'
 import { MemoryKeyValue } from './vendor/protocol.js'
 import { createInitialState, type GameState, hashState, type Item } from './vendor/sim.js'
@@ -1121,6 +1125,58 @@ test('without gold the expansion is refused in the message window', async ($, on
   await ui.press({ key: 'tab-odds' })
   await ui.press({ key: 'row:expand-inventory' })
   expect(await paneText(ui)).toMatch(/Refused: /)
+  await ui.unmount()
+})
+
+test('the ring ends on the ▶ after a recruit inserts a row, through the real focus lifecycle', async ($, on) => {
+  const { states } = harness(on, { ...seeded(), gold: 10_000 })
+  // Beneath the plugins the engine lands the person's move.
+  on('ui.focus', () => ({}))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...PANE })
+  await ui.press({ key: 'tab-heroes' })
+  // The person walks the ▶ onto the recruit row.
+  const walk: UiFocusInput = {
+    component: 'Pane',
+    requestId: 'promptfall',
+    element: 'row:recruit',
+    origin: { kind: 'person' },
+  }
+  await $.ui.focus(walk as never)
+  // The kit answers no `$.ui.focus` of the plugin's own, so the drawings the pane makes go
+  // through the lifecycle here, against the CLI's ring.
+  const drawing = () => {
+    const dialog: DialogState = { ...DIALOG_DEFAULT, ...(states.get('dialog') as DialogState) }
+    const build = heroesPane({
+      ...paneInput(),
+      tab: 'heroes',
+      view: states.get('view') as GameView,
+      dialog,
+    })
+    return { build, signature: stopsSignature(build, paneWindow(dialog, 'heroes', false)) }
+  }
+  const ring = cliRing()
+  const before = drawing()
+  ring.mount(before.build)
+  refocus(ring.io, 'cli-191', before.signature, before.build, true)
+  ring.walk('row:recruit')
+  expect(before.build.focus).toBe('row:recruit')
+  const roster = (states.get('view') as GameView).roster.length
+  // Enter on the recruit row: the new hero's row lands above it.
+  await ui.press({ key: ring.on() ?? '' })
+  const after = drawing()
+  refocus(ring.io, 'cli-191', after.signature, after.build, true)
+  // The next tick's send lands on the drawing still mounted, where the ▶'s key sits one stop up,
+  // and is answered {}. Then the drawing mounts, keeping the ring by position.
+  await ring.advance(0)
+  ring.mount(after.build)
+  await ring.advance(1_000)
+  expect(after.build.focus).toBe('row:recruit')
+  expect(ring.on()).toBe('row:recruit')
+  // Enter again recruits again.
+  await ui.press({ key: ring.on() ?? '' })
+  expect((states.get('view') as GameView).roster).toHaveLength(roster + 2)
+  expect((states.get('dialog') as DialogState).menu).toBeNull()
   await ui.unmount()
 })
 
