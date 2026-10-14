@@ -19,6 +19,7 @@ import {
   ENRAGE_RGB,
   FLASH_RGB,
   HIRES_SCALE,
+  HUDDLE_MS,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
@@ -739,6 +740,142 @@ test('guarding heroes hold the derived stance with the bob stopped; the front he
   expect(actor(struck.actors, 'h1').pose).toBe('hit')
   // Off guard, the idle pair again.
   expect(actor(at(guarding(false), [], NOW, BOX, HI).actors, 'h1').pose).toBe('idle')
+})
+
+/** The opaque columns a hero's idle figure covers on the stage, drawn flipped. */
+const figure = (a: StageActor) => {
+  const box = opaqueBox(a.poses.idle.art)
+  const w = a.poses.idle.art.width
+  return { left: a.x + w - 1 - (box?.x1 ?? 0), right: a.x + w - 1 - (box?.x0 ?? 0) }
+}
+/** Each hero's x, in party order. */
+const heroXs = (m: { actors: StageActor[] }) =>
+  ['h1', 'h2', 'h3'].map((key) => actor(m.actors, key).x)
+
+/**
+ * A stage that saw the party off or on guard (`patch` applied), then the guard effect turning it
+ * `on` at NOW, staged at `now` from `after` (the state past the effect, `patch` applied too).
+ */
+function guardTurned(
+  on: boolean,
+  now: number,
+  patch: (v: GameView) => void = () => {},
+  after: (v: GameView) => void = patch,
+  opts: Opts = HI,
+  box = BOX,
+) {
+  const t = new StageTimeline()
+  const before = guarding(!on)
+  patch(before)
+  t.observe(before, NOW - 1000)
+  t.onEffects([{ k: 'guard', on }], NOW)
+  const v = guarding(on)
+  after(v)
+  return stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, box, opts)
+}
+const fall = (id: string) => (v: GameView) => {
+  const h = v.heroes.find((x) => x.id === id)
+  if (h) Object.assign(h, { hp: 0, alive: false })
+}
+
+test('guard on slides the living heroes in toward the front hero over one shared duration, in their idle art; they stand pressed in party order, a pixel apart', () => {
+  const slots = heroXs(at(wave(), [], NOW, BOX, HI))
+  expect(heroXs(guardTurned(true, NOW))).toEqual(slots)
+  const mid = guardTurned(true, NOW + HUDDLE_MS / 2)
+  const done = guardTurned(true, NOW + HUDDLE_MS)
+  const [h1, h2, h3] = ['h1', 'h2', 'h3'].map((key) => actor(done.actors, key))
+  if (!h1 || !h2 || !h3) throw new Error('no party')
+  // The front hero keeps its slot; each hero behind it stands one empty pixel clear of the one before.
+  expect(h1.x).toBe(slots[0])
+  expect(figure(h2).left - figure(h1).right).toBe(2)
+  expect(figure(h3).left - figure(h2).right).toBe(2)
+  for (const [i, key] of ['h2', 'h3'].entries()) {
+    const x = actor(mid.actors, key).x
+    const from = slots[i + 1] ?? 0
+    const to = actor(done.actors, key).x
+    expect(to, key).toBeLessThan(from)
+    // Halfway through the one duration, halfway there.
+    expect(x, key).toBe(from + Math.round((to - from) / 2))
+    expect(actor(mid.actors, key).pose, key).toBe('idle')
+  }
+  // Arrived, they hold the stance and the huddle.
+  expect(h2.pose).toBe('guard')
+  expect(heroXs(guardTurned(true, NOW + 5000))).toEqual(heroXs(done))
+})
+
+test('the fallen keep their slots in the huddle, and the first hero standing is its front', () => {
+  const slots = heroXs(at(wave(), [], NOW, BOX, HI))
+  // The front hero fallen: the second keeps its slot and the third presses against it.
+  const front = guardTurned(true, NOW + HUDDLE_MS, fall('h1'))
+  const [h1, h2, h3] = ['h1', 'h2', 'h3'].map((key) => actor(front.actors, key))
+  if (!h1 || !h2 || !h3) throw new Error('no party')
+  expect([h1.x, h2.x]).toEqual([slots[0], slots[1]])
+  expect(figure(h3).left - figure(h2).right).toBe(2)
+  // The middle hero fallen: the third presses against the front one, past the fallen.
+  const middle = guardTurned(true, NOW + HUDDLE_MS, fall('h2'))
+  expect(actor(middle.actors, 'h2').x).toBe(slots[1])
+  expect(figure(actor(middle.actors, 'h3')).left - figure(actor(middle.actors, 'h1')).right).toBe(2)
+})
+
+test('a hero that falls under Guard keeps its huddle position and nothing shifts until Guard ends', () => {
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  const fell = guardTurned(true, NOW + 2000, () => {}, fall('h2'))
+  expect(actor(fell.actors, 'h2').fallen).toBe(true)
+  expect(heroXs(fell)).toEqual(huddled)
+  // A stage first drawn huddled holds its members too.
+  const t = new StageTimeline()
+  t.observe(guarding(), NOW)
+  const v = guarding()
+  fall('h2')(v)
+  t.observe(v, NOW + 1000)
+  const later = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW + 1000), t, NOW + 1000, BOX, HI)
+  expect(heroXs(later)).toEqual(huddled)
+})
+
+test('a party already guarding at the first draw stands huddled with no motion', () => {
+  const t = new StageTimeline()
+  t.observe(guarding(), NOW)
+  const first = stageAt(stagedState(guarding(), WORLD_DEFAULT, t, NOW), t, NOW, BOX, HI)
+  expect(heroXs(first)).toEqual(heroXs(guardTurned(true, NOW + HUDDLE_MS)))
+  expect(t.isBusy(NOW)).toBe(false)
+  // Nor does a guard on the timeline hears before its first draw play one.
+  const early = new StageTimeline()
+  early.onEffects([{ k: 'guard', on: true }], NOW)
+  early.observe(guarding(), NOW)
+  expect(early.isBusy(NOW)).toBe(false)
+  const drawn = stageAt(stagedState(guarding(), WORLD_DEFAULT, early, NOW), early, NOW, BOX, HI)
+  expect(heroXs(drawn)).toEqual(heroXs(first))
+})
+
+test('guard off slides the huddle back to the slots over the same span, the fallen with it', () => {
+  const slots = heroXs(at(wave(), [], NOW, BOX, HI))
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  expect(heroXs(guardTurned(false, NOW))).toEqual(huddled)
+  const mid = guardTurned(false, NOW + HUDDLE_MS / 2)
+  expect(actor(mid.actors, 'h3').pose).toBe('idle')
+  for (const i of [1, 2]) {
+    const from = huddled[i] ?? 0
+    const to = slots[i] ?? 0
+    expect(heroXs(mid)[i]).toBe(from + Math.round((to - from) / 2))
+  }
+  expect(heroXs(guardTurned(false, NOW + HUDDLE_MS))).toEqual(slots)
+  // A hero that fell in the huddle rides back with it.
+  const fell = guardTurned(false, NOW + HUDDLE_MS / 2, () => {}, fall('h3'))
+  expect(heroXs(fell)[2]).toBe(heroXs(mid)[2])
+})
+
+test("a huddled hero's step and lunge add to its huddle position; the compact stage has no huddle", () => {
+  const archerHits: Effect[] = [{ k: 'act', actor: 'h3', action: 'attack', at: 0 }, hit('h3', 'e1')]
+  const moved = (v: GameView) =>
+    actor(at(v, archerHits, NOW + 60, BOX, HI).actors, 'h3').x -
+    actor(at(v, [], NOW, BOX, HI).actors, 'h3').x
+  expect(moved(guarding())).toBe(moved(wave()))
+  expect(moved(guarding())).not.toBe(0)
+  const compact = (v: GameView) =>
+    at(v, [], NOW, BOX_COMPACT, COMPACT)
+      .actors.filter((a) => a.flipX)
+      .map((a) => a.x)
+  expect(compact(guarding())).toEqual(compact(wave()))
 })
 
 test('an enraged enemy flashes red at the mishap and holds a red tint until its hit lands', () => {

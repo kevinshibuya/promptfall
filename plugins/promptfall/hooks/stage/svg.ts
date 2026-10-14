@@ -25,7 +25,13 @@ import {
 } from './model'
 import { colourPath } from './paths'
 import { svgFrame } from './playfield'
-import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './timeline'
+import {
+  bobbingAt,
+  CHEST_SHOW_MS,
+  type HuddleMotion,
+  type Motion,
+  type StageTimeline,
+} from './timeline'
 import {
   BLINK_MS,
   CAMPFIRE_MS,
@@ -51,12 +57,15 @@ import {
 } from './tuning'
 
 type PoseMotion = Extract<Motion, { kind: 'windup' | 'strike' | 'follow' | 'hit' | 'victory' }>
-const POSE_RANK: Readonly<Record<PoseMotion['kind'], number>> = {
+/** A span a pose shows over: a pose motion's, or a huddle's slide, which holds idle A. */
+type PoseSpan = { kind: PoseMotion['kind'] | 'huddle'; from: number; until: number }
+const POSE_RANK: Readonly<Record<PoseSpan['kind'], number>> = {
   hit: 4,
   follow: 3,
   strike: 2,
   windup: 1,
   victory: 0,
+  huddle: -1,
 }
 const isPoseMotion = (m: Motion): m is PoseMotion =>
   m.kind === 'windup' ||
@@ -91,7 +100,7 @@ export function framesInUse(mine: readonly Motion[], now: number): PoseMotion[] 
 
 /** Disjoint spans of the pose shown, each the highest-ranked pose motion over it. */
 function poseSpans(
-  motions: readonly PoseMotion[],
+  motions: readonly PoseSpan[],
   now: number,
 ): { pose: Pose; from: number; until: number }[] {
   const cuts = [...new Set(motions.flatMap((m) => [m.from, m.until]))].sort((a, b) => a - b)
@@ -100,15 +109,16 @@ function poseSpans(
     const a = cuts[i] ?? 0
     const b = cuts[i + 1] ?? 0
     if (b <= now) continue
-    let top: PoseMotion | null = null
+    let top: PoseSpan | null = null
     for (const m of motions) {
       if (m.from <= a && a < m.until && (top === null || POSE_RANK[m.kind] > POSE_RANK[top.kind]))
         top = m
     }
     if (top === null) continue
+    const pose = top.kind === 'huddle' ? 'idle' : top.kind
     const last = spans.at(-1)
-    if (last && last.pose === top.kind && last.until === a) last.until = b
-    else spans.push({ pose: top.kind, from: a, until: b })
+    if (last && last.pose === pose && last.until === a) last.until = b
+    else spans.push({ pose, from: a, until: b })
   }
   return spans
 }
@@ -311,6 +321,14 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     }
     return null
   }
+  /**
+   * A huddle's slide on a member's group, as a translate summed with its place: from where the
+   * slide starts to where it ends, held there.
+   */
+  const slideAnim = (actor: StageActor, m: HuddleMotion): string => {
+    const dx = (m.dir === 'in' ? 1 : -1) * (actor.huddle?.dx ?? 0)
+    return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+  }
   const ground = px(2)
 
   // The backdrop as paths, like any art (no <image>): one def, used bottom-anchored and centred
@@ -421,8 +439,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       .join('')
 
   /** The 1.5x actor under SMIL: the idle pair on the bob's clock, the frames in use over it. */
-  const hiresActor = (actor: StageActor, mine: readonly Motion[], x: number): string => {
-    const anim: string[] = []
+  const hiresActor = (
+    actor: StageActor,
+    mine: readonly Motion[],
+    x: number,
+    slides: readonly HuddleMotion[],
+  ): string => {
+    const anim: string[] = slides.map((m) => slideAnim(actor, m))
     for (const m of mine) {
       const move = moveAnim(m)
       if (move !== null) {
@@ -437,7 +460,9 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         )
       }
     }
-    const spans = actor.fallen ? [] : poseSpans(framesInUse(mine, opts.now), opts.now)
+    const spans = actor.fallen
+      ? []
+      : poseSpans([...framesInUse(mine, opts.now), ...slides], opts.now)
     const hide = spans
       .map(
         (sp) =>
@@ -559,17 +584,30 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       continue
     }
 
-    // Back out the offsets the model baked in at `now`; the animations reapply them.
+    // Back out the offsets the model baked in at `now`; the animations reapply them. A huddle
+    // member stands where its first slide still to end starts, and each slide moves it on.
     const started = (kind: Motion['kind']) =>
       mine.find((m) => m.kind === kind && m.from <= opts.now)
+    const huddle = actor.huddle
+    const slides = huddle
+      ? live
+          .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.members.includes(actor.key))
+          .sort((a, b) => a.from - b.from)
+      : []
+    const first = slides[0]
+    const huddled =
+      huddle && first
+        ? Math.round(huddle.dx * huddle.share) - (first.dir === 'in' ? 0 : huddle.dx)
+        : 0
     const x =
       actor.x -
+      huddled -
       actionOffset(started('step'), started('lunge'), opts.now, scale) -
       travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
-      body.push(hiresActor(actor, mine, x))
+      body.push(hiresActor(actor, mine, x, slides))
       continue
     }
     const { use, flashUse, redUse, goldUse } = drawNow()

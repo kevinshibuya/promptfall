@@ -14,6 +14,8 @@ import {
   type ChestPhase,
   chestPhaseAt,
   enemySpriteId,
+  type HuddleMotion,
+  huddles,
   type Motion,
   type StageTimeline,
 } from './timeline'
@@ -33,6 +35,7 @@ import {
   GLOW_RADIUS_PX,
   HASTE_FRAME_MS,
   HIRES_SCALE,
+  HUDDLE_GAP_PX,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
@@ -131,6 +134,11 @@ export type StageActor = {
   streak?: Mark | null
   /** Guard's shield over the front hero; 1.5 only. */
   shield?: Mark | null
+  /**
+   * A huddle member's huddle position less its slot, and the share of that offset in `x` at the
+   * model's instant (0 at the slot, 1 huddled); null for a hero outside the huddle and an enemy.
+   */
+  huddle?: { dx: number; share: number } | null
   /** Enrage's red flash, as `flashing` is the white one. */
   redFlashing?: boolean
   /** A level-up's gold flash, as `flashing` is the white one. */
@@ -243,6 +251,27 @@ export function actionOffset(
   scale = 1,
 ): number {
   return stepOffset(step, now, scale) + lungeOffset(lunge, now, scale)
+}
+
+/**
+ * How far into its huddle the party stands at `now`, 0 at the slots to 1 huddled, and the huddle
+ * motion that says so: the latest started, else the next to come (it holds the party where it
+ * starts), else none and the view's own (`huddled`).
+ */
+function huddleShare(
+  motions: readonly Motion[],
+  now: number,
+  huddled: boolean,
+): { share: number; motion: HuddleMotion | null } {
+  const slides = motions
+    .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.until > now)
+    .sort((a, b) => a.from - b.from)
+  const started = slides.filter((m) => m.from <= now).at(-1)
+  const motion = started ?? slides[0] ?? null
+  if (motion === null) return { share: huddled ? 1 : 0, motion }
+  // The step's ramp: straight from one end to the other.
+  const p = started ? progress(motion, now) : 0
+  return { share: motion.dir === 'in' ? p : 1 - p, motion }
 }
 
 /** `rgb` moved `share` of the way to `to`, per channel. */
@@ -415,11 +444,14 @@ export function stageAt(
     fallen: boolean,
     rest: 'idle' | 'guard',
     bobMs: number | null,
+    sliding = false,
   ): Pose => {
     if (fallen) return 'idle'
     for (const kind of ['hit', 'follow', 'strike', 'windup', 'victory'] as const) {
       if (motionOf(actor, kind)) return kind
     }
+    // A huddle's slide holds idle A, as a step costs no new frame.
+    if (sliding) return 'idle'
     if (rest === 'guard') return 'guard'
     return bobMs !== null && bobbingAt(now, bobMs) === 1 ? 'idle_b' : 'idle'
   }
@@ -524,6 +556,32 @@ export function stageAt(
 
   // The front of the party is its first hero standing: a fallen one wears no shield.
   const front = view.heroes.findIndex((h) => h.alive)
+  /** A hero's place in the line, without its offsets. */
+  const slotX = (index: number, art: SpriteArt) =>
+    width - edge - art.width - (partySize - 1 - index) * pitch
+  // Guard's huddle, on the full stage (the compact one draws one hero): its members, fixed as it
+  // began, stand in party order, the first in its slot and each other with its figure a gap behind
+  // the figure before it. Heroes face left, so a figure's back is its right edge.
+  const huddle = huddleShare(all, now, huddles(view))
+  const huddleDx = new Map<string, number>()
+  if (!opts.compact) {
+    const members = new Set(
+      huddle.motion?.members ??
+        timeline.huddled() ??
+        view.heroes.filter((h) => h.alive).map((h) => h.id),
+    )
+    let back: number | null = null
+    view.heroes.forEach((hero, index) => {
+      if (!members.has(hero.id)) return
+      const art = variant(spriteFor('hero', hero.cls), false)
+      const box = opaqueBox(art) ?? { x0: 0, x1: art.width - 1 }
+      const slot = slotX(index, art)
+      const x = back === null ? slot : back + 1 + HUDDLE_GAP_PX - (art.width - 1 - box.x1)
+      huddleDx.set(hero.id, x - slot)
+      back = x + art.width - 1 - box.x0
+    })
+  }
+  const sliding = huddle.motion !== null && huddle.motion.from <= now
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
@@ -541,7 +599,8 @@ export function stageAt(
     const poses = posesOf(sprite, attack, opts.compact, true, recolour)
     const rest = hero.guarding && !fallen ? 'guard' : 'idle'
     const bobMs = fallen || rest === 'guard' ? null : bobOf(hero.hasted)
-    const pose = poseOf(hero.id, fallen, rest, bobMs)
+    const dx = huddleDx.get(hero.id)
+    const pose = poseOf(hero.id, fallen, rest, bobMs, sliding && dx !== undefined)
     const shown = poses[pose]
     // Haste's streak and Guard's shield are the full stage's: compact, the bob and the stance alone.
     const marks = !opts.compact && !fallen
@@ -557,10 +616,8 @@ export function stageAt(
       scale,
     )
     const x =
-      width -
-      edge -
-      art.width -
-      (partySize - 1 - index) * pitch +
+      slotX(index, art) +
+      Math.round((dx ?? 0) * huddle.share) +
       actionOffset(step, lunge, now, scale) +
       travel.dx
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
@@ -584,6 +641,7 @@ export function stageAt(
       bobMs,
       streak,
       shield,
+      huddle: dx === undefined ? null : { dx, share: huddle.share },
     })
   })
 
@@ -625,7 +683,7 @@ export function stageAt(
       })
       continue
     }
-    if (m.kind === 'campfire') continue
+    if (m.kind === 'campfire' || m.kind === 'huddle') continue
     const actor = at.get(m.actor)
     if (!actor) continue
     // Numbers measure from the idle art, whatever the pose.
