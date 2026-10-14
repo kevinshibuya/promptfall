@@ -74,7 +74,7 @@ test('a Raster stage too tall for the band keeps its size and shows its bottom r
 
 test('an Image stage too tall for the band zooms the whole scene out; the Raster crop stops at the tallest actor', () => {
   const boss = { tab: 'party', extra: 0, minRows: 17 } as const
-  // A boss on a 16-row band: 11 rows left, under the boss's 17. The Raster cannot scale.
+  // A boss on a 16-row band: 11 rows left, under the boss's 17. The Raster does not zoom out.
   expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', boss).kind).toBe('compact')
   // The Image never crops: at rest on the same band it zooms out just the same.
   expect(

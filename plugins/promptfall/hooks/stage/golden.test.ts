@@ -46,7 +46,7 @@ import {
   ZONE_GROUND,
 } from './tuning'
 
-/** A model past scale 1 draws on Image only (and on Svg from H5): its frame's bytes at its share of IMAGE_SCALE. */
+/** A model past scale 1 on the Image: its frame's bytes at its share of IMAGE_SCALE. */
 function imageWithinBudget(frame: Frame, scale: number, check = 'image bytes'): void {
   expect(imageBytes(frame, IMAGE_SCALE / scale), check).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
 }
@@ -105,12 +105,14 @@ for (const name of SCENARIOS) {
     for (const encoding of Object.keys({ ...want, ...golden }) as (keyof Golden)[]) {
       expect(golden[encoding], `${name}: ${encoding}`).toBe(want[encoding])
     }
+    // The Raster's cells are the one scene's, resampled: its pairs, on every scenario.
+    expect(rasterPairs(r.cells), `${name}: Raster pairs`).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
     const lo = { svg: r.svgLo, flat: r.svgLoFlat, cells: r.cells, image: r.image }
     scaleOneWithinBudgets(lo, `${name} at scale 1`)
-    if (r.hiresCells === null) {
+    if (s.hires.scale !== 1) {
       imageWithinBudget(r.hires, s.hires.scale, `${name} hires: Image bytes`)
     } else {
-      const hi = { svg: r.svgHi, flat: r.svgHiFlat, cells: r.hiresCells, image: r.hires }
+      const hi = { svg: r.svgHi, flat: r.svgHiFlat, cells: r.cells, image: r.hires }
       scaleOneWithinBudgets(hi, `${name} hires at scale 1`)
     }
     // The desktop's Svg through the production fall-back: the hires one, or the scale-1 one over
