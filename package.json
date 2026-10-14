@@ -32,6 +32,7 @@
     "test:scripts": "vitest run scripts",
     "stage:goldens": "tsx scripts/stage-goldens.ts",
     "smoke:desktop": "tsx scripts/smoke-desktop.ts",
+    "svg:measure": "tsx scripts/svg-measure.ts",
     "refsheet": "tsx scripts/ref-sheet.ts"
   },
   "devDependencies": {
