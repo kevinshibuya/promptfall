@@ -29,8 +29,9 @@ terminal shares that geometry, `Image` filling the same box crisp.
 
 - Spec §2's "the band is 4 rows at rest" now reads 10 at rest and up to 19 in a boss fight.
   Its intent survives through the escapes: a 4-row compact stage with downsampled sprites
-  when the terminal is too short or 100 to 115 columns wide, 1 row under 100 columns, hidden
-  while Claude asks a question, and `/promptfall off`.
+  when the terminal is too short or 100 to 115 columns wide, 1 row under 100 columns, and
+  `/promptfall off`. While Claude asks for a permission or a question the band stays up, at
+  the layout the rows it is given allow.
 - The Loot and World tabs keep 4 rows, so switching tabs changes the band's height.
 - Half-block cost sets the stage's width too: a 16 px sprite is 16 columns, three heroes
   and three monsters about 110, which is why the full stage needs about 116 columns.

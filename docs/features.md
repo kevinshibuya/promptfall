@@ -58,8 +58,10 @@ the hero who is acting; enemies' gauges never show.
 over the small party. Beating it moves the party on to the next zone: twelve of them, from
 Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 2 and tier 3,
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
-played, the party has held its victory pose and the boss's row has left, the backdrop changes, and only then does the combat log say "The
-party reached zone 2" and a toast name the zone ahead. The enemy window shows a boss with its HP
+played and the party has held its victory pose, the party walks off to the right as on a travel,
+the backdrop changes as it goes, and the party walks back on from the left; the combat log's "The
+party reached zone 2" and a toast naming the zone ahead land with the new backdrop. With Farm here
+the party holds its pose and stays. The enemy window shows a boss with its HP
 percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
 zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
 more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
@@ -339,7 +341,8 @@ stage over the 5-row strip, and never more than Claude Code gives it. With fewer
 that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
 terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
-under 100 columns, and it hides while Claude asks a question.
+under 100 columns. It stays up while Claude asks for a permission or a question, at whatever size
+the rows left to it allow, so the party is on screen while a prompt waits.
 
 **The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
 field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
@@ -369,9 +372,13 @@ Three moments get a scene of their own. When the party travels, the heroes step 
 and fade, the enemies it left stand until the backdrop changes to the destination's, and the
 heroes step back on from the left; the log's "The party travels to zone 3, Marsh of Sighs." lands
 as the backdrop changes. A level-up flashes the hero gold and its gains rise over it in gold,
-"+3 atk  +2 def", as damage numbers do. When a zone boss falls, the party holds a victory pose over
-the empty ground for about two seconds after the boss has dissolved, and only then does the
-backdrop change and the arrival's line and toast land; a turn boss and the world boss get no hold.
+"+3 atk  +2 def", for just over a second, slower than damage numbers so they can be read; when
+several heroes level at once, each flashes and rises a quarter second after the one before, in
+party order. When a zone boss falls, the party holds a victory pose over the empty ground for
+about two seconds after the boss has dissolved. With Push on it then walks to the next zone as on
+a travel: it steps off once the pose and any chest are over, the backdrop changes, the arrival's
+line and toast land, and it steps on. With Farm here it holds and stays; a turn boss and the world
+boss get no hold.
 The pose is a slot: at 1.5× it holds the class's drawn victory frame, the weapon raised, and the
 idle art where a class has none; at 1× it always holds the idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
