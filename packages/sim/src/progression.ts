@@ -241,7 +241,10 @@ export function spawnOnEmptyTick(s: GameState, effects: Effect[]): void {
     effects.push({ k: 'boss_spawned', kind: 'zone_boss', def: zone.boss })
     return
   }
-  if (s.encounter) {
+  // An open wave with a free slot refills. One with nothing on the field and nothing queued is
+  // unreachable (the clear check removes it, the migration's finish clears a carried fight); were
+  // one ever left, it would stall play, so it closes and the next wave opens instead.
+  if (s.encounter && s.encounter.queue.length > 0) {
     refill(s, s.encounter)
     return
   }

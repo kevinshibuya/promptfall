@@ -221,6 +221,23 @@ describe('spawning', () => {
     }
     expect(kills).toBeGreaterThan(10)
   })
+
+  it('an open wave left with nothing on the field and nothing queued closes, and the tick opens the next', () => {
+    // Unreachable through the rules (the clear check removes such a wave); a save or a bug that
+    // left one must not stall play, so the empty tick treats it as no encounter.
+    const s0 = createInitialState(3)
+    const stranded: GameState = {
+      ...s0,
+      encounter: { enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 },
+    }
+    const r = run(stranded, [tick])
+    const enc = r.state.encounter
+    if (!enc) throw new Error('no encounter')
+    expect(enc.enemies.length).toBeGreaterThanOrEqual(1)
+    expect(enc.enemies.length).toBe(Math.min(3, enc.waveSize))
+    expect(enc.spawnedInWave).toBe(enc.enemies.length)
+    expect(r.effects.filter((e) => e.k === 'rejected')).toEqual([])
+  })
 })
 
 describe('wave 11', () => {

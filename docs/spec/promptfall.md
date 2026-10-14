@@ -921,7 +921,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
   fills between ticks and turns gold when full) and the purse window (gold,
   the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
-  view's `zoneWipes` out of the sim's `RETREAT_AT`, left out in boss mode).
+  view's `zoneWipes` out of the sim's `RETREAT_AT`, never staged, left out in
+  boss mode).
   Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
   the last two drops, or the World rows. While `hasSurvey` the band stays up at

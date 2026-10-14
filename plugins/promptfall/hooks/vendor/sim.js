@@ -1377,7 +1377,7 @@ function spawnOnEmptyTick(s, effects) {
     effects.push({ k: "boss_spawned", kind: "zone_boss", def: zone.boss });
     return;
   }
-  if (s.encounter) {
+  if (s.encounter && s.encounter.queue.length > 0) {
     refill(s, s.encounter);
     return;
   }

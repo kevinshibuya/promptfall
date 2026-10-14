@@ -87,4 +87,5 @@ export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
   'band-compact-wide': {imageHash: "c4d7d9ec18a4430e", cellsHash: "d0088c0a37704401", width: 1360, height: 96, stageSvgHash: "11159a41533d2903", stageSvgChars: 35276, stripSvgHash: "6681bec9cb878c47", stripSvgChars: 20110},
   'band-loot': {imageHash: "1a090545116e9579", cellsHash: "c0b34a4a1729a131", width: 1280, height: 80, stripSvgHash: "647127010dcc6cc1", stripSvgChars: 17273},
   'band-world': {imageHash: "369460b503fd40fc", cellsHash: "49d4cb2718fa61ba", width: 1320, height: 80, stripSvgHash: "62fa4975b47c6f02", stripSvgChars: 17932},
+  'band-waiting': {imageHash: "d4d7a34d57cd2678", cellsHash: "d34364639d5f7b17", width: 1280, height: 352, stageSvgHash: "02f33a0b72e4e96c", stageSvgChars: 35276, stripSvgHash: "2de248ce95c4b842", stripSvgChars: 21513},
 }
