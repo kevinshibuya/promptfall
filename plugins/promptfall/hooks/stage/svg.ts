@@ -16,6 +16,7 @@ import {
   groundStand,
   type Mark,
   type Pose,
+  type ShieldMark,
   type StageActor,
   type StageModel,
   stageAt,
@@ -349,7 +350,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${paint(model.ground)}"/>`,
   ]
   const base = new Map<string, { x: number; y: number; actor: StageActor }>()
-  /** Guard's shield on the flat Svg: drawn over every actor. */
+  /** Guard's shield on the flat Svg, white while a hit lands on it: drawn over every actor. */
   const marks: string[] = []
 
   /** Enrage's red is in the document: its filter goes in the defs. */
@@ -416,6 +417,25 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
   /** A mark drawn with an actor (Haste's streak, Guard's shield), from its idle top-left. */
   const markUse = (m: Mark | null | undefined): string =>
     m ? `<use href="#${define(m.art, null)}" transform="translate(${m.dx} ${m.dy})"/>` : ''
+  /** The hits Guard's shield takes: each hero's white flash, whoever it struck. */
+  const heroes = new Set(model.actors.filter((a) => a.flipX).map((a) => a.key))
+  const blows = live.filter((m) => m.kind === 'flash' && heroes.has(m.actor))
+  /**
+   * Guard's shield under SMIL, from its holder's idle top-left: white over each hit's blink (`blink`
+   * of the flash, the whole flash on the compact stage), as the struck hero's own.
+   */
+  const shieldMarkup = (m: ShieldMark | null | undefined, blink: (f: Motion) => string): string => {
+    if (!m) return ''
+    const t = `transform="translate(${m.dx} ${m.dy})"`
+    const id = define(m.art, null)
+    const flashes = blows
+      .map(
+        (f) =>
+          `<use href="#${id}" ${t} filter="url(#${ID.flash})" opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin(f)}" dur="${blink(f)}"/></use>`,
+      )
+      .join('')
+    return `<use href="#${id}" ${t}/>${flashes}`
+  }
   /**
    * The bob's frame of an actor: its own, or (a hand-built actor) the plain one unless it holds
    * still; none from the ladder's second rung.
@@ -519,7 +539,8 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       )
     }
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
-    return `<g transform="translate(${x} ${actor.y})"${op}>${anim.join('')}${parts.join('')}${markUse(actor.shield)}</g>`
+    const shield = shieldMarkup(actor.shield, () => seconds(BLINK_MS))
+    return `<g transform="translate(${x} ${actor.y})"${op}>${anim.join('')}${parts.join('')}${shield}</g>`
   }
 
   for (const actor of model.actors) {
@@ -578,8 +599,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       body.push(
         `<g transform="translate(${actor.x + dx} ${actor.y})"${op}>${drawn}${flash}${enraged}</g>`,
       )
-      if (actor.shield)
-        marks.push(`<g transform="translate(${actor.x} ${actor.y})">${markUse(actor.shield)}</g>`)
+      const shield = actor.shield
+      if (shield) {
+        const white = shield.flashing
+          ? `<use href="#${define(shield.art, null)}" transform="translate(${shield.dx} ${shield.dy})" filter="url(#${ID.flash})"/>`
+          : ''
+        marks.push(`<g transform="translate(${actor.x} ${actor.y})">${markUse(shield)}${white}</g>`)
+      }
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
@@ -652,7 +678,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     const tinted = tints ? `${redUse} opacity="0">${tints}</use>` : ''
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     body.push(
-      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${actor.fallen ? '' : markUse(actor.streak)}${use}${tinted}${flashes}${markUse(actor.shield)}</g>`,
+      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${actor.fallen ? '' : markUse(actor.streak)}${use}${tinted}${flashes}${shieldMarkup(actor.shield, dur)}</g>`,
     )
   }
   body.push(...marks)

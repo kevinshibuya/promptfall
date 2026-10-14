@@ -112,6 +112,8 @@ export const CAMPFIRE_FADE_MS = 400
  */
 export const HUDDLE_MS = 200
 export const HUDDLE_GAP_PX = 1
+/** Guard's big shield: its back edge covers this many columns of its holder's front. */
+export const SHIELD_OVERLAP_PX = 1
 export const EVENT_FRAME_MS = 83
 /**
  * A travel: the heroes step off toward the right and fade over TRAVEL_OFF_MS, the backdrop
