@@ -223,9 +223,12 @@ Checked against Claude Code v2.1.287's mods API.
     hook, which fires as a compaction is about to run, when its trigger is
     manual, auto or plugin and it carries no agent id (the engine's precompute
     and a fork's own compaction send nothing), at most one per minute. It sends
-    `camp` off unpaced from the band's `g`, `/promptfall go` and the session's
-    end when its process ends (not on a clear or a resume), each only while the
-    view says camping, so once per camp.
+    `camp` off unpaced from the band's `g`, `/promptfall go`, the session's
+    end when its process ends (not on a clear or a resume) and a primary
+    stepping aside because it draws nowhere, each only while the party camps,
+    so once per camp. The step-aside is what carries `/exit`: its teardown
+    draws nowhere for seconds before the session ends, and the end then finds
+    a secondary.
   - **Guard**, while a permission prompt waits. `guard` on sets the guard
     countdown to 60 ticks (2 minutes of battle); `guard` off, `rest` and the
     tick that takes it to zero end it; on while on, or off while off, is a
