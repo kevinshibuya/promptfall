@@ -16,7 +16,7 @@ import { type Box, cellsOf, imageScaleFor, type Layout, layoutFor, sameLayout } 
 import type { MessageLog } from './log'
 import { type StageModel, type StageNumber, stageAt } from './model'
 import { composeBand, composeBandCells, headsOf } from './playfield'
-import { encodeRaster } from './raster'
+import { encodeRaster, intoCells } from './raster'
 import { stagedState } from './staged'
 import type { StageTimeline } from './timeline'
 import {
@@ -137,14 +137,15 @@ export function stageFrame(
   motion: Settings['motion'],
 ): { cells: string } | { source: { png: string } } {
   if (!layout.box) throw new Error('no stage in a collapsed layout')
-  // The full stage draws the 1.5x art on Image; Raster and the compact stage stay at 1.
+  // The full stage draws the 1.5x scene on both; the Raster resamples it into its cells. The
+  // compact stage stays at 1.
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
-    scale: renderer === 'image' ? HIRES_SCALE : 1,
+    scale: HIRES_SCALE,
   })
   if (renderer === 'raster') {
-    const { frame, numbers } = rasterShown(model, layout)
+    const { frame, numbers } = rasterStage(model, layout)
     return { cells: encodeRaster(frame, numbers) }
   }
   return {
@@ -167,17 +168,23 @@ function shown(model: StageModel, layout: Layout, frame: Frame): Frame {
   return cells ? cropBottom(frame, Math.ceil(cells.rows * 2 * model.scale)) : frame
 }
 
-/** The Raster's stage: the rows shown, its numbers moved up with them (one clamped to the top stays visible). */
-function rasterShown(
+/**
+ * The Raster's stage: the scene's rows shown (three scene pixels a cell row at 1.5), its numbers
+ * moved up with them (one clamped to the top stays visible), resampled into the cells' pixels, the
+ * numbers mapped through the same factor (`intoCells`).
+ */
+export function rasterStage(
   model: StageModel,
   layout: Layout,
 ): { frame: Frame; numbers: StageNumber[]; heads: boolean[] } {
-  const frame = shown(model, layout, composeFrame(model, { numbers: false }))
-  const cut = Math.ceil(model.box.rows * 2 * model.scale) - frame.height
-  const numbers = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
-  // The actors alone, cropped the same: where their art reaches the top cell row.
+  const scene = shown(model, layout, composeFrame(model, { numbers: false }))
+  const cut = Math.ceil(model.box.rows * 2 * model.scale) - scene.height
+  const moved = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
+  const cells = { columns: model.box.columns, rows: scene.height / (2 * model.scale) }
+  const { frame, numbers } = intoCells(scene, moved, cells)
+  // The actors alone, cropped and resampled the same: where their art reaches the top cell row.
   const art = shown(model, layout, composeFrame({ ...model, backdrop: null }, { numbers: false }))
-  return { frame, numbers, heads: headsOf(art) }
+  return { frame, numbers, heads: headsOf(intoCells(art, [], cells).frame) }
 }
 
 /**
@@ -205,9 +212,10 @@ export function bandFrame(
 }
 
 /**
- * The Raster band's cells (#61): the full stage's 1x frame, its sky cropped on a short band (ADR
- * 0010), or compact's beside its window, and the strip's scene composed into `band`, the playfield
- * on the shell; on Loot and World (`bare`) the strip alone.
+ * The Raster band's cells (#61): the full stage's 1.5x frame, its sky cropped on a short band (ADR
+ * 0010), resampled into the stage's cells; or compact's 1x one beside its window; and the strip's
+ * scene composed into `band`, the playfield on the shell; on Loot and World (`bare`) the strip
+ * alone.
  */
 export function bandCells(
   view: GameView,
@@ -223,9 +231,9 @@ export function bandCells(
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
     motion,
-    scale: 1,
+    scale: HIRES_SCALE,
   })
-  const { frame, numbers, heads } = rasterShown(model, layout)
+  const { frame, numbers, heads } = rasterStage(model, layout)
   return { cells: composeBandCells(band, frame, numbers, strip, heads) }
 }
 

@@ -60,8 +60,10 @@ export function layoutFor(
   // A stage too tall for the band (a long prompt): the band cannot take more rows than the
   // engine gives it (`maxRows`), so the stage fits what is left. An Image zooms the whole scene
   // out, the zoomed-out view Kevin wants in every fight (ADR 0010): the scene widens so that,
-  // scaled into the rows left, it still spans the band. The Raster cannot scale: it keeps its art size and shows the stage's bottom
-  // `room` rows, the sky cropped, down to the tallest actor's height, then goes compact.
+  // scaled into the rows left, it still spans the band. The Raster does not zoom out further: at
+  // 8 rows a 24-pixel figure scaled into 16 pixels of height is a smear. It keeps the size it
+  // resamples the scene to and shows the stage's bottom `room` rows, the sky cropped, down to the
+  // tallest actor's height, then goes compact.
   const room = props.maxRows - STRIP_ROWS - opts.extra
   if (!opts.scalable && props.bodyColumns >= FULL_MIN_COLUMNS && room >= minRows) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)
