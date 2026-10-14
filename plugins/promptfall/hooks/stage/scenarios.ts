@@ -52,6 +52,7 @@ import {
   FLASH_MS,
   FULL_MIN_COLUMNS,
   HASTE_FRAME_MS,
+  HUDDLE_MS,
   LEVEL_STAGGER_MS,
   LUNGE_MS,
   REVEAL_RISE_MS,
@@ -89,6 +90,7 @@ export const SCENARIOS = [
   'enrage',
   'camp',
   'guard',
+  'guard-huddle',
   'travel',
   'level-up',
   'victory',
@@ -320,8 +322,18 @@ export function caseOf(name: Scenario): Case {
       t.observe(wave(), NOW)
       return staging(wave(), t, FULL, NOW)
     }
-    // Guard: every hero in the stance, the bob stopped, the knight under the shield.
+    // Guard, first drawn on a guarding party: huddled toward the knight with no step, every hero
+    // in the stance, the bob stopped, the knight under the shield.
     case 'guard': {
+      const v = party({ guarding: true })
+      t.observe(v, NOW)
+      return staging(v, t, FULL, NOW)
+    }
+    // Guard coming on, halfway through the huddle: the black mage and the white mage sliding in
+    // toward the knight in their idle art.
+    case 'guard-huddle': {
+      t.observe(wave(), NOW - 1000)
+      t.onEffects([{ k: 'guard', on: true }], NOW - HUDDLE_MS / 2)
       const v = party({ guarding: true })
       t.observe(v, NOW)
       return staging(v, t, FULL, NOW)

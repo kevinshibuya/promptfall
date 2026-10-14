@@ -23,6 +23,7 @@ import {
   DISSOLVE_MS,
   FLASH_MS,
   FOLLOW_MS,
+  HUDDLE_MS,
   IDLE_FRAME_MS,
   LEVEL_NUMBER_MS,
   LEVEL_RGB,
@@ -97,6 +98,20 @@ export type Motion =
   | ({ kind: 'chest'; actor: null; slot: number } & ChestFields)
   /** Camp's campfire between the lines: it sits CAMPFIRE_MS, then fades over CAMPFIRE_FADE_MS. */
   | { kind: 'campfire'; actor: null; from: number; until: number }
+  /**
+   * The party's huddle: `members`, the heroes standing as it began, slide from their slots to
+   * their huddle positions (`in`) or back (`out`).
+   */
+  | HuddleMotion
+
+export type HuddleMotion = {
+  kind: 'huddle'
+  actor: null
+  dir: 'in' | 'out'
+  members: readonly string[]
+  from: number
+  until: number
+}
 
 type ChestFields = {
   /** The dropped item's id, its rarity and its sprite's id. */
@@ -260,6 +275,14 @@ export function bobbingAt(now: number, frameMs: number = IDLE_FRAME_MS): 0 | 1 {
   return Math.floor(now / frameMs) % 2 === 0 ? 0 : 1
 }
 
+/**
+ * The party stands huddled: while it is guarding. The stage's positions follow it, so a stage
+ * first drawn on a huddled party draws it huddled with no motion.
+ */
+export function huddles(view: GameView): boolean {
+  return view.heroes.some((h) => h.guarding)
+}
+
 /** An enemy's sprite: the world boss's by name, any other by its content id. */
 export function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
   return enemy.kind === 'world_boss'
@@ -310,6 +333,11 @@ export class StageTimeline {
   private leftByTravel = new Set<string>()
   /** The zone bosses whose kill advanced the zone: the party walks on once the hold is over. */
   private walking = new Set<string>()
+  /**
+   * The heroes standing as the party huddled, held until the huddle breaks: their huddle positions
+   * stay fixed, so a hero that falls in it keeps its place and nothing shifts.
+   */
+  private huddle: readonly string[] | null = null
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -317,6 +345,9 @@ export class StageTimeline {
     this.travels = this.travels.filter((t) => t.end > now)
     this.scene = { zone: view.zone, zoneName: view.zoneName, wave: view.wave }
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
+    // A party first seen huddled stands as it is seen.
+    if (!huddles(view)) this.huddle = null
+    else this.huddle ??= view.heroes.filter((h) => h.alive).map((h) => h.id)
     // A hero the travel applied with a pending party walks off and on with the rest.
     for (const travel of this.travels) {
       for (const actor of this.heroes.keys()) {
@@ -790,6 +821,10 @@ export class StageTimeline {
           this.camp(effect.heals, start, hp)
           continue
         }
+        if (effect.k === 'guard') {
+          this.huddleStep(effect.on ? 'in' : 'out', start, hp)
+          continue
+        }
         if (effect.k === 'level_up') {
           // With the blow that earned it, or as the tick lands when no action is shown.
           const at = attacker !== null ? impact : start
@@ -995,6 +1030,31 @@ export class StageTimeline {
         until: at + NUMBER_MS,
       })
     }
+  }
+
+  /**
+   * The party's huddle from `at`: in, the heroes standing as it begins are its members, fixed
+   * until it breaks; out, the same members step back. On a stage never drawn it plays nothing: the
+   * first observe places the party as the view stands.
+   */
+  private huddleStep(dir: 'in' | 'out', at: number, hp: Map<string, number>): void {
+    if (!this.observed) return
+    const standing = [...this.heroes.keys()].filter((id) => (hp.get(id) ?? 0) > 0)
+    const members = dir === 'in' ? standing : (this.huddle ?? standing)
+    this.huddle = dir === 'in' ? members : null
+    this.motions.push({
+      kind: 'huddle',
+      actor: null,
+      dir,
+      members,
+      from: at,
+      until: at + HUDDLE_MS,
+    })
+  }
+
+  /** The members of the huddle the party stands in, fixed as it began; null when none is held. */
+  huddled(): readonly string[] | null {
+    return this.huddle
   }
 
   /** Records a hit's or heal's HP change, as far as the actor's HP allows, to land at `at`. */
