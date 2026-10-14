@@ -119,8 +119,8 @@ function drawBackdrop(frame: Frame, art: SpriteArt): void {
 
 /**
  * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
- * on the bottom two rows, three at scale 1.5), the actors in slot order (a hasted hero's streak
- * under it), Guard's shield (white while a hit lands on it), the glows, the chests, the items rising from them, the campfire, the
+ * on the bottom two rows, three at scale 1.5), the actors in slot order (a hasted hero's speed
+ * lines under it), Guard's shield (white while a hit lands on it), the glows, the chests, the items rising from them, the campfire, the
  * effect sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells
  * instead.
  */
@@ -137,8 +137,10 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
   const mark = (a: StageActor, m: Mark, palette = m.art.palette) =>
     blit(frame, m.art, palette, a.x + m.dx, a.y + m.dy, false, a.alpha)
   for (const a of model.actors) {
-    // Haste's streak trails the idle pair, under the hero and under the next one along.
-    if (a.streak && (a.pose === 'idle' || a.pose === 'idle_b')) mark(a, a.streak)
+    // Haste's speed lines trail the idle pair, a pattern per frame, under the hero and under the
+    // next one along.
+    if (a.speedLines && (a.pose === 'idle' || a.pose === 'idle_b'))
+      mark(a, a.speedLines[a.pose === 'idle_b' ? 1 : 0])
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
   }
   for (const a of model.actors) {

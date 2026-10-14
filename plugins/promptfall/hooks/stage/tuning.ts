@@ -214,7 +214,7 @@ export const ZONE_GROUND: readonly number[] = [
   0xe8e4d8, // The Unwritten Reach
 ]
 export const FLASH_RGB = 0xffffff
-/** Each class's colour, from its sprite's accent: Haste's speed streak behind the hero. */
+/** Each class's colour, from its sprite's accent: Haste's speed lines behind the hero, tinted light. */
 export const CLASS_RGB: Readonly<Record<string, number>> = {
   knight: 0xe04030,
   black_mage: 0x9050e0,
