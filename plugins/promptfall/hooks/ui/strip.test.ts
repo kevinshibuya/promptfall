@@ -360,6 +360,65 @@ test("the enemy window's footer counts the queue, dim; at 0 and in a world boss 
   expect(lineText({ spans: enemy(strip('strip-world-boss')).title ?? [] })).toBe('World boss · 11m')
 })
 
+test('camping blanks the enemy rows but a dim camping, the title and the footer kept', () => {
+  const input = strip('strip-camping')
+  const enemy = win(stripScene(input).scene, 'enemy')
+  const fighting = win(
+    stripScene({ ...input, view: { ...input.view, camping: false } }).scene,
+    'enemy',
+  )
+  expect(enemy.title).toEqual(fighting.title)
+  expect(lineText({ spans: enemy.footer ?? [] })).toBe('+2 waiting')
+  expect(enemy.lines.map((l) => lineText(l).trim())).toEqual(['camping'])
+  expect(enemy.lines[0]?.spans.every((s) => !('text' in s) || s.rgb === DIM_RGB)).toBe(true)
+  for (const e of input.view.enemies) expect(allText(enemy)).not.toContain(e.name)
+  expect(enemy.alt).toBe('Zone 1 · Wave 2. Camping. 2 more waiting.')
+})
+
+test('camping puts g: back to the fight under the newest log line, a hotspot; a notice wins its row', () => {
+  const input = strip('strip-camping')
+  const { scene, hotspots } = stripScene(input)
+  const message = win(scene, 'message')
+  // The newest line whole on one row, clipped: the camp's own line.
+  expect(lineText(message.lines[1]).trim()).toBe('The party makes camp while Claude g…')
+  expect(lineText(message.lines[2]).trim()).toBe('g: back to the fight')
+  expect(hotspots.find((h) => h.hotkey === 'g')).toEqual({
+    hotkey: 'g',
+    label: 'g: back to the fight',
+    x: message.x + 2,
+    y: 3,
+    columns: 20,
+  })
+  const noticed = stripScene({ ...input, notice: 'Promptfall resynced' })
+  expect(lineText(win(noticed.scene, 'message').lines[2]).trim()).toBe('Promptfall resynced')
+  expect(noticed.hotspots.some((h) => h.hotkey === 'g')).toBe(false)
+  // On Loot the row is the same one a notice takes.
+  const loot = win(stripScene({ ...input, tab: 'loot' }).scene, 'message')
+  expect(lineText(loot.lines[2]).trim()).toBe('g: back to the fight')
+  expect(stripScene(strip('strip-rest')).hotspots.some((h) => h.hotkey === 'g')).toBe(false)
+})
+
+test('the compact window shows a dim camping for the front enemy; a notice wins there too', () => {
+  const input = strip('strip-compact-camping')
+  const compact = win(stripScene(input).scene, 'compact')
+  expect(lineText(compact.lines[3]).trim()).toBe('camping')
+  expect(compact.lines[3]?.spans.every((s) => !('text' in s) || s.rgb === DIM_RGB)).toBe(true)
+  for (const e of input.view.enemies) expect(allText(compact)).not.toContain(e.name)
+  const noticed = win(stripScene({ ...input, notice: 'Promptfall resynced' }).scene, 'compact')
+  expect(lineText(noticed.lines[3]).trim()).toBe('Promptfall resynced')
+})
+
+test('desktop tracks while camping keep the g line and type nothing, as under a notice', () => {
+  const input = strip('strip-camping')
+  const track = stripTracks(input, 3000).find(
+    (t): t is Extract<Track, { kind: 'lines' }> => t.kind === 'lines',
+  )
+  for (const f of track?.frames ?? []) {
+    expect(lineText(f.lines[2]).trim()).toBe('g: back to the fight')
+    expect(f.typing).toBeUndefined()
+  }
+})
+
 test("the purse's third row counts the zone's falls; the sandbox keeps Farm, boss mode shows none", () => {
   const rest = strip('strip-rest')
   const purse = (i: StripInput) => stripScene(i)

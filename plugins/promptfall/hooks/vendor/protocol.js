@@ -14,7 +14,7 @@ var BUDGETS = {
   turn_end: { refillMs: 5e3, capacity: 30 },
   turn_start: { refillMs: 5e3, capacity: 30 },
   tool_mishap: { refillMs: 5e3, capacity: 30 },
-  camp: { refillMs: 6e4, capacity: 5 },
+  camp: { refillMs: 3e4, capacity: 10 },
   guard: { refillMs: 2e3, capacity: 60 }
 };
 
@@ -4090,7 +4090,7 @@ var PlayerEventSchema = external_exports.discriminatedUnion("t", [
   external_exports.object({ t: external_exports.literal("rest"), at }),
   external_exports.object({ t: external_exports.literal("travel"), zone: positive, at }),
   external_exports.object({ t: external_exports.literal("tool_mishap"), at }),
-  external_exports.object({ t: external_exports.literal("camp"), at }),
+  external_exports.object({ t: external_exports.literal("camp"), on: external_exports.boolean().optional(), at }),
   external_exports.object({ t: external_exports.literal("guard"), on: external_exports.boolean(), at }),
   external_exports.object({ t: external_exports.literal("equip"), heroId: id, itemId: id, at }),
   external_exports.object({ t: external_exports.literal("unequip"), heroId: id, slot, at }),

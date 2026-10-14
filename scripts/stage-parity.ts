@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import type { Browser } from 'playwright'
 import type { Frame } from '../plugins/promptfall/hooks/stage/compose'
 import {
+  type Case,
   caseOf,
   cellsPicture,
   renders,
@@ -16,6 +17,7 @@ import {
   type Staged,
 } from '../plugins/promptfall/hooks/stage/scenarios'
 import type { Motion } from '../plugins/promptfall/hooks/stage/timeline'
+import { HASTE_FRAME_MS } from '../plugins/promptfall/hooks/stage/tuning'
 import { glyphFor } from '../plugins/promptfall/hooks/windows/kit'
 import { CELL_H, CELL_W } from '../plugins/promptfall/hooks/windows/tuning'
 import { type Rgba, writePng } from './png'
@@ -25,9 +27,15 @@ const OUT = join(import.meta.dirname, '../plugins/promptfall/hooks/stage/goldens
 /** The fractions of a stretch a sheet shows it at: its start, its end and four between. */
 export const INSTANTS = [0, 0.2, 0.4, 0.6, 0.8, 1] as const
 
-/** A sheet's stretch: its scenario's case, from the start to the end of its first `kind` motion. */
-export type Stretch = { scenario: Scenario; kind: Motion['kind'] }
-export type Sheet = { name: string; stretches: readonly Stretch[] }
+/**
+ * A sheet's stretch: its scenario's case, from the start to the end of its first `kind` motion,
+ * or, for a look that is a clock and not a motion, over `span` ms from its events.
+ */
+export type Stretch =
+  | { scenario: Scenario; kind: Motion['kind'] }
+  | { scenario: Scenario; span: number }
+/** A sheet: its name, its stretches, and its desktop row's label when that row reads otherwise. */
+export type Sheet = { name: string; stretches: readonly Stretch[]; desktop?: string }
 
 export const SHEETS: readonly Sheet[] = [
   // The knight's attack with its hit: its step spans the action, from the wind-up's hold to the
@@ -43,6 +51,31 @@ export const SHEETS: readonly Sheet[] = [
   },
   // The kill's chest from its fall through its reveal and the item's fade.
   { name: 'chest', stretches: [{ scenario: 'chest', kind: 'chest' }] },
+  // Haste's speed lines over two hasted bob frames, a pattern each. The desktop's flat picture
+  // draws the first pattern static by design: the flicker rides the SMIL clock it leaves off.
+  {
+    name: 'haste',
+    stretches: [{ scenario: 'haste', span: 2 * HASTE_FRAME_MS }],
+    desktop: 'desktop (static)',
+  },
+  // Guard coming on: the party's huddle in toward the knight, then the goblin scout's attack on
+  // the big shield, its flash at the impact.
+  {
+    name: 'guard',
+    stretches: [
+      { scenario: 'guard-huddle', kind: 'huddle' },
+      { scenario: 'guard-hit', kind: 'step' },
+    ],
+  },
+  // Camp made, the enemies walking off toward their edge; then camp broken, the same enemies
+  // walking back in as the fire fades.
+  {
+    name: 'camp',
+    stretches: [
+      { scenario: 'camp', kind: 'camp_leave' },
+      { scenario: 'camp-break', kind: 'camp_return' },
+    ],
+  },
 ]
 
 /** A sheet's column: its head, and the scenario staged at its instant. */
@@ -50,16 +83,23 @@ export type Column = { head: string; staged: Staged }
 
 /** A sheet's columns: each stretch staged at each of the INSTANTS, headed by its ms into it. */
 export function columnsOf(sheet: Sheet): Column[] {
-  return sheet.stretches.flatMap(({ scenario, kind }) => {
-    const c = caseOf(scenario)
-    const motion = c.at(c.from).motions.find((m) => m.kind === kind)
-    if (motion === undefined) throw new Error(`${scenario}: no ${kind} motion after its events`)
-    const from = Math.max(motion.from, c.from)
+  return sheet.stretches.flatMap((stretch) => {
+    const c = caseOf(stretch.scenario)
+    const [label, from, until] = spanOf(stretch, c)
     return INSTANTS.map((f) => {
-      const ms = Math.round((motion.until - from) * f)
-      return { head: `${kind} ${ms}ms`, staged: c.at(from + ms) }
+      const ms = Math.round((until - from) * f)
+      return { head: `${label} ${ms}ms`, staged: c.at(from + ms) }
     })
   })
+}
+
+/** A stretch's head and its bounds on its case's clock. */
+function spanOf(stretch: Stretch, c: Case): [string, number, number] {
+  if ('span' in stretch) return [stretch.scenario, c.from, c.from + stretch.span]
+  const { scenario, kind } = stretch
+  const motion = c.at(c.from).motions.find((m) => m.kind === kind)
+  if (motion === undefined) throw new Error(`${scenario}: no ${kind} motion after its events`)
+  return [kind, Math.max(motion.from, c.from), motion.until]
 }
 
 /** The Image frame scaled into `width` × `height`, the box the terminal shows it in: nearest pixel. */
@@ -78,7 +118,9 @@ export function imageRow(frame: Frame, width: number, height: number): Frame {
 /** A sheet's background: the dark terminal the goldens' PNGs lay their pixels on. */
 export const BG = [0x1e, 0x1e, 0x24] as const
 const INK = [0xd0, 0xd0, 0xd0] as const
-const LAYOUT = { label: 8 * CELL_W, head: CELL_H + CELL_H / 2, gap: CELL_W }
+/** The gutter fits eight glyphs, or the longest label and a glyph's space. */
+const GUTTER_GLYPHS = 8
+const LAYOUT = { head: CELL_H + CELL_H / 2, gap: CELL_W }
 
 /**
  * The sheet: each row's frames side by side under the columns' heads, its label in the gutter on
@@ -87,8 +129,9 @@ const LAYOUT = { label: 8 * CELL_W, head: CELL_H + CELL_H / 2, gap: CELL_W }
 export function contactSheet(
   heads: readonly string[],
   rows: readonly { label: string; frames: readonly Frame[] }[],
-): { png: Rgba; layout: typeof LAYOUT } {
-  const { label, head, gap } = LAYOUT
+): { png: Rgba; layout: typeof LAYOUT & { label: number } } {
+  const { head, gap } = LAYOUT
+  const label = CELL_W * Math.max(GUTTER_GLYPHS, ...rows.map((r) => r.label.length + 1))
   const widths = heads.map((_, i) => Math.max(...rows.map((r) => r.frames[i]?.width ?? 0)))
   const heights = rows.map((r) => Math.max(...r.frames.map((f) => f.height)))
   const xs = widths.map((_, i) => label + widths.slice(0, i).reduce((a, w) => a + w + gap, 0))
@@ -130,7 +173,7 @@ export function contactSheet(
       }
     })
   })
-  return { png: { width, height, data }, layout: LAYOUT }
+  return { png: { width, height, data }, layout: { ...LAYOUT, label } }
 }
 
 const URL = 'http://parity.test/stage.svg'
@@ -180,7 +223,7 @@ async function main(): Promise<void> {
         [
           { label: 'Image', frames: image },
           { label: 'Raster', frames: raster },
-          { label: 'desktop', frames: desktop },
+          { label: sheet.desktop ?? 'desktop', frames: desktop },
         ],
       )
       const path = join(OUT, `parity-${sheet.name}.png`)

@@ -15,6 +15,7 @@ import {
   onEnemyKilled,
   partyHeroes,
 } from './progression'
+import { breakCamp } from './reactive'
 import { earn, markHeld } from './tallies'
 import type { Effect, Event, GameState, Goods, LootEntry, StepResult } from './types'
 
@@ -150,7 +151,8 @@ export function credited(state: GameState, event: Of<'credited'>): StepResult {
 
 export function bossEngaged(state: GameState, event: Of<'boss_engaged'>): StepResult {
   if (state.boss !== null) return unapplicable(state, event, 'already_engaged')
-  return draft(state, (s) => {
+  return draft(state, (s, effects) => {
+    breakCamp(s, effects)
     const { hp } = event.stats
     const id = newId(s, 'e')
     // The old encounter and queue go; a pending turn boss and the turn's tool calls stay.
@@ -221,7 +223,8 @@ function noSuchRarity(rarity: string): boolean {
 export function sandboxBoss(state: GameState, event: Of<'sandbox_boss'>): StepResult {
   if (state.boss) return unapplicable(state, event, 'boss_mode')
   if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
-  return draft(state, (s) => {
+  return draft(state, (s, effects) => {
+    breakCamp(s, effects)
     if (s.zone !== event.zone) changeZone(s, event.zone)
     endEncounter(s)
     // The next empty tick spawns it: the zone boss at the boss wave, the turn boss when pending.
@@ -272,7 +275,8 @@ export function sandboxLevel(state: GameState, event: Of<'sandbox_level'>): Step
 export function sandboxZone(state: GameState, event: Of<'sandbox_zone'>): StepResult {
   if (state.boss) return unapplicable(state, event, 'boss_mode')
   if (noSuchZone(event.zone)) return unapplicable(state, event, 'no_such_zone')
-  return draft(state, (s) => {
+  return draft(state, (s, effects) => {
+    breakCamp(s, effects)
     changeZone(s, event.zone)
     endEncounter(s)
   })
@@ -289,6 +293,7 @@ export function sandboxRecruit(state: GameState, event: Of<'sandbox_recruit'>): 
 export function sandboxWipe(state: GameState, event: Of<'sandbox_wipe'>): StepResult {
   if (state.boss) return unapplicable(state, event, 'boss_mode')
   return draft(state, (s, effects) => {
+    breakCamp(s, effects)
     for (const hero of partyHeroes(s)) hero.hp = 0
     checkWipe(s, effects)
   })

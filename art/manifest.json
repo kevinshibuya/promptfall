@@ -1164,6 +1164,12 @@
       "style": "nes"
     },
     {
+      "id": "effect:shield",
+      "file": "sprites/effect/shield.png",
+      "fileHires": "sprites-hires/effect/shield.png",
+      "style": "nes"
+    },
+    {
       "id": "chest:closed",
       "file": "sprites/chest/closed.png",
       "fileHires": "sprites-hires/chest/closed.png",

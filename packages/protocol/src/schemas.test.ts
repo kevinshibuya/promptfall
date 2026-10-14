@@ -95,6 +95,19 @@ describe('BatchSchema', () => {
     }
   })
 
+  it('carries camp on and off through a batch, and reads a camp without the field as it was', () => {
+    for (const event of [
+      { t: 'camp', on: true, at: 3 },
+      { t: 'camp', on: false, at: 4 },
+      { t: 'camp', at: 5 },
+    ]) {
+      expect(TimedEventSchema.parse(event)).toEqual(event)
+      const batch = { ...valid, events: [event] }
+      expect(BatchSchema.parse(batch).events).toEqual([event])
+    }
+    expect(TimedEventSchema.safeParse({ t: 'camp', on: 'off', at: 1 }).success).toBe(false)
+  })
+
   it('refuses a hint outside the four words, and a guard without a boolean', () => {
     for (const hint of ['boss', 'turn_boss', 'Swift', '', 3, null]) {
       expect(TimedEventSchema.safeParse({ t: 'tool_call', hint, at: 1 }).success).toBe(false)

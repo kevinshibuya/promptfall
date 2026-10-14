@@ -10,12 +10,14 @@ import type { Box } from './layout'
 import {
   actionOffset,
   CHESTS,
+  campWalkAt,
   chestPlace,
   effectAt,
   glowOf,
   groundStand,
   type Mark,
   type Pose,
+  type ShieldMark,
   type StageActor,
   type StageModel,
   stageAt,
@@ -25,10 +27,15 @@ import {
 } from './model'
 import { colourPath } from './paths'
 import { svgFrame } from './playfield'
-import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './timeline'
+import {
+  bobbingAt,
+  CHEST_SHOW_MS,
+  type HuddleMotion,
+  type Motion,
+  type StageTimeline,
+} from './timeline'
 import {
   BLINK_MS,
-  CAMPFIRE_MS,
   CHEST_FALL_MS,
   CHEST_OPEN_MS,
   CHEST_SIT_MS,
@@ -51,12 +58,15 @@ import {
 } from './tuning'
 
 type PoseMotion = Extract<Motion, { kind: 'windup' | 'strike' | 'follow' | 'hit' | 'victory' }>
-const POSE_RANK: Readonly<Record<PoseMotion['kind'], number>> = {
+/** A span a pose shows over: a pose motion's, or a huddle's slide, which holds idle A. */
+type PoseSpan = { kind: PoseMotion['kind'] | 'huddle'; from: number; until: number }
+const POSE_RANK: Readonly<Record<PoseSpan['kind'], number>> = {
   hit: 4,
   follow: 3,
   strike: 2,
   windup: 1,
   victory: 0,
+  huddle: -1,
 }
 const isPoseMotion = (m: Motion): m is PoseMotion =>
   m.kind === 'windup' ||
@@ -91,7 +101,7 @@ export function framesInUse(mine: readonly Motion[], now: number): PoseMotion[] 
 
 /** Disjoint spans of the pose shown, each the highest-ranked pose motion over it. */
 function poseSpans(
-  motions: readonly PoseMotion[],
+  motions: readonly PoseSpan[],
   now: number,
 ): { pose: Pose; from: number; until: number }[] {
   const cuts = [...new Set(motions.flatMap((m) => [m.from, m.until]))].sort((a, b) => a - b)
@@ -100,15 +110,16 @@ function poseSpans(
     const a = cuts[i] ?? 0
     const b = cuts[i + 1] ?? 0
     if (b <= now) continue
-    let top: PoseMotion | null = null
+    let top: PoseSpan | null = null
     for (const m of motions) {
       if (m.from <= a && a < m.until && (top === null || POSE_RANK[m.kind] > POSE_RANK[top.kind]))
         top = m
     }
     if (top === null) continue
+    const pose = top.kind === 'huddle' ? 'idle' : top.kind
     const last = spans.at(-1)
-    if (last && last.pose === top.kind && last.until === a) last.until = b
-    else spans.push({ pose: top.kind, from: a, until: b })
+    if (last && last.pose === pose && last.until === a) last.until = b
+    else spans.push({ pose, from: a, until: b })
   }
   return spans
 }
@@ -123,11 +134,11 @@ const FLASH_OF: Partial<Record<Motion['kind'], Flash>> = {
 /** The flood filter a motion blinks, if it is a flash. */
 const flashOf = (m: Motion): Flash | null => FLASH_OF[m.kind] ?? null
 /**
- * An actor still to appear: spawning, or stepping on after a travel whose step off this picture no
- * longer carries. It starts transparent and its animation fades it in.
+ * An actor still to appear: spawning, walking back in as camp breaks, or stepping on after a travel
+ * whose step off this picture no longer carries. It starts transparent and its animation fades it in.
  */
 const appearing = (mine: readonly Motion[]): boolean =>
-  mine.some((m) => m.kind === 'spawn') ||
+  mine.some((m) => m.kind === 'spawn' || m.kind === 'camp_return') ||
   (mine.some((m) => m.kind === 'travel_on') && !mine.some((m) => m.kind === 'travel_off'))
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
@@ -291,7 +302,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
   const travelPx = px(TRAVEL_PX)
   /**
    * The step and the lunge as translates on the actor's group, summed with its place; a travel's
-   * step off and on with their fades.
+   * step off and on, and a camp's walk off and back in, with their fades.
    */
   const moveAnim = (m: Motion): string | null => {
     if (m.kind === 'travel_off') {
@@ -299,6 +310,12 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     }
     if (m.kind === 'travel_on') {
       return `<animateTransform attributeName="transform" type="translate" additive="sum" values="-${travelPx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/><animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
+    if (m.kind === 'camp_leave') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-${travelPx} 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
+    if (m.kind === 'camp_return') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="-${travelPx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/><animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
     }
     if (m.kind === 'lunge') {
       const dx = m.dir * px(LUNGE_PX)
@@ -310,6 +327,14 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0;${dx} 0;0 0" keyTimes="0;${out};${Number((1 - out).toFixed(3))};1" begin="${begin(m)}" dur="${dur(m)}"/>`
     }
     return null
+  }
+  /**
+   * A huddle's slide on a member's group, as a translate summed with its place: from where the
+   * slide starts to where it ends, held there.
+   */
+  const slideAnim = (actor: StageActor, m: HuddleMotion): string => {
+    const dx = (m.dir === 'in' ? 1 : -1) * (actor.huddle?.dx ?? 0)
+    return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${dx} 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
   }
   const ground = px(2)
 
@@ -331,7 +356,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${paint(model.ground)}"/>`,
   ]
   const base = new Map<string, { x: number; y: number; actor: StageActor }>()
-  /** Guard's shield on the flat Svg: drawn over every actor. */
+  /** Guard's shield on the flat Svg, white while a hit lands on it: drawn over every actor. */
   const marks: string[] = []
 
   /** Enrage's red is in the document: its filter goes in the defs. */
@@ -395,9 +420,28 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       .join(' ')
     return `<use href="#${define(shown.art, slot)}"${t ? ` transform="${t}"` : ''}${color}${filt}/>`
   }
-  /** A mark drawn with an actor (Haste's streak, Guard's shield), from its idle top-left. */
+  /** A mark drawn with an actor (Haste's speed lines, Guard's shield), from its idle top-left. */
   const markUse = (m: Mark | null | undefined): string =>
     m ? `<use href="#${define(m.art, null)}" transform="translate(${m.dx} ${m.dy})"/>` : ''
+  /** The hits Guard's shield takes: each hero's white flash, whoever it struck. */
+  const heroes = new Set(model.actors.filter((a) => a.flipX).map((a) => a.key))
+  const blows = live.filter((m) => m.kind === 'flash' && heroes.has(m.actor))
+  /**
+   * Guard's shield under SMIL, from its holder's idle top-left: white over each hit's blink (`blink`
+   * of the flash, the whole flash on the compact stage), as the struck hero's own.
+   */
+  const shieldMarkup = (m: ShieldMark | null | undefined, blink: (f: Motion) => string): string => {
+    if (!m) return ''
+    const t = `transform="translate(${m.dx} ${m.dy})"`
+    const id = define(m.art, null)
+    const flashes = blows
+      .map(
+        (f) =>
+          `<use href="#${id}" ${t} filter="url(#${ID.flash})" opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin(f)}" dur="${blink(f)}"/></use>`,
+      )
+      .join('')
+    return `<use href="#${id}" ${t}/>${flashes}`
+  }
   /**
    * The bob's frame of an actor: its own, or (a hand-built actor) the plain one unless it holds
    * still; none from the ladder's second rung.
@@ -421,8 +465,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       .join('')
 
   /** The 1.5x actor under SMIL: the idle pair on the bob's clock, the frames in use over it. */
-  const hiresActor = (actor: StageActor, mine: readonly Motion[], x: number): string => {
-    const anim: string[] = []
+  const hiresActor = (
+    actor: StageActor,
+    mine: readonly Motion[],
+    x: number,
+    slides: readonly HuddleMotion[],
+  ): string => {
+    const anim: string[] = slides.map((m) => slideAnim(actor, m))
     for (const m of mine) {
       const move = moveAnim(m)
       if (move !== null) {
@@ -437,7 +486,9 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         )
       }
     }
-    const spans = actor.fallen ? [] : poseSpans(framesInUse(mine, opts.now), opts.now)
+    const spans = actor.fallen
+      ? []
+      : poseSpans([...framesInUse(mine, opts.now), ...slides], opts.now)
     const hide = spans
       .map(
         (sp) =>
@@ -451,8 +502,9 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     const tints = tintSets(mine)
     const tinted = (pose: Pose) =>
       tints ? `<g opacity="0">${tints}${poseMarkup(actor, pose, 'redflash')}</g>` : ''
-    // Haste's streak trails the idle pair, under it.
-    const streak = markUse(actor.fallen ? null : actor.streak)
+    // Haste's speed lines trail the idle pair under it, a pattern per frame.
+    const lines = actor.fallen ? null : actor.speedLines
+    const [linesA, linesB] = [markUse(lines?.[0]), markUse(lines?.[1])]
     if (bobMs !== null) {
       // Discrete on the bob's clock (1 s, or half that hasted), B in the second half; begun whole
       // periods early so any pose span (always later) outranks it.
@@ -461,13 +513,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       const clock = (values: string) =>
         `<animate attributeName="visibility" values="${values}" calcMode="discrete" begin="${start}" dur="${seconds(period)}" repeatCount="indefinite"/>`
       parts.push(
-        `<g>${clock('visible;hidden')}${hide}${streak}${poseMarkup(actor, 'idle', null)}${tinted('idle')}</g>`,
+        `<g>${clock('visible;hidden')}${hide}${linesA}${poseMarkup(actor, 'idle', null)}${tinted('idle')}</g>`,
       )
       parts.push(
-        `<g visibility="hidden">${clock('hidden;visible')}${hide}${streak}${poseMarkup(actor, 'idle_b', null)}${tinted('idle_b')}</g>`,
+        `<g visibility="hidden">${clock('hidden;visible')}${hide}${linesB}${poseMarkup(actor, 'idle_b', null)}${tinted('idle_b')}</g>`,
       )
     } else {
-      const under = rest === 'idle' ? streak : ''
+      const under = rest === 'idle' ? linesA : ''
       parts.push(`<g>${hide}${under}${poseMarkup(actor, rest, null)}${tinted(rest)}</g>`)
     }
     const byPose = new Map<Pose, string[]>()
@@ -494,7 +546,8 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       )
     }
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
-    return `<g transform="translate(${x} ${actor.y})"${op}>${anim.join('')}${parts.join('')}${markUse(actor.shield)}</g>`
+    const shield = shieldMarkup(actor.shield, () => seconds(BLINK_MS))
+    return `<g transform="translate(${x} ${actor.y})"${op}>${anim.join('')}${parts.join('')}${shield}</g>`
   }
 
   for (const actor of model.actors) {
@@ -527,11 +580,12 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         goldUse: `<use href="#${id}"${flip} filter="url(#${ID.goldflash})"`,
       }
     }
-    // Haste's streak, drawn under the idle pair from the idle's place.
+    // Haste's speed lines, drawn under the idle pair from the idle's place: idle B's pattern while
+    // it shows, idle A's otherwise.
     const resting = actor.pose === 'idle' || actor.pose === 'idle_b'
-    const streakAt = (x: number, y: number) =>
-      actor.streak && resting
-        ? `<g transform="translate(${x} ${y})">${markUse(actor.streak)}</g>`
+    const linesAt = (x: number, y: number) =>
+      actor.speedLines && resting
+        ? `<g transform="translate(${x} ${y})">${markUse(actor.speedLines[actor.pose === 'idle_b' && !held ? 1 : 0])}</g>`
         : ''
 
     if (!opts.smil) {
@@ -549,27 +603,51 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       const dx = actor.poses[held ? 'idle' : actor.pose].dx
       const hit = hitLit && actor.pose === 'hit' ? ` filter="url(#${ID.hit})"` : ''
       const drawn = hit ? `<g${hit}>${use}</g>` : use
-      body.push(streakAt(actor.x, actor.y))
+      body.push(linesAt(actor.x, actor.y))
       body.push(
         `<g transform="translate(${actor.x + dx} ${actor.y})"${op}>${drawn}${flash}${enraged}</g>`,
       )
-      if (actor.shield)
-        marks.push(`<g transform="translate(${actor.x} ${actor.y})">${markUse(actor.shield)}</g>`)
+      const shield = actor.shield
+      if (shield) {
+        const white = shield.flashing
+          ? `<use href="#${define(shield.art, null)}" transform="translate(${shield.dx} ${shield.dy})" filter="url(#${ID.flash})"/>`
+          : ''
+        marks.push(`<g transform="translate(${actor.x} ${actor.y})">${markUse(shield)}${white}</g>`)
+      }
       base.set(actor.key, { x: actor.x, y: actor.y, actor })
       continue
     }
 
-    // Back out the offsets the model baked in at `now`; the animations reapply them.
+    // Back out the offsets the model baked in at `now`; the animations reapply them. A huddle
+    // member stands where its first slide still to end starts, and each slide moves it on.
     const started = (kind: Motion['kind']) =>
       mine.find((m) => m.kind === kind && m.from <= opts.now)
+    const huddle = actor.huddle
+    const slides = huddle
+      ? live
+          .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.members.includes(actor.key))
+          .sort((a, b) => a.from - b.from)
+      : []
+    const first = slides[0]
+    const huddled =
+      huddle && first
+        ? Math.round(huddle.dx * huddle.share) - (first.dir === 'in' ? 0 : huddle.dx)
+        : 0
     const x =
       actor.x -
+      huddled -
       actionOffset(started('step'), started('lunge'), opts.now, scale) -
-      travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx
+      travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx -
+      campWalkAt(
+        mine.find((m) => m.kind === 'camp_leave'),
+        mine.find((m) => m.kind === 'camp_return'),
+        opts.now,
+        scale,
+      ).dx
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
-      body.push(hiresActor(actor, mine, x))
+      body.push(hiresActor(actor, mine, x, slides))
       continue
     }
     const { use, flashUse, redUse, goldUse } = drawNow()
@@ -614,7 +692,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     const tinted = tints ? `${redUse} opacity="0">${tints}</use>` : ''
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     body.push(
-      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${actor.fallen ? '' : markUse(actor.streak)}${use}${tinted}${flashes}${markUse(actor.shield)}</g>`,
+      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${use}${tinted}${flashes}${shieldMarkup(actor.shield, dur)}</g>`,
     )
   }
   body.push(...marks)
@@ -704,12 +782,17 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         continue
       }
       if (m.kind === 'campfire') {
-        // It sits CAMPFIRE_MS from its start, then fades; hidden until it is lit.
+        // Hidden until it is lit; then it burns until its fade, or for good while the camp holds.
         const fire = model.campfire
         if (!fire) continue
-        const sit = Number((CAMPFIRE_MS / (m.until - m.from)).toFixed(3))
+        const use = `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})" opacity="0">`
+        if (!Number.isFinite(m.until)) {
+          effects.push(`${use}<set attributeName="opacity" to="1" begin="${begin(m)}"/></use>`)
+          continue
+        }
+        const sit = Number(((m.fade - m.from) / (m.until - m.from)).toFixed(3))
         effects.push(
-          `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;${sit};1" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
+          `${use}<animate attributeName="opacity" values="1;1;0" keyTimes="0;${sit};1" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
         )
         continue
       }
@@ -759,6 +842,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
           `<g transform="translate(${start.x} ${start.y})" opacity="0"><animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/>${fly}<use href="#${define(art, null)}"${flip}/></g>`,
         )
       }
+    }
+    // A party first drawn camping sits at the state's fire: lit, with no motion to animate.
+    const fire = model.campfire
+    if (fire && !live.some((m) => m.kind === 'campfire')) {
+      effects.push(
+        `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})"/>`,
+      )
     }
     body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }

@@ -1,4 +1,4 @@
-export const SIM_VERSION = 18 as const
+export const SIM_VERSION = 19 as const
 
 export type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
 export const RARITIES: readonly Rarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary']
@@ -127,7 +127,8 @@ export type PlayerEvent =
   /** Moves the party to a zone it has reached, ending the fight with no drops and no XP. */
   | { t: 'travel'; zone: number }
   | { t: 'tool_mishap' }
-  | { t: 'camp' }
+  /** On makes camp and off breaks it; absent reads as on, as every camp logged before it does. */
+  | { t: 'camp'; on?: boolean }
   | { t: 'guard'; on: boolean }
   | { t: 'equip'; heroId: string; itemId: string }
   | { t: 'unequip'; heroId: string; slot: Slot }
@@ -253,8 +254,11 @@ export type Effect =
   | { k: 'enraged'; enemyId: string }
   /** A raging zone boss's HP went under half at this hit: its hits land half again as hard from here. */
   | { k: 'raging'; enemyId: string }
-  /** The party camped: each party hero and the HP it restored. */
-  | { k: 'camp'; heals: { heroId: string; amount: number }[] }
+  /**
+   * Camp: `on: true` with the heals on making camp, `on: false` with no heals on breaking it, and
+   * no `on` with the heals on a camp with a world boss engaged, which heals and pauses nothing.
+   */
+  | { k: 'camp'; on?: boolean; heals: { heroId: string; amount: number }[] }
 
 export type GameState = {
   v: typeof SIM_VERSION
@@ -285,6 +289,8 @@ export type GameState = {
   hasteTicks: number
   /** Ticks of Guard left; 0 is off. Set by guard on, cleared by guard off and rest. */
   guardTicks: number
+  /** Camped: the fight is held and a tick passes with nothing done. Set by camp on, cleared by a break. */
+  camp: boolean
   lootLog: LootEntry[]
   stats: { kills: number; bosses: number; wipes: number }
   tallies: Tallies

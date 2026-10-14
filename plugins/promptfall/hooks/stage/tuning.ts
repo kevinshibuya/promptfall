@@ -105,6 +105,15 @@ export const HASTE_FRAME_MS = IDLE_FRAME_MS / 2
 /** Camp's campfire: it sits between the lines this long, then fades. */
 export const CAMPFIRE_MS = 4000
 export const CAMPFIRE_FADE_MS = 400
+/**
+ * Guard's huddle: every living hero slides between its slot and its huddle position over this
+ * one span, so they arrive together, and stands HUDDLE_GAP_PX stage pixels clear of the hero
+ * before it (unscaled: one pixel of the scene it is drawn in).
+ */
+export const HUDDLE_MS = 200
+export const HUDDLE_GAP_PX = 1
+/** Guard's big shield: its back edge covers this many columns of its holder's front. */
+export const SHIELD_OVERLAP_PX = 1
 export const EVENT_FRAME_MS = 83
 /**
  * A travel: the heroes step off toward the right and fade over TRAVEL_OFF_MS, the backdrop
@@ -205,7 +214,7 @@ export const ZONE_GROUND: readonly number[] = [
   0xe8e4d8, // The Unwritten Reach
 ]
 export const FLASH_RGB = 0xffffff
-/** Each class's colour, from its sprite's accent: Haste's speed streak behind the hero. */
+/** Each class's colour, from its sprite's accent: Haste's speed lines behind the hero, tinted light. */
 export const CLASS_RGB: Readonly<Record<string, number>> = {
   knight: 0xe04030,
   black_mage: 0x9050e0,

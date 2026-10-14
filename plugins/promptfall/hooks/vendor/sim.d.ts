@@ -27,7 +27,7 @@ declare const SPAWN_GAUGE_MAX = 5000;
 /** Gauge gained per step at this speed, never below 1. */
 declare function fill(spd: number): number;
 
-declare const SIM_VERSION: 18;
+declare const SIM_VERSION: 19;
 type Rarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary';
 declare const RARITIES: readonly Rarity[];
 type HeroClass = 'knight' | 'black_mage' | 'white_mage' | 'archer';
@@ -189,8 +189,11 @@ type PlayerEvent = {
     zone: number;
 } | {
     t: 'tool_mishap';
-} | {
+}
+/** On makes camp and off breaks it; absent reads as on, as every camp logged before it does. */
+ | {
     t: 'camp';
+    on?: boolean;
 } | {
     t: 'guard';
     on: boolean;
@@ -446,9 +449,13 @@ type Effect = {
     k: 'raging';
     enemyId: string;
 }
-/** The party camped: each party hero and the HP it restored. */
+/**
+ * Camp: `on: true` with the heals on making camp, `on: false` with no heals on breaking it, and
+ * no `on` with the heals on a camp with a world boss engaged, which heals and pauses nothing.
+ */
  | {
     k: 'camp';
+    on?: boolean;
     heals: {
         heroId: string;
         amount: number;
@@ -483,6 +490,8 @@ type GameState = {
     hasteTicks: number;
     /** Ticks of Guard left; 0 is off. Set by guard on, cleared by guard off and rest. */
     guardTicks: number;
+    /** Camped: the fight is held and a tick passes with nothing done. Set by camp on, cleared by a break. */
+    camp: boolean;
     lootLog: LootEntry[];
     stats: {
         kills: number;
@@ -796,7 +805,7 @@ declare const GOLDEN_SEED = 20261002;
 declare function goldenEvents(options?: {
     boss?: boolean;
 }): Event[];
-declare const GOLDEN_HASH = "9856df8da655c357";
+declare const GOLDEN_HASH = "9054f86741bb1a2d";
 
 declare function hashState(state: GameState): string;
 
@@ -869,7 +878,7 @@ declare function heroStats(state: GameState, hero: Hero): Stats;
 /** A zone's third wipe with no boss kill between them is a retreat. */
 declare const RETREAT_AT = 3;
 
-/** A hero's gauge gained per step as the battle fills it: zero while guarding, scaled while hasted. */
+/** A hero's gauge gained per step as the battle fills it: zero while guarding or camped, scaled while hasted. */
 declare function heroFill(s: GameState, hero: Hero): number;
 
 declare function createInitialState(seed: number): GameState;

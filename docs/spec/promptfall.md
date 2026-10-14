@@ -3,7 +3,8 @@
 Decided in a grilling session on 2026-10-02; amended for phase 2 on 2026-10-03, for
 phase 3 on 2026-10-03, for phase 4 on 2026-10-04, for the staged state on
 2026-10-09, for the curve on 2026-10-12, for sound on 2026-10-12, for the
-reactive events on 2026-10-12 and for the pull on 2026-10-13. Every
+reactive events on 2026-10-12, for the pull on 2026-10-13 and for the reactive
+revamp on 2026-10-14. Every
 section is a decision, not a proposal. A change here is a change of contract and goes
 through the same gate.
 
@@ -145,9 +146,9 @@ Checked against Claude Code v2.1.287's mods API.
   (§10). **A reactive event shapes the fight and never the reward.** Four are
   player events of their own, `turn_start`, `tool_mishap`, `camp` and `guard`
   (carrying on or off); the fifth is a hint on `tool_call`. The state holds a
-  haste countdown and a guard countdown in ticks (zero is off) and each enemy
-  an enraged flag; a save migrated from before them starts with both
-  countdowns at zero and no enemy enraged. The plugin raises them from Claude
+  haste countdown and a guard countdown in ticks (zero is off), a camp flag,
+  and each enemy an enraged flag; a save migrated from before them starts with
+  both countdowns at zero, not camped, and no enemy enraged. The plugin raises them from Claude
   Code's hooks; hooks fire in every session, and only the primary records
   them, as it does every event.
   - **Haste**, while a turn runs. `turn_start` sets the haste countdown to 90
@@ -182,22 +183,52 @@ Checked against Claude Code v2.1.287's mods API.
     rate, and an unhinted zone pays on average the base, less at most the one
     unit the floor drops per kind. Rarity weights, boss multiples, boss drop
     chances and boss drop tables are untouched.
-  - **Enrage**, on a failed tool call. `tool_mishap` enrages the front enemy,
-    the first in the encounter's line, the engaged world boss included, and
-    emits an enraged effect naming it. Its next attack uses its attack stat
+  - **Enrage**, on a failed tool call. `tool_mishap` enrages the
+    strongest living enemy on the field: the highest by kind (world boss, zone boss, turn boss,
+    then a wave enemy), then the highest attack as the sim's stats give it (a
+    world boss by the engaged boss's scaled stats), then the highest max HP,
+    then the front-most. The queue never counts. It emits an enraged effect
+    naming the pick. Its next attack uses its attack stat
     scaled by 15,000 basis points (`ENRAGE_BP`), floored, in place of its own,
     through the same variance, mitigation and doubling; then the flag clears.
     An enemy that dies enraged takes its flag with it. A mishap on an empty
-    field, or on an enemy already enraged, does nothing. The plugin sends it
+    field, on a pick already enraged (no fall-through to the next strongest),
+    or while camped does nothing. The plugin sends it
     from the classic post-tool-failure hook, at most one per 5 seconds, never
     for an interrupt by the user nor for a call the permission-denied hook
     named; a user's no at a prompt raises no failure hook at all.
-  - **Camp**, on a compaction. `camp` heals every party hero 50% of max HP and
-    revives the fallen at 50%, exactly as a rest heals, in boss mode in place,
-    and emits a camp effect carrying each hero's id and heal. It leaves Haste
-    and Guard alone. The plugin sends it from the classic post-compaction hook,
-    manual and auto alike, at most one per minute; the engine raises no such
-    hook for its own precompute or a forked compaction.
+  - **Camp**, on a compaction. `camp` carries an optional on, like `guard`;
+    a `camp` without it reads as on. `camp` on heals every party hero 50% of
+    max HP and revives the fallen at 50%, exactly as a rest heals, in place,
+    sets the camp flag and emits a camp effect with on and each hero's id and
+    heal. The encounter, its queue, the gauges, the action queue and the busy
+    counter are held as they are. While camped a tick does nothing: no refill,
+    no battle, no spawn, no countdown, and a hero's per-step fill reads zero.
+    `guard` on and off, equips, vendoring, market and farm events run as
+    always. Camp breaks, clearing the flag and emitting a camp effect with on
+    false and no heals before the event's own work, on the four events that
+    keep the encounter, `camp` off, `rest`, `turn_start` and `tool_call`,
+    after which the next tick fights on from the held gauges and queue, and
+    on any event that ends or replaces the encounter: `travel`,
+    `boss_engaged`, `sandbox_boss`, `sandbox_zone` and `sandbox_wipe`. A
+    refused event breaks nothing. `camp` on while camped and `camp` off while
+    not camped are no-ops. With a world boss engaged, `camp` on heals, sets
+    nothing and emits the camp effect with the heals and no on: no pause.
+    Camp leaves Haste and Guard as they are. Haste never starts while
+    camped, since the `turn_start` that would start it breaks camp first; one
+    already on when camp is made waits with its countdown frozen, as every
+    countdown is, and shows no speed lines at the fire (§10). `guard` on and
+    off set and clear the guard countdown while camped, and the stage shows
+    the stance alone. The plugin sends `camp` on from the engine's `session.compact`
+    hook, which fires as a compaction is about to run, when its trigger is
+    manual, auto or plugin and it carries no agent id (the engine's precompute
+    and a fork's own compaction send nothing), at most one per minute. It sends
+    `camp` off unpaced from the band's `g`, `/promptfall go`, the session's
+    end when its process ends (not on a clear or a resume) and a primary
+    stepping aside because it draws nowhere, each only while the party camps,
+    so once per camp. The step-aside is what carries `/exit`: its teardown
+    draws nowhere for seconds before the session ends, and the end then finds
+    a secondary.
   - **Guard**, while a permission prompt waits. `guard` on sets the guard
     countdown to 60 ticks (2 minutes of battle); `guard` off, `rest` and the
     tick that takes it to zero end it; on while on, or off while off, is a
@@ -217,7 +248,10 @@ Checked against Claude Code v2.1.287's mods API.
     resolving under a showing prompt lowers the guard early.
   - The plugin drops a reactive event sent faster than its pace, since a
     dropped one loses a flash at most, and its paces sit under the server's
-    buckets (§7). Any later reactive event passes ADR 0014's test before it is
+    buckets (§7). `camp` off has no pace: the plugin applies it only while
+    the engine's own state says camping, read before any await, so two
+    breaks at once send one off and a camp spends one on and one off. The
+    band's `g` reads the clock at the keypress, not at its last draw. Any later reactive event passes ADR 0014's test before it is
     designed: if faking it would pay, it is not a reactive event. A summon on a
     subagent start fails it and stays out.
 
@@ -596,11 +630,13 @@ market listing fee, 5 percent market sale fee.
   reactive events (§4.1) have four buckets of their own, so a flood of claimed
   compactions heals the party no faster than a flood of prompts: `turn_start`
   and `tool_mishap` at one per 5 seconds with the turn ends' capacity of 30,
-  `camp` at one per minute with a capacity of 5, and `guard` at one per 2
+  `camp` at one per 30 seconds with a capacity of 10, since a compaction
+  spends an on and an off, and `guard` at one per 2
   seconds with a capacity of 60, since every prompt costs an on and an off
   (`BUDGETS` in `@promptfall/protocol`). `travel` (§4.2) has its own bucket,
   capped as a rest is, one per 5 seconds with a capacity of 30. A record from
-  before a bucket gets it full on its first load. A batch over any bucket is rejected
+  before a bucket gets it full on its first load; one from before a bucket's
+  resize keeps its count and refills to the new capacity. A batch over any bucket is rejected
   whole, and the player sees a resync. Since a human paces only rests and
   prompts, the plugin paces the reactive events itself, under the buckets: a
   turn's `turn_start` refresh at most once per 60 seconds after its start,
@@ -903,7 +939,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
   the message window's command line (`▶Party Loot World ▾`). `c` collapses, `f`
-  toggles farm. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
+  toggles farm, and `g`, shown and bound only while the view says camping,
+  breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
   zero-width Box; VS Code and mobile show them as a row under the strip.
 - Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010), the
@@ -923,6 +960,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
   view's `zoneWipes` out of the sim's `RETREAT_AT`, never staged, left out in
   boss mode).
+  While the view says camping the enemy window keeps its title and footer and
+  draws its rows blank but for a dim `camping` on the first; the message
+  window shows `g: back to the fight` in the row a notice takes, a hotspot as
+  `f` is, under the newest log line clipped to one row, and the desktop's
+  track types nothing; the compact window shows the dim `camping` in place of
+  the front enemy. A notice wins its row in both. Goldens `strip-camping` and
+  `strip-compact-camping` pin them.
   Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
   the last two drops, or the World rows. While `hasSurvey` the band stays up at
@@ -1056,11 +1100,20 @@ flags. No second server program, no Postgres, no Redis, no worker.
   table and the cue set are unchanged. Spawn by tool kind shows as the enemy
   that walks in and has no line of its own. The other four:
   - **Haste**: while the view says a hero is hasted its idle bob runs on a
-    250 ms clock instead of 500 ms, and on the full stage, on every surface, it
-    trails a streak two pixels tall in its class colour (`CLASS_RGB`) behind its
-    back; on the compact stage the faster bob alone. The streak
-    follows the state, so it holds across ticks and goes when Haste ends; under
-    Motion still it draws and the bob stays stopped. The party window's gauges
+    250 ms clock (`HASTE_FRAME_MS`) instead of 500 ms, and on the full stage,
+    on every surface, each hasted living hero trails its speed lines: three
+    or four horizontal runs of uneven length from its back across its height,
+    in its class colour (`CLASS_RGB`) mixed toward white, lighter toward the
+    tail (`SPEED_LINES` in `stage/model.ts`). The lines are a mark of the
+    hero, drawn from its art box, so they move with it and never sit loose
+    between two heroes. They have a pattern per bob frame and so flicker on
+    the hasted bob's clock; the SMIL picture carries the two patterns on the
+    bob's discrete clock, as it does the idle pair. They draw only with the
+    idle pair: none on a fallen hero, in the guard stance, in an action's or
+    the hit's frames, or while the party camps. On the compact stage the
+    faster bob alone. The lines follow the state, so they hold across ticks
+    and go when Haste ends; under Motion still the first pattern draws static
+    and the bob stays stopped. The party window's gauges
     fill at the sim's effective per-step rate (`heroFill`, Haste and Guard
     applied), so the strip agrees with the stage.
   - **Enrage**: at the mishap the enemy flashes red, the white flash's
@@ -1072,27 +1125,68 @@ flags. No second server program, no Postgres, no Redis, no worker.
     the flag in the tick that resolves the hit, before the stage plays it, so
     the timeline holds the tint to that hit's show time, and drops it when the
     enemy departs or a later view no longer has it enraged.
-  - **Camp**: the `effect:campfire` sprite, its 1.5× art (its compact art on
-    the compact stage), sits on the
-    ground between the enemies' line and the party for 4 seconds, then fades
-    over 400 ms; each hero's heal lands at the camp's start with a green
-    rising number, from the amounts the effect carries.
+  - **Camp** pauses the fight on the stage. On a camp effect with on, each
+    enemy walks off toward its own edge, the spawn's walk played backward
+    over the spawn's span (`camp_leave`), and none draws while the view says
+    camping; the living heroes huddle toward the front living hero with
+    Guard's huddle motion; the `effect:campfire` sprite, its 1.5× art (its
+    compact art on the compact stage), stands on the ground a hero's width in
+    front of the front living hero and burns for the whole camp with no
+    fade; each hero's heal lands with a green rising number, from the amounts
+    the effect carries. The bob stops while camping (idle A), so Motion still
+    changes nothing. On a camp effect with on false the party breaks camp:
+    the fire fades over 400 ms (`CAMPFIRE_FADE_MS`), the heroes step back to
+    their slots with the huddle's reverse, and the held enemies walk back in
+    from their edge with the spawn's walk (`camp_return`), in their held
+    order with their HP as held; an enemy the break's view no longer lists
+    never returns. A camp effect with no on (a world boss engaged) sets the
+    fire on the ground between the enemies' line and the party for 4 seconds
+    (`CAMPFIRE_MS`), then fades it over 400 ms, and pauses nothing. The
+    strip's camping rows are the band's (above).
   - **Guard**: while the view says the party is guarding, each hero holds the
     `guard` pose derived from its idle (`stance()` in `sprites/derive.ts`: a
     one-row squash leaned one column per 12 rows toward the enemies, feet kept,
     no drawn frame, within ADR 0007) and the idle bob stops; a hit still shows
-    the hit frame. On the full stage, on every surface, a small shield drawn in
-    code sits over the party's front hero, its first hero standing; on the
-    compact stage the stance alone.
-  - The log prints six lines for four effects, each at its effect's time and
+    the hit frame. On the full stage, on every surface, the living heroes
+    huddle: the front living hero keeps its slot and each living hero behind
+    it stands with its figure `HUDDLE_GAP_PX` (one pixel) behind the figure
+    before it, in party order. The huddle's members are fixed at guard-on, so
+    the fallen keep their slots and a hero that falls under Guard shifts
+    nobody; a hero camp's heal raises while Guard holds the huddle joins it
+    at once, the members behind it making room in that frame. On the guard effect with on the timeline slides each member from
+    its slot to its huddle position in idle A over `HUDDLE_MS` (200 ms), one
+    span for all so they arrive together, and on the guard effect with off
+    the reverse; a slide turned before it ends goes back from where the
+    party stands, as one slide backdated to that share, so the pictures
+    agree. The SMIL picture carries the slide as a frozen translate. A
+    party first drawn guarding stands huddled with no motion. The front
+    living hero holds the big shield, the `effect:shield` sprite (1.5× and
+    1× art, about a hero's height), on the enemies' side: its bottom at the
+    hero's feet, its back edge over the hero's front by `SHIELD_OVERLAP_PX`,
+    drawn over the hero. When it falls the next hero standing takes the
+    shield at once, with no motion. A hit on any guarding hero lands on the
+    shield: the shield flashes white in the struck hero's flash while that
+    hero shows its hit frame and the damage number rises from it. On the
+    compact stage the front hero holds the 1× shield in the stance, with no
+    huddle to show. While camping Guard is the stance alone: the party is
+    already huddled and there is nothing to block.
+  - The log prints seven lines for four effects, each at its effect's time and
     keyed as a line that is never dropped: "The party quickens." and "The
     party slows." for haste on and off; "Claude stumbles. Wood Goblin is
     enraged!", naming the enemy; "The party makes camp while Claude gathers
-    its thoughts."; "The party stands guard." and "The party lowers its
+    its thoughts." on a camp's heal and "The party breaks camp." when it
+    breaks, a break lighting no campfire; "The party stands guard." and "The party lowers its
     guard." for guard on and off.
-  - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
-    on every surface (the Raster, the Image and the SMIL picture), under the
-    size caps.
+  - Each visual has golden scenarios on every surface (the Raster, the Image
+    and the SMIL picture), under the size caps: `haste` (a fallen hero with no
+    lines), `enrage` (the bandit captain behind a field rat), `camp`,
+    `camp-break`, `camp-boss`, `guard`, `guard-huddle` and `guard-hit`, and on
+    the compact stage `compact-guard` and `compact-camping`.
+    `pnpm stage:parity` lays three across the three surfaces for the eye:
+    `parity-haste` over two hasted bob frames, its desktop row the static
+    first pattern by design and labelled so, `parity-guard` over the huddle
+    in and the hit on the shield, and `parity-camp` over `camp_leave` and
+    `camp_return`.
 - Stage moments and lines of the pull (spec #132). Each has a golden
   scenario, `travel`, `level-up`, `victory`, `boss-kill-travel` and
   `boss_move`, on every surface (the Raster, the Image and the SMIL picture),
@@ -1270,7 +1364,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   view exists the pane says Promptfall has not started, and Account still
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag. `/promptfall journal` opens the pane on the Journal.
+  toggles the farm flag. `/promptfall go` breaks camp as `g` does and answers
+  "Back to the fight.", or "The party is not camping." when it is not. `/promptfall journal` opens the pane on the Journal.
   `/promptfall travel <zone>` sends `travel` (§4.2) and answers
   "The party travels to zone 3, Marsh of Sighs." or the refusal in words: a
   zone that is not a number answers the usage, one past the highest reached
