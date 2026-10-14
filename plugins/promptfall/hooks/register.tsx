@@ -883,6 +883,9 @@ class GameSession implements GameHandle {
     this.steppingAside = true
     try {
       const held = await holds(this.kv, this.owner)
+      // The party is out of camp when this process stops playing: /exit's teardown draws
+      // nowhere before the session ends, so the end's own break would find a secondary.
+      if (held) await this.breakCamp(await this.io.now())
       if (held) await this.engine.flush()
       await this.becomeSecondary()
       if (held) await release(this.kv, this.owner)

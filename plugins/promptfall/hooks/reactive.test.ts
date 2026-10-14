@@ -1,4 +1,4 @@
-import type { On, SessionMessage, ToolCallResult } from 'claude-code'
+import type { On, RenderSurface, SessionMessage, ToolCallResult } from 'claude-code'
 import { type Engine, expect, mock, type Plugin } from 'claude-code/testing'
 import { BAND, RUN } from './inplay/harness'
 import { test } from './testing'
@@ -286,6 +286,20 @@ test('the session’s end breaks camp only while camping, and a clear or a resum
   await $.tool.call({ tool: 'Bash', command: 'make' })
   await quit($)
   expect(reactive(sent)).toEqual(['camp on', 'camp on'])
+})
+
+test('an exit whose teardown draws nowhere before the session ends still breaks camp', async ($, on) => {
+  const { sent, time } = playing(on)
+  const drawn = { surfaces: ['terminal'] as RenderSurface[] }
+  on('session.surfaces', () => ({ value: drawn.surfaces }))
+  await start($)
+  await compact($, 'manual')
+  // /exit's teardown, seen live: the REPL draws on nothing for seconds before the session ends,
+  // so the primary steps aside first and the end finds a secondary.
+  drawn.surfaces = []
+  await time.advance(5_000)
+  await quit($)
+  expect(reactive(sent)).toEqual(['camp on', 'camp off'])
 })
 
 test('g breaks camp at the keypress, not at the band’s last draw', async ($, on) => {
