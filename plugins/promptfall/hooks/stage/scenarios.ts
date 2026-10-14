@@ -540,6 +540,8 @@ export const STRIP_SCENARIOS = [
   'strip-world',
   'strip-notice',
   'strip-waiting',
+  'strip-camping',
+  'strip-compact-camping',
 ] as const
 export type StripScenario = (typeof STRIP_SCENARIOS)[number]
 export type StripGolden = {
@@ -666,7 +668,23 @@ export function strip(name: StripScenario): StripInput {
     // Three on the field and four queued behind them, in a zone the party has fallen in once.
     case 'strip-waiting':
       return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
+    // The party camps: the encounter held with two queued behind it, the log's newest line the camp's.
+    case 'strip-camping':
+      return camping({})
+    case 'strip-compact-camping':
+      return camping({ kind: 'compact', columns: 110 })
   }
+}
+
+/** A camp made after the burst: its heal lands and the log says so, the encounter held. */
+function camping(patch: Partial<StripInput>): StripInput {
+  const v = { ...wave(), camping: true, waiting: 2 }
+  const heals = v.heroes.map((h) => ({ heroId: h.id, amount: 0 }))
+  return stripInput(v, patch, [
+    { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'h1', target: v.enemies[0]?.id ?? 'e1', amount: 12 },
+    { k: 'camp', on: true, heals },
+  ])
 }
 
 /**

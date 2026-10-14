@@ -1,5 +1,7 @@
+import type { SessionMessage } from 'claude-code'
 import { describe, expect, type TestBody } from 'claude-code/testing'
 import type { WorldState } from '../types'
+import { commandSpec } from './command'
 import { BAND, harness, PAST_GRID_BOSS, RUN, sandboxOn, stripText } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { bandKey, stageKey } from './stage/loop'
@@ -65,6 +67,34 @@ test('/promptfall farm toggles the farm flag', async ($, on) => {
   expect((states.get('view') as { farm: boolean }).farm).toBe(true)
 })
 
+/** A compaction of the main conversation, the party camping: past the grid boss, which would hold it. */
+async function camped($: Parameters<TestBody>[0], on: Parameters<TestBody>[1]) {
+  const h = harness(on, {}, {}, PAST_GRID_BOSS)
+  const message = { role: 'user', text: 'the story so far', toolUses: [] } as SessionMessage
+  on('session.compact', () => ({ messages: [message] }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  await $.session.compact({ trigger: 'manual', messages: [message] })
+  await h.clock.advance(1)
+  return h
+}
+
+test('/promptfall go breaks camp and answers; out of camp it says the party is not camping', async ($, on) => {
+  const { view, clock } = await camped($, on)
+  expect(view().camping).toBe(true)
+  const go = await $.command.run({ ...RUN, command: 'promptfall', args: 'go' })
+  expect(go.text).toBe('Back to the fight.')
+  expect(view().camping).toBe(false)
+  await clock.advance(1)
+  const again = await $.command.run({ ...RUN, command: 'promptfall', args: 'go' })
+  expect(again.text).toBe('The party is not camping.')
+  expect(view().camping).toBe(false)
+})
+
+test('the command names go in its hint and description', () => {
+  expect(commandSpec(false).argumentHint).toContain('|go|')
+  expect(commandSpec(false).description).toContain('go')
+})
+
 test('/promptfall autovendor on|off sets the setting and answers; a bad word answers the usage', async ($, on) => {
   const { states } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -117,6 +147,7 @@ test('a paused primary answers farm and the sandbox verbs as paused, not as anot
   const base = Object.values(content.itemBases)[0]?.id ?? ''
   const verbs = [
     'farm',
+    'go',
     'autovendor on',
     'sandbox gold 100',
     `sandbox boss ${zoneBoss}`,

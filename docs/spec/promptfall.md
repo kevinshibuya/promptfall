@@ -212,9 +212,13 @@ Checked against Claude Code v2.1.287's mods API.
     and queue. `camp` on while camped and `camp` off while not camped are
     no-ops. With a world boss engaged, `camp` on heals, sets nothing and emits
     the camp effect with the heals and no on: no pause. It leaves Haste and
-    Guard alone. The plugin sends it from the classic post-compaction hook,
-    manual and auto alike, at most one per minute; the engine raises no such
-    hook for its own precompute or a forked compaction.
+    Guard alone. The plugin sends `camp` on from the engine's `session.compact`
+    hook, which fires as a compaction is about to run, when its trigger is
+    manual, auto or plugin and it carries no agent id (the engine's precompute
+    and a fork's own compaction send nothing), at most one per minute. It sends
+    `camp` off unpaced from the band's `g`, `/promptfall go` and the session's
+    end when its process ends (not on a clear or a resume), each only while the
+    view says camping, so once per camp.
   - **Guard**, while a permission prompt waits. `guard` on sets the guard
     countdown to 60 ticks (2 minutes of battle); `guard` off, `rest` and the
     tick that takes it to zero end it; on while on, or off while off, is a
@@ -922,7 +926,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
   the message window's command line (`▶Party Loot World ▾`). `c` collapses, `f`
-  toggles farm. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
+  toggles farm, and `g`, shown and bound only while the view says camping,
+  breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
   zero-width Box; VS Code and mobile show them as a row under the strip.
 - Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010), the
@@ -942,6 +947,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
   view's `zoneWipes` out of the sim's `RETREAT_AT`, never staged, left out in
   boss mode).
+  While the view says camping the enemy window keeps its title and footer and
+  draws its rows blank but for a dim `camping` on the first; the message
+  window shows `g: back to the fight` in the row a notice takes, a hotspot as
+  `f` is, under the newest log line clipped to one row, and the desktop's
+  track types nothing; the compact window shows the dim `camping` in place of
+  the front enemy. A notice wins its row in both. Goldens `strip-camping` and
+  `strip-compact-camping` pin them.
   Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
   the last two drops, or the World rows. While `hasSurvey` the band stays up at
@@ -1290,7 +1302,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   view exists the pane says Promptfall has not started, and Account still
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag. `/promptfall journal` opens the pane on the Journal.
+  toggles the farm flag. `/promptfall go` breaks camp as `g` does and answers
+  "Back to the fight.", or "The party is not camping." when it is not. `/promptfall journal` opens the pane on the Journal.
   `/promptfall travel <zone>` sends `travel` (§4.2) and answers
   "The party travels to zone 3, Marsh of Sighs." or the refusal in words: a
   zone that is not a number answers the usage, one past the highest reached
