@@ -25,6 +25,7 @@ import {
   LEVEL_RGB,
   LUNGE_MS,
   RARITY_RGB,
+  SPAWN_MS,
   SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
   TRAVEL_OFF_MS,
@@ -659,6 +660,47 @@ test('a camp lights the campfire, then fades it, under SMIL and without it', () 
     motion: 'full',
   })
   expect(flat).toContain('opacity="0.5"/>')
+})
+
+test('making camp under SMIL: the enemies walk off toward their edge as they fade, the fire holds lit with no fade', () => {
+  const s = svgOf(wave(), [{ k: 'camp', on: true, heals: [] }], NOW + 100)
+  expect(balanced(s)).toBe(true)
+  const walk = Math.round(TRAVEL_PX * HIRES_SCALE)
+  const leave = `values="0 0;-${walk} 0" begin="-0.1s" dur="${SPAWN_MS / 1000}s" fill="freeze"/><animate attributeName="opacity" values="1;0"`
+  expect(s.split(leave).length - 1).toBe(wave().enemies.length)
+  expect(s).toContain('<set attributeName="opacity" to="1" begin="-0.1s"/>')
+  expect(s).not.toMatch(/NaN|Infinity/)
+})
+
+test('breaking camp under SMIL: the held enemies walk back in from their edge, the fire fades', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 2000)
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW - 1000)
+  t.observe({ ...wave(), camping: true }, NOW - 500)
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW)
+  const at = NOW + 100
+  t.observe(wave(), at)
+  const model = stageAt(stagedState(wave(), WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
+  expect(balanced(s)).toBe(true)
+  const walk = Math.round(TRAVEL_PX * HIRES_SCALE)
+  const back = `values="-${walk} 0;0 0" begin="-0.1s" dur="${SPAWN_MS / 1000}s" fill="freeze"/><animate attributeName="opacity" values="0;1"`
+  expect(s.split(back).length - 1).toBe(wave().enemies.length)
+  const sit = Number((1000 / (1000 + CAMPFIRE_FADE_MS)).toFixed(3))
+  expect(s).toContain(`values="1;1;0" keyTimes="0;${sit};1" begin="-1.1s"`)
+  expect(s).not.toMatch(/NaN|Infinity/)
+})
+
+test('a party first drawn camping sits at its lit fire under SMIL, with no enemy drawn', () => {
+  const s = svgOf({ ...wave(), camping: true })
+  const campfire = spriteFor('effect', 'campfire')
+  expect(s).toContain(strokePaths(campfire.hires, null))
+  expect(s).not.toContain('<set attributeName="opacity" to="1"')
+  // Only the heroes are drawn, and camping they hold still: no clock in the picture.
+  expect(s).not.toContain('repeatCount="indefinite"')
 })
 
 test('guarding heroes hold the stance with no idle clock; the front hero holds the big shield', () => {

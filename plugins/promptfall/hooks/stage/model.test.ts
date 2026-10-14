@@ -28,8 +28,10 @@ import {
   LEVEL_RGB,
   LUNGE_MS,
   LUNGE_PX,
+  NUMBER_RGB_HEAL,
   RARITY_RGB,
   SHIELD_OVERLAP_PX,
+  SPAWN_MS,
   STEP_OUT_MS,
   STEP_PX,
   TRAVEL_OFF_MS,
@@ -1116,6 +1118,233 @@ test('breaking camp lights no campfire', () => {
   t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW)
   const m = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW + 1000), t, NOW + 1000, BOX, HI)
   expect(m.campfire ?? null).toBe(null)
+})
+
+const camping = (patch: (v: GameView) => void = () => {}): GameView => {
+  const v = { ...wave(), camping: true }
+  patch(v)
+  return v
+}
+const CAMP_HEALS = [
+  { heroId: 'h1', amount: 25 },
+  { heroId: 'h3', amount: 25 },
+]
+
+/**
+ * A stage that saw the party fighting (`before`), then camp made at NOW; `model` observes the view
+ * it is given (camping by default) and stages it at `now`, in ascending order.
+ */
+function campStage(before = wave(), box = BOX, opts: Opts = HI) {
+  const t = new StageTimeline()
+  t.observe(before, NOW - 1000)
+  t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW)
+  let v = camping((x) => {
+    x.heroes = before.heroes
+  })
+  const model = (now: number) => {
+    t.observe(v, now)
+    return stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, box, opts)
+  }
+  const show = (next: GameView) => {
+    v = next
+  }
+  return { t, model, show }
+}
+
+const enemyKeys = ['e1', 'e2', 'e3']
+
+test('making camp walks each enemy off toward its own edge, the spawn played backward, and draws none while camping', () => {
+  const placed = at(wave(), [], NOW, BOX, HI)
+  const { t, model } = campStage()
+  const mid = model(NOW + SPAWN_MS / 2)
+  for (const key of enemyKeys) {
+    const a = actor(mid.actors, key)
+    expect(a.alpha, key).toBe(0.5)
+    expect(a.x, key).toBe(actor(placed.actors, key).x - k(TRAVEL_PX) / 2)
+  }
+  const later = model(NOW + 60_000)
+  for (const key of enemyKeys) expect(actor(later.actors, key).alpha, key).toBe(0)
+  // Held, not gone: the view still lists them.
+  expect(stagedState(camping(), WORLD_DEFAULT, t, NOW + 60_000).enemies.map((e) => e.id)).toEqual(
+    enemyKeys,
+  )
+})
+
+test('camping, the living heroes huddle at a fire burning a hero ahead of the front hero with no fade, the heals rising green, the bob stopped', () => {
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  const { model } = campStage()
+  expect(model(NOW + 10).numbers.map((n) => [n.text, n.rgb])).toEqual([
+    ['25', NUMBER_RGB_HEAL],
+    ['25', NUMBER_RGB_HEAL],
+  ])
+  // A minute in, on idle B's half of the bob's clock.
+  const m = model(NOW + 60_000 + IDLE_FRAME_MS)
+  expect(heroXs(m)).toEqual(huddled)
+  for (const key of ['h1', 'h2', 'h3']) {
+    const a = actor(m.actors, key)
+    expect([a.pose, a.bobMs ?? null, a.shield ?? null], key).toEqual(['idle', null, null])
+  }
+  const fire = m.campfire
+  if (!fire) throw new Error('no campfire')
+  expect(fire.alpha).toBe(1)
+  expect(fire.art).toBe(spriteFor('effect', 'campfire').hires)
+  expect(fire.y + fire.art.height).toBe(m.box.rows * 2 * m.scale)
+  const h1 = actor(m.actors, 'h1')
+  const ahead = h1.x + h1.art.width / 2 - h1.art.width
+  expect(Math.abs(fire.x + fire.art.width / 2 - ahead)).toBeLessThanOrEqual(0.5)
+})
+
+test('the fire stands ahead of the first hero standing when the front hero has fallen', () => {
+  const down = wave()
+  fall('h1')(down)
+  // No heal for the knight: it stays down through the camp.
+  const t = new StageTimeline()
+  t.observe(down, NOW - 1000)
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW)
+  const v = camping((x) => {
+    x.heroes = down.heroes
+  })
+  t.observe(v, NOW + 1000)
+  const m = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW + 1000), t, NOW + 1000, BOX, HI)
+  const h2 = actor(m.actors, 'h2')
+  const fire = m.campfire
+  if (!fire) throw new Error('no campfire')
+  const ahead = h2.x + h2.art.width / 2 - h2.art.width
+  expect(Math.abs(fire.x + fire.art.width / 2 - ahead)).toBeLessThanOrEqual(0.5)
+})
+
+test('breaking camp fades the fire over 400 ms, slides the party back and walks the held enemies in from their edge with the HP they had', () => {
+  const placed = at(wave(), [], NOW, BOX, HI)
+  const slots = heroXs(placed)
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  const hurt = (v: GameView) => {
+    const e1 = v.enemies[0]
+    if (e1) e1.hp = 3
+  }
+  const { t, model, show } = campStage()
+  show(camping(hurt))
+  model(NOW + 1000)
+  const at0 = NOW + 60_000
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], at0)
+  const back = wave()
+  hurt(back)
+  show(back)
+  const start = model(at0)
+  expect(start.campfire?.alpha).toBe(1)
+  expect(heroXs(start)).toEqual(huddled)
+  const sliding = model(at0 + HUDDLE_MS / 2)
+  for (const i of [1, 2]) {
+    const from = huddled[i] ?? 0
+    expect(heroXs(sliding)[i]).toBe(from + Math.round(((slots[i] ?? 0) - from) / 2))
+  }
+  const mid = model(at0 + SPAWN_MS / 2)
+  expect(mid.campfire?.alpha).toBe(1 - SPAWN_MS / 2 / CAMPFIRE_FADE_MS)
+  for (const key of enemyKeys) {
+    const a = actor(mid.actors, key)
+    expect(a.alpha, key).toBe(0.5)
+    expect(a.x, key).toBe(actor(placed.actors, key).x - k(TRAVEL_PX) / 2)
+  }
+  expect(stagedState(back, WORLD_DEFAULT, t, at0 + SPAWN_MS / 2).enemies[0]?.hp).toBe(3)
+  const done = model(at0 + CAMPFIRE_FADE_MS)
+  expect(done.campfire ?? null).toBe(null)
+  expect(heroXs(done)).toEqual(slots)
+  for (const key of enemyKeys) {
+    expect(actor(done.actors, key)).toMatchObject({ alpha: 1, x: actor(placed.actors, key).x })
+  }
+})
+
+test("an enemy the break's view no longer lists never walks in: a world boss arrives as it does today", () => {
+  const { t, model, show } = campStage()
+  model(NOW + 1000)
+  const at0 = NOW + 60_000
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], at0)
+  show(worldBoss())
+  const models = [at0, at0 + SPAWN_MS / 2, at0 + 5000].map(model)
+  for (const m of models) {
+    for (const key of enemyKeys)
+      expect(
+        m.actors.find((a) => a.key === key),
+        key,
+      ).toBe(undefined)
+  }
+  // The boss steps on with a spawn as the break's view brings it.
+  expect(actor(models[1]?.actors ?? [], 'e7').alpha).toBe(0.5)
+})
+
+test("an enemy the break's view no longer lists never walks in: one gone from the encounter, or a travel's", () => {
+  const { t, model, show } = campStage()
+  model(NOW + 1000)
+  const at0 = NOW + 60_000
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], at0)
+  const fewer = wave()
+  fewer.enemies = fewer.enemies.filter((e) => e.id !== 'e2')
+  show(fewer)
+  for (const now of [at0 + SPAWN_MS / 2, at0 + 5000]) {
+    expect(model(now).actors.find((a) => a.key === 'e2')).toBe(undefined)
+  }
+  const travel = campStage()
+  travel.model(NOW + 1000)
+  travel.t.onEffects(
+    [
+      { k: 'camp', on: false, heals: [] },
+      { k: 'traveled', from: 1, to: 3 },
+    ],
+    at0,
+  )
+  travel.show({ ...wave(), enemies: [], zone: 3, zoneName: 'Marsh of Sighs', wave: 1 })
+  for (const now of [at0, at0 + TRAVEL_OFF_MS / 2, at0 + TRAVEL_OFF_MS + 100]) {
+    const m = travel.model(now)
+    for (const key of enemyKeys) {
+      expect(m.actors.find((a) => a.key === key)?.alpha ?? 0, key).toBe(0)
+    }
+  }
+  // The party's step-off plays as it does today.
+  expect(actor(travel.model(at0 + TRAVEL_OFF_MS + 200).actors, 'h1').alpha).toBeLessThan(1)
+})
+
+test('guard while camped holds the stance with no shield and no second huddle; guard off has nothing to undo', () => {
+  const { t, model, show } = campStage()
+  const huddled = heroXs(model(NOW + 1000))
+  t.onEffects([{ k: 'guard', on: true }], NOW + 2000)
+  show(
+    camping((v) => {
+      for (const h of v.heroes) h.guarding = true
+    }),
+  )
+  const guarded = model(NOW + 2000 + HUDDLE_MS / 2)
+  expect(heroXs(guarded)).toEqual(huddled)
+  for (const key of ['h1', 'h2', 'h3']) {
+    const a = actor(guarded.actors, key)
+    expect([a.pose, a.shield ?? null], key).toEqual(['guard', null])
+  }
+  t.onEffects([{ k: 'guard', on: false }], NOW + 3000)
+  show(camping())
+  expect(heroXs(model(NOW + 3000 + HUDDLE_MS / 2))).toEqual(huddled)
+  // A party already guarding makes camp standing huddled: no second slide in.
+  const g = campStage(guarding())
+  expect(heroXs(g.model(NOW + HUDDLE_MS / 2))).toEqual(huddled)
+})
+
+test('a stage first drawn camping stands huddled at the lit fire with no enemy and nothing to play', () => {
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  const t = new StageTimeline()
+  t.observe(camping(), NOW)
+  const m = stageAt(stagedState(camping(), WORLD_DEFAULT, t, NOW), t, NOW, BOX, HI)
+  expect(heroXs(m)).toEqual(huddled)
+  expect(m.campfire?.alpha).toBe(1)
+  for (const key of enemyKeys) expect(actor(m.actors, key).alpha, key).toBe(0)
+  expect(t.isBusy(NOW)).toBe(false)
+})
+
+test('the compact stage shows the compact fire and no enemy while camping', () => {
+  const { model } = campStage(wave(), BOX_COMPACT, COMPACT)
+  const m = model(NOW + 60_000)
+  const fire = m.campfire
+  if (!fire) throw new Error('no campfire')
+  expect(fire.art).toBe(spriteFor('effect', 'campfire').compact)
+  expect(fire.x).toBeGreaterThanOrEqual(0)
+  expect(fire.x + fire.art.width).toBeLessThanOrEqual(BOX_COMPACT.columns)
+  for (const a of m.actors.filter((x) => !x.flipX)) expect(a.alpha, a.key).toBe(0)
 })
 
 test('a level-up flashes the hero gold, the white flash untouched, and its deltas rise in gold', () => {

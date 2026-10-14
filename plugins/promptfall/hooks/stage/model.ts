@@ -24,7 +24,6 @@ import {
   ACTOR_PITCH,
   BLINK_MS,
   CAMPFIRE_FADE_MS,
-  CAMPFIRE_MS,
   CLASS_RGB,
   COMPACT_PITCH,
   DROP_RISE_PX,
@@ -188,7 +187,10 @@ export type StageModel = {
   drops: StageDrop[]
   /** Drawn after the drops, before the numbers. */
   effects: StageEffect[]
-  /** Camp's campfire between the lines, drawn with the effects; `alpha` 0 before it is lit. */
+  /**
+   * Camp's campfire, drawn with the effects: a hero's width ahead of the front hero while the party
+   * camps, between the lines on a camp with a world boss engaged; `alpha` 0 before it is lit.
+   */
   campfire?: { art: SpriteArt; x: number; y: number; alpha: number } | null
   alt: string
   /** Stage pixels per half-block cell: HIRES_SCALE for the full stage, 1 for the compact one. */
@@ -250,6 +252,29 @@ export function travelAt(
   if (off?.kind === 'travel_off') {
     const p = progress(off, now)
     return { dx: Math.round(span * p), alpha: 1 - p }
+  }
+  return { dx: 0, alpha: 1 }
+}
+
+/**
+ * An enemy's walk for a camp, its offset and opacity: off toward its own edge (the left) while
+ * fading out, the spawn played backward; back in from there while fading in, held at the edge
+ * and unseen until it starts. None outside a camp's walk.
+ */
+export function campWalkAt(
+  leave: Motion | undefined,
+  back: Motion | undefined,
+  now: number,
+  scale = 1,
+): { dx: number; alpha: number } {
+  const span = Math.round(TRAVEL_PX * scale)
+  if (back?.kind === 'camp_return') {
+    const p = progress(back, now)
+    return { dx: -Math.round(span * (1 - p)), alpha: p }
+  }
+  if (leave?.kind === 'camp_leave') {
+    const p = progress(leave, now)
+    return { dx: -Math.round(span * p), alpha: 1 - p }
   }
   return { dx: 0, alpha: 1 }
 }
@@ -583,6 +608,15 @@ export function stageAt(
     if (dissolve !== undefined) alpha = now < dissolve.from ? 1 : 1 - progress(dissolve, now)
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
+    // Camping, an enemy is drawn only on its walk off; breaking camp, it walks back in.
+    const leave = all.find((m) => m.actor === known.id && m.kind === 'camp_leave')
+    const walk = campWalkAt(
+      leave,
+      all.find((m) => m.actor === known.id && m.kind === 'camp_return'),
+      now,
+      scale,
+    )
+    alpha = view.camping && leave === undefined ? 0 : Math.min(alpha, walk.alpha)
     const lunge = motionOf(known.id, 'lunge')
     const step = motionOf(known.id, 'step')
     const flashing = isFlashing(known.id)
@@ -600,7 +634,7 @@ export function stageAt(
         : tinted
           ? shown.palette.map((c, i) => (i === 0 ? c : mix(c, ENRAGE_RGB, ENRAGE_TINT)))
           : shown.palette
-    const x = baseX + actionOffset(step, lunge, now, scale)
+    const x = baseX + actionOffset(step, lunge, now, scale) + walk.dx
     const ground = { y: height - art.height, width: art.width, height: art.height }
     grounded.set(known.id, { ...ground, x })
     stands.set(known.id, { ...ground, x: baseX })
@@ -625,7 +659,7 @@ export function stageAt(
       tinted,
     })
   }
-  // The right edge of the enemies' line: where the campfire's ground starts.
+  // The right edge of the enemies' line: where a world boss camp's fire finds its ground.
   const enemyRight = view.enemies.length > 0 ? nextFree - gap : edge
 
   // Bosses draw over their minions, never under.
@@ -678,7 +712,8 @@ export function stageAt(
     }
     const poses = posesOf(sprite, attack, opts.compact, true, recolour)
     const rest = hero.guarding && !fallen ? 'guard' : 'idle'
-    const bobMs = fallen || rest === 'guard' ? null : bobOf(hero.hasted)
+    // Camping, the bob stops: the party rests in idle A.
+    const bobMs = fallen || rest === 'guard' || view.camping ? null : bobOf(hero.hasted)
     const dx = huddleDx.get(hero.id)
     const pose = poseOf(hero.id, fallen, rest, bobMs, sliding && dx !== undefined)
     const shown = poses[pose]
@@ -688,8 +723,9 @@ export function stageAt(
       !opts.compact && !fallen && hero.hasted && rest === 'idle' && !view.camping
         ? speedLinesOf(poses.idle.art, poses.idle_b.art, CLASS_RGB[hero.cls] ?? 0)
         : null
+    // Camping, there is nothing to block: the stance alone.
     const shield =
-      rest === 'guard' && index === front
+      rest === 'guard' && index === front && !view.camping
         ? shieldBeside(
             poses.idle.art,
             variant(SHIELD, opts.compact),
@@ -805,17 +841,28 @@ export function stageAt(
   }
 
   let campfire: StageModel['campfire'] = null
-  const camp = all.find((m) => m.kind === 'campfire')
-  if (camp) {
-    // Centred on the ground between the enemies' line and the party, in the frame.
+  const camp = all.findLast((m) => m.kind === 'campfire')
+  // A party first drawn camping sits at its fire, lit, with no motion.
+  const place = camp?.kind === 'campfire' ? camp.place : view.camping ? 'party' : null
+  if (place !== null) {
     const art = variant(CAMPFIRE, opts.compact)
-    const x = clamp(
-      Math.round((enemyRight + heroLeft - art.width) / 2),
-      0,
-      Math.max(0, width - art.width),
-    )
-    const lit = camp.from + CAMPFIRE_MS
-    const alpha = now < camp.from ? 0 : now < lit ? 1 : 1 - (now - lit) / CAMPFIRE_FADE_MS
+    // At the party, centred a hero's width ahead of the front hero standing (it keeps its slot in
+    // the huddle); else centred between the enemies' line and the party. On the ground, in the frame.
+    const hero = view.heroes[Math.max(0, front)]
+    const heroArt = hero ? variant(spriteFor('hero', hero.cls), opts.compact) : null
+    const centre =
+      place === 'party' && heroArt
+        ? slotX(Math.max(0, front), heroArt) - heroArt.width / 2
+        : (enemyRight + heroLeft) / 2
+    const x = clamp(Math.round(centre - art.width / 2), 0, Math.max(0, width - art.width))
+    const alpha =
+      camp?.kind !== 'campfire' || now >= camp.until
+        ? 1
+        : now < camp.from
+          ? 0
+          : now < camp.fade
+            ? 1
+            : 1 - (now - camp.fade) / CAMPFIRE_FADE_MS
     campfire = { art, x, y: height - art.height, alpha }
   }
 

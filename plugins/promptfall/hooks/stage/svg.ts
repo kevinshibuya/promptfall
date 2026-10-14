@@ -10,6 +10,7 @@ import type { Box } from './layout'
 import {
   actionOffset,
   CHESTS,
+  campWalkAt,
   chestPlace,
   effectAt,
   glowOf,
@@ -35,7 +36,6 @@ import {
 } from './timeline'
 import {
   BLINK_MS,
-  CAMPFIRE_MS,
   CHEST_FALL_MS,
   CHEST_OPEN_MS,
   CHEST_SIT_MS,
@@ -134,11 +134,11 @@ const FLASH_OF: Partial<Record<Motion['kind'], Flash>> = {
 /** The flood filter a motion blinks, if it is a flash. */
 const flashOf = (m: Motion): Flash | null => FLASH_OF[m.kind] ?? null
 /**
- * An actor still to appear: spawning, or stepping on after a travel whose step off this picture no
- * longer carries. It starts transparent and its animation fades it in.
+ * An actor still to appear: spawning, walking back in as camp breaks, or stepping on after a travel
+ * whose step off this picture no longer carries. It starts transparent and its animation fades it in.
  */
 const appearing = (mine: readonly Motion[]): boolean =>
-  mine.some((m) => m.kind === 'spawn') ||
+  mine.some((m) => m.kind === 'spawn' || m.kind === 'camp_return') ||
   (mine.some((m) => m.kind === 'travel_on') && !mine.some((m) => m.kind === 'travel_off'))
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
@@ -302,7 +302,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
   const travelPx = px(TRAVEL_PX)
   /**
    * The step and the lunge as translates on the actor's group, summed with its place; a travel's
-   * step off and on with their fades.
+   * step off and on, and a camp's walk off and back in, with their fades.
    */
   const moveAnim = (m: Motion): string | null => {
     if (m.kind === 'travel_off') {
@@ -310,6 +310,12 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     }
     if (m.kind === 'travel_on') {
       return `<animateTransform attributeName="transform" type="translate" additive="sum" values="-${travelPx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}"/><animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
+    if (m.kind === 'camp_leave') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-${travelPx} 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/><animate attributeName="opacity" values="1;0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
+    }
+    if (m.kind === 'camp_return') {
+      return `<animateTransform attributeName="transform" type="translate" additive="sum" values="-${travelPx} 0;0 0" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/><animate attributeName="opacity" values="0;1" begin="${begin(m)}" dur="${dur(m)}" fill="freeze"/>`
     }
     if (m.kind === 'lunge') {
       const dx = m.dir * px(LUNGE_PX)
@@ -631,7 +637,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       actor.x -
       huddled -
       actionOffset(started('step'), started('lunge'), opts.now, scale) -
-      travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx
+      travelAt(started('travel_off'), started('travel_on'), opts.now, scale).dx -
+      campWalkAt(
+        mine.find((m) => m.kind === 'camp_leave'),
+        mine.find((m) => m.kind === 'camp_return'),
+        opts.now,
+        scale,
+      ).dx
     if (scale !== 1) {
       // 1.5: no bob; the idle pair and the frames in use, one shown at any instant.
       base.set(actor.key, { x, y: actor.y, actor })
@@ -770,12 +782,17 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         continue
       }
       if (m.kind === 'campfire') {
-        // It sits CAMPFIRE_MS from its start, then fades; hidden until it is lit.
+        // Hidden until it is lit; then it burns until its fade, or for good while the camp holds.
         const fire = model.campfire
         if (!fire) continue
-        const sit = Number((CAMPFIRE_MS / (m.until - m.from)).toFixed(3))
+        const use = `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})" opacity="0">`
+        if (!Number.isFinite(m.until)) {
+          effects.push(`${use}<set attributeName="opacity" to="1" begin="${begin(m)}"/></use>`)
+          continue
+        }
+        const sit = Number(((m.fade - m.from) / (m.until - m.from)).toFixed(3))
         effects.push(
-          `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;${sit};1" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
+          `${use}<animate attributeName="opacity" values="1;1;0" keyTimes="0;${sit};1" begin="${begin(m)}" dur="${dur(m)}"/></use>`,
         )
         continue
       }
@@ -825,6 +842,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
           `<g transform="translate(${start.x} ${start.y})" opacity="0"><animate attributeName="opacity" values="1;1" begin="${begin(m)}" dur="${dur(m)}"/>${fly}<use href="#${define(art, null)}"${flip}/></g>`,
         )
       }
+    }
+    // A party first drawn camping sits at the state's fire: lit, with no motion to animate.
+    const fire = model.campfire
+    if (fire && !live.some((m) => m.kind === 'campfire')) {
+      effects.push(
+        `<use href="#${define(fire.art, null)}" transform="translate(${fire.x} ${fire.y})"/>`,
+      )
     }
     body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }
