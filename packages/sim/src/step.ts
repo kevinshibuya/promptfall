@@ -15,7 +15,16 @@ import {
 } from './commands'
 import { draft, reject } from './draft'
 import { onRest, onToolCall, onTurnEnd, refillFromQueue, spawnOnEmptyTick } from './progression'
-import { countDown, onCamp, onGuard, onMishap, onTurnStart, stopGuard, stopHaste } from './reactive'
+import {
+  breakCamp,
+  countDown,
+  onCamp,
+  onGuard,
+  onMishap,
+  onTurnStart,
+  stopGuard,
+  stopHaste,
+} from './reactive'
 import {
   bossDisengaged,
   bossEngaged,
@@ -48,6 +57,8 @@ export type Handlers = { [K in EventKind]: Handler<K> }
 const handlers: Handlers = {
   tick: (state) =>
     draft(state, (s, effects) => {
+      // Camped, the fight is held: no refill, no battle, no spawn, no countdown.
+      if (s.camp) return
       refillFromQueue(s)
       if (s.encounter && s.encounter.enemies.length > 0) advanceBattle(s, effects)
       else {
@@ -57,8 +68,16 @@ const handlers: Handlers = {
       }
       countDown(s, effects)
     }),
-  tool_call: (state, event) => draft(state, (s) => onToolCall(s, event.hint)),
-  turn_start: (state) => draft(state, (s, effects) => onTurnStart(s, effects)),
+  tool_call: (state, event) =>
+    draft(state, (s, effects) => {
+      breakCamp(s, effects)
+      onToolCall(s, event.hint)
+    }),
+  turn_start: (state) =>
+    draft(state, (s, effects) => {
+      breakCamp(s, effects)
+      onTurnStart(s, effects)
+    }),
   turn_end: (state) =>
     draft(state, (s, effects) => {
       onTurnEnd(s)
@@ -66,13 +85,14 @@ const handlers: Handlers = {
     }),
   rest: (state) =>
     draft(state, (s, effects) => {
+      breakCamp(s, effects)
       onRest(s)
       stopHaste(s, effects)
       stopGuard(s, effects)
     }),
   travel,
   tool_mishap: (state) => draft(state, (s, effects) => onMishap(s, effects)),
-  camp: (state) => draft(state, (s, effects) => onCamp(s, effects)),
+  camp: (state, event) => draft(state, (s, effects) => onCamp(s, event.on !== false, effects)),
   guard: (state, event) => draft(state, (s, effects) => onGuard(s, event.on === true, effects)),
   equip,
   unequip,

@@ -794,6 +794,15 @@ test('a camp sets the campfire between the enemies and the party, then fades it'
   expect(model(NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS).campfire ?? null).toBe(null)
 })
 
+test('breaking camp lights no campfire', () => {
+  const t = new StageTimeline()
+  const v = wave()
+  t.observe(v, NOW)
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW)
+  const m = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW + 1000), t, NOW + 1000, BOX, HI)
+  expect(m.campfire ?? null).toBe(null)
+})
+
 test('a level-up flashes the hero gold, the white flash untouched, and its deltas rise in gold', () => {
   const t = new StageTimeline()
   const v = wave()

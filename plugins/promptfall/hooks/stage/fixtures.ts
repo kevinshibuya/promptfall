@@ -60,6 +60,7 @@ function view(enemies: EnemyView[], zone = 1, wave = 2): GameView {
     waiting: 0,
     gold: 0,
     farm: false,
+    camping: false,
     autoVendor: false,
     lastDrop: null,
     loot: [],

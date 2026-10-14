@@ -145,9 +145,9 @@ Checked against Claude Code v2.1.287's mods API.
   (§10). **A reactive event shapes the fight and never the reward.** Four are
   player events of their own, `turn_start`, `tool_mishap`, `camp` and `guard`
   (carrying on or off); the fifth is a hint on `tool_call`. The state holds a
-  haste countdown and a guard countdown in ticks (zero is off) and each enemy
-  an enraged flag; a save migrated from before them starts with both
-  countdowns at zero and no enemy enraged. The plugin raises them from Claude
+  haste countdown and a guard countdown in ticks (zero is off), a camp flag,
+  and each enemy an enraged flag; a save migrated from before them starts with
+  both countdowns at zero, not camped, and no enemy enraged. The plugin raises them from Claude
   Code's hooks; hooks fire in every session, and only the primary records
   them, as it does every event.
   - **Haste**, while a turn runs. `turn_start` sets the haste countdown to 90
@@ -182,20 +182,37 @@ Checked against Claude Code v2.1.287's mods API.
     rate, and an unhinted zone pays on average the base, less at most the one
     unit the floor drops per kind. Rarity weights, boss multiples, boss drop
     chances and boss drop tables are untouched.
-  - **Enrage**, on a failed tool call. `tool_mishap` enrages the front enemy,
-    the first in the encounter's line, the engaged world boss included, and
-    emits an enraged effect naming it. Its next attack uses its attack stat
+  - **Enrage**, on a failed tool call. `tool_mishap` enrages the strongest
+    enemy on the field: the highest by kind (world boss, zone boss, turn boss,
+    then a wave enemy), then the highest attack as the sim's stats give it (a
+    world boss by the engaged boss's scaled stats), then the highest max HP,
+    then the front-most. The queue never counts. It emits an enraged effect
+    naming the pick. Its next attack uses its attack stat
     scaled by 15,000 basis points (`ENRAGE_BP`), floored, in place of its own,
     through the same variance, mitigation and doubling; then the flag clears.
     An enemy that dies enraged takes its flag with it. A mishap on an empty
-    field, or on an enemy already enraged, does nothing. The plugin sends it
+    field, on a pick already enraged (no fall-through to the next strongest),
+    or while camped does nothing. The plugin sends it
     from the classic post-tool-failure hook, at most one per 5 seconds, never
     for an interrupt by the user nor for a call the permission-denied hook
     named; a user's no at a prompt raises no failure hook at all.
-  - **Camp**, on a compaction. `camp` heals every party hero 50% of max HP and
-    revives the fallen at 50%, exactly as a rest heals, in boss mode in place,
-    and emits a camp effect carrying each hero's id and heal. It leaves Haste
-    and Guard alone. The plugin sends it from the classic post-compaction hook,
+  - **Camp**, on a compaction. `camp` carries an optional on, like `guard`;
+    a `camp` without it reads as on. `camp` on heals every party hero 50% of
+    max HP and revives the fallen at 50%, exactly as a rest heals, in place,
+    sets the camp flag and emits a camp effect with on and each hero's id and
+    heal. The encounter, its queue, the gauges, the action queue and the busy
+    counter are held as they are. While camped a tick does nothing: no refill,
+    no battle, no spawn, no countdown, and a hero's per-step fill reads zero.
+    `guard` on and off, equips, vendoring, market and farm events run as
+    always. Camp breaks, clearing the flag and emitting a camp effect with on
+    false and no heals before the event's own work, on `camp` off, `rest`,
+    `turn_start` (so Haste never starts while camped), `tool_call`, `travel`,
+    `boss_engaged`, `sandbox_boss`, `sandbox_zone` and `sandbox_wipe`; a
+    refused event breaks nothing. The next tick fights on from the held gauges
+    and queue. `camp` on while camped and `camp` off while not camped are
+    no-ops. With a world boss engaged, `camp` on heals, sets nothing and emits
+    the camp effect with the heals and no on: no pause. It leaves Haste and
+    Guard alone. The plugin sends it from the classic post-compaction hook,
     manual and auto alike, at most one per minute; the engine raises no such
     hook for its own precompute or a forked compaction.
   - **Guard**, while a permission prompt waits. `guard` on sets the guard
@@ -596,11 +613,13 @@ market listing fee, 5 percent market sale fee.
   reactive events (§4.1) have four buckets of their own, so a flood of claimed
   compactions heals the party no faster than a flood of prompts: `turn_start`
   and `tool_mishap` at one per 5 seconds with the turn ends' capacity of 30,
-  `camp` at one per minute with a capacity of 5, and `guard` at one per 2
+  `camp` at one per 30 seconds with a capacity of 10, since a compaction
+  spends an on and an off, and `guard` at one per 2
   seconds with a capacity of 60, since every prompt costs an on and an off
   (`BUDGETS` in `@promptfall/protocol`). `travel` (§4.2) has its own bucket,
   capped as a rest is, one per 5 seconds with a capacity of 30. A record from
-  before a bucket gets it full on its first load. A batch over any bucket is rejected
+  before a bucket gets it full on its first load; one from before a bucket's
+  resize keeps its count and refills to the new capacity. A batch over any bucket is rejected
   whole, and the player sees a resync. Since a human paces only rests and
   prompts, the plugin paces the reactive events itself, under the buckets: a
   turn's `turn_start` refresh at most once per 60 seconds after its start,
@@ -1084,11 +1103,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
     the hit frame. On the full stage, on every surface, a small shield drawn in
     code sits over the party's front hero, its first hero standing; on the
     compact stage the stance alone.
-  - The log prints six lines for four effects, each at its effect's time and
+  - The log prints seven lines for four effects, each at its effect's time and
     keyed as a line that is never dropped: "The party quickens." and "The
     party slows." for haste on and off; "Claude stumbles. Wood Goblin is
     enraged!", naming the enemy; "The party makes camp while Claude gathers
-    its thoughts."; "The party stands guard." and "The party lowers its
+    its thoughts." on a camp's heal and "The party breaks camp." when it
+    breaks, a break lighting no campfire; "The party stands guard." and "The party lowers its
     guard." for guard on and off.
   - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
     on every surface (the Raster, the Image and the SMIL picture), under the
