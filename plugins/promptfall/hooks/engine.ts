@@ -99,6 +99,8 @@ export type GameHandle = {
   }
   apply: (event: PlayerEvent, at: number) => void
   canApply: () => boolean
+  /** Applies `camp` off while the view says camping, the band's `g` and `/promptfall go`; false when not. */
+  breakCamp: (at: number) => Promise<boolean>
   /** This session holds the lease and its engine has paused: its refusals say paused. */
   isPaused: () => boolean
   /** This session's engine paused for a ban: the delete is the one verb it still lets through. */

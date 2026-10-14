@@ -71,6 +71,8 @@ const HOTKEYS = [
   { hotkey: 'w', label: 'world' },
   { hotkey: 'c', label: '▾' },
   { hotkey: 'f', label: 'farm' },
+  // Shown and bound only while the party camps.
+  { hotkey: 'g', label: 'go' },
 ] as const
 
 export function registerBand(on: On, game: () => GameHandle | null): void {
@@ -186,15 +188,17 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         // The path `/promptfall farm` takes (hooks/command.ts).
         if (handle?.canApply()) handle.apply({ t: 'set_farm', on: !view.farm }, now)
       },
+      // The path `/promptfall go` takes.
+      g: () => void handle?.breakCamp(now),
     }
     // Not `h`: that name is the JSX factory.
-    const buttons = HOTKEYS.map((k) => (
+    const buttons = HOTKEYS.filter((k) => k.hotkey !== 'g' || view.camping).map((k) => (
       <Button
         key={`hot-${k.hotkey}`}
         label={k.label}
         hotkey={k.hotkey}
         plain
-        dimColor={k.hotkey !== 'c' && k.hotkey !== 'f' && k.label !== tab}
+        dimColor={k.hotkey !== 'c' && k.hotkey !== 'f' && k.hotkey !== 'g' && k.label !== tab}
         onPress={press[k.hotkey]}
       />
     ))

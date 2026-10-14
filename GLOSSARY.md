@@ -285,8 +285,9 @@ engaged it heals and holds nothing.
 _Avoid_: rest (that is a prompt), inn, respite, break
 
 **Break camp**:
-The way out of Camp: camp off, the next prompt, the next tool call, a travel or a world boss
-appearing ends it, and the held fight goes on from where it stood.
+The way out of Camp: camp off (the band's `g`, `/promptfall go` or the session's end), the next
+prompt, the next tool call, a travel or a world boss appearing ends it, and the held fight goes on
+from where it stood.
 _Avoid_: wake, resume, end camp, leave camp
 
 **Guard**:

@@ -1,11 +1,14 @@
-import type { On, ToolCallResult } from 'claude-code'
+import type { On, SessionMessage, ToolCallResult } from 'claude-code'
 import { type Engine, expect, mock, type Plugin } from 'claude-code/testing'
 import { test } from './testing'
 import { approveAs, Ledger } from './vendor/ledger.js'
-import { MemoryKeyValue } from './vendor/protocol.js'
+import { BOSS_WINDOW_MS, MemoryKeyValue } from './vendor/protocol.js'
 
 const URL = 'http://reactive'
-const T0 = 1_000_000
+/** Past the first world boss window: no grid boss engages the party, so nothing breaks a camp. */
+const T0 = BOSS_WINDOW_MS + 1_000_000
+/** The one message a compaction runs over and leaves. */
+const SUMMARY: SessionMessage = { role: 'user', text: 'the story so far', toolUses: [] }
 
 /** A player event as a batch the server accepted carried it. */
 type Sent = { t: string; at: number; hint?: string; on?: boolean }
@@ -103,7 +106,7 @@ function playing(on: On, seed: Record<string, unknown> = {}, cadence = false) {
   })
   on('classic.PermissionDenied', () => ({}))
   on('classic.PostToolUseFailure', () => ({}))
-  on('classic.PostCompact', () => ({}))
+  on('session.compact', () => ({ messages: [SUMMARY] }))
   on('ui.toast', () => ({ value: undefined }))
   on('command.register', (_$, e) => ({ value: { command: e.name } }))
   const ledger = new Ledger({
@@ -135,11 +138,11 @@ function playing(on: On, seed: Record<string, unknown> = {}, cadence = false) {
   return { time, periods: recording?.periods ?? [], sent, refused, prompt }
 }
 
-/** What the session sent of the reactive kinds, a guard named by its side. */
+/** What the session sent of the reactive kinds, a guard and a camp named by their side. */
 const reactive = (sent: Sent[]) =>
   sent
     .filter((e) => ['turn_start', 'turn_end', 'tool_mishap', 'camp', 'guard'].includes(e.t))
-    .map((e) => (e.t === 'guard' ? `guard ${e.on ? 'on' : 'off'}` : e.t))
+    .map((e) => (e.t === 'guard' || e.t === 'camp' ? `${e.t} ${e.on ? 'on' : 'off'}` : e.t))
 
 const hints = (sent: Sent[]) => sent.filter((e) => e.t === 'tool_call').map((e) => e.hint)
 
@@ -233,16 +236,55 @@ test('an interrupt by the person is no mishap', async ($, on) => {
   expect(reactive(sent)).toEqual([])
 })
 
-test('a compaction makes camp, manual and auto both, at most one a minute', async ($, on) => {
+/** A compaction of the conversation about to run, as the engine raises it. */
+function compact(
+  $: Engine,
+  trigger: 'manual' | 'auto' | 'plugin' | 'precompute',
+  agentId?: string,
+) {
+  return $.session.compact({ trigger, messages: [SUMMARY], ...(agentId ? { agentId } : {}) })
+}
+
+test('a compaction makes camp, manual, auto and plugin alike, at most one a minute', async ($, on) => {
   const { sent, time } = playing(on)
   await start($)
-  await $.classic.PostCompact({ trigger: 'manual', compact_summary: 's' })
+  await compact($, 'manual')
   await time.advance(30_000)
-  await $.classic.PostCompact({ trigger: 'auto', compact_summary: 's' })
+  await compact($, 'auto')
   await time.advance(30_000)
-  await $.classic.PostCompact({ trigger: 'auto', compact_summary: 's' })
+  await compact($, 'plugin')
+  await time.advance(60_000)
+  await compact($, 'auto')
+  // Ending the session breaks the last camp before the flush.
   await quit($)
-  expect(reactive(sent)).toEqual(['camp', 'camp'])
+  const camps = reactive(sent).filter((e) => e.startsWith('camp'))
+  expect(camps).toEqual(['camp on', 'camp on', 'camp on', 'camp off'])
+})
+
+test('the engine’s precompute and a fork’s own compaction make no camp', async ($, on) => {
+  const { sent } = playing(on)
+  await start($)
+  await compact($, 'precompute')
+  await compact($, 'auto', 'agent-1')
+  await compact($, 'manual', 'agent-2')
+  await quit($)
+  expect(reactive(sent)).toEqual([])
+})
+
+test('the session’s end breaks camp only while camping, and a clear or a resume leaves it', async ($, on) => {
+  const { sent, time } = playing(on)
+  on('tool.call', answered)
+  await start($)
+  await compact($, 'manual')
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } })
+  expect(reactive(sent)).toEqual(['camp on'])
+  // A tool call breaks camp in the sim: the end finds the party out of camp and sends no off.
+  await time.advance(60_000)
+  await compact($, 'auto')
+  await $.tool.call({ tool: 'Bash', command: 'make' })
+  await quit($)
+  expect(reactive(sent)).toEqual(['camp on', 'camp on'])
 })
 
 /** A tool call the person is asked about: the request fires inside the call, beneath the plugin. */
@@ -430,7 +472,7 @@ test(
       tool_use_id: 'c1',
       error: 'exit 1',
     })
-    await $.classic.PostCompact({ trigger: 'auto', compact_summary: 's' })
+    await compact($, 'auto')
     await step($, 't1', 1, undefined, 'abort')
     await time.advance(20_000)
     await quit($)

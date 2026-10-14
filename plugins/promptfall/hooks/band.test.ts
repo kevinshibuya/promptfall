@@ -1,6 +1,7 @@
-import type { On, RenderElement, UiBlitArgs } from 'claude-code'
+import type { On, RenderElement, SessionMessage, UiBlitArgs } from 'claude-code'
 import { describe, expect, mock } from 'claude-code/testing'
 import type { GameView, Prefs, Settings, WorldState } from '../types'
+import { BAND, PAST_GRID_BOSS, harness as playing } from './inplay/harness'
 import { decode } from './sprites/base64'
 import { boss, turnBoss, wave } from './stage/fixtures'
 import { bandKey } from './stage/loop'
@@ -265,6 +266,31 @@ test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so
   await ui.unmount()
   const after = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
   expect(await stripText(after)).toContain('Farm here')
+  await after.unmount()
+})
+
+test('g shows and binds only while the party camps, and pressing it breaks camp', async ($, on) => {
+  // Past the grid boss, which would engage the party and hold no camp.
+  const { view, clock } = playing(on, {}, {}, PAST_GRID_BOSS)
+  const message: SessionMessage = { role: 'user', text: 'the story so far', toolUses: [] }
+  on('session.compact', () => ({ messages: [message] }))
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...BAND })
+    expect(await ui.find({ key: 'hot-g' }), `${surface}: no g out of camp`).toBeUndefined()
+    await ui.unmount()
+  }
+  await $.session.compact({ trigger: 'manual', messages: [message] })
+  await clock.advance(1)
+  expect(view().camping).toBe(true)
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
+  expect(await ui.find({ key: 'hot-g' })).toBeDefined()
+  await ui.press({ key: 'hot-g' })
+  await clock.advance(1)
+  expect(view().camping).toBe(false)
+  await ui.unmount()
+  const after = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
+  expect(await after.find({ key: 'hot-g' })).toBeUndefined()
   await after.unmount()
 })
 

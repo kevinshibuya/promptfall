@@ -35,14 +35,14 @@ import { zonePhrase, zoneWords } from './zone-words'
 export const PANE_ID = 'promptfall'
 
 const HINT =
-  'inventory|heroes|market|orders|account|odds|journal|chat|leaderboards|off|on|farm|travel <zone>|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
+  'inventory|heroes|market|orders|account|odds|journal|chat|leaderboards|off|on|farm|go|travel <zone>|autovendor on|off|server <url>|server local|sound off|quiet|normal|loud|motion full|still|renderer auto|image|raster'
 
 /** The command, its hint naming the sandbox verb only while the sandbox is on. */
 export function commandSpec(sandbox: boolean) {
   return {
     name: 'promptfall',
     description:
-      'Promptfall: open the game, or off / on / farm / travel / autovendor / server / sound / motion / renderer',
+      'Promptfall: open the game, or off / on / farm / go / travel / autovendor / server / sound / motion / renderer',
     argumentHint: `[${HINT}${sandbox ? '|sandbox <verb>' : ''}]`,
     immediate: true,
   } as const
@@ -157,6 +157,19 @@ export function registerCommand(
       running.apply({ t: 'set_farm', on: !view.farm }, await $.clock.now())
       await running.settled()
       return { text: `Promptfall farm is ${view.farm ? 'off' : 'on'}` }
+    }
+
+    // The band's `g`: the party breaks camp and goes back to the fight.
+    if (arg === 'go') {
+      const view = await read($, viewAtom)
+      const running = game()
+      if (running?.isPaused()) return { text: PAUSED_LINE }
+      if (!view || !running?.canApply())
+        return { text: 'Promptfall is not playing in this session' }
+      if (!(await running.breakCamp(await $.clock.now())))
+        return { text: 'The party is not camping.' }
+      await running.settled()
+      return { text: 'Back to the fight.' }
     }
 
     if (arg === 'travel' || arg.startsWith('travel ')) {
