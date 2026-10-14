@@ -29,8 +29,9 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
   whole stage smaller where it can (the Image zooms out, the Svg scales) and
   crops the Raster's sky down to the tallest actor on the stage; past that it
   drops to a 6-row compact band, as it does at 100 to 115 columns, collapses to
-  1 row under 100 columns or 6 rows, hides while Claude asks a question, and
-  switches off per session with one command. Loot and World are the strip
+  1 row under 100 columns or 6 rows, and switches off per session with one
+  command. It stays up while Claude asks for a permission or a question, at
+  the layout the rows it is given allow. Loot and World are the strip
   alone, 5 rows. VS Code and mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
@@ -906,7 +907,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   fills between ticks and turns gold when full) and the purse window (gold and
   the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
-  the last two drops, or the World rows. Hidden while `hasSurvey`. The band is
+  the last two drops, or the World rows. While `hasSurvey` the band stays up at
+  the layout its rows allow and the stage keeps playing. The band is
   22 rows and never changes height for a fight.
 - The band as one picture (ADR 0011): a playfield on a shell. The shell is the
   windows' charcoal, flat, with no decoration, and fills every cell of the
@@ -982,12 +984,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   state (GLOSSARY). A drop's show time is its reveal, the item fully risen:
   the drop's log line, its Loot row, its toast and its cue all land then. A
   zone arrival's show time is the backdrop change, when the zone boss's row
-  has left (its dissolve, any chest and the party's victory pose over, the
-  moment the staged state's zone flips): the arrival's log line and its toast
-  land then. The timeline answers it as the kill's effects arrive, before any
-  draw has departed the boss, as a prediction (the end of the blow shown on the
-  boss plus the dissolve and the victory hold, or its chest's end, whichever is
-  later), and refines it as the draws schedule and
+  has left (its dissolve, any chest and the party's victory pose over, then
+  the party's step-off, the moment the staged state's zone flips): the
+  arrival's log line and its toast land then. The timeline answers it as the
+  kill's effects arrive, before any draw has departed the boss, as a
+  prediction (the end of the blow shown on the boss plus the dissolve and the
+  victory hold, or its chest's end, whichever is later, plus the step-off),
+  and refines it as the draws schedule and
   re-time those motions. The boss's drop reveals before its row leaves, so its
   words land first and the zone's after. The farming line ("Zone N cleared.")
   is not held.
@@ -1062,8 +1065,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
     at both densities and in the SMIL picture, under the size caps.
 - Stage moments and lines of the pull (spec #132). Each has a golden
-  scenario, `travel`, `level-up`, `victory` and `boss_move`, at both densities
-  and in the SMIL picture, under the size caps.
+  scenario, `travel`, `level-up`, `victory`, `boss-kill-travel` and
+  `boss_move`, at both densities and in the SMIL picture, under the size caps.
   - **Travel**: on `traveled` the heroes step off toward the right
     (`TRAVEL_PX`), fading over 500 ms (`TRAVEL_OFF_MS`); the enemies the travel left
     stand until the backdrop changes to the destination's at the end of it,
@@ -1076,11 +1079,21 @@ flags. No second server program, no Postgres, no Redis, no worker.
   - **Level-up**: the hero flashes gold, the hit flash's mechanism with a gold
     fill (`LEVEL_RGB`), and its gains rise over it as a gold number, `+3 atk
     +2 def`, atk, def and spd in that order, zero gains and HP left out. The
-    engine computes the gains from the hero's stats before and after the tick
-    and hands them to the stage with the effect.
+    number rises over 1.2 seconds (`LEVEL_NUMBER_MS`), where a hit's takes
+    700 ms. Several level-ups in one group play one after another by party
+    slot: the first at the blow's impact (or the group's time with no blow
+    shown), each next 250 ms later (`LEVEL_STAGGER_MS`); a lone one plays at
+    the first's time. The engine computes the gains from the hero's stats
+    before and after the tick and hands them to the stage with the effect.
   - **Victory**: when a zone boss falls, after its dissolve, every hero holds
     the `victory` pose for 2 seconds (`VICTORY_MS`) and the boss's row is held
     with it, so the backdrop change and the arrival's words move after the hold.
+    When the kill advances the zone (Push on: the `zone_cleared` effect names a
+    higher zone), the party then walks on as a travel does: the step-off over
+    `TRAVEL_OFF_MS` once the hold and any chest have both ended, whichever is
+    later, the backdrop change as it ends, the step-on over `TRAVEL_ON_MS`. The
+    boss's row is held through the step-off, so the arrival's words land at the
+    new zone's first frame. With Farm here the party holds and does not walk.
     The pose is a slot: the drawn 1.5× victory frame of the hero's class where
     the manifest has one, its idle where it has none, and the idle always at 1×
     (ADR 0007). A turn boss and the world boss get no hold.
