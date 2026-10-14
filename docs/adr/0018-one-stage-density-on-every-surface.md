@@ -41,3 +41,23 @@ the pixels are fewer, and the frames, effects and timing are the same.
   not for the thresholds" are read with this ADR.
 - A three-surface golden set for a few key scenarios (an attack with a hit, a dissolve and a
   spawn, a chest) is compared by eye once, at the PR, to catch a desktop that reads slow.
+- **Chosen encoding** (2026-10-14, measured in #210 with `pnpm svg:measure`, built in #212):
+  strokes. Each colour of each art, the backdrop included, is drawn as the shortest of three:
+  its rectangles filled, its horizontal runs, or its vertical runs, the runs stroked one pixel
+  wide down their middles; ids are one letter and colours three digits where they pair. It draws
+  the same pixels as the encoding before it in every look Chromium took, and cuts 40 to 46%. The
+  fullest scenario, `step-boss`, is 34,007 characters with SMIL on and 20,754 off (60,510 and
+  38,403 before), so every scenario is under three quarters of the cap on the first rung. ADR
+  0006's fuller legal frame is 64,487 at rest and 118,952 lunging with no backdrop, both on the
+  first rung. At rest over its worst zone (zone 10) it is 84,894, on the first rung. Lunging
+  over it, 139,359 on the first rung, it lands on the last, the backdrop dropped, at 114,061, as
+  it does over zones 3, 8 and 9; over zones 7 and 11 it lands on the rung that drops the idle
+  pair. No frame fits on no rung. Over the cap the engine's CLI refuses the tree and draws its
+  own content in the band's slot for that redraw, read from the 2.1.299 bundle and not seen in
+  the app. The open fact: the desktop app draws a PNG embedded as a data URI in the
+  non-interactive stage picture (Kevin, on #210, 2026-10-14: yes). The PNG encoding measured
+  13,902 characters on its largest scenario and puts every fuller frame on the first rung,
+  17,578 lunging over zone 8, at the cost of a one-device-pixel seam along an art's edge where
+  the scale is not whole, and of drawing nothing if `SVG_INTERACTIVE` is ever turned on, since
+  that path's scrub forbids `<image>`. The build ran before the answer was read and took
+  strokes, which fit without it; moving to embedded images is a later decision.

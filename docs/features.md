@@ -118,8 +118,7 @@ moving on.
 **Reactive events.** The fight answers what Claude is doing, on the stage and in the combat log, and
 never with a toast or a cue. While Claude works on a prompt the party has Haste: the heroes' gauges
 fill a quarter faster and they bob twice as fast, each trailing a speed streak in its class's
-colour, and the log says "The party quickens." A half-block terminal and the compact stage show the
-faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three minutes of
+colour, and the log says "The party quickens." The compact stage shows the faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three minutes of
 battle with no sign of work, and the log says "The party slows." A subagent's turn leaves it alone.
 A failed tool call enrages the front enemy: it flashes red and stays tinted red until its next hit,
 which lands half again as hard, and the log says "Claude stumbles. Wood Goblin is enraged!" With no
@@ -128,7 +127,7 @@ compaction makes the party camp: a campfire burns between the party and the enem
 seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
 "The party makes camp while Claude gathers its thoughts." While Claude Code shows a permission
 prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
-standing raises a small shield on the stages that draw the streaks, and the heroes take half damage and
+standing raises a small shield on the full stage, and the heroes take half damage and
 attack nobody while the enemies fight on. The log says "The party stands guard." The party lowers
 its guard when the call resolves, allowed or denied, or after two minutes of battle with no answer.
 Guard comes from Claude Code's permission-request hook, which fires only as a permission prompt
@@ -351,9 +350,14 @@ pauses and the band asks for an update instead of being refused in silence.
 **The band.** The game draws in a band above the prompt with three tabs, Party, Loot and World,
 on the letter hotkeys `p`, `l` and `w`, and `c` collapses it. The Party tab is the stage over the
 strip; Loot and World are the strip alone. The Party tab is 22 rows in every fight, the 17-row
-stage over the 5-row strip, and never more than Claude Code gives it. With fewer rows a terminal
-that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
-terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
+stage over the 5-row strip, and never more than Claude Code gives it. A half-block terminal
+shows the same scene as the terminals that draw images and the desktop, with the same art, frames,
+marks and timing, at fewer pixels: about two thirds of them, the heroes and enemies the same size
+on screen as there, and damage numbers drawn as text. `/promptfall renderer raster` and `/promptfall
+renderer image` switch one terminal between the two. With fewer rows a terminal that draws images
+zooms the whole scene out to fit and the desktop scales it; a half-block terminal crops the sky,
+down to the tallest actor on the stage, since a figure zoomed out into so few half-block rows
+would be a smear. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
 under 100 columns. It never hides itself while Claude asks for a permission or a question; it
 lays out at whatever size the rows left to it allow. In the terminal, though, Claude Code draws
@@ -396,8 +400,8 @@ about two seconds after the boss has dissolved. With Push on it then walks to th
 a travel: it steps off once the pose and any chest are over, the backdrop changes, the arrival's
 line and toast land, and it steps on. With Farm here it holds and stays; a turn boss and the world
 boss get no hold.
-The pose is a slot: at 1.5× it holds the class's drawn victory frame, the weapon raised, and the
-idle art where a class has none; at 1× it always holds the idle.
+The pose is a slot: on every surface it holds the class's drawn victory frame, the weapon raised,
+and the idle art where a class has none; the compact stage holds the idle.
 It draws inside the band's picture, as described under the playfield above. A terminal session asks
 which picture it can draw, and lays the band out with the last session's answer while it waits, so
 the band holds its height from the second session on.

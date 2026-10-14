@@ -17,6 +17,12 @@ Raster's numbers moving up), down to the tallest actor on it (`minRowsAt`: 8 row
 goes compact. The engine's `maxRows` is a hard limit: a taller band scrolls in a window, so the
 band cannot push into the transcript.
 
+_ADR 0018 (2026-10-14): the Raster now scales. It draws the one 1.5× scene resampled into its
+full box, three scene pixels to two cell pixels, so "cannot scale" above no longer holds. A short
+band still keeps the crop: the scene is cropped to the rows shown, three scene pixels a cell row,
+then resampled. The reason is legibility: at 8 rows the Raster has 16 pixels of height, and a
+24-pixel figure scaled into them is a smear._
+
 Kevin asked for both on 2026-10-08, playing with the backdrops in: the boss fights showed the
 whole painting and he wanted that view all the time, with the units small so a boss's size lands;
 and a long prompt had shrunk the stage to a strip, which he did not want, "even if it means
