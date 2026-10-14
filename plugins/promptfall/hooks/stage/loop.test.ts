@@ -11,9 +11,11 @@ import { MessageLog } from './log'
 import { bandKey, type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
 import { StageTimeline } from './timeline'
 import {
+  ALT_REMOUNT_MS,
   EVENT_FRAME_MS,
   HASTE_FRAME_MS,
   IDLE_FRAME_MS,
+  PROBE_ALT_DENY,
   SPAWN_MS,
   SVG_FALLBACK_FRAME_MS,
 } from './tuning'
@@ -305,6 +307,46 @@ test('a deny stops the blits until the next mount', async () => {
   h.loop.mount(site())
   await clock.advance(IDLE_FRAME_MS)
   expect(h.blits.length).toBeGreaterThan(1)
+})
+
+test('an Image drawn as its alt takes a new key and a render, at most every ALT_REMOUNT_MS', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  // A background worker's band, laid out before the terminal attached.
+  h.state.answer = { deny: `${PROBE_ALT_DENY} (bg worker)` }
+  h.loop.mount(site('image'))
+  await clock.advance(EVENT_FRAME_MS)
+  expect(h.loop.remountKey()).toBe('-r1')
+  const asked = h.invalidations.length
+  expect(asked).toBeGreaterThan(0)
+  // Drawn again under that key, attached now but with no image id: no new key before ALT_REMOUNT_MS.
+  h.state.answer = { deny: 'the Image draws its alt here: every 8-bit image id is in use' }
+  h.loop.mount({ ...site('image'), key: `stage${h.loop.remountKey()}` })
+  await clock.advance(EVENT_FRAME_MS)
+  expect(h.loop.remountKey()).toBe('-r1')
+  await clock.advance(ALT_REMOUNT_MS)
+  h.loop.mount({ ...site('image'), key: 'stage-r1-again' })
+  await clock.advance(EVENT_FRAME_MS)
+  expect(h.loop.remountKey()).toBe('-r2')
+  expect(h.invalidations.length).toBeGreaterThan(asked)
+  // Attached: the fresh Image takes its blits, and the key holds.
+  h.state.answer = {}
+  h.loop.mount({ ...site('image'), key: `stage${h.loop.remountKey()}` })
+  await clock.advance(ALT_REMOUNT_MS * 2)
+  expect(h.loop.remountKey()).toBe('-r2')
+})
+
+test('any other deny, or a Raster, keeps the key', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.answer = { deny: 'not mounted' }
+  h.loop.mount(site('image'))
+  await clock.advance(5_000)
+  const raster = harness(clock)
+  raster.state.answer = { deny: `${PROBE_ALT_DENY} (bg worker)` }
+  raster.loop.mount(site('raster'))
+  await clock.advance(5_000)
+  expect([h.loop.remountKey(), raster.loop.remountKey()]).toEqual(['', ''])
 })
 
 test('a tick that spans a mount(null) blits nothing', async () => {

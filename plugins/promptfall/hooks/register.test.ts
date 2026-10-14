@@ -385,6 +385,64 @@ const JOB_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'slash' }
 const SPARE_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg', CLAUDE_BG_SOURCE: 'spare' }
 /** The spare as `ps` saw its launch, before the engine marks it. */
 const SPARE_AT_LAUNCH_ENV = { CLAUDE_CODE_SESSION_KIND: 'bg' }
+/** The marks a terminal that draws pictures leaves in the processes started from it. */
+const GHOSTTY_ENV = { GHOSTTY_RESOURCES_DIR: '/Applications/cmux.app/Contents/Resources/ghostty' }
+const KITTY_ENV = { KITTY_WINDOW_ID: '1' }
+
+/** What the plugin sets in its own process's environment, by name. */
+function envSets(on: On) {
+  const sets = new Map<string, string | undefined>()
+  on('env.set', (_$, e) => {
+    sets.set(e.name, e.value)
+    return { value: undefined }
+  })
+  return sets
+}
+
+const FORCES: [string, Record<string, string>, string][] = [
+  ["the conversation's process from Ghostty or cmux", { ...JOB_ENV, ...GHOSTTY_ENV }, 'auto'],
+  ['the spare from kitty, with image forced', { ...SPARE_ENV, ...KITTY_ENV }, 'image'],
+]
+for (const [who, env, renderer] of FORCES) {
+  test(`a background worker forces pictures for the attach: ${who}`, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    store(on, { 'promptfall:settings': { sound: 'off', motion: 'full', renderer } })
+    engineBottom(on, [], env)
+    const last = states(on)
+    const sets = envSets(on)
+    session(on)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    expect(sets.get('CLAUDE_CODE_FORCE_TERMINAL_IMAGES')).toBe('1')
+    // No probe: before the attach it would hear "no pictures" and settle on half-blocks.
+    expect(last.get('renderer')).toBe('image')
+  })
+}
+
+const LEAVES: [string, Record<string, string>, string][] = [
+  ['a direct session', GHOSTTY_ENV, 'auto'],
+  [
+    'a worker inside tmux',
+    { ...JOB_ENV, ...GHOSTTY_ENV, TMUX: '/tmp/tmux-501/default,1,0' },
+    'auto',
+  ],
+  ['a worker inside screen', { ...JOB_ENV, ...KITTY_ENV, STY: '1.pts-0' }, 'auto'],
+  ['a worker from a terminal with no pictures', JOB_ENV, 'auto'],
+  ['a worker with raster forced', { ...JOB_ENV, ...GHOSTTY_ENV }, 'raster'],
+]
+for (const [who, env, renderer] of LEAVES) {
+  test(`the engine's picture check is left alone: ${who}`, async ($, on) => {
+    mock.clock(on, { now: 1_000_000 })
+    store(on, { 'promptfall:settings': { sound: 'off', motion: 'full', renderer } })
+    engineBottom(on, [], env)
+    const last = states(on)
+    const sets = envSets(on)
+    session(on)
+    await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+    expect(sets.has('CLAUDE_CODE_FORCE_TERMINAL_IMAGES')).toBe(false)
+    // The renderer is the setting's: the probe decides auto.
+    expect(last.get('renderer') ?? 'unknown').toBe(renderer === 'auto' ? 'unknown' : renderer)
+  })
+}
 
 /** The machine's save as another process of the plugin reaches it: the same store. */
 function elsewhere(data: Map<string, unknown>): StoreKeyValue {
