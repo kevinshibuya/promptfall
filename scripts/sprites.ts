@@ -1,11 +1,12 @@
 // Builds plugins/promptfall/hooks/sprites/generated.ts from art/manifest.json, the master palettes
-// and the PNGs under art/. A pure function of committed input: `pnpm sprites:check` fails CI when
-// the committed module is stale.
+// and the PNGs under art/. A pure function of input: `pnpm sprites:check` fails when
+// the generated module is stale, regardless of its Git status.
 //
 // tsx scripts/sprites.ts                       build, exit 1 listing every failure
+// tsx scripts/sprites.ts --check               check the module without writing it
 // tsx scripts/sprites.ts --derive-snes-master  write art/palettes/snes.json from the snes stems
 // tsx scripts/sprites.ts --derive-hires-master write art/palettes/hires.json from the 1.5x art
-import { readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { worldBossKey } from '../plugins/promptfall/hooks/sprites/keys'
 import { STAGE_MAX_COLUMNS, STAGE_ROWS } from '../plugins/promptfall/hooks/stage/tuning'
@@ -37,12 +38,10 @@ export type ManifestEntry = {
   /** A hero's rarity colour per drawn frame, as `rarityColorHires`. */
   frameRarityColors?: { windup: string; follow?: string; victory?: string }
 }
-/** One zone's stage backdrop: the 1x painting and its 1.5x twin, each at the full stage's size. */
+/** One zone's stage backdrop: the 1.5x painting at the full stage's size. */
 export type BackdropEntry = {
   zone: number
-  /** A PNG under art/, exactly BACKDROP wide and tall, opaque, at most BACKDROP_COLOURS colours. */
-  file: string
-  /** As `file`, at 1.5x: exactly BACKDROP_HIRES. */
+  /** A PNG under art/, exactly BACKDROP_HIRES, opaque, at most BACKDROP_COLOURS colours. */
   fileHires: string
 }
 export type Manifest = {
@@ -84,7 +83,7 @@ export type BuildInput = {
   /** The content's zone count: a backdrop past it is an error. Unbounded when absent. */
   zones?: number
 }
-export type BuiltBackdrop = { zone: number; full: Indexed; hires: Indexed }
+export type BuiltBackdrop = { zone: number; art: Indexed }
 export type BuildResult = {
   errors: string[]
   sprites: BuiltSprite[]
@@ -129,13 +128,12 @@ const HIRES_SCALE = 1.5
 const HIRES_COLOURS = 16
 const HIRES_MASTER_SIZE = 128
 /**
- * A zone backdrop's canvas: the widest, tallest full stage (160 columns, the boss rows), at 1x and
- * at 1.5x (compose.ts frameSize). The stage bottom-anchors it and centre-crops narrower boxes.
+ * A zone backdrop's canvas: the widest, tallest full stage at 1.5x (compose.ts frameSize).
+ * The stage bottom-anchors it and centre-crops narrower boxes.
  */
-export const BACKDROP = { width: STAGE_MAX_COLUMNS, height: STAGE_ROWS * 2 }
 export const BACKDROP_HIRES = {
-  width: Math.ceil(BACKDROP.width * HIRES_SCALE),
-  height: Math.ceil(BACKDROP.height * HIRES_SCALE),
+  width: Math.ceil(STAGE_MAX_COLUMNS * HIRES_SCALE),
+  height: Math.ceil(STAGE_ROWS * 2 * HIRES_SCALE),
 }
 export const BACKDROP_COLOURS = 16
 
@@ -205,10 +203,9 @@ export function buildBackdrops(input: BuildInput, errors: string[]): BuiltBackdr
       }
       return indexed.art
     }
-    const full = one(entry.file, BACKDROP)
-    const hires = one(entry.fileHires, BACKDROP_HIRES)
-    if (full === null || hires === null) continue
-    built.push({ zone: entry.zone, full, hires })
+    const art = one(entry.fileHires, BACKDROP_HIRES)
+    if (art === null) continue
+    built.push({ zone: entry.zone, art })
   }
   return built.sort((a, b) => a.zone - b.zone)
 }
@@ -779,12 +776,12 @@ export function emitModule(result: BuildResult): string {
   lines.push('}')
   lines.push('')
   lines.push(
-    '/** The zone backdrops by zone number: the 1x painting and its 1.5x twin, each the full stage. */',
+    '/** The zone backdrops by zone number: each a 1.5x painting at the full stage size. */',
   )
-  lines.push('export const BACKDROPS: Readonly<Record<string, { full: Art; hires: Art }>> = {')
+  lines.push('export const BACKDROPS: Readonly<Record<string, Art>> = {')
   for (const b of result.backdrops) {
     lines.push(`  // backdrop zone ${b.zone}`)
-    lines.push(`  '${b.zone}': { full: ${artLiteral(b.full)}, hires: ${artLiteral(b.hires)} },`)
+    lines.push(`  '${b.zone}': ${artLiteral(b.art)},`)
   }
   lines.push('}')
   lines.push('')
@@ -917,7 +914,16 @@ async function main(): Promise<void> {
     for (const e of result.errors) console.error(e)
     process.exit(1)
   }
-  writeFileSync(OUT, emitModule(result))
+  const source = emitModule(result)
+  if (process.argv.includes('--check')) {
+    if (!existsSync(OUT) || readFileSync(OUT, 'utf8') !== source) {
+      console.error(`${OUT}: stale; run pnpm sprites`)
+      process.exitCode = 1
+      return
+    }
+  } else {
+    writeFileSync(OUT, source)
+  }
   if (result.drift.length > 0) {
     console.log('frame size drift:')
     for (const d of result.drift) console.log(`  ${d}`)

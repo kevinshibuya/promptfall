@@ -9,17 +9,18 @@ import { inventoryPane } from '../ui/pane/inventory'
 import { marketPane } from '../ui/pane/market'
 import { sceneSvg } from '../windows/svg'
 import { CELL_W, PANE_SVG_MAX_CHARS, STRIP_SVG_MAX_CHARS } from '../windows/tuning'
-import { composeFrame, type Frame } from './compose'
+import { composeFrame } from './compose'
 import { fullerFrame } from './fixtures'
 import { BAND_GOLDENS, GOLDENS, PANE_GOLDENS, STRIP_GOLDENS } from './goldens/index'
 import { imageBytes, pngImage } from './image'
 import { type StageActor, type StageModel, samePoses } from './model'
 import { composeBand } from './playfield'
-import { encodeRaster, rasterPairs } from './raster'
+import { rasterPairs } from './raster'
 import {
   BAND_SCENARIOS,
   band,
   bandGoldenOf,
+  caseOf,
   type Golden,
   goldenOf,
   PANE_SCENARIOS,
@@ -33,7 +34,7 @@ import {
   strip,
   stripGoldenOf,
 } from './scenarios'
-import { renderSvg, svgWithFallback } from './svg'
+import { fitSvg, type Rung } from './svg'
 import type { Motion } from './timeline'
 import {
   DESKTOP_COLUMN_PX_CEILING,
@@ -46,35 +47,10 @@ import {
   ZONE_GROUND,
 } from './tuning'
 
-/** A model past scale 1 draws on Image only (and on Svg from H5): its frame's bytes at its share of IMAGE_SCALE. */
-function imageWithinBudget(frame: Frame, scale: number, check = 'image bytes'): void {
-  expect(imageBytes(frame, IMAGE_SCALE / scale), check).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
-}
-
-/** A scale-1 model's renders: its Svg with SMIL on and off, its Raster's pairs, its Image's bytes. */
-function scaleOneWithinBudgets(
-  r: { svg: string; flat: string; cells: string; image: Frame },
-  of = 'scale 1',
-): void {
-  expect(r.svg.length, `${of}: Svg characters, SMIL on`).toBeLessThan(SVG_MAX_CHARS)
-  expect(r.flat.length, `${of}: Svg characters, SMIL off`).toBeLessThan(SVG_MAX_CHARS)
-  expect(rasterPairs(r.cells), `${of}: Raster pairs`).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
-  expect(imageBytes(r.image, IMAGE_SCALE), `${of}: Image bytes`).toBeLessThanOrEqual(
-    IMAGE_MAX_BYTES,
-  )
-}
-
-function withinBudgets(model: StageModel, motions: readonly Motion[], now: number): void {
-  if (model.scale !== 1) {
-    imageWithinBudget(composeFrame(model, { numbers: true }), model.scale)
-    return
-  }
-  scaleOneWithinBudgets({
-    svg: renderSvg(model, motions, { smil: true, now, width: 960, motion: 'full' }),
-    flat: renderSvg(model, motions, { smil: false, now, width: 960, motion: 'full' }),
-    cells: encodeRaster(composeFrame(model, { numbers: false }), model.numbers),
-    image: composeFrame(model, { numbers: true }),
-  })
+/** A model's Image frame within the Image budget: its bytes at its share of IMAGE_SCALE. */
+function imageWithinBudget(model: StageModel, check = 'image bytes'): void {
+  const frame = composeFrame(model, { numbers: true })
+  expect(imageBytes(frame, IMAGE_SCALE / model.scale), check).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
 }
 
 /** `make(key)` once per key, shared by every test that reads it. */
@@ -90,7 +66,7 @@ function once<K, V>(make: (key: K) => V): (key: K) => V {
   }
 }
 
-/** Each stage scenario staged and its encodings rendered once: the golden, the budgets and the fallback read these. */
+/** Each stage scenario staged and its encodings rendered once: the golden and the budgets read these. */
 const staged = once((name: Scenario) => {
   const s = stage(name)
   return { ...s, renders: renders(s) }
@@ -105,24 +81,49 @@ for (const name of SCENARIOS) {
     for (const encoding of Object.keys({ ...want, ...golden }) as (keyof Golden)[]) {
       expect(golden[encoding], `${name}: ${encoding}`).toBe(want[encoding])
     }
-    const lo = { svg: r.svgLo, flat: r.svgLoFlat, cells: r.cells, image: r.image }
-    scaleOneWithinBudgets(lo, `${name} at scale 1`)
-    if (r.hiresCells === null) {
-      imageWithinBudget(r.hires, s.hires.scale, `${name} hires: Image bytes`)
-    } else {
-      const hi = { svg: r.svgHi, flat: r.svgHiFlat, cells: r.hiresCells, image: r.hires }
-      scaleOneWithinBudgets(hi, `${name} hires at scale 1`)
-    }
-    // The desktop's Svg through the production fall-back: the hires one, or the scale-1 one over
-    // the cap.
-    for (const [smil, svg] of [
-      ['on', r.svg],
-      ['off', r.svgFlat],
+    // The Raster's cells are the one scene's, resampled: its pairs, on every scenario.
+    expect(rasterPairs(r.cells), `${name}: Raster pairs`).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
+    expect(
+      imageBytes(r.image, IMAGE_SCALE / s.model.scale),
+      `${name}: Image bytes`,
+    ).toBeLessThanOrEqual(IMAGE_MAX_BYTES)
+    // The desktop's Svg through the production ladder: on its first rung, under three quarters of
+    // the cap, SMIL on and off.
+    for (const [smil, svg, rung] of [
+      ['on', r.svg, r.rung],
+      ['off', r.svgFlat, r.rungFlat],
     ] as const) {
-      expect(svg.length, `${name}: the desktop's Svg, SMIL ${smil}`).toBeLessThan(SVG_MAX_CHARS)
+      expect(rung, `${name}: the desktop's Svg's rung, SMIL ${smil}`).toBe(0)
+      expect(svg.length, `${name}: the desktop's Svg, SMIL ${smil}`).toBeLessThan(
+        (SVG_MAX_CHARS * 3) / 4,
+      )
     }
   })
 }
+
+test("a case stages at any instant after its events: the windup's knight, later, is the strike's and the follow-through's", () => {
+  const windup = caseOf('windup')
+  expect(windup.from).toBeLessThan(windup.now)
+  for (const [name, later] of [
+    ['strike', 120],
+    ['follow', 240],
+  ] as const) {
+    // The Svg's SMIL clock counts from its own instant, so its hash is the instant's own.
+    const g = goldenOf(renders(windup.at(windup.now + later)))
+    expect(g.imageHash, `${name}: Image`).toBe(GOLDENS[name].imageHash)
+    expect(g.rasterHash, `${name}: Raster`).toBe(GOLDENS[name].rasterHash)
+  }
+})
+
+test('the spawn scenario stages the hedge sprite halfway through its fade in, after the kill has faded', () => {
+  const c = caseOf('spawn')
+  const s = c.at(c.now)
+  expect(s.motions.filter((m) => m.kind === 'dissolve')).toEqual([])
+  const spawn = s.motions.find((m) => m.kind === 'spawn')
+  expect(spawn?.actor).toBe('e4')
+  expect(spawn?.from).toBe(c.from)
+  expect(((spawn?.until ?? 0) + (spawn?.from ?? 0)) / 2).toBe(c.now)
+})
 
 const NOW = 1_000_000
 
@@ -187,45 +188,12 @@ function busyMotions(boss: string): Motion[] {
   ]
 }
 
-test('worst case: the concept boss at 160 × 17 with three lunging heroes, numbers and a chest', () => {
-  const boss = spriteFor('enemy', 'bandit_captain').full
-  const heroes = ['knight', 'black_mage', 'white_mage'].map((c) => spriteFor('hero', c).full)
-  const drop = spriteFor('item', 'iron_sword').full
-  const chest = spriteFor('chest', 'closed')
-  const model: StageModel = {
-    box: { columns: 160, rows: 17 },
-    ground: ZONE_GROUND[0] ?? 0,
-    backdrop: null,
-    actors: [
-      actor('e1', 'enemy:bandit_captain', boss, 4, 0, false),
-      ...heroes.map((art, i) =>
-        actor(
-          `h${i + 1}`,
-          `hero:${['knight', 'black_mage', 'white_mage'][i]}`,
-          art,
-          140 - i * 18,
-          18,
-          true,
-        ),
-      ),
-    ],
-    numbers: [0, 1, 2].map((i) => ({ text: '999', x: 10 + i * 14, y: 2, rgb: 0xffffff })),
-    glows: [{ x: 28, y: 14, r: 12, rgb: 0xf0c040, alpha: 0.5 }],
-    chests: [{ spriteId: 'chest:closed', art: chest.full, x: 20, y: 18, alpha: 1, phase: 'hold' }],
-    drops: [{ spriteId: 'item:iron_sword', art: drop, x: 20, y: 6, alpha: 1 }],
-    effects: [],
-    alt: 'worst',
-    scale: 1,
-  }
-  withinBudgets(model, busyMotions('e1'), NOW)
-})
-
 test('at scale 1.5 the rest frame and the boss frame are both 180 × 51 (ADR 0010)', () => {
-  const rest = staged('rest').renders.hires
+  const rest = staged('rest').renders.image
   expect([rest.width, rest.height]).toEqual([180, 51])
-  const boss = staged('boss').renders.hires
+  const boss = staged('boss').renders.image
   expect([boss.width, boss.height]).toEqual([180, 51])
-  expect(staged('compact').hires.scale).toBe(1)
+  expect(staged('compact').model.scale).toBe(1)
 })
 
 test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes stays in the Image budget', () => {
@@ -265,7 +233,7 @@ test('hires worst case: the 72 × 51 boss at 160 × 17 with three lunging heroes
     scale: 1.5,
   }
   expect(composeFrame(model, { numbers: true }).width).toBe(240)
-  withinBudgets(model, busyMotions('e1'), NOW)
+  imageWithinBudget(model)
 })
 
 /** A legal-sized checkerboard: every pixel opaque, alternating two colours, the worst run length. */
@@ -275,46 +243,6 @@ function checker(width: number, height: number, a: number, b: number): SpriteArt
   )
   return { width, height, palette: [0, a, b], pixels: encode(px) }
 }
-
-test('adversarial legal art: a 48 × 34 checker boss, three checker heroes, a checker chest and drop', () => {
-  const boss = checker(48, 34, 0x102030, 0xf0e0d0)
-  const heroes = [0, 1, 2].map((i) =>
-    checker(16, 16, 0x400000 + i * 0x101010, 0x00c000 + i * 0x000a0a),
-  )
-  const drop = checker(16, 16, 0x808080, 0x0000ff)
-  const model: StageModel = {
-    box: { columns: 160, rows: 17 },
-    ground: ZONE_GROUND[0] ?? 0,
-    backdrop: null,
-    actors: [
-      actor('e1', 'adversarial:boss', boss, 4, 0, false),
-      ...heroes.map((art, i) =>
-        actor(`h${i + 1}`, `adversarial:h${i}`, art, 140 - i * 18, 18, true),
-      ),
-    ],
-    numbers: [{ text: '-999', x: 10, y: 2, rgb: 0xff5050 }],
-    glows: [{ x: 28, y: 14, r: 12, rgb: 0xf0c040, alpha: 0.5 }],
-    chests: [
-      {
-        spriteId: 'adversarial:chest',
-        art: checker(16, 16, 0x604020, 0xf0c040),
-        x: 20,
-        y: 18,
-        alpha: 0.5,
-        phase: 'hold',
-      },
-    ],
-    drops: [{ spriteId: 'adversarial:drop', art: drop, x: 20, y: 6, alpha: 0.5 }],
-    effects: [],
-    alt: 'adversarial',
-    scale: 1,
-  }
-  withinBudgets(
-    model,
-    busyMotions('e1').filter((m) => m.kind !== 'chest'),
-    NOW,
-  )
-})
 
 for (const name of STRIP_SCENARIOS) {
   test(`strip golden: ${name}`, () => {
@@ -446,17 +374,13 @@ test('the fullest Market pane fits the Svg budget', () => {
   expect(svg.length).toBeLessThan(PANE_SVG_MAX_CHARS)
 })
 
-/** The adversarial scene at `scale`: a checker boss, three checker heroes with distinct palettes, a checker drop. */
-function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): StageModel {
+/** The adversarial scene at 1.5: a checker boss, three checker heroes with distinct palettes, a checker drop. */
+function adversarial(): StageModel {
+  const scale = 1.5
   const k = (v: number) => Math.round(v * scale)
   const boss = checker(k(48), k(34), 0x102030, 0xf0e0d0)
   const heroes = [0, 1, 2].map((i) =>
-    checker(
-      k(heroSize.width),
-      k(heroSize.height),
-      0x400000 + i * 0x101010,
-      0x00c000 + i * 0x000a0a,
-    ),
+    checker(k(16), k(16), 0x400000 + i * 0x101010, 0x00c000 + i * 0x000a0a),
   )
   return {
     box: { columns: 160, rows: 17 },
@@ -495,74 +419,71 @@ function adversarial(scale: 1 | 1.5, heroSize = { width: 16, height: 16 }): Stag
   }
 }
 
-test('adversarial legal art at 1.5 (a 72 × 51 checker boss, 24 × 24 heroes) keeps the 1.5x Svg under the cap', () => {
-  const hi = adversarial(1.5)
-  const lo = adversarial(1)
+test('adversarial legal art at 1.5 (a 72 × 51 checker boss, 24 × 24 heroes) renders on the first rung, under the cap, and in the Image budget', () => {
+  const model = adversarial()
   const motions = busyMotions('e1').filter((m) => m.kind !== 'chest')
   for (const smil of [true, false]) {
     const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
-    const svg = svgWithFallback(hi, lo, motions, opts)
-    expect(svg).toBe(renderSvg(hi, motions, opts))
+    const { svg, rung } = fitSvg(model, motions, opts)
+    expect(rung).toBe(0)
     expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
+  }
+  imageWithinBudget(model)
+})
+
+/**
+ * ADR 0006's fuller legal frame through the production ladder, SMIL on, at rest with the idle pair
+ * and 60 ms into a dithered boss lunge with a hero hit: the rung it lands on and its characters.
+ * These are ticket #210's numbers for its strokes encoding (`pnpm svg:measure`), every rung of
+ * each; the lunge over zones 3, 8, 9 and 10 lands on the last rung, with no backdrop.
+ */
+const FULLER_RUNGS: Record<string, { rest: [Rung, number]; lunging: [Rung, number] }> = {
+  'no backdrop': { rest: [0, 64_487], lunging: [0, 118_952] },
+  1: { rest: [0, 75_363], lunging: [0, 129_828] },
+  2: { rest: [0, 76_431], lunging: [0, 130_896] },
+  3: { rest: [0, 83_706], lunging: [3, 114_061] },
+  4: { rest: [0, 74_686], lunging: [0, 129_151] },
+  5: { rest: [0, 73_493], lunging: [0, 127_958] },
+  6: { rest: [0, 75_636], lunging: [0, 130_101] },
+  7: { rest: [0, 79_394], lunging: [1, 129_201] },
+  8: { rest: [0, 83_715], lunging: [3, 114_061] },
+  9: { rest: [0, 82_444], lunging: [3, 114_061] },
+  10: { rest: [0, 84_894], lunging: [3, 114_061] },
+  11: { rest: [0, 78_790], lunging: [1, 128_597] },
+  12: { rest: [0, 72_905], lunging: [0, 127_370] },
+}
+
+test('the fuller legal frame at rest and lunging, with no backdrop and over every zone backdrop, fits on a rung', () => {
+  const zones = Object.keys(BACKDROPS)
+  expect(Object.keys(FULLER_RUNGS).sort()).toEqual(['no backdrop', ...zones].sort())
+  for (const [zone, pins] of Object.entries(FULLER_RUNGS)) {
+    for (const acting of [false, true]) {
+      const f = fullerFrame(acting, NOW)
+      const model = { ...f.model, backdrop: BACKDROPS[zone] ?? null }
+      const at = `${acting ? 'lunging' : 'at rest'}, ${zone}`
+      const on = fitSvg(model, f.motions, { smil: true, now: NOW, width: 960, motion: 'full' })
+      expect([on.rung, on.svg.length], at).toEqual(acting ? pins.lunging : pins.rest)
+      expect(on.svg.length, at).toBeLessThan(SVG_MAX_CHARS)
+      // Without SMIL the picture carries one frame: the first rung, whatever the zone.
+      const off = fitSvg(model, f.motions, { smil: false, now: NOW, width: 960, motion: 'full' })
+      expect(off.rung, at).toBe(0)
+    }
   }
 })
 
-test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
-  // Past legal art: every hero a 72 × 51 checker, so the 1.5x markup passes the cap.
-  const hi = adversarial(1.5, { width: 48, height: 34 })
-  const lo = adversarial(1)
-  const motions = busyMotions('e1').filter((m) => m.kind !== 'chest')
-  for (const smil of [true, false]) {
-    const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
-    expect(renderSvg(hi, motions, opts).length).toBeGreaterThanOrEqual(SVG_MAX_CHARS)
-    const svg = svgWithFallback(hi, lo, motions, opts)
-    expect(svg).toBe(renderSvg(lo, motions, opts))
-    expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
-  }
-})
-
-test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg with its chest, 117,722 characters", () => {
-  const hi = fullerFrame(1.5, false, NOW)
-  const lo = fullerFrame(1, false, NOW)
-  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
-  expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
-  expect(svg.length).toBe(117_722)
-})
-
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 221,085 characters at 1.5x with its chest, so the 1x Svg (54,288)', () => {
-  const hi = fullerFrame(1.5, true, NOW)
-  const lo = fullerFrame(1, true, NOW)
-  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(221_085)
-  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
-  expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(54_288)
-})
-
-test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 53,279 characters over the zone 1 backdrop, under the cap', () => {
-  const svg = staged('boss-strike').renders.svgHi
-  expect(svg.length).toBe(53_279)
+test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 30,386 characters over the zone 1 backdrop, under the cap', () => {
+  const svg = staged('boss-strike').renders.svg
+  expect(svg.length).toBe(30_386)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
 })
 
-test('the fuller frame over every zone backdrop stays in budget at both scales', () => {
+test('the fuller frame over every zone backdrop stays in the Image budget', () => {
   const zones = Object.keys(BACKDROPS)
   expect(zones.length).toBeGreaterThan(0)
   for (const zone of zones) {
     const b = BACKDROPS[zone]
     if (!b) continue
-    const lo = fullerFrame(1, true, NOW)
-    const hi = fullerFrame(1.5, true, NOW)
-    const loModel = { ...lo.model, backdrop: b.full }
-    const hiModel = { ...hi.model, backdrop: b.hires }
-    withinBudgets(loModel, lo.motions, NOW)
-    withinBudgets(hiModel, hi.motions, NOW)
-    for (const smil of [true, false]) {
-      const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
-      expect(svgWithFallback(hiModel, loModel, hi.motions, opts).length, zone).toBeLessThan(
-        SVG_MAX_CHARS,
-      )
-    }
+    const { model } = fullerFrame(true, NOW)
+    imageWithinBudget({ ...model, backdrop: b }, `zone ${zone}: image bytes`)
   }
 })

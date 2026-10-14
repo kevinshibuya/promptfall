@@ -591,7 +591,7 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   expect((await bandRaster(ui))?.props.columns).toBe(120)
   expect(await stageRowsOf(ui)).toBe(11)
   await ui.unmount()
-  // A boss needs all 17: the Raster cannot scale, so the same band is compact.
+  // A boss needs all 17: the Raster does not zoom out into a short band, so the same band is compact.
   shown.view = boss()
   const withBoss = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
   expect(await height(withBoss)).toBe(6)

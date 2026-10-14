@@ -58,14 +58,20 @@ The SMIL `Svg` draws every pose from the actor's poses, never from the drawing a
 starting before the next one (167 ms), with the rest of the same action. A whole tick's queued
 actions would put every attacker's frames in one document.
 
+Measured in ADR 0018's strokes encoding (2026-10-14):
+
 - ADR 0006's fuller legal frame (a 72 × 51 boss and four 24 × 24 enemies dithered in 16
   colours, two dissolving, three checker heroes, a drop) is a committed fixture. At rest, with
-  the idle pair, its 1.5× SMIL `Svg` is 113,047 characters, under the 131,072 cap.
+  the idle pair, its SMIL `Svg` is 64,487 characters, under half the 131,072 cap; over a zone
+  backdrop, 72,905 (zone 12) to 84,894 (zone 10).
 - The same frame with the boss 60 ms into a lunge on two dithered 72 × 51 frames and a hero hit
-  is 216,353 characters: `svgWithFallback` draws the 1× `Svg` (51,341) for it. Adversarial art
-  at the edge of legal costs the desktop its 1.5× drawing during a boss's attack.
+  is 118,952 characters with no backdrop, under the cap. Over a zone backdrop it is 127,370 to
+  139,359, and over the six zones where that passes the cap the ladder takes it under: the idle
+  pair goes over zones 7 and 11, the backdrop over zones 3, 8, 9 and 10 (114,061). Adversarial
+  art at the edge of legal costs the desktop at most its painting during a boss's attack, never
+  a drawn frame.
 - The real bandit captain 60 ms into its lunge, on its drawn frames (the `boss-strike`
-  scenario), is 32,731 characters: a quarter of the cap.
+  scenario), is 30,386 characters: under a quarter of the cap.
 
 ## Consequences
 

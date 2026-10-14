@@ -4,11 +4,14 @@ import type { GameView, Settings } from '../../types'
 import { decode } from '../sprites/base64'
 import { SETTINGS_DEFAULT, WORLD_DEFAULT } from '../state'
 import { GAUGE_FRAME_MS } from '../windows/tuning'
+import { composeFrame, type Frame } from './compose'
 import { boss, wave } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { layoutFor } from './layout'
 import { MessageLog } from './log'
-import { bandKey, type LoopIo, StageLoop, type StageSite, stageFrame } from './loop'
+import { bandKey, type LoopIo, rasterStage, StageLoop, type StageSite, stageFrame } from './loop'
+import { type StageModel, stageAt } from './model'
+import { encodeRaster } from './raster'
 import { StageTimeline } from './timeline'
 import {
   ALT_REMOUNT_MS,
@@ -779,4 +782,93 @@ test('on SMIL a batch held while a frame found nothing to release still gets its
   h.loop.mount(site('smil', wave(), PROPS, 'desktop'))
   await clock.advance(show - (await clock.now()))
   expect(h.released).toEqual([show])
+})
+
+/** Where `f` differs from `ground`, the same stage with no actor on it: [left, top, right, bottom]. */
+function bounds(f: Frame, ground: Frame): [number, number, number, number] {
+  let [left, top, right, bottom] = [f.width, f.height, -1, -1]
+  for (let y = 0; y < f.height; y++) {
+    for (let x = 0; x < f.width; x++) {
+      const i = (y * f.width + x) * 4
+      if ([0, 1, 2, 3].every((k) => f.rgba[i + k] === ground.rgba[i + k])) continue
+      left = Math.min(left, x)
+      right = Math.max(right, x)
+      top = Math.min(top, y)
+      bottom = Math.max(bottom, y)
+    }
+  }
+  return [left, top, right, bottom]
+}
+
+test("the Raster stage stands each actor in the 1x stage's box, a 24-pixel hero 16 pixels tall", () => {
+  const t = new StageTimeline()
+  t.observe(wave(), 0)
+  const layout = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
+  if (!layout.box) throw new Error('expected a full stage')
+  const box = layout.box
+  const hires = stageAt(wave(), t, 0, box, { compact: false, motion: 'still' })
+  // Where the 1x stage stood each actor, its 16-pixel box's top-left corner, before it retired.
+  const was: Record<string, { x: number; y: number }> = {
+    e1: { x: 4, y: 18 },
+    e2: { x: 22, y: 18 },
+    e3: { x: 40, y: 18 },
+    h1: { x: 64, y: 18 },
+    h2: { x: 82, y: 18 },
+    h3: { x: 100, y: 18 },
+  }
+  const alone = (m: StageModel, key: string | null): StageModel => ({
+    ...m,
+    backdrop: null,
+    actors: m.actors.filter((a) => a.key === key),
+  })
+  const ground = rasterStage(alone(hires, null), layout).frame
+  expect([ground.width, ground.height]).toEqual([120, 34])
+  expect(hires.actors.map((a) => a.key).sort()).toEqual(Object.keys(was).sort())
+  for (const actor of hires.actors) {
+    const box = was[actor.key]
+    if (!box) throw new Error(`${actor.key} was not on the 1x stage`)
+    expect(actor.art.height, actor.key).toBe(24)
+    const [left, top, right, bottom] = bounds(
+      rasterStage(alone(hires, actor.key), layout).frame,
+      ground,
+    )
+    // Inside the 16-pixel box the 1x stage drew it in, standing on that box's bottom row.
+    expect(left, `${actor.key}: left`).toBeGreaterThanOrEqual(box.x)
+    expect(right, `${actor.key}: right`).toBeLessThan(box.x + 16)
+    expect(top, `${actor.key}: top`).toBeGreaterThanOrEqual(box.y)
+    expect(bottom, `${actor.key}: bottom`).toBe(box.y + 15)
+    // Two thirds of the figure's height in the scene, give or take the pixel the vote rounds.
+    const scene = composeFrame(alone(hires, actor.key), { numbers: false })
+    const [, sceneTop, , sceneBottom] = bounds(
+      scene,
+      composeFrame(alone(hires, null), { numbers: false }),
+    )
+    const tall = (sceneBottom - sceneTop + 1) * (2 / 3)
+    expect(Math.abs(bottom - top + 1 - tall), `${actor.key}: height`).toBeLessThanOrEqual(1)
+  }
+})
+
+test("a short Raster band shows the full stage's bottom rows, three scene pixels a cell row, a number above it in its top row", () => {
+  const t = new StageTimeline()
+  t.observe(wave(), 0)
+  const rows = t.rowsAt(wave(), 0)
+  const full = layoutFor(rows, PROPS, 'terminal', { tab: 'party', extra: 0 })
+  const short = layoutFor(rows, { bodyColumns: 120, maxRows: 16 }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+  })
+  expect(short).toMatchObject({ kind: 'full', cells: { columns: 120, rows: 11 } })
+  if (!full.box) throw new Error('expected a full stage')
+  const model = {
+    ...stageAt(wave(), t, 0, full.box, { compact: false, motion: 'still' }),
+    numbers: [{ text: '9', x: 30, y: 0, rgb: 0xffffff }],
+  }
+  const whole = rasterStage(model, full).frame
+  const { frame, numbers } = rasterStage(model, short)
+  expect([frame.width, frame.height]).toEqual([120, 22])
+  expect(frame.rgba).toEqual(whole.rgba.slice((34 - 22) * 120 * 4))
+  const cells = decode(encodeRaster(frame, numbers))
+  const words = new Uint32Array(cells.buffer, cells.byteOffset, cells.length / 4)
+  // Scene column 30 is cell column 20; the number was 18 scene rows above the crop.
+  expect(words[20 * 3]).toBe(0x39)
 })

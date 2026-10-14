@@ -38,8 +38,10 @@ const NOW = 1_000_000 // bobbing(NOW) is 0
 const BOX = { columns: 116, rows: 8 }
 const BOX_COMPACT = { columns: 52, rows: 4 }
 const BOSS_BOX = { columns: 120, rows: 17 }
-type Opts = { compact: boolean; motion: 'full' | 'still'; scale?: 1 | 1.5 }
+type Opts = { compact: boolean; motion: 'full' | 'still' }
 const STILL: Opts = { compact: false, motion: 'still' }
+/** A 1x distance on the full stage, which is 1.5. */
+const k = (v: number) => Math.round(v * HIRES_SCALE)
 const hit = (by: string, target: string): Effect => ({ k: 'hit', by, target, amount: 12 })
 
 function at(view = wave(), effects: Effect[] = [], now = NOW, box = BOX, opts: Opts = STILL) {
@@ -62,15 +64,15 @@ const overlaps = (a: StageActor, b: StageActor) =>
 test('enemies from the left by slot, heroes in party order with the last at the right, feet on the ground, no overlap', () => {
   const m = at()
   ;['e1', 'e2', 'e3'].forEach((key, i) => {
-    expect(actor(m.actors, key).x).toBe(ACTOR_EDGE + ACTOR_PITCH * i)
+    expect(actor(m.actors, key).x).toBe(k(ACTOR_EDGE) + k(ACTOR_PITCH) * i)
   })
   // Left to right as the heroes window lists them: the first faces the enemies, the last stands back.
   ;['h1', 'h2', 'h3'].forEach((key, i) => {
     const a = actor(m.actors, key)
-    expect(a.x).toBe(116 - ACTOR_EDGE - 16 - ACTOR_PITCH * (2 - i))
+    expect(a.x).toBe(k(116) - k(ACTOR_EDGE) - 24 - k(ACTOR_PITCH) * (2 - i))
     expect(a.flipX).toBe(true)
   })
-  for (const a of m.actors) expect(a.y + a.art.height).toBe(16)
+  for (const a of m.actors) expect(a.y + a.art.height).toBe(24)
   for (const a of m.actors)
     for (const b of m.actors) if (a !== b) expect(overlaps(a, b)).toBe(false)
 })
@@ -85,7 +87,7 @@ test('a 48 px boss in slot 0 does not reach the heroes at 116 columns', () => {
 
 test('the rarity slot takes the hero rarity colour', () => {
   const mira = actor(at().actors, 'h2')
-  const slot = spriteFor('hero', 'black_mage').raritySlot ?? -1
+  const slot = spriteFor('hero', 'black_mage').raritySlotHires ?? -1
   expect(mira.palette[slot]).toBe(RARITY_RGB.rare)
 })
 
@@ -93,23 +95,25 @@ test('a flashing actor draws white; a lunging hero steps and lunges toward the e
   const effects: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
   const mid = at(wave(), effects, NOW + LUNGE_MS / 2)
   expect(actor(mid.actors, 'h1').x).toBe(
-    116 - ACTOR_EDGE - 16 - ACTOR_PITCH * 2 - STEP_PX - LUNGE_PX,
+    k(116) - k(ACTOR_EDGE) - 24 - k(ACTOR_PITCH) * 2 - k(STEP_PX) - k(LUNGE_PX),
   )
   const e1 = actor(mid.actors, 'e1')
   expect(e1.flashing).toBe(true)
   expect(e1.palette.slice(1).every((c) => c === FLASH_RGB)).toBe(true)
   const h1 = actor(mid.actors, 'h1')
   expect(h1.spriteId).toBe('hero:knight')
-  expect(h1.art).toBe(spriteFor('hero_attack', 'knight').full)
+  expect(h1.art).toBe(spriteFor('hero_attack', 'knight').hires)
 })
 
-test('the idle bob moves with motion full only', () => {
+test('on the compact stage the idle bob lifts one pixel with motion full only', () => {
   const v = wave()
-  const full: Opts = { compact: false, motion: 'full' }
-  const rest = at(v, [], NOW, BOX, full)
-  const up = at(v, [], NOW + IDLE_FRAME_MS, BOX, full)
+  const full: Opts = { compact: true, motion: 'full' }
+  const rest = at(v, [], NOW, BOX_COMPACT, full)
+  const up = at(v, [], NOW + IDLE_FRAME_MS, BOX_COMPACT, full)
   expect(actor(rest.actors, 'h1').y - actor(up.actors, 'h1').y).toBe(IDLE_BOB_PX)
-  const still = at(v, [], NOW + IDLE_FRAME_MS, BOX, STILL)
+  // One drawing: the lift alone moves it.
+  expect(actor(up.actors, 'h1').art).toBe(spriteFor('hero', 'knight').compact)
+  const still = at(v, [], NOW + IDLE_FRAME_MS, BOX_COMPACT, { ...full, motion: 'still' })
   expect(actor(still.actors, 'h1').y).toBe(actor(rest.actors, 'h1').y)
 })
 
@@ -198,8 +202,8 @@ test('minions joining a boss stand clear of the boss and the party, and the boss
   expect(order.indexOf('e9')).toBeGreaterThan(order.indexOf('e2'))
 })
 
-test('at scale 1.5 the full stage carries the 1.5x art and every distance grows by 1.5', () => {
-  const opts: Opts = { compact: false, motion: 'still', scale: HIRES_SCALE }
+test('the full stage is 1.5: it carries the 1.5x art and every distance grows by 1.5', () => {
+  const opts: Opts = { compact: false, motion: 'still' }
   const rest = at(wave(), [], NOW, BOX, opts)
   expect(rest.scale).toBe(1.5)
   const knight = spriteFor('hero', 'knight')
@@ -220,28 +224,22 @@ test('at scale 1.5 the full stage carries the 1.5x art and every distance grows 
   expect(actor(mid.actors, 'h1').art).toBe(spriteFor('hero_attack', 'knight').hires)
 })
 
-test('the compact stage ignores the scale and an enemy carries no rarity slot', () => {
-  const m = at(
-    wave(),
-    [],
-    NOW,
-    { columns: 52, rows: 4 },
-    { compact: true, motion: 'still', scale: 1.5 },
-  )
+test('the compact stage is 1x and an enemy carries no rarity slot', () => {
+  const m = at(wave(), [], NOW, BOX_COMPACT, { compact: true, motion: 'still' })
   expect(m.scale).toBe(1)
   expect(actor(m.actors, 'h1').art).toBe(spriteFor('hero', 'knight').compact)
+  expect(actor(m.actors, 'h1').raritySlot).toBe(spriteFor('hero', 'knight').raritySlot)
   expect(actor(m.actors, 'e1').raritySlot).toBe(null)
-  expect(actor(at().actors, 'h1').raritySlot).toBe(spriteFor('hero', 'knight').raritySlot)
 })
 
-const HI: Opts = { compact: false, motion: 'full', scale: HIRES_SCALE }
-const LO: Opts = { compact: false, motion: 'full', scale: 1 }
+const HI: Opts = { compact: false, motion: 'full' }
+const COMPACT: Opts = { compact: true, motion: 'full' }
 const knightHits: Effect[] = [{ k: 'act', actor: 'h1', action: 'attack', at: 0 }, hit('h1', 'e1')]
 const slimeHits: Effect[] = [{ k: 'act', actor: 'e1', action: 'attack', at: 0 }, hit('e1', 'h1')]
 const knight = spriteFor('hero', 'knight')
 const knightAttack = spriteFor('hero_attack', 'knight')
 
-test('at 1.5 the knight winds up, strikes in its attack art and follows through', () => {
+test('the knight winds up, strikes in its attack art and follows through', () => {
   const windup = actor(at(wave(), knightHits, NOW + 60, BOX, HI).actors, 'h1')
   const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
   expect(windup.pose).toBe('windup')
@@ -265,7 +263,7 @@ test('at 1.5 the knight winds up, strikes in its attack art and follows through'
   expect(follow.art).toBe(knight.frames?.follow?.art)
 })
 
-test('at 1.5 the struck enemy leans back from its idle place, lightened, and blinks white', () => {
+test('the struck enemy leans back from its idle place, lightened, and blinks white', () => {
   const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'e1')
   const struck = actor(at(wave(), knightHits, NOW + 150, BOX, HI).actors, 'e1')
   const idle = spriteFor('enemy', 'goblin_scout').hires
@@ -282,7 +280,7 @@ test('at 1.5 the struck enemy leans back from its idle place, lightened, and bli
   expect(later.palette).toEqual(later.poses.hit.palette)
 })
 
-test('at 1.5 a struck hero leans back with no offset, from its idle place', () => {
+test('a struck hero leans back with no offset, from its idle place', () => {
   const rest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
   const struck = actor(at(wave(), slimeHits, NOW + 150, BOX, HI).actors, 'h1')
   expect(struck.pose).toBe('hit')
@@ -290,29 +288,27 @@ test('at 1.5 a struck hero leans back with no offset, from its idle place', () =
   expect(struck.x).toBe(rest.x)
 })
 
-test('at 1 the knight shows its attack art through the lunge and its idle art after', () => {
+test('on the compact stage the knight shows its attack art through the lunge and its idle art after, and a flash holds', () => {
   for (const ms of [60, 180]) {
-    expect(actor(at(wave(), knightHits, NOW + ms, BOX, LO).actors, 'h1').art).toBe(
-      knightAttack.full,
+    expect(actor(at(wave(), knightHits, NOW + ms, BOX_COMPACT, COMPACT).actors, 'h1').art).toBe(
+      knightAttack.compact,
     )
   }
-  expect(actor(at(wave(), knightHits, NOW + 300, BOX, LO).actors, 'h1').art).toBe(knight.full)
-  const e1 = actor(at(wave(), knightHits, NOW + 230, BOX, LO).actors, 'e1')
+  expect(actor(at(wave(), knightHits, NOW + 300, BOX_COMPACT, COMPACT).actors, 'h1').art).toBe(
+    knight.compact,
+  )
+  const e1 = actor(at(wave(), knightHits, NOW + 230, BOX_COMPACT, COMPACT).actors, 'e1')
   expect(e1.flashing).toBe(true)
-  expect(e1.art).toBe(spriteFor('enemy', 'goblin_scout').full)
+  expect(e1.art).toBe(spriteFor('enemy', 'goblin_scout').compact)
 })
 
-test('at rest the second half-second shows idle B at 1.5 and the 1-pixel bob at 1; still shows idle A', () => {
+test('at rest the second half-second shows idle B with no lift; still shows idle A', () => {
   const later = NOW + 700
   const hi = actor(at(wave(), [], later, BOX, HI).actors, 'h1')
   const hiRest = actor(at(wave(), [], NOW, BOX, HI).actors, 'h1')
   expect(hi.pose).toBe('idle_b')
   expect(hi.art).toBe(squash(knight.hires))
   expect(hi.y).toBe(hiRest.y)
-  const lo = actor(at(wave(), [], later, BOX, LO).actors, 'h1')
-  const loRest = actor(at(wave(), [], NOW, BOX, LO).actors, 'h1')
-  expect(lo.art).toBe(knight.full)
-  expect(loRest.y - lo.y).toBe(IDLE_BOB_PX)
   const still = actor(at(wave(), [], later, BOX, { ...HI, motion: 'still' }).actors, 'h1')
   expect(still.pose).toBe('idle')
   expect(still.art).toBe(knight.hires)
@@ -342,7 +338,6 @@ test("a black mage's fireball is halfway from its front edge to the target's cen
 })
 
 test('the compact stage draws every pose and effect from compact art, its frame still 52 x 8', () => {
-  const COMPACT: Opts = { compact: true, motion: 'full' }
   const box = { columns: 52, rows: 4 }
   const lunging = at(wave(), knightHits, NOW + 60, box, COMPACT)
   expect(actor(lunging.actors, 'h1').art).toBe(knightAttack.compact)
@@ -363,17 +358,9 @@ test('the compact stage draws every pose and effect from compact art, its frame 
   expect([f.width, f.height]).toEqual([52, 8])
 })
 
-test('the backdrop is the zone painting at the stage scale, and none on the compact stage', () => {
+test("the backdrop is the zone's 1.5x painting, and none on the compact stage", () => {
   const full = at(wave(), [], NOW, { columns: 120, rows: 8 }, { compact: false, motion: 'still' })
-  expect(full.backdrop).toBe(backdropFor(1, 1))
-  const hires = at(
-    wave(),
-    [],
-    NOW,
-    { columns: 120, rows: 8 },
-    { compact: false, motion: 'still', scale: 1.5 },
-  )
-  expect(hires.backdrop).toBe(backdropFor(1, 1.5))
+  expect(full.backdrop).toBe(backdropFor(1))
   const compact = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
   expect(compact.backdrop).toBe(null)
 })
@@ -384,7 +371,7 @@ test("tier 2's zone 1 stands on zone 1's ground and backdrop", () => {
   const zone13 = at({ ...wave(), zone: 13 }, [], NOW, { columns: 120, rows: 8 }, opts)
   expect(zone13.ground).toBe(ZONE_GROUND[0])
   expect(zone13.ground).toBe(zone1.ground)
-  expect(zone13.backdrop).toBe(backdropFor(1, 1))
+  expect(zone13.backdrop).toBe(backdropFor(1))
 })
 
 test('a world boss at an emptied bar stands whole until the server disengages it, then dissolves', () => {
@@ -461,9 +448,8 @@ test('the step is the same distance for a world boss and a goblin', () => {
     [wave(), 'e1', 'h2'],
     [worldBoss(), 'e7', 'h1'],
   ]
-  for (const opts of [LO, HI, { ...HI, motion: 'still' as const }]) {
-    const scale = opts.scale ?? 1
-    const stepPx = Math.round(STEP_PX * scale)
+  const stepPx = k(STEP_PX)
+  for (const opts of [HI, { ...HI, motion: 'still' as const }]) {
     for (const [view, enemy, target] of cases) {
       const effects: Effect[] = [
         { k: 'act', actor: enemy, action: 'attack', at: 0 },
@@ -472,23 +458,20 @@ test('the step is the same distance for a world boss and a goblin', () => {
       const rest = xAt(view, [], enemy, held, opts)
       expect(xAt(view, effects, enemy, held, opts) - rest).toBe(stepPx)
       // The lunge adds its own from the stepped position.
-      expect(xAt(view, effects, enemy, apex, opts) - rest).toBe(
-        stepPx + Math.round(LUNGE_PX * scale),
-      )
+      expect(xAt(view, effects, enemy, apex, opts) - rest).toBe(stepPx + k(LUNGE_PX))
       // Back where it stood once the action is over.
       expect(xAt(view, effects, enemy, NOW + 1000, opts)).toBe(rest)
     }
   }
   // A hero steps toward the enemies.
-  const knightRest = xAt(wave(), [], 'h1', held, LO)
-  expect(xAt(wave(), knightHits, 'h1', held, LO) - knightRest).toBe(-STEP_PX)
+  const knightRest = xAt(wave(), [], 'h1', held, HI)
+  expect(xAt(wave(), knightHits, 'h1', held, HI) - knightRest).toBe(-stepPx)
   // The compact stage steps its one drawing the 1x distance.
   const compact = (effects: Effect[]) => {
     const t = new StageTimeline()
     t.observe(wave(), NOW)
     t.onEffects(effects, NOW)
-    const opts: Opts = { compact: true, motion: 'full', scale: HIRES_SCALE }
-    const m = stageAt(stagedState(wave(), WORLD_DEFAULT, t, held), t, held, BOX_COMPACT, opts)
+    const m = stageAt(stagedState(wave(), WORLD_DEFAULT, t, held), t, held, BOX_COMPACT, COMPACT)
     return actor(m.actors, 'e1').x
   }
   expect(compact(slimeHits) - compact([])).toBe(STEP_PX)
@@ -530,37 +513,31 @@ function chestAt(
 
 test("a chest falls from above the dead enemy's centre to its ground, sits closed, and its item rises from its top", () => {
   const FULL = { columns: 116, rows: 17 }
-  // 1x: e1 at x 4, 16 px, centre (12, 26). The chest's bottom starts at that centre and falls to
-  // the ground (y 18); the item's centre starts at the closed chest's top (row 5) and rises 10 px.
+  // e1 at x 6, 24 px, centre (18, 39). The chest's bottom starts at that centre and falls to the
+  // ground (y 27); the item's centre starts at the closed chest's top (row 22) and rises 15 px.
   const closed = spriteFor('chest', 'closed')
-  const lo = (now: number) => chestAt(now, FULL, STILL)
-  expect(lo(NOW + 399).chest).toBeUndefined()
-  expect(lo(NOW + 400).chest).toEqual({ phase: 'fall', at: [4, 10, 1] })
+  const hi = (now: number) => chestAt(now, FULL, STILL)
+  expect(hi(NOW + 399).chest).toBeUndefined()
+  expect(hi(NOW + 400).chest).toEqual({ phase: 'fall', at: [6, 15, 1] })
   // Eased in: a quarter of the way down at half the fall.
-  expect(lo(NOW + 550).chest).toEqual({ phase: 'fall', at: [4, 12, 1] })
+  expect(hi(NOW + 550).chest).toEqual({ phase: 'fall', at: [6, 18, 1] })
   for (const [now, phase] of [
     [NOW + 700, 'sit'],
     [NOW + 1200, 'open'],
     [NOW + 1650, 'rise'],
     [NOW + 2000, 'hold'],
   ] as const) {
-    expect(lo(now).chest).toEqual({ phase, at: [4, 18, 1] })
+    expect(hi(now).chest).toEqual({ phase, at: [6, 27, 1] })
   }
-  expect(lo(NOW + 700).chestArt).toBe(closed.full)
-  expect(lo(NOW + 1200).item).toBeUndefined()
-  expect(lo(NOW + 1500).item).toEqual([4, 15, 1])
-  expect(lo(NOW + 1650).item).toEqual([4, 10, 1])
-  expect(lo(NOW + 2000).item).toEqual([4, 5, 1])
-  // The fade takes the chest and the item together.
-  expect(lo(NOW + 2700)).toMatchObject({ chest: { phase: 'fade', at: [4, 18, 0.5] } })
-  expect(lo(NOW + 2700).item).toEqual([4, 5, 0.5])
-  expect(lo(NOW + 2800).chest).toBeUndefined()
-  // 1.5x: e1 at x 6, 24 px, centre (18, 39); the chest falls from 15 to 27, the item rises from 22.
-  const hi = (now: number) => chestAt(now, FULL, { ...STILL, scale: HIRES_SCALE })
-  expect(hi(NOW + 400).chest).toEqual({ phase: 'fall', at: [6, 15, 1] })
-  expect(hi(NOW + 1200).chest).toEqual({ phase: 'open', at: [6, 27, 1] })
+  expect(hi(NOW + 700).chestArt).toBe(closed.hires)
+  expect(hi(NOW + 1200).item).toBeUndefined()
   expect(hi(NOW + 1500).item).toEqual([6, 22, 1])
+  expect(hi(NOW + 1650).item).toEqual([6, 15, 1])
   expect(hi(NOW + 2000).item).toEqual([6, 7, 1])
+  // The fade takes the chest and the item together.
+  expect(hi(NOW + 2700)).toMatchObject({ chest: { phase: 'fade', at: [6, 27, 0.5] } })
+  expect(hi(NOW + 2700).item).toEqual([6, 7, 0.5])
+  expect(hi(NOW + 2800).chest).toBeUndefined()
   // The compact stage: the 8 px chest on its ground, the item kept inside the frame.
   const compact = chestAt(NOW + 2000, BOX_COMPACT, { ...STILL, compact: true })
   expect(compact).toMatchObject({
@@ -598,27 +575,23 @@ function groundChestAt(now: number, box: { columns: number; rows: number }, opts
 
 test("a chest with no actor falls onto the front slot's ground, where a kill's in that slot lands", () => {
   const FULL = { columns: 116, rows: 17 }
-  // 1x: a kill's chest in slot 0 is at x 4 and lands at y 18 (the test above). This one falls
-  // half its own height onto the same ground, sits, opens, and its item rises to the same place.
-  const lo = (now: number) => groundChestAt(now, FULL, STILL)
-  expect(lo(NOW).chest).toEqual({ phase: 'fall', at: [4, 10, 1] })
-  expect(lo(NOW).actors).toBe(0)
+  // A kill's chest in slot 0 is at x 6 and lands at y 27 (the test above). This one falls half
+  // its own height onto the same ground, sits, opens, and its item rises to the same place.
+  const hi = (now: number) => groundChestAt(now, FULL, STILL)
+  expect(hi(NOW).chest).toEqual({ phase: 'fall', at: [6, 15, 1] })
+  expect(hi(NOW).actors).toBe(0)
   for (const [now, phase] of [
     [NOW + 300, 'sit'],
     [NOW + 600, 'open'],
     [NOW + 1250, 'rise'],
     [NOW + 1600, 'hold'],
   ] as const) {
-    expect(lo(now).chest).toEqual({ phase, at: [4, 18, 1] })
+    expect(hi(now).chest).toEqual({ phase, at: [6, 27, 1] })
   }
-  expect(lo(NOW + 1100).item).toEqual([4, 15, 1])
-  expect(lo(NOW + 1600).item).toEqual([4, 5, 1])
-  expect(lo(NOW + 2300)).toMatchObject({ chest: { phase: 'fade', at: [4, 18, 0.5] } })
-  expect(lo(NOW + 2400).chest).toBeUndefined()
-  // 1.5x: a kill's chest in slot 0 is at x 6 on the ground at 27, its item risen to 7.
-  const hi = (now: number) => groundChestAt(now, FULL, { ...STILL, scale: HIRES_SCALE })
-  expect(hi(NOW + 600).chest).toEqual({ phase: 'open', at: [6, 27, 1] })
+  expect(hi(NOW + 1100).item).toEqual([6, 22, 1])
   expect(hi(NOW + 1600).item).toEqual([6, 7, 1])
+  expect(hi(NOW + 2300)).toMatchObject({ chest: { phase: 'fade', at: [6, 27, 0.5] } })
+  expect(hi(NOW + 2400).chest).toBeUndefined()
   // The compact stage: the 8 px chest at the left edge, as a kill's there.
   expect(groundChestAt(NOW + 1600, BOX_COMPACT, { ...STILL, compact: true })).toMatchObject({
     chest: { phase: 'hold', at: [0, 0, 1] },
@@ -643,19 +616,13 @@ test('the reveal shows the chest closed, opening then open, with the open art un
     [NOW + 2700, open],
   ]
   for (const [now, sprite] of shown) {
-    for (const [opts, art] of [
-      [STILL, sprite?.full],
-      [{ ...STILL, scale: HIRES_SCALE }, sprite?.hires],
-    ] as const) {
-      const at = chestAt(now, FULL, opts)
-      expect(at.chestArt, `${now - NOW} ms at ${opts.scale ?? 1}x`).toBe(art)
-    }
+    expect(chestAt(now, FULL, STILL).chestArt, `${now - NOW} ms`).toBe(sprite?.hires)
     expect(chestAt(now, BOX_COMPACT, { ...STILL, compact: true }).chestArt).toBe(sprite?.compact)
   }
   // The open art is under the item while it rises and holds.
   const rising = chestAt(NOW + 1650, FULL, STILL)
-  expect(rising.item).toEqual([4, 10, 1])
-  expect(rising.chestArt).toBe(open?.full)
+  expect(rising.item).toEqual([6, 15, 1])
+  expect(rising.chestArt).toBe(open?.hires)
 })
 
 test("the glow sits on the risen item's centre in its rarity colour, ramps in over the rise, holds and fades with the item; a legendary's is wider", () => {
@@ -665,22 +632,18 @@ test("the glow sits on the risen item's centre in its rarity colour, ramps in ov
     return g && [g.x, g.y, g.r, g.alpha]
   }
   const grey = RARITY_RGB.common
-  // 1x: the item risen at (4, 5), 16 px: its centre (12, 13). The rise runs NOW + 1500 to 1800.
+  // The item risen at (6, 7), 24 px: its centre (18, 19). The rise runs NOW + 1500 to 1800.
   expect(glow(NOW + 1499, STILL)).toBeUndefined()
-  expect(glow(NOW + 1500, STILL)).toEqual([12, 13, 8, 0])
-  expect(glow(NOW + 1650, STILL)).toEqual([12, 13, 8, 0.25])
-  expect(glow(NOW + 2000, STILL)).toEqual([12, 13, 8, 0.5])
+  expect(glow(NOW + 1500, STILL)).toEqual([18, 19, 12, 0])
+  expect(glow(NOW + 1650, STILL)).toEqual([18, 19, 12, 0.25])
+  expect(glow(NOW + 2000, STILL)).toEqual([18, 19, 12, 0.5])
   expect(chestAt(NOW + 2000, FULL, STILL).glow?.rgb).toBe(grey)
   // A common's fade runs NOW + 2600 to 2800, with the item's.
-  expect(glow(NOW + 2700, STILL)).toEqual([12, 13, 8, 0.25])
+  expect(glow(NOW + 2700, STILL)).toEqual([18, 19, 12, 0.25])
   expect(glow(NOW + 2800, STILL)).toBeUndefined()
   // A legendary's glow is wider and gold, and holds until NOW + 3800.
-  expect(glow(NOW + 3700, STILL, 'legendary')).toEqual([12, 13, 12, 0.5])
+  expect(glow(NOW + 3700, STILL, 'legendary')).toEqual([18, 19, 18, 0.5])
   expect(chestAt(NOW + 3700, FULL, STILL, 'legendary').glow?.rgb).toBe(RARITY_RGB.legendary)
-  // 1.5x: the item risen at (6, 7), 24 px.
-  const hi: Opts = { ...STILL, scale: HIRES_SCALE }
-  expect(glow(NOW + 2000, hi)).toEqual([18, 19, 12, 0.5])
-  expect(glow(NOW + 2000, hi, 'legendary')).toEqual([18, 19, 18, 0.5])
   // The compact stage: the 8 px item at (0, 0).
   const compact = { ...STILL, compact: true }
   expect(glow(NOW + 2000, compact, 'common', BOX_COMPACT)).toEqual([4, 4, 4, 0.5])
@@ -708,7 +671,7 @@ test('with the front hero fallen, the first hero standing wears the shield', () 
   expect(actor(hi.actors, 'h3').shield ?? null).toBe(null)
 })
 
-test('hasted heroes trail a streak in their class colour behind them at 1.5, and bob twice as fast', () => {
+test('hasted heroes trail a streak in their class colour behind them, and bob twice as fast', () => {
   const m = at(hasted(), [], NOW, BOX, HI)
   for (const key of ['h1', 'h2', 'h3']) {
     const a = actor(m.actors, key)
@@ -726,14 +689,13 @@ test('hasted heroes trail a streak in their class colour behind them at 1.5, and
   expect(actor(at(hasted(), [], NOW + IDLE_FRAME_MS / 2, BOX, HI).actors, 'e1').pose).toBe('idle')
 })
 
-test('at 1 a hasted hero bobs twice as fast and trails no streak', () => {
+test('on the compact stage a hasted hero bobs twice as fast and trails no streak', () => {
   const quarter = NOW + IDLE_FRAME_MS / 2
-  const lo = actor(at(hasted(), [], quarter, BOX, LO).actors, 'h1')
-  const rest = actor(at(hasted(), [], NOW, BOX, LO).actors, 'h1')
+  const lo = actor(at(hasted(), [], quarter, BOX_COMPACT, COMPACT).actors, 'h1')
+  const rest = actor(at(hasted(), [], NOW, BOX_COMPACT, COMPACT).actors, 'h1')
   expect(rest.y - lo.y).toBe(IDLE_BOB_PX)
   expect(lo.streak ?? null).toBe(null)
-  const compact = { compact: true, motion: 'full' } as const
-  expect(actor(at(hasted(), [], NOW, BOX_COMPACT, compact).actors, 'h1').streak ?? null).toBe(null)
+  expect(rest.streak ?? null).toBe(null)
 })
 
 test('under still the streaks draw and the bob stays stopped; once haste ends they are gone', () => {
@@ -746,7 +708,7 @@ test('under still the streaks draw and the bob stays stopped; once haste ends th
   expect(actor(at(hasted(false), [], NOW, BOX, HI).actors, 'h1').streak ?? null).toBe(null)
 })
 
-test('guarding heroes hold the derived stance with the bob stopped; the front hero wears the shield at 1.5', () => {
+test('guarding heroes hold the derived stance with the bob stopped; the front hero wears the shield, but not on the compact stage', () => {
   for (const later of [NOW, NOW + 700]) {
     const hi = at(guarding(), [], later, BOX, HI)
     for (const key of ['h1', 'h2', 'h3']) {
@@ -756,10 +718,10 @@ test('guarding heroes hold the derived stance with the bob stopped; the front he
     }
     expect(actor(hi.actors, 'h1').shield).not.toBe(null)
     expect(actor(hi.actors, 'h2').shield ?? null).toBe(null)
-    const lo = at(guarding(), [], later, BOX, LO)
-    const h1 = actor(lo.actors, 'h1')
+    const compact = at(guarding(), [], later, BOX_COMPACT, COMPACT)
+    const h1 = actor(compact.actors, 'h1')
     expect(h1.pose).toBe('guard')
-    expect(h1.y + h1.art.height).toBe(16)
+    expect(h1.y + h1.art.height).toBe(8)
     expect(h1.shield ?? null).toBe(null)
   }
   // The stance leans toward the enemies: its feet stay where the idle's stand.
@@ -784,8 +746,7 @@ test('an enraged enemy flashes red at the mishap and holds a red tint until its 
   const v = wave()
   t.observe(v, NOW)
   t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW)
-  const model = (now: number, opts: Opts = LO) =>
-    stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, opts)
+  const model = (now: number) => stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, HI)
   const flashed = actor(model(NOW + 10).actors, 'e1')
   expect(flashed.redFlashing).toBe(true)
   expect(flashed.palette.slice(1).every((c) => c === ENRAGE_RGB)).toBe(true)
@@ -802,9 +763,8 @@ test('an enraged enemy flashes red at the mishap and holds a red tint until its 
     expect((c >> 16) & 0xff).toBeGreaterThanOrEqual((b >> 16) & 0xff)
     expect(c === b && b !== ENRAGE_RGB).toBe(false)
   })
-  // At 1.5 the red is a blink, as the white is.
-  expect(actor(model(NOW + 10, HI).actors, 'e1').redFlashing).toBe(true)
-  expect(actor(model(NOW + 120, HI).actors, 'e1').redFlashing).toBe(false)
+  // The red is a blink, as the white is.
+  expect(actor(model(NOW + 120).actors, 'e1').redFlashing).toBe(false)
   const [start] = t.onEffects(
     [{ k: 'act', actor: 'e1', action: 'attack', at: 0 }, hit('e1', 'h1')],
     NOW + 2000,
@@ -819,20 +779,17 @@ test('a camp sets the campfire between the enemies and the party, then fades it'
   const v = wave()
   t.observe(v, NOW)
   t.onEffects([{ k: 'camp', heals: [] }], NOW)
-  const model = (now: number, opts: Opts = HI) =>
-    stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, opts)
-  for (const opts of [HI, LO]) {
-    const m = model(NOW + 1000, opts)
-    const fire = m.campfire
-    if (!fire) throw new Error('no campfire')
-    expect(fire.alpha).toBe(1)
-    const e3 = actor(m.actors, 'e3')
-    const h1 = actor(m.actors, 'h1')
-    const centre = fire.x + fire.art.width / 2
-    expect(centre).toBeGreaterThan(e3.x + e3.art.width / 2)
-    expect(centre).toBeLessThan(h1.x + h1.art.width / 2)
-    expect(fire.y + fire.art.height).toBe(m.box.rows * 2 * m.scale)
-  }
+  const model = (now: number) => stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, HI)
+  const m = model(NOW + 1000)
+  const fire = m.campfire
+  if (!fire) throw new Error('no campfire')
+  expect(fire.alpha).toBe(1)
+  const e3 = actor(m.actors, 'e3')
+  const h1 = actor(m.actors, 'h1')
+  const centre = fire.x + fire.art.width / 2
+  expect(centre).toBeGreaterThan(e3.x + e3.art.width / 2)
+  expect(centre).toBeLessThan(h1.x + h1.art.width / 2)
+  expect(fire.y + fire.art.height).toBe(m.box.rows * 2 * m.scale)
   expect(model(NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS / 2).campfire?.alpha).toBe(0.5)
   expect(model(NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS).campfire ?? null).toBe(null)
 })
@@ -842,8 +799,7 @@ test('a level-up flashes the hero gold, the white flash untouched, and its delta
   const v = wave()
   t.observe(v, NOW)
   t.onEffects([{ k: 'level_up', heroId: 'h1', level: 6, deltas: { atk: 3, def: 2 } }], NOW)
-  const model = (now: number, opts: Opts = LO) =>
-    stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, opts)
+  const model = (now: number) => stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, HI)
   const flashed = actor(model(NOW + 10).actors, 'h1')
   expect(flashed.goldFlashing).toBe(true)
   expect(flashed.flashing).toBe(false)
@@ -851,9 +807,8 @@ test('a level-up flashes the hero gold, the white flash untouched, and its delta
   expect(model(NOW + 10).numbers.map((n) => [n.text, n.rgb])).toEqual([
     ['+3 atk  +2 def', LEVEL_RGB],
   ])
-  // At 1.5 the gold is a blink, as the white is.
-  expect(actor(model(NOW + 10, HI).actors, 'h1').goldFlashing).toBe(true)
-  expect(actor(model(NOW + 120, HI).actors, 'h1').goldFlashing).toBe(false)
+  // The gold is a blink, as the white is.
+  expect(actor(model(NOW + 120).actors, 'h1').goldFlashing).toBe(false)
 })
 
 test('a travel fades the party out stepping right, then in from the left at the new backdrop', () => {
@@ -862,24 +817,24 @@ test('a travel fades the party out stepping right, then in from the left at the 
   t.observe(v, NOW)
   t.onEffects([{ k: 'traveled', from: 1, to: 3 }], NOW)
   const next: GameView = { ...v, enemies: [], zone: 3, zoneName: 'Marsh of Sighs', wave: 1 }
-  const model = (now: number, opts: Opts = LO) => {
+  const model = (now: number) => {
     t.observe(next, now)
-    return stageAt(stagedState(next, WORLD_DEFAULT, t, now), t, now, BOX, opts)
+    return stageAt(stagedState(next, WORLD_DEFAULT, t, now), t, now, BOX, HI)
   }
   const placed = actor(at().actors, 'h1')
   const off = actor(model(NOW + TRAVEL_OFF_MS / 2).actors, 'h1')
   expect(off.alpha).toBe(0.5)
-  expect(off.x).toBe(placed.x + TRAVEL_PX / 2)
+  expect(off.x).toBe(placed.x + k(TRAVEL_PX) / 2)
   const show = NOW + TRAVEL_OFF_MS
   expect(model(show - 1).ground).toBe(ZONE_GROUND[0])
   const on = model(show + TRAVEL_ON_MS / 2)
   expect(on.ground).toBe(ZONE_GROUND[2])
   expect(actor(on.actors, 'h1').alpha).toBe(0.5)
-  expect(actor(on.actors, 'h1').x).toBe(placed.x - TRAVEL_PX / 2)
+  expect(actor(on.actors, 'h1').x).toBe(placed.x - k(TRAVEL_PX) / 2)
   expect(actor(model(show + TRAVEL_ON_MS).actors, 'h1')).toMatchObject({ x: placed.x, alpha: 1 })
 })
 
-test('the victory pose holds the drawn slot at 1.5, the idle art at 1, and never on a fallen hero', () => {
+test('the victory pose holds the drawn slot, the idle art on the compact stage, and never on a fallen hero', () => {
   const t = new StageTimeline()
   const down = (v: GameView): GameView => ({
     ...v,
@@ -896,12 +851,13 @@ test('the victory pose holds the drawn slot at 1.5, the idle art at 1, and never
   const next = down(wave())
   t.observe(next, NOW + 1)
   const from = t.active(NOW + 1).find((m) => m.kind === 'victory')?.from ?? 0
-  const model = (opts: Opts) =>
-    stageAt(stagedState(next, WORLD_DEFAULT, t, from + 500), t, from + 500, BOSS_BOX, opts)
+  const model = (opts: Opts, box = BOSS_BOX) =>
+    stageAt(stagedState(next, WORLD_DEFAULT, t, from + 500), t, from + 500, box, opts)
   const hi = actor(model(HI).actors, 'h1')
   expect(hi.pose).toBe('victory')
   expect(hi.art).toBe(spriteFor('hero', 'knight').frames?.victory?.art)
   expect(actor(model(HI).actors, 'h3').pose).toBe('idle')
-  const lo = actor(model(LO).actors, 'h1')
-  expect(lo.art).toBe(spriteFor('hero', 'knight').full)
+  const compact = actor(model(COMPACT, BOX_COMPACT).actors, 'h1')
+  expect(compact.pose).toBe('victory')
+  expect(compact.art).toBe(spriteFor('hero', 'knight').compact)
 })
