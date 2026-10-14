@@ -35,14 +35,19 @@ fallen heroes get up at 50%.
 
 ## Combat
 
-**Encounters and waves.** Each tool call Claude makes spawns an enemy into the encounter: at most
-three fight at once and up to ten more wait. Every zone has four wave enemies, a swift, a brute, a
-caster and a tank, and the tool picks which one comes: a read or a web lookup brings out the swift,
-an edit or a write the brute, a shell command the caster, and any other tool, an MCP tool or a
-subagent's call the tank. A search runs through the shell today, so it brings out the caster. When
-nobody is left to fight, the next enemy of the current wave walks in, drawn from all four, so an
-idle session still plays. A zone is ten waves of one to three of its own enemies, and clearing a
-wave heals every hero 15% and gets the fallen back up at 15%. A kill pays by the enemy's toughness:
+**Encounters and waves.** A zone is ten waves, and a wave opens with a draw of one to three of
+the zone's own enemies, drawn from all four, which all walk in together, so an idle session still
+plays. Each tool call Claude makes adds an enemy to the wave: it steps onto the field if a place is
+free, or waits in line, and the wave clears only when every enemy it got is dead. At most three
+fight at once and up to ten more wait; a call past that brings nobody. Whenever a place on the
+field is free and someone waits, they step on at once, in the same moment as the kill that freed
+it. A tool call with no wave open opens one: its own enemy comes first, then the draw. At wave 11
+the zone boss's turn comes: a call still brings an enemy, which counts toward nothing, and the boss
+walks onto the empty field. Every zone has four wave enemies, a swift, a brute, a caster and a
+tank, and the tool picks which one comes: a read or a web lookup brings out the swift, an edit or a
+write the brute, a shell command the caster, and any other tool, an MCP tool or a subagent's call
+the tank. A search runs through the shell today, so it brings out the caster. Clearing a wave heals
+every hero 15% and gets the fallen back up at 15%. A kill pays by the enemy's toughness:
 its XP, gold and drop chance follow its share of HP, so a zone's tank pays about 1.3 times the
 zone's base and its swift about 0.74, and no kind pays better per point of HP it takes to kill. A
 day of edits plays differently from a day of reads and earns the same.
@@ -83,8 +88,9 @@ so the reference Knight still survives three to four of its actions; turn bosses
 boss keep the single attack. None of it toasts.
 
 **Turn bosses.** A Claude turn with ten or more tool calls ends in a turn boss: a mini-boss with
-better drops and a chance of a recruit contract, separate from the zone's own boss. One that
-arrives mid-wave leaves the wave where it was: the wave goes on after it and clears as usual.
+better drops and a chance of a recruit contract, separate from the zone's own boss. It arrives
+between waves, in a fight of its own, and counts toward no wave; a tool call made while it stands
+alone opens the next wave around it.
 
 **Wipe.** When every hero falls, the party restarts the zone it is in at wave 1, at full health,
 and nothing is lost; the game counts the zone's wipes. The combat log says "The party fell.", and
@@ -398,9 +404,15 @@ the band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
-come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
-the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The stage
+come the enemy window (titled with the zone and wave, an HP bar per enemy, and a dim `+4 waiting`
+cut into its bottom line while the wave's queue holds enemies), the message window, the party
+window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP and red at
+0) and the purse (the gold, the tactics or `Sandbox` in the sandbox, and the falls, `Falls 1/3`:
+the zone's wipes out of the three that make a retreat, none in a world boss fight). Both counts
+are the game's as it stands, not the stage's: a fall shows before its blow has played. The compact
+layout has neither the enemy window nor the purse, so it shows neither the queue nor the falls. The
+queue's count is the game's own, not the staged one: while a kill's replacement waits out the
+dissolve, the line already reads the shorter queue. The stage
 and every window draw the staged state, the fight as the stage has played it so far, so they never
 run ahead of the picture: a killed monster keeps its row until its death has played, a wiped hero
 falls on his blow and is up at full only once the field has cleared, a monster that leaves alive

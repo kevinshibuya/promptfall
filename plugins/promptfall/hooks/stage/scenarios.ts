@@ -488,6 +488,7 @@ export const STRIP_SCENARIOS = [
   'strip-loot',
   'strip-world',
   'strip-notice',
+  'strip-waiting',
 ] as const
 export type StripScenario = (typeof STRIP_SCENARIOS)[number]
 export type StripGolden = {
@@ -611,6 +612,9 @@ export function strip(name: StripScenario): StripInput {
         tab: 'loot',
         notice: 'Promptfall: server unreachable, retrying',
       })
+    // Three on the field and four queued behind them, in a zone the party has fallen in once.
+    case 'strip-waiting':
+      return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
   }
 }
 
@@ -925,6 +929,7 @@ export const BAND_SCENARIOS = [
   'band-compact-wide',
   'band-loot',
   'band-world',
+  'band-waiting',
 ] as const
 export type BandScenario = (typeof BAND_SCENARIOS)[number]
 export type BandGolden = {
@@ -1100,6 +1105,10 @@ export function band(name: BandScenario): BandInput {
     // World at 165, as band-wide: the playfield centred, the line in the shell beside it.
     case 'band-world':
       return bareInput(strip('strip-world'), 165)
+    // Three on the field and four queued, a fall taken: the enemy window's `+4 waiting` footer and
+    // the purse's falls row read through the band's bottom line.
+    case 'band-waiting':
+      return bandInput({ ...wave(), waiting: 4, zoneWipes: 1 }, strip('strip-waiting'), 160, 22)
   }
 }
 

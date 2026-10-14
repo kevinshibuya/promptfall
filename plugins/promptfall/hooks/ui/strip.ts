@@ -7,7 +7,7 @@ import type { MessageLog } from '../stage/log'
 import { landingsWithin, stagedState } from '../stage/staged'
 import type { StageTimeline } from '../stage/timeline'
 import { COMPACT_STAGE_COLUMNS, RARITY_RGB } from '../stage/tuning'
-import { GAUGE_FULL } from '../vendor/sim.js'
+import { GAUGE_FULL, RETREAT_AT } from '../vendor/sim.js'
 import {
   chars,
   drawable,
@@ -182,7 +182,9 @@ function enemyWindow(input: StripInput, x: number): Built {
   const list = enemies(input).slice(0, 3)
   const inner = ENEMY_COLUMNS - 2
   const lines: Line[] = list.map((e) => ({ spans: [pad(1), ...enemyRow(e, inner - 2), pad(1)] }))
-  const alt = `${title}. ${list.map((e) => `${e.name} ${e.hp} of ${e.maxHp} HP`).join(', ') || 'No enemies'}.`
+  // The three rows are the field's: the queue behind them is the footer, the sim's count.
+  const { waiting } = input.view
+  const alt = `${title}. ${list.map((e) => `${e.name} ${e.hp} of ${e.maxHp} HP`).join(', ') || 'No enemies'}.${waiting > 0 ? ` ${waiting} more waiting.` : ''}`
   const hp = list.map((e, line) => ({ id: e.id, line, span: 1 + ENEMY_BAR_SPAN }))
   return {
     win: {
@@ -191,6 +193,7 @@ function enemyWindow(input: StripInput, x: number): Built {
       columns: ENEMY_COLUMNS,
       rows: STRIP_ROWS,
       title: [text(title)],
+      ...(waiting > 0 ? { footer: [text(`+${waiting} waiting`, DIM_RGB)] } : {}),
       lines,
       alt,
     },
@@ -363,7 +366,13 @@ function purseWindow(input: StripInput, x: number): Built {
     { spans: [pad(1), text(gold)] },
     { spans: [pad(1), text(sandbox ? 'Sandbox' : tactics)] },
   ]
-  const alt = `Gold ${formatCount(input.view.gold)}.${sandbox ? ' Sandbox.' : ''} Tactics: ${tactics.toLowerCase()}.`
+  let alt = `Gold ${formatCount(input.view.gold)}.${sandbox ? ' Sandbox.' : ''} Tactics: ${tactics.toLowerCase()}.`
+  // The zone's falls before a retreat; boss mode counts no wipes, so it shows none.
+  if (input.view.boss === null) {
+    const falls = input.view.zoneWipes
+    lines.push({ spans: [pad(1), text(`Falls ${falls}/${RETREAT_AT}`)] })
+    alt += ` Falls ${falls} of ${RETREAT_AT} before a retreat.`
+  }
   return {
     win: {
       key: 'purse',

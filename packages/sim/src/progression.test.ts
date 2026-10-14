@@ -5,7 +5,7 @@ import { heroStats } from './progression'
 import { createInitialState } from './state'
 import { step } from './step'
 import type { Effect, Enemy, EnemyKind, Event, GameState, Hero, Item, Rarity } from './types'
-import { RARITIES } from './types'
+import { RARITIES, WAVE_ARCHETYPES } from './types'
 
 const toolCall = { t: 'tool_call' } as const
 const turnEnd = { t: 'turn_end' } as const
@@ -43,32 +43,33 @@ describe('turn boss', () => {
     expect(r.state.encounter?.enemies.map((e) => e.kind)).toEqual(['turn_boss'])
   })
 
-  it("a turn boss spawned mid-wave leaves the wave's progress alone", () => {
-    // Wave 3 of 3 monsters, one already beaten, and a turn boss due.
-    let s: GameState = {
-      ...createInitialState(1),
-      wave: 3,
-      pendingTurnBoss: true,
-      encounter: { enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 },
-    }
+  it('a tool call during a turn boss alone opens the wave around it, the boss outside its count', () => {
+    let s: GameState = { ...createInitialState(1), wave: 3, pendingTurnBoss: true }
     s = run(s, [tick]).state
-    expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['turn_boss'])
-    expect(s.encounter).toMatchObject({ waveSize: 3, spawnedInWave: 1 })
+    expect(s.encounter).toMatchObject({ waveSize: 0, spawnedInWave: 0 })
 
-    let r = run(finishFront(s), [tick])
-    expect(r.state.stats).toMatchObject({ kills: 1, bosses: 1 })
+    s = run(s, [{ t: 'tool_call', hint: 'brute' }]).state
+    const enc = s.encounter
+    if (!enc) throw new Error('no encounter')
+    const [boss, first] = enc.enemies
+    expect(boss?.kind).toBe('turn_boss')
+    expect(first && enemyAt(first.def, 1)?.archetype).toBe('brute')
+    // The call's enemy and a draw of 1 to 3: 2 to 4 wave enemies, beside the boss on a field of 3.
+    expect(enc.waveSize).toBeGreaterThanOrEqual(2)
+    expect(enc.waveSize).toBeLessThanOrEqual(4)
+    expect(enc.enemies).toHaveLength(3)
+    expect(enc.spawnedInWave).toBe(2)
+    expect(enc.queue).toHaveLength(enc.waveSize - 2)
+
+    // The boss dies first and the wave goes on; the wave's last kill clears it, once.
+    let r = run(s, [killFront])
+    expect(r.state.stats.bosses).toBe(1)
     expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
-    expect(r.state.wave).toBe(3)
-    expect(r.state.encounter).toEqual({ enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 })
-
-    // The wave goes on where it was: two more monsters, then the clear.
-    for (const spawned of [2, 3]) {
-      s = run(r.state, [tick]).state
-      expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['wave'])
-      expect(s.encounter?.spawnedInWave).toBe(spawned)
-      r = run(finishFront(s), [tick])
-    }
-    expect(r.effects).toContainEqual({ k: 'wave_cleared', zone: 1, wave: 3 })
+    expect(r.state.encounter?.enemies.every((e) => e.kind === 'wave')).toBe(true)
+    r = run(r.state, times(enc.waveSize, killFront))
+    expect(r.effects.filter((e) => e.k === 'wave_cleared')).toEqual([
+      { k: 'wave_cleared', zone: 1, wave: 3 },
+    ])
     expect(r.state.wave).toBe(4)
     expect(r.state.encounter).toBeNull()
   })
@@ -110,29 +111,188 @@ describe('turn boss', () => {
 })
 
 describe('spawning', () => {
-  it('caps the fight at 3 and the queue at 10, dropping the 14th', () => {
+  it('the tick that opens a wave puts the whole draw on the field and leaves the queue empty', () => {
+    const sizes = new Set<number>()
+    for (let seed = 1; seed <= 30; seed++) {
+      const r = run(createInitialState(seed), [tick])
+      const enc = r.state.encounter
+      if (!enc) throw new Error('no encounter')
+      sizes.add(enc.waveSize)
+      expect(enc.enemies).toHaveLength(enc.waveSize)
+      expect(enc.enemies.every((e) => e.kind === 'wave')).toBe(true)
+      expect(enc.queue).toEqual([])
+      expect(enc.spawnedInWave).toBe(enc.waveSize)
+    }
+    // A draw of 3 is among them: three on the field at once.
+    expect([...sizes].sort()).toEqual([1, 2, 3])
+  })
+
+  it('a tool call that opens a wave queues its own enemy first, then the draw', () => {
+    for (const hint of WAVE_ARCHETYPES) {
+      const s = run(createInitialState(4), [{ t: 'tool_call', hint }]).state
+      const enc = s.encounter
+      if (!enc) throw new Error('no encounter')
+      expect(enemyAt(enc.enemies[0]?.def ?? '', 1)?.archetype).toBe(hint)
+      expect(enc.waveSize).toBeGreaterThanOrEqual(2)
+      expect(enc.waveSize).toBeLessThanOrEqual(4)
+      expect(enc.enemies).toHaveLength(Math.min(3, enc.waveSize))
+      expect(enc.queue).toHaveLength(enc.waveSize - enc.enemies.length)
+      expect(enc.spawnedInWave).toBe(enc.enemies.length)
+    }
+  })
+
+  it('a tool call during a wave counts toward it: the drawn enemies die and the wave stays open', () => {
+    const opened = firstWaveOf(1)
+    const drawn = opened.encounter?.waveSize ?? 0
+    let r = run(opened, [toolCall])
+    expect(r.state.encounter).toMatchObject({ waveSize: drawn + 1 })
+    r = run(r.state, times(drawn, killFront))
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.wave).toBe(1)
+    expect(r.state.encounter?.enemies).toHaveLength(1)
+    r = run(r.state, [killFront])
+    expect(r.effects).toContainEqual({ k: 'wave_cleared', zone: 1, wave: 1 })
+    expect(r.state.wave).toBe(2)
+  })
+
+  it('a queued tool-call enemy keeps the wave open too', () => {
+    const opened = firstWaveOf(1)
+    let r = run(opened, times(4, toolCall))
+    const enc = r.state.encounter
+    if (!enc) throw new Error('no encounter')
+    expect(enc.queue.length).toBeGreaterThan(0)
+    // Kill all but the last enemy the wave got: none of those kills clears it.
+    r = run(r.state, times(enc.waveSize - 1, killFront))
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.encounter?.enemies).toHaveLength(1)
+    expect(r.state.encounter?.queue).toEqual([])
+  })
+
+  it('a kill refills from the queue in the same step, before the clear check', () => {
+    const s = run(createInitialState(1), times(6, toolCall)).state
+    const enc = s.encounter
+    if (!enc) throw new Error('no encounter')
+    expect(enc.enemies).toHaveLength(3)
+    const queued = enc.queue.length
+    expect(queued).toBeGreaterThan(0)
+    const r = run(s, [killFront])
+    expect(r.state.encounter?.enemies).toHaveLength(3)
+    expect(r.state.encounter?.queue).toHaveLength(queued - 1)
+    expect(r.state.encounter?.spawnedInWave).toBe(enc.spawnedInWave + 1)
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+  })
+
+  it('a kill in battle refills in the same tick', () => {
+    const s = run(createInitialState(1), times(6, toolCall)).state
+    const queued = s.encounter?.queue.length ?? 0
+    const r = run(finishFront(s), [tick])
+    expect(r.state.stats.kills).toBeGreaterThanOrEqual(1)
+    expect(r.state.encounter?.enemies).toHaveLength(3)
+    expect(r.state.encounter?.queue).toHaveLength(queued - r.state.stats.kills)
+  })
+
+  it('caps the field at 3 and the queue at 10: past the cap a tool call counts toward nothing', () => {
     const s = run(createInitialState(1), times(14, toolCall)).state
     expect(s.encounter?.enemies).toHaveLength(3)
     expect(s.encounter?.queue).toHaveLength(10)
-    expect(s.encounter?.spawnedInWave).toBe(0)
+    expect(s.encounter?.waveSize).toBe(13)
+    expect(s.encounter?.spawnedInWave).toBe(3)
     expect(s.turnToolCalls).toBe(14)
-    // The test kills one enemy; the next tick refills from the queue.
-    const enc = s.encounter
-    if (!enc) throw new Error('no encounter')
-    const oneDown: GameState = { ...s, encounter: { ...enc, enemies: enc.enemies.slice(1) } }
-    const r = run(oneDown, [tick])
-    expect(r.state.encounter?.queue).toHaveLength(9)
-    expect(r.state.encounter?.enemies.length).toBeGreaterThanOrEqual(2)
-    const ids = new Set(r.state.encounter?.enemies.map((e) => e.id))
-    expect(ids.size).toBe(r.state.encounter?.enemies.length)
+    const ids = new Set(s.encounter?.enemies.map((e) => e.id))
+    expect(ids.size).toBe(3)
   })
 
-  it('an idle tick with nothing alive spawns a wave enemy', () => {
-    const r = run(createInitialState(2), [tick])
-    expect(r.state.encounter?.enemies).toHaveLength(1)
-    expect(r.state.encounter?.spawnedInWave).toBe(1)
-    expect(r.state.encounter?.waveSize).toBeGreaterThanOrEqual(1)
-    expect(r.state.encounter?.waveSize).toBeLessThanOrEqual(3)
+  it('no step leaves a free slot while the queue waits', () => {
+    const script: Event[] = []
+    for (let i = 0; i < 60; i++) {
+      script.push(...times(i % 4, toolCall), tick, tick)
+      if (i % 5 === 0) script.push(turnEnd, killFront)
+    }
+    let s = createInitialState(7)
+    let kills = 0
+    for (const e of script) {
+      s = step(s, e).state
+      const enc = s.encounter
+      if (!enc) continue
+      expect(enc.enemies.length).toBeLessThanOrEqual(3)
+      expect(enc.queue.length).toBeLessThanOrEqual(10)
+      if (enc.enemies.length < 3) expect(enc.queue).toEqual([])
+      kills = s.stats.kills
+    }
+    expect(kills).toBeGreaterThan(10)
+  })
+
+  it('an open wave left with nothing on the field and nothing queued closes, and the tick opens the next', () => {
+    // Unreachable through the rules (the clear check removes such a wave); a save or a bug that
+    // left one must not stall play, so the empty tick treats it as no encounter.
+    const s0 = createInitialState(3)
+    const stranded: GameState = {
+      ...s0,
+      encounter: { enemies: [], queue: [], waveSize: 3, spawnedInWave: 1 },
+    }
+    const r = run(stranded, [tick])
+    const enc = r.state.encounter
+    if (!enc) throw new Error('no encounter')
+    expect(enc.enemies.length).toBeGreaterThanOrEqual(1)
+    expect(enc.enemies.length).toBe(Math.min(3, enc.waveSize))
+    expect(enc.spawnedInWave).toBe(enc.enemies.length)
+    expect(r.effects.filter((e) => e.k === 'rejected')).toEqual([])
+  })
+})
+
+describe('wave 11', () => {
+  const at11 = (): GameState => ({ ...createInitialState(1), wave: 11 })
+
+  it('a tool call with no encounter opens one with no wave, and its enemy counts toward nothing', () => {
+    let s = run(at11(), [toolCall]).state
+    expect(s.encounter).toMatchObject({ waveSize: 0, spawnedInWave: 0, queue: [] })
+    expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['wave'])
+    const before = s.roster.map((h) => h.hp)
+    s = {
+      ...s,
+      roster: s.roster.map((h, i) => ({ ...h, hp: Math.max(1, (before[i] ?? 2) - 1) })),
+    }
+    const hurt = s.roster.map((h) => h.hp)
+    const r = run(s, [killFront])
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.roster.map((h) => h.hp)).toEqual(hurt)
+    expect(r.state.wave).toBe(11)
+    expect(r.state.encounter).toBeNull()
+    // The zone boss arrives on the empty field.
+    const t = run(r.state, [tick])
+    expect(t.effects).toContainEqual({
+      k: 'boss_spawned',
+      kind: 'zone_boss',
+      def: 'bandit_captain',
+    })
+    expect(t.state.encounter?.enemies.map((e) => e.kind)).toEqual(['zone_boss'])
+  })
+
+  it('a tool call beside the zone boss joins its encounter and counts toward nothing', () => {
+    let s = run(at11(), [tick]).state
+    expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['zone_boss'])
+    s = run(s, times(4, toolCall)).state
+    expect(s.encounter?.enemies.map((e) => e.kind)).toEqual(['zone_boss', 'wave', 'wave'])
+    expect(s.encounter).toMatchObject({ waveSize: 0, spawnedInWave: 0 })
+    expect(s.encounter?.queue).toHaveLength(2)
+    // A zone boss kill ends the encounter and spawns nothing from the queue.
+    const r = run(s, [killFront])
+    expect(r.effects).toContainEqual({ k: 'zone_cleared', zone: 1, advancedTo: 2 })
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.encounter).toBeNull()
+  })
+
+  it('killing the adds beside the zone boss clears nothing', () => {
+    let s = run(at11(), [tick]).state
+    s = run(s, [toolCall]).state
+    // Move the add to the front, then kill it.
+    const enc = s.encounter
+    if (!enc) throw new Error('no encounter')
+    s = { ...s, encounter: { ...enc, enemies: [...enc.enemies].reverse() } }
+    const r = run(s, [killFront])
+    expect(r.effects.some((e) => e.k === 'wave_cleared')).toBe(false)
+    expect(r.state.encounter?.enemies.map((e) => e.kind)).toEqual(['zone_boss'])
+    expect(r.state.wave).toBe(11)
   })
 })
 
@@ -582,6 +742,14 @@ describe('wipe', () => {
 })
 
 // Helpers
+
+/** The front enemy struck down outside battle: the sandbox's kill, which drops the item. */
+const killFront = { t: 'sandbox_item', base: 'oak_staff', rarity: 'common' } as const
+
+/** The state after the first tick of a fresh game: wave 1, opened with its draw. */
+function firstWaveOf(seed: number): GameState {
+  return run(createInitialState(seed), [tick]).state
+}
 
 /** The front enemy at 1 hp and the party ready: the next tick kills it. */
 function finishFront(s: GameState): GameState {

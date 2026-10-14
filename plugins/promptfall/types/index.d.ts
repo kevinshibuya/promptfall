@@ -108,6 +108,8 @@ export type GameView = {
   zone: number
   zoneName: string
   wave: number
+  /** The wave's encounter queue: enemies drawn or joined that wait for a free slot. */
+  waiting: number
   gold: number
   farm: boolean
   /** The account's auto-vendor setting. */
@@ -116,7 +118,10 @@ export type GameView = {
   loot: LootView[]
   highestZone: number
   kills: number
+  /** Lifetime wipes. */
   wipes: number
+  /** This zone's wipes since the last retreat, travel or zone boss kill: the falls. */
+  zoneWipes: number
   inventory: ItemView[]
   inventoryCap: number
   roster: RosterHeroView[]

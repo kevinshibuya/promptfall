@@ -6,7 +6,7 @@ import { heroStats } from './progression'
 import { heroFill } from './reactive'
 import { createInitialState } from './state'
 import { step } from './step'
-import type { Effect, Enemy, EnemyKind, Event, GameState, Hero } from './types'
+import type { Effect, Enemy, EnemyKind, Event, GameState, Hero, WaveArchetype } from './types'
 
 // The reactive events (spec #131, ADR 0014): each shapes the fight and never the reward.
 
@@ -328,21 +328,15 @@ describe('spawn by tool kind', () => {
   const call = (hint?: 'swift' | 'brute' | 'caster' | 'tank'): Event =>
     hint ? { t: 'tool_call', hint } : { t: 'tool_call' }
 
-  it("a hinted call spawns the zone's enemy of that archetype", () => {
+  it("a hinted call spawns the zone's enemy of that archetype, ahead of the wave it opens", () => {
     const s = createInitialState(1)
-    expect(run(s, [call('swift')]).state.encounter?.enemies.map((e) => e.def)).toEqual([
-      'field_rat',
-    ])
-    expect(run(s, [call('tank')]).state.encounter?.enemies.map((e) => e.def)).toEqual([
-      'road_slime',
-    ])
+    const front = (state: GameState, hint: WaveArchetype) =>
+      run(state, [call(hint)]).state.encounter?.enemies[0]?.def
+    expect(front(s, 'swift')).toBe('field_rat')
+    expect(front(s, 'tank')).toBe('road_slime')
     const zone2: GameState = { ...s, zone: 2, highestZone: 2 }
-    expect(run(zone2, [call('swift')]).state.encounter?.enemies.map((e) => e.def)).toEqual([
-      'bramble_wolf',
-    ])
-    expect(run(zone2, [call('caster')]).state.encounter?.enemies.map((e) => e.def)).toEqual([
-      'whisper_wisp',
-    ])
+    expect(front(zone2, 'swift')).toBe('bramble_wolf')
+    expect(front(zone2, 'caster')).toBe('whisper_wisp')
   })
 
   it('a hint the wave list lacks draws as an unhinted call does', () => {
@@ -351,10 +345,16 @@ describe('spawn by tool kind', () => {
     expect(run(s, [odd, odd, odd])).toEqual(run(s, [call(), call(), call()]))
   })
 
-  it('holds the fight at 3 and the queue at 10, every one of the kind', () => {
+  it('holds the fight at 3 and the queue at 10, every call one of the kind', () => {
+    const drawn = (run(createInitialState(1), [call('brute')]).state.encounter?.waveSize ?? 0) - 1
     const s = run(createInitialState(1), times(14, call('brute'))).state
-    expect(s.encounter?.enemies.map((e) => e.def)).toEqual(times(3, 'goblin_scout'))
-    expect(s.encounter?.queue).toEqual(times(10, { def: 'goblin_scout', kind: 'wave' }))
+    expect(s.encounter?.enemies).toHaveLength(3)
+    expect(s.encounter?.queue).toHaveLength(10)
+    expect(s.encounter?.queue.every((q) => q.kind === 'wave')).toBe(true)
+    // The first call's enemy, its draw, then each later call's: all of the kind but the draw.
+    const all = [...(s.encounter?.enemies ?? []), ...(s.encounter?.queue ?? [])].map((e) => e.def)
+    expect(all[0]).toBe('goblin_scout')
+    expect(all.slice(1 + drawn)).toEqual(times(12 - drawn, 'goblin_scout'))
   })
 
   it('spawns nothing in boss mode and changes no boss', () => {

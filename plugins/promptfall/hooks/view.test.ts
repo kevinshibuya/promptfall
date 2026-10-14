@@ -98,13 +98,16 @@ test('the view carries the tallies and the recruits remaining to each guarantee'
   expect(fresh.tallies.enemies).toEqual({})
   expect(fresh.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
 
+  // The call opens a wave: its enemy and the draw come on together, and the sandbox kills the front.
   let s = step(s0, { t: 'tool_call' }).state
+  const front = s.encounter?.enemies[0]
+  if (!front) throw new Error('nothing spawned')
+  const seen = s.encounter?.enemies.filter((e) => e.def === front.def).length
   s = step(s, { t: 'sandbox_item', base: 'oak_staff', rarity: 'epic' }).state
   s = { ...s, guarantee: { rare: 19, epic: 3, legendary: 7 } }
   const v = toGameView(s, 'a1', false, account)
-  const def = Object.keys(s.tallies.enemies)[0]
-  if (!def) throw new Error('nothing seen')
-  expect(v.tallies.enemies[def]).toEqual({ seen: 1, defeated: 1 })
+  expect(v.tallies.enemies).toEqual(s.tallies.enemies)
+  expect(v.tallies.enemies[front.def]).toEqual({ seen, defeated: 1 })
   expect(v.tallies.collection.oak_staff?.epic).toBe(1)
   expect(v.tallies.drops.epic).toBe(1)
   expect(v.tallies.goldEarned).toBe(s.tallies.goldEarned)
@@ -115,4 +118,21 @@ test('the view carries the tallies and the recruits remaining to each guarantee'
   const before = toGameView(old as typeof s0, 'a1', false, account)
   expect(before.tallies.zoneBosses).toBe(0)
   expect(before.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
+})
+
+test("the view carries the wave's queue length and the zone's wipes, not the lifetime ones", () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  const s0 = createInitialState(1)
+  expect(toGameView(s0, 'a1', false, account)).toMatchObject({ waiting: 0, zoneWipes: 0 })
+  const s = step(s0, { t: 'tool_call' }).state
+  const encounter = s.encounter
+  if (!encounter) throw new Error('the call opens a wave')
+  const queue = Array.from({ length: 4 }, () => ({ def: 'goblin_scout', kind: 'wave' as const }))
+  const v = toGameView(
+    { ...s, encounter: { ...encounter, queue }, zoneWipes: 2, stats: { ...s.stats, wipes: 7 } },
+    'a1',
+    false,
+    account,
+  )
+  expect(v).toMatchObject({ waiting: 4, zoneWipes: 2, wipes: 7 })
 })

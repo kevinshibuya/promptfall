@@ -2261,7 +2261,8 @@ test('with motion still, a held toast lands at the same show time', async ($, on
 
 /**
  * A state whose next tick spawns a Goblin Scout and kills it before any view holds it, dropping a
- * rare item: the stage never stood the monster up, so its chest falls on the empty ground.
+ * rare item: the stage never stood the monster up, so its chest falls on the empty ground. The
+ * Scout is its wave's one enemy, so the kill clears the wave.
  */
 function spawnedAndKilled(): GameState {
   for (let seed = 1; seed < 5_000; seed++) {
@@ -2282,7 +2283,7 @@ function spawnedAndKilled(): GameState {
     if (
       drop?.k === 'drop' &&
       drop.item.rarity === 'rare' &&
-      state.encounter?.enemies.length === 0 &&
+      !state.encounter?.enemies.length &&
       !effects.some((e) => e.k === 'level_up')
     ) {
       return s

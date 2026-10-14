@@ -295,7 +295,15 @@ export function sceneSvg(
       const shift = y > 0 ? ` transform="translate(0 ${y})"` : ''
       body.push(`<g id="w-${win.key}"${shift}>${parts.join('')}</g>`)
     }
-    return `${head}<defs>${g.defs.join('')}${clips.join('')}</defs>${shell.under}${body.join('')}${shell.over}</svg>`
+    // The band's line runs over the strip windows' bottom border: their footers are drawn again
+    // over it, so a footer reads through the line as the cells and the pixels let it.
+    const footers = opts.band
+      ? scene.windows
+          .filter((win) => !win.y)
+          .map((win) => plate(g, win, win.footer, win.rows - 1))
+          .join('')
+      : ''
+    return `${head}<defs>${g.defs.join('')}${clips.join('')}</defs>${shell.under}${body.join('')}${shell.over}${footers}</svg>`
   }
 
   const most = Math.max(0, ...live.map((t) => (t.kind === 'lines' ? t.frames.length : 0)))
