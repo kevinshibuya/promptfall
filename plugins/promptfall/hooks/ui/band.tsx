@@ -79,7 +79,9 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const mode = await read($, modeAtom)
     const handle = game()
     const loop = handle?.stage.loopFor(e.surface) ?? null
-    if (e.props.hasSurvey || mode === 'off') {
+    // A survey (a permission prompt or a question) hides nothing: the band takes the rows the
+    // engine gives it, as for a tall prompt, so Guard plays where it can be seen.
+    if (mode === 'off') {
       loop?.mount(null)
       return next(e)
     }

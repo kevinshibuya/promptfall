@@ -27,7 +27,7 @@ Kevin chose this knowing the stage can take much of a small window.
 - Spec §10's "one geometry for all" now holds for the art, not for the thresholds (and
   since ADR 0018 the art is one scene on every surface): the
   compact stage and the one-line band are terminal escapes. On the desktop the band
-  collapses only when the person collapses it, the session is not primary, or a survey is
-  showing.
+  collapses only when the person collapses it or the session is not primary; it stays up
+  while Claude asks for a permission or a question.
 - The tests mount the desktop at the size it really reports (95 × 12), not at a terminal
   size.
