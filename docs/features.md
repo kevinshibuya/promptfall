@@ -120,12 +120,17 @@ never with a toast or a cue. While Claude works on a prompt the party has Haste:
 fill a quarter faster and they bob twice as fast, each trailing a speed streak in its class's
 colour, and the log says "The party quickens." The compact stage shows the faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three minutes of
 battle with no sign of work, and the log says "The party slows." A subagent's turn leaves it alone.
-A failed tool call enrages the front enemy: it flashes red and stays tinted red until its next hit,
-which lands half again as hard, and the log says "Claude stumbles. Wood Goblin is enraged!" With no
-enemy on the field nothing happens, and stopping Claude or answering no to a prompt is no stumble. A
+A failed tool call enrages the strongest enemy on the field: a world boss, then a zone boss, then a
+turn boss, then the wave enemy that hits hardest, the toughest and then the front-most of equals. It
+flashes red and stays tinted red until its next hit, which lands half again as hard, and the log
+says "Claude stumbles. Bandit Captain is enraged!" With no enemy on the field, or the strongest
+already enraged, nothing happens, and stopping Claude or answering no to a prompt is no stumble. A
 compaction makes the party camp: a campfire burns between the party and the enemies for about four
 seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
-"The party makes camp while Claude gathers its thoughts." While Claude Code shows a permission
+"The party makes camp while Claude gathers its thoughts." The fight then holds where it stands, every
+gauge, enemy and queued enemy kept, until camp breaks at the next prompt or tool call, a travel or a
+world boss appearing, and the log says "The party breaks camp." A failed tool call while camped
+enrages nobody. With a world boss engaged the party heals and fights on. While Claude Code shows a permission
 prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
 standing raises a small shield on the full stage, and the heroes take half damage and
 attack nobody while the enemies fight on. The log says "The party stands guard." The party lowers

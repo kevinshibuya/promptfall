@@ -52,6 +52,9 @@ enemy kind rides the tool calls' own bucket.
 - Haste touches pace, the one reactive event that does. It passes the test as shape: a quarter
   more hero actions, only during a turn, with a countdown, in time the turn cadence already
   pays for. Its arc run at sim 15 moved the medians by under 5% against sim 14.
+- Camp pauses the fight until it breaks (sim 19, #222). Stopping a fight pays nothing: a held
+  tick spawns, kills and drops nothing, and with a world boss engaged camp pauses nothing, so a
+  shared fight is never forfeited.
 - A summon on a subagent start (a fourth unit that fights while the subagent runs) fails the
   test and stays out, however good it looks. It can return the day the server can see
   subagents, which is never, or as something that does not fight.

@@ -10,6 +10,7 @@ import {
   endEncounter,
   findHero,
 } from './progression'
+import { breakCamp } from './reactive'
 import { earn } from './tallies'
 import type { Event, GameState, GuaranteeRarity, Rarity, StepResult } from './types'
 import { GUARANTEE_RARITIES, RARITIES } from './types'
@@ -163,6 +164,7 @@ export function travel(state: GameState, event: Of<'travel'>): StepResult {
   if (state.boss) return reject(state, event, 'boss_mode')
   return draft(state, (s, effects) => {
     const from = s.zone
+    breakCamp(s, effects)
     endEncounter(s)
     changeZone(s, zone)
     effects.push({ k: 'traveled', from, to: zone })

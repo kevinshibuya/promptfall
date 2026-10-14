@@ -225,11 +225,52 @@ function front(s: GameState): Enemy {
 }
 
 describe('Enrage', () => {
-  it('tool_mishap enrages the front enemy with one enraged effect naming it', () => {
-    const s = injectEnemy(injectEnemy(createInitialState(1), 'goblin_scout'), 'field_rat')
+  /** A zone 1 field of these enemies, in this order, front first. */
+  function field(...defs: [string, EnemyKind?][]): GameState {
+    return defs.reduce((s, [def, kind]) => injectEnemy(s, def, kind), createInitialState(1))
+  }
+
+  function enragedBy(s: GameState): string[] {
+    return run(s, [mishap]).effects.flatMap((e) => (e.k === 'enraged' ? [e.enemyId] : []))
+  }
+
+  function idOf(s: GameState, def: string): string {
+    const e = s.encounter?.enemies.find((x) => x.def === def)
+    if (!e) throw new Error(`no ${def}`)
+    return e.id
+  }
+
+  it('tool_mishap enrages the strongest living enemy with one enraged effect naming it', () => {
+    const s = field(['field_rat'], ['goblin_scout'])
     const r = run(s, [mishap])
-    expect(r.state.encounter?.enemies.map((e) => e.enraged)).toEqual([true, false])
-    expect(r.effects).toEqual([{ k: 'enraged', enemyId: front(s).id }])
+    expect(r.state.encounter?.enemies.map((e) => e.enraged)).toEqual([false, true])
+    expect(r.effects).toEqual([{ k: 'enraged', enemyId: idOf(s, 'goblin_scout') }])
+  })
+
+  it('picks a zone boss behind a plain enemy, and a turn boss over the wave', () => {
+    const boss = field(['field_rat'], ['bandit_captain'])
+    expect(enragedBy(boss)).toEqual([idOf(boss, 'bandit_captain')])
+    const turn = field(['hedge_sprite'], ['wild_boar'])
+    expect(enragedBy(turn)).toEqual([idOf(turn, 'wild_boar')])
+    const both = field(['wild_boar'], ['bandit_captain'])
+    expect(enragedBy(both)).toEqual([idOf(both, 'bandit_captain')])
+  })
+
+  it('breaks ties among wave enemies by attack, then max HP, then the front', () => {
+    // Zone 1: the Field Rat hits for 8 at 40 HP, the Goblin Scout for 8 at 60, the Hedge Sprite for 10 at 45.
+    const atk = field(['field_rat'], ['goblin_scout'], ['hedge_sprite'])
+    expect(enragedBy(atk)).toEqual([idOf(atk, 'hedge_sprite')])
+    const hp = field(['field_rat'], ['goblin_scout'])
+    expect(enragedBy(hp)).toEqual([idOf(hp, 'goblin_scout')])
+    const twins = field(['goblin_scout'], ['goblin_scout'])
+    expect(enragedBy(twins)).toEqual([front(twins).id])
+  })
+
+  it('does nothing when the pick is already enraged, and never falls through to the next', () => {
+    const s0 = field(['field_rat'], ['bandit_captain'])
+    const s = run(s0, [mishap]).state
+    expect(run(s, [mishap])).toEqual({ state: s, effects: [] })
+    expect(front(s).enraged).toBe(false)
   })
 
   it('enrages the engaged world boss', () => {
@@ -243,6 +284,8 @@ describe('Enrage', () => {
     const r = run(s, [mishap])
     expect(front(r.state)).toMatchObject({ kind: 'world_boss', enraged: true })
     expect(r.effects).toEqual([{ k: 'enraged', enemyId: front(s).id }])
+    // A zone boss beside it on the field is still not the pick.
+    expect(enragedBy(injectEnemy(s, 'bandit_captain'))).toEqual([front(s).id])
   })
 
   it('does nothing on an empty field or on an enraged enemy', () => {
@@ -274,6 +317,17 @@ describe('Enrage', () => {
   })
 })
 
+const campOn = { t: 'camp', on: true } as const
+const campOff = { t: 'camp', on: false } as const
+const broke: Effect = { k: 'camp', on: false, heals: [] }
+const engage = {
+  t: 'boss_engaged',
+  bossId: 'wb1',
+  name: 'The Promptwyrm',
+  glyph: '☠',
+  stats: { hp: 900, atk: 18, def: 6, spd: 5 },
+} as const
+
 describe('Camp', () => {
   /** The Knight down, the Black Mage at 1 HP, the White Mage whole. */
   function wounded(): GameState {
@@ -284,13 +338,169 @@ describe('Camp', () => {
     return { ...s0, roster }
   }
 
-  it('heals 50% and revives at 50% as a rest does, with a camp effect carrying the amounts', () => {
+  /** A wave mid-fight, Haste on: two enemies on the field, the rest queued for the free slot. */
+  function inFight(): GameState {
+    const s = run(createInitialState(1), [
+      turnStart,
+      ...times(4, { t: 'tool_call' } as const),
+      tick,
+    ]).state
+    const encounter = s.encounter
+    const [gone, ...left] = encounter?.enemies ?? []
+    if (!encounter || !gone || encounter.queue.length === 0) throw new Error('no queue')
+    return {
+      ...s,
+      encounter: { ...encounter, enemies: left },
+      battle: { ...s.battle, gauges: s.battle.gauges.filter((g) => g.id !== gone.id) },
+    }
+  }
+
+  function camped(s = inFight()): GameState {
+    const r = run(s, [campOn])
+    expect(r.state.camp).toBe(true)
+    return r.state
+  }
+
+  it('heals 50% and revives at 50% as a rest does, with a camp effect on carrying the amounts', () => {
     const s = wounded()
     const r = run(s, [{ t: 'camp' }])
     const rested = run(s, [{ t: 'rest' }]).state
     expect(r.state.roster).toEqual(rested.roster)
+    expect(r.state.camp).toBe(true)
     const [k, b, w] = s.party
     // The Knight's maximum is 60 and the Black Mage's 36; the White Mage is whole.
+    expect(r.effects).toEqual([
+      {
+        k: 'camp',
+        on: true,
+        heals: [
+          { heroId: k, amount: 30 },
+          { heroId: b, amount: 18 },
+          { heroId: w, amount: 0 },
+        ],
+      },
+    ])
+    expect(run(s, [campOn])).toEqual(r)
+  })
+
+  it('holds the encounter, its queue, the gauges and Haste’s countdown as they were', () => {
+    const s = inFight()
+    const c = camped(s)
+    expect(c.encounter).toEqual(s.encounter)
+    expect(c.battle).toEqual(s.battle)
+    expect(c.hasteTicks).toBe(s.hasteTicks)
+    expect(c.hasteTicks).toBeGreaterThan(0)
+  })
+
+  it('a tick while camped refills nothing, moves no gauge, spawns nothing and counts nothing down', () => {
+    const c = run(camped(), [guardOn]).state
+    expect(run(c, times(3, tick))).toEqual({ state: c, effects: [] })
+    const empty = camped(createInitialState(1))
+    expect(run(empty, times(3, tick))).toEqual({ state: empty, effects: [] })
+  })
+
+  it('reports a per-step fill of zero while camped', () => {
+    const c = camped()
+    expect(heroFill(c, hero(c, 0))).toBe(0)
+    expect(heroFill(inFight(), hero(c, 0))).toBeGreaterThan(0)
+  })
+
+  it('camp on while camped and camp off while not camped are no-ops', () => {
+    const c = camped()
+    expect(run(c, [campOn])).toEqual({ state: c, effects: [] })
+    expect(run(c, [{ t: 'camp' }])).toEqual({ state: c, effects: [] })
+    const s = inFight()
+    expect(run(s, [campOff])).toEqual({ state: s, effects: [] })
+  })
+
+  it('a mishap while camped does nothing; guard on and off still set and clear the countdown', () => {
+    const c = camped()
+    expect(run(c, [mishap])).toEqual({ state: c, effects: [] })
+    const guarded = run(c, [guardOn])
+    expect(guarded.state.guardTicks).toBe(60)
+    expect(guarded.effects).toEqual([{ k: 'guard', on: true }])
+    const lowered = run(guarded.state, [guardOff])
+    expect(lowered.state.guardTicks).toBe(0)
+    expect(lowered.effects).toEqual([{ k: 'guard', on: false }])
+    expect(lowered.state.camp).toBe(true)
+  })
+
+  for (const breaker of [campOff, { t: 'rest' }, turnStart, { t: 'tool_call' }] as const) {
+    it(`${breaker.t}${'on' in breaker ? ' off' : ''} breaks camp once, first, and the next tick fights on`, () => {
+      const s = inFight()
+      const r = run(camped(s), [breaker])
+      expect(r.state.camp).toBe(false)
+      expect(r.effects[0]).toEqual(broke)
+      expect(kinds(r.effects, 'camp')).toEqual([broke])
+      expect(run(r.state, [breaker]).effects).not.toContainEqual(broke)
+      // The held gauges move on from where they stood.
+      const next = run(r.state, [tick]).state
+      const held = s.battle.gauges.filter((g) => g.id.startsWith('e'))
+      expect(held.length).toBeGreaterThan(0)
+      for (const { id, g } of held) {
+        const moved = gauge(next, id) !== g || !next.encounter?.enemies.some((e) => e.id === id)
+        expect(moved, id).toBe(true)
+      }
+      // The queue refills the free slot.
+      expect(next.encounter?.enemies.length).toBeGreaterThan(s.encounter?.enemies.length ?? 0)
+    })
+  }
+
+  it('turn_start breaks camp before Haste comes on, so Haste never runs while camped', () => {
+    const c = camped(createInitialState(1))
+    const r = run(c, [turnStart])
+    expect(r.effects).toEqual([broke, { k: 'haste', on: true }])
+    expect(r.state).toMatchObject({ camp: false, hasteTicks: 90 })
+  })
+
+  it('a camped zone boss comes back with the HP it had', () => {
+    const s0 = injectEnemy({ ...createInitialState(1), wave: 11 }, 'bandit_captain')
+    const boss = { ...front(s0), hp: 200 }
+    const s: GameState = s0.encounter
+      ? { ...s0, encounter: { ...s0.encounter, enemies: [boss] } }
+      : s0
+    const c = run(camped(s), times(5, tick)).state
+    const back = run(c, [{ t: 'rest' }]).state
+    expect(front(back)).toEqual(boss)
+    const fought = run(back, times(3, tick))
+    expect(fought.effects.some((e) => e.k === 'act')).toBe(true)
+  })
+
+  it('travel, boss_engaged and the sandbox events that end the encounter break camp once', () => {
+    const c = { ...camped(), highestZone: 2 }
+    for (const event of [
+      { t: 'travel', zone: 2 },
+      engage,
+      { t: 'sandbox_zone', zone: 2 },
+      { t: 'sandbox_boss', zone: 1, boss: 'zone_boss' },
+      { t: 'sandbox_wipe' },
+    ] as const) {
+      const r = run(c, [event])
+      expect(r.state.camp, event.t).toBe(false)
+      expect(r.effects[0], event.t).toEqual(broke)
+      expect(kinds(r.effects, 'camp'), event.t).toEqual([broke])
+    }
+    expect(run(c, [{ t: 'travel', zone: 2 }]).state.encounter).toBeNull()
+    expect(front(run(c, [engage]).state).kind).toBe('world_boss')
+  })
+
+  it('a refused travel breaks nothing', () => {
+    const c = camped()
+    const r = run(c, [{ t: 'travel', zone: 5 }])
+    expect(r.state).toEqual(c)
+    expect(kinds(r.effects, 'camp')).toEqual([])
+  })
+
+  it('with a world boss engaged it heals in place, pauses nothing and emits a heal-only effect', () => {
+    const s = run(wounded(), [engage, turnStart, guardOn]).state
+    const r = run(s, [campOn])
+    expect(r.state.camp).toBe(false)
+    expect(r.state.encounter).toEqual(s.encounter)
+    expect(r.state.boss).toEqual(s.boss)
+    expect(hero(r.state, 0).hp).toBe(30)
+    expect(r.state.hasteTicks).toBe(90)
+    expect(r.state.guardTicks).toBe(60)
+    const [k, b, w] = s.party
     expect(r.effects).toEqual([
       {
         k: 'camp',
@@ -301,26 +511,7 @@ describe('Camp', () => {
         ],
       },
     ])
-  })
-
-  it('heals in place in boss mode and leaves Haste and Guard on', () => {
-    const s = run(wounded(), [
-      {
-        t: 'boss_engaged',
-        bossId: 'wb1',
-        name: 'The Promptwyrm',
-        glyph: '☠',
-        stats: { hp: 900, atk: 18, def: 6, spd: 5 },
-      },
-      turnStart,
-      guardOn,
-    ]).state
-    const r = run(s, [{ t: 'camp' }])
-    expect(r.state.encounter).toEqual(s.encounter)
-    expect(r.state.boss).toEqual(s.boss)
-    expect(hero(r.state, 0).hp).toBe(30)
-    expect(r.state.hasteTicks).toBe(90)
-    expect(r.state.guardTicks).toBe(60)
+    expect(run(r.state, [tick]).state.tick).toBe(r.state.tick + 1)
   })
 })
 
