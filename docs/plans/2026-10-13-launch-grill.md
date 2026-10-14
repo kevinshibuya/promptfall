@@ -21,7 +21,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 |---|---|---|---|---|---|---|
 | 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | #187, merged 2026-10-13 as `259ce09` | merged |
 | 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | #200, merged 2026-10-14 as `a49ef45` | merged |
-| 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 | merged |
+| 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 as `f08a125` | merged |
 | 4 | One stage | | | | | not started |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
 | 6 | Band polish | | #173 | | | not started |
