@@ -1015,7 +1015,7 @@ function earn(s, gold) {
 }
 
 // packages/sim/src/types.ts
-var SIM_VERSION = 17;
+var SIM_VERSION = 18;
 var RARITIES = ["common", "uncommon", "rare", "epic", "legendary"];
 var WAVE_ARCHETYPES = ["swift", "brute", "caster", "tank"];
 var GUARANTEE_RARITIES = ["rare", "epic", "legendary"];
@@ -1296,8 +1296,8 @@ function applyPendingParty(s, effects) {
   s.pendingParty = null;
   effects.push({ k: "party_applied", heroIds: [...s.party] });
 }
-function openEncounter(s, waveSize) {
-  const encounter = { enemies: [], queue: [], waveSize, spawnedInWave: 0 };
+function openEncounter(s) {
+  const encounter = { enemies: [], queue: [], waveSize: 0, spawnedInWave: 0 };
   s.encounter = encounter;
   return encounter;
 }
@@ -1317,13 +1317,39 @@ function pickWaveEnemy(s, hint) {
   for (const id of zone?.enemies ?? []) weights2[id] = 1;
   return drawWeighted(s, weights2);
 }
+var FIELD_MAX = 3;
+var QUEUE_MAX = 10;
+function enqueue(encounter, defId, counts) {
+  if (encounter.queue.length >= QUEUE_MAX) return;
+  encounter.queue.push({ def: defId, kind: "wave" });
+  if (counts) encounter.waveSize += 1;
+}
+function openWave(s, encounter, size) {
+  for (let i = 0; i < size; i++) enqueue(encounter, pickWaveEnemy(s), true);
+}
+function refill(s, encounter) {
+  while (encounter.enemies.length < FIELD_MAX) {
+    const next = encounter.queue.shift();
+    if (!next) break;
+    spawnEnemy(s, encounter, next.def, next.kind);
+    if (encounter.waveSize > 0) encounter.spawnedInWave += 1;
+  }
+}
 function onToolCall(s, hint) {
   s.turnToolCalls += 1;
   if (s.boss) return;
-  const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3));
-  const defId = pickWaveEnemy(s, hint);
-  if (encounter.enemies.length < 3) spawnEnemy(s, encounter, defId, "wave");
-  else if (encounter.queue.length < 10) encounter.queue.push({ def: defId, kind: "wave" });
+  if (s.wave === 11) {
+    const encounter2 = s.encounter ?? openEncounter(s);
+    enqueue(encounter2, pickWaveEnemy(s, hint), false);
+    refill(s, encounter2);
+    return;
+  }
+  const opens = !s.encounter || s.encounter.waveSize === 0;
+  const size = opens ? 1 + draw(s, 3) : 0;
+  const encounter = s.encounter ?? openEncounter(s);
+  enqueue(encounter, pickWaveEnemy(s, hint), true);
+  openWave(s, encounter, size);
+  refill(s, encounter);
 }
 function onTurnEnd(s) {
   if (s.turnToolCalls >= 10) s.pendingTurnBoss = true;
@@ -1333,33 +1359,31 @@ function onRest(s) {
   healParty(s, 5e3);
 }
 function refillFromQueue(s) {
-  const encounter = s.encounter;
-  if (!encounter) return;
-  while (encounter.enemies.length < 3) {
-    const next = encounter.queue.shift();
-    if (!next) break;
-    spawnEnemy(s, encounter, next.def, next.kind);
-  }
+  if (s.encounter) refill(s, s.encounter);
 }
 function spawnOnEmptyTick(s, effects) {
   const zone = zoneAt(s.zone)?.def;
   if (!zone) return;
   if (s.pendingTurnBoss) {
-    const encounter2 = s.encounter ?? openEncounter(s, 0);
+    const encounter2 = s.encounter ?? openEncounter(s);
     spawnEnemy(s, encounter2, zone.turnBoss, "turn_boss");
     s.pendingTurnBoss = false;
     effects.push({ k: "boss_spawned", kind: "turn_boss", def: zone.turnBoss });
     return;
   }
   if (s.wave === 11) {
-    const encounter2 = s.encounter ?? openEncounter(s, 0);
+    const encounter2 = s.encounter ?? openEncounter(s);
     spawnEnemy(s, encounter2, zone.boss, "zone_boss");
     effects.push({ k: "boss_spawned", kind: "zone_boss", def: zone.boss });
     return;
   }
-  const encounter = s.encounter ?? openEncounter(s, 1 + draw(s, 3));
-  spawnEnemy(s, encounter, pickWaveEnemy(s), "wave");
-  encounter.spawnedInWave += 1;
+  if (s.encounter) {
+    refill(s, s.encounter);
+    return;
+  }
+  const encounter = openEncounter(s);
+  openWave(s, encounter, 1 + draw(s, 3));
+  refill(s, encounter);
 }
 function grantXp(s, hero, xp, effects) {
   const cap = content.rarity[hero.rarity].levelCap;
@@ -1421,7 +1445,9 @@ function onEnemyKilled(s, enemy, effects, drop) {
     return;
   }
   const current = s.encounter;
-  if (!current || current.enemies.length > 0 || current.queue.length > 0) return;
+  if (!current) return;
+  refill(s, current);
+  if (current.enemies.length > 0 || current.queue.length > 0) return;
   if (current.waveSize > 0 && current.spawnedInWave >= current.waveSize) {
     healParty(s, 1500);
     effects.push({ k: "wave_cleared", zone: s.zone, wave: s.wave });
@@ -1840,7 +1866,7 @@ function goldenEvents(options = {}) {
   }
   return events.slice(0, 300);
 }
-var GOLDEN_HASH = "5a9469dfea696461";
+var GOLDEN_HASH = "9856df8da655c357";
 
 // packages/sim/src/migrate.ts
 var MIGRATIONS = {
@@ -1923,7 +1949,11 @@ var MIGRATIONS = {
   },
   // 16 → 17: the zone bosses' moves (#169). Rules, tactics and the bosses' atk moved; a move is read
   // from content and rage from a boss's HP at the hit, so nothing changes shape.
-  16: { state: (s) => s }
+  16: { state: (s) => s },
+  // 17 → 18: waves fill every free slot (#204). A wave's whole draw queues at its open, tool calls
+  // join it, and a kill refills in the same step; `waveSize` and `spawnedInWave` keep their shape and
+  // count what the wave got. The finish clears every fight outside boss mode, so nothing changes shape.
+  17: { state: (s) => s }
 };
 function withBaseTier(item) {
   const minZone = content.itemBases[item.base]?.minZone ?? 1;
@@ -2629,6 +2659,7 @@ export {
   ONE_OFF_GOLD,
   POWER_BP,
   RARITIES,
+  RETREAT_AT,
   SANDBOX_EVENT_KINDS,
   SERVER_EVENT_KINDS,
   SIM_VERSION,

@@ -39,6 +39,8 @@ describe('golden replay', () => {
   // kill, drop and gold gain lands in the tallies.
   // SIM_VERSION 17 (the zone bosses' moves) moves it through `v` alone: the script never meets a
   // zone boss, and the world boss keeps the single attack at its move-free atk.
+  // SIM_VERSION 18 (waves fill every free slot) changes every fight: a wave's draw arrives
+  // together, each tool call's enemy joins the wave, and a kill refills in its own step.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -47,7 +49,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('5a9469dfea696461')
+    expect(GOLDEN_HASH).toBe('9856df8da655c357')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)

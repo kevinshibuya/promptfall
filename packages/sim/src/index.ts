@@ -61,7 +61,7 @@ export type {
   VersionedState,
 } from './migrate'
 export { MIGRATIONS, migrate, migrateGoods } from './migrate'
-export { heroStats } from './progression'
+export { heroStats, RETREAT_AT } from './progression'
 export { heroFill } from './reactive'
 export { createInitialState } from './state'
 export { replay, step } from './step'
