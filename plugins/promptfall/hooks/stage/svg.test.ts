@@ -793,6 +793,30 @@ test('the huddle slides each hero from its slot as a transform animation, frozen
   expect(flat.svg).toContain(`translate(${mid.x} ${mid.y})`)
 })
 
+test('a huddle reversed mid-slide is one slide back from where the party stands, as the pixels draw it', () => {
+  const xOf = (m: { actors: { key: string; x: number; y: number }[] }, key: string) =>
+    m.actors.find((a) => a.key === key) ?? { x: 0, y: 0 }
+  const slot = xOf(guardTurned(false, NOW + HUDDLE_MS).model, 'h3')
+  const huddled = xOf(guardTurned(true, NOW + HUDDLE_MS).model, 'h3')
+  const dx = huddled.x - slot.x
+  const t = new StageTimeline()
+  t.observe(party({ guarding: false }), NOW - 1000)
+  t.onEffects([{ k: 'guard', on: true }], NOW)
+  t.onEffects([{ k: 'guard', on: false }], NOW + 50)
+  const now = NOW + 60
+  const v = party({ guarding: false })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  const svg = renderSvg(model, t.active(now), { smil: true, motion: 'full', now, width: 960 })
+  // Turned a quarter in, the slide back runs as if it began 150 ms before the turn.
+  expect(svg).toContain(
+    `<g transform="translate(${huddled.x} ${huddled.y})"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${-dx} 0" begin="-0.16s" dur="0.2s" fill="freeze"/>`,
+  )
+  expect(svg).not.toContain(`values="0 0;${dx} 0"`)
+})
+
 test('a level-up flashes gold beside the white flash filter and its deltas rise as gold text', () => {
   const up: StageEffect[] = [{ k: 'level_up', heroId: 'h1', level: 6, deltas: { atk: 3, def: 2 } }]
   const gold = colour(LEVEL_RGB)

@@ -1139,6 +1139,7 @@ export class StageTimeline {
     this.reasons[reason] = on
     const is = this.reasons.guard || this.reasons.camp
     if (was !== is) this.huddleStep(is ? 'in' : 'out', at, hp)
+    else if (is) this.rejoin(hp)
   }
 
   /** Drops an entry and everything on the timeline about it, with no motion. */
@@ -1164,14 +1165,45 @@ export class StageTimeline {
     const standing = [...this.heroes.keys()].filter((id) => (hp.get(id) ?? 0) > 0)
     const members = dir === 'in' ? standing : (this.huddle ?? standing)
     this.huddle = dir === 'in' ? members : null
+    // A slide still running at `at` turns back from where it stands: the new one starts as far
+    // along as the party is, and the old one goes, so every picture draws one slide.
+    const running = this.motions
+      .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.from <= at && m.until > at)
+      .sort((a, b) => a.from - b.from)
+      .at(-1)
+    let from = at
+    if (running) {
+      const p = (at - running.from) / (running.until - running.from)
+      const share = running.dir === 'in' ? p : 1 - p
+      from = at - (dir === 'in' ? share : 1 - share) * HUDDLE_MS
+      this.motions = this.motions.filter((m) => m !== running)
+    }
     this.motions.push({
       kind: 'huddle',
       actor: null,
       dir,
       members,
-      from: at,
-      until: at + HUDDLE_MS,
+      from,
+      until: from + HUDDLE_MS,
     })
+  }
+
+  /**
+   * Already huddled, a hero the step raised (camp's heal under Guard) joins the huddle at once:
+   * the members behind it make room in the same frame.
+   */
+  private rejoin(hp: Map<string, number>): void {
+    const held = this.huddle
+    if (held === null) return
+    const standing = [...this.heroes.keys()].filter((id) => (hp.get(id) ?? 0) > 0)
+    if (standing.every((id) => held.includes(id))) return
+    const members = [...this.heroes.keys()].filter(
+      (id) => held.includes(id) || standing.includes(id),
+    )
+    this.huddle = members
+    this.motions = this.motions.map((m) =>
+      m.kind === 'huddle' && m.dir === 'in' ? { ...m, members } : m,
+    )
   }
 
   /** The members of the huddle the party stands in, fixed as it began; null when none is held. */

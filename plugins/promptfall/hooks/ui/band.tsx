@@ -188,8 +188,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         // The path `/promptfall farm` takes (hooks/command.ts).
         if (handle?.canApply()) handle.apply({ t: 'set_farm', on: !view.farm }, now)
       },
-      // The path `/promptfall go` takes.
-      g: () => void handle?.breakCamp(now),
+      // The path `/promptfall go` takes, at the keypress: camping, the last draw can be stale.
+      g: () => void $.clock.now().then((at) => handle?.breakCamp(at)),
     }
     // Not `h`: that name is the JSX factory.
     const buttons = HOTKEYS.filter((k) => k.hotkey !== 'g' || view.camping).map((k) => (

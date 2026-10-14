@@ -246,7 +246,9 @@ Checked against Claude Code v2.1.287's mods API.
   - The plugin drops a reactive event sent faster than its pace, since a
     dropped one loses a flash at most, and its paces sit under the server's
     buckets (§7). `camp` off has no pace: the plugin applies it only while
-    the view says camping, so a camp spends one on and one off. Any later reactive event passes ADR 0014's test before it is
+    the engine's own state says camping, read before any await, so two
+    breaks at once send one off and a camp spends one on and one off. The
+    band's `g` reads the clock at the keypress, not at its last draw. Any later reactive event passes ADR 0014's test before it is
     designed: if faking it would pay, it is not a reactive event. A summon on a
     subagent start fails it and stays out.
 
@@ -1147,10 +1149,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
     it stands with its figure `HUDDLE_GAP_PX` (one pixel) behind the figure
     before it, in party order. The huddle's members are fixed at guard-on, so
     the fallen keep their slots and a hero that falls under Guard shifts
-    nobody. On the guard effect with on the timeline slides each member from
+    nobody; a hero camp's heal raises while Guard holds the huddle joins it
+    at once, the members behind it making room in that frame. On the guard effect with on the timeline slides each member from
     its slot to its huddle position in idle A over `HUDDLE_MS` (200 ms), one
     span for all so they arrive together, and on the guard effect with off
-    the reverse; the SMIL picture carries the slide as a frozen translate. A
+    the reverse; a slide turned before it ends goes back from where the
+    party stands, as one slide backdated to that share, so the pictures
+    agree. The SMIL picture carries the slide as a frozen translate. A
     party first drawn guarding stands huddled with no motion. The front
     living hero holds the big shield, the `effect:shield` sprite (1.5× and
     1× art, about a hero's height), on the enemies' side: its bottom at the

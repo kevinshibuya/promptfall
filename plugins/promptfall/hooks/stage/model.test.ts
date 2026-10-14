@@ -1044,6 +1044,20 @@ test('guard off slides the huddle back to the slots over the same span, the fall
   expect(heroXs(fell)[2]).toBe(heroXs(mid)[2])
 })
 
+test('a huddle reversed mid-slide turns back from where the party stands, over the share it went', () => {
+  const slots = heroXs(at(wave(), [], NOW, BOX, HI))
+  const t = new StageTimeline()
+  t.observe(guarding(false), NOW - 1000)
+  t.onEffects([{ k: 'guard', on: true }], NOW)
+  t.onEffects([{ k: 'guard', on: false }], NOW + 50)
+  const v = guarding(false)
+  const draw = (now: number) => stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, HI)
+  // A quarter in as it turns: back from there, not from the huddle, and home a quarter later.
+  expect(heroXs(draw(NOW + 50))).toEqual(heroXs(guardTurned(true, NOW + 50)))
+  expect(heroXs(draw(NOW + 75))).toEqual(heroXs(guardTurned(true, NOW + 25)))
+  expect(heroXs(draw(NOW + 100))).toEqual(slots)
+})
+
 test("a huddled hero's step and lunge add to its huddle position; the compact stage has no huddle", () => {
   const archerHits: Effect[] = [{ k: 'act', actor: 'h3', action: 'attack', at: 0 }, hit('h3', 'e1')]
   const moved = (v: GameView) =>
@@ -1300,6 +1314,21 @@ test("an enemy the break's view no longer lists never walks in: one gone from th
   }
   // The party's step-off plays as it does today.
   expect(actor(travel.model(at0 + TRAVEL_OFF_MS + 200).actors, 'h1').alpha).toBeLessThan(1)
+})
+
+test('a hero the camp heal raises while Guard holds the huddle joins it at once', () => {
+  const huddled = heroXs(guardTurned(true, NOW + HUDDLE_MS))
+  const down = guarding(false)
+  fall('h2')(down)
+  const t = new StageTimeline()
+  t.observe(down, NOW - 1000)
+  t.onEffects([{ k: 'guard', on: true }], NOW)
+  t.onEffects([{ k: 'camp', on: true, heals: [{ heroId: 'h2', amount: 25 }] }], NOW + 1000)
+  const v = { ...guarding(), camping: true }
+  const now = NOW + 2000
+  const m = stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, HI)
+  expect(actor(m.actors, 'h2').fallen).toBe(false)
+  expect(heroXs(m)).toEqual(huddled)
 })
 
 test('guard while camped holds the stance with no shield and no second huddle; guard off has nothing to undo', () => {
