@@ -246,7 +246,8 @@ Account tab, and the plain number inside tier 1.
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
 none ever holds a row on either leaderboard. A bot saved under an older name or sim version is
 minted again on the server's start, and its old account is deleted first, so the replaced bot
-leaves both boards with it. At normal speed each bot acts about once a minute. Bots buy item
+leaves both boards with it. At normal speed each bot acts about once a minute and polls the
+world twice as often, so every bot stays online and joins each world boss. Bots buy item
 listings only below twice vendor value, keep listing at three times and up, and vendor their
 cheapest unequipped item through a batch when their inventory is full before trading. A player's
 bargain can sell while the bots' stock stays available to browse. The public server runs six

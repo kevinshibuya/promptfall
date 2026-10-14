@@ -341,8 +341,7 @@ describe('bots over HTTP', () => {
     const boss = world.boss
     if (!boss) throw new Error('no boss')
     expect(boss.spawnedAt).toBe(grid)
-    // A round now spans 60s: only eight bots remain within the 45s presence TTL at spawn.
-    expect(boss.maxHp).toBe(8 * BOSS_BASE_HP)
+    expect(boss.maxHp).toBe(COUNT * BOSS_BASE_HP)
     expect(boss.hp).toBeLessThan(boss.maxHp)
     // Only bots played and fought: neither board holds a row.
     expect(boards.damage).toEqual([])
@@ -361,8 +360,8 @@ describe('bots over HTTP', () => {
       // The mark is the record's alone: the account is what the wire carries.
       expect(record.account).not.toHaveProperty('bot')
     }
-    // A 60s round outlasts the 45s presence TTL: eight recent bots plus the viewer.
-    expect(world.online).toBe(9)
+    // A 60s round outlasts the 45s presence TTL; the half-round heartbeat keeps every bot online.
+    expect(world.online).toBe(COUNT + 1)
   }, 120_000)
 
   it('a bot saved before the mark is minted again, marked and named as a bot', async () => {

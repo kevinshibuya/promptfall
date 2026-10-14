@@ -384,13 +384,28 @@ export function startBots(options: BotOptions): Bots {
       log(`bots failed to start: ${String(error)}`)
       return
     }
-    const bot = bots[turn % Math.max(1, bots.length)]
+    const count = Math.max(1, bots.length)
+    const bot = bots[turn % count]
+    // A round outlasts PRESENCE_TTL_MS, so the bot half a round on polls too: every bot's
+    // heartbeat lands twice a round and none drops out of presence between its acts.
+    const half = bots[(turn + Math.floor(count / 2)) % count]
     turn += 1
     if (!bot) return
     try {
       await act(bot)
     } catch (error) {
       // The next act retries from the mirror as it is: a lost ack is answered duplicate or seq_mismatch.
+      log(`bot ${bot.name} error ${String(error)}`)
+    }
+    if (half && half !== bot) await heartbeat(half)
+  }
+
+  async function heartbeat(bot: Bot): Promise<void> {
+    try {
+      const world = await client.world(bot.auth, bot.chatMark)
+      if ('reason' in world) return log(`bot ${bot.name} world ${world.reason}`)
+      bot.chatMark = world.chat.at(-1)?.id ?? bot.chatMark
+    } catch (error) {
       log(`bot ${bot.name} error ${String(error)}`)
     }
   }
