@@ -434,7 +434,7 @@ test('the fuller legal frame at rest and lunging, with no backdrop and over ever
   for (const [zone, pins] of Object.entries(FULLER_RUNGS)) {
     for (const acting of [false, true]) {
       const f = fullerFrame(acting, NOW)
-      const model = { ...f.model, backdrop: BACKDROPS[zone]?.hires ?? null }
+      const model = { ...f.model, backdrop: BACKDROPS[zone] ?? null }
       const at = `${acting ? 'lunging' : 'at rest'}, ${zone}`
       const on = fitSvg(model, f.motions, { smil: true, now: NOW, width: 960, motion: 'full' })
       expect([on.rung, on.svg.length], at).toEqual(acting ? pins.lunging : pins.rest)
@@ -459,6 +459,6 @@ test('the fuller frame over every zone backdrop stays in the Image budget', () =
     const b = BACKDROPS[zone]
     if (!b) continue
     const { model } = fullerFrame(true, NOW)
-    imageWithinBudget({ ...model, backdrop: b.hires }, `zone ${zone}: image bytes`)
+    imageWithinBudget({ ...model, backdrop: b }, `zone ${zone}: image bytes`)
   }
 })

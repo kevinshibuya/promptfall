@@ -675,7 +675,7 @@ export function stageAt(
   return {
     box,
     ground: ZONE_GROUND[(base ?? 1) - 1] ?? ZONE_GROUND[0] ?? 0,
-    backdrop: opts.compact || base === undefined ? null : backdropFor(base, scale),
+    backdrop: opts.compact || base === undefined ? null : backdropFor(base),
     actors,
     numbers,
     glows,

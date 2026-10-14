@@ -192,11 +192,10 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
       const zone = content.zones[target.zone - 1]
       if (!zone) throw new Error(`no zone ${target.zone}`)
       for (const def of [...zone.enemies, zone.boss, zone.turnBoss]) both(`enemy:${def}`)
-      // The zone's backdrop alone, at the stage views' screen scales; the views draw it under.
+      // The zone's 1.5x backdrop alone, at the stage views' screen scale; the views draw it under.
       const backdrop = BACKDROPS[String(target.zone)]
       if (backdrop) {
-        put('backdrop-hires', scaled(rgbaOf(artFrame(backdrop.hires)), 4))
-        put('backdrop', scaled(rgbaOf(artFrame(backdrop.full)), 6))
+        put('backdrop-hires', scaled(rgbaOf(artFrame(backdrop)), 4))
       }
       views('stage-rest', inZone(wave(), target.zone, zone.enemies.slice(0, 3)))
       views('stage-boss', inZone(boss(), target.zone, [zone.boss]))

@@ -1,6 +1,10 @@
+import { execFileSync } from 'node:child_process'
+import { mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { backdropFrom, cutBackdrop, fitCanvas, paintedBand, quantise, resample } from './backdrop'
-import { blank, type Rgba, rgbOf } from './png'
+import { blank, type Rgba, readPng, rgbOf, writePng } from './png'
 
 const KEY = 0xff00ff
 function sheet(width: number, height: number, colour: (x: number, y: number) => number): Rgba {
@@ -16,6 +20,43 @@ function sheet(width: number, height: number, colour: (x: number, y: number) => 
 const at = (img: Rgba, x: number, y: number) => rgbOf(img.data, (y * img.width + x) * 4)
 
 describe('backdrop', () => {
+  it('writes one 1.5x PNG and reports one cut from the CLI', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'backdrop-'))
+    try {
+      const source = join(dir, 'sheet.png')
+      const out = join(dir, 'art')
+      writePng(
+        source,
+        sheet(8, 4, (_, y) => (y < 2 ? KEY : 0x557733)),
+      )
+      const report = execFileSync(
+        process.execPath,
+        [
+          '--import',
+          'tsx',
+          join(import.meta.dirname, 'backdrop.ts'),
+          source,
+          '--zone',
+          '1',
+          '--out',
+          out,
+        ],
+        { encoding: 'utf8' },
+      )
+      expect(readdirSync(out)).toEqual(['backdrops-hires'])
+      expect(readdirSync(join(out, 'backdrops-hires'))).toEqual(['zone-1.png'])
+      const painting = readPng(join(out, 'backdrops-hires', 'zone-1.png'))
+      expect([painting.width, painting.height]).toEqual([240, 51])
+      expect(report.trim().split('\n')).toEqual([
+        'band: x 0..8, y 2..4 (8 x 2)',
+        '1.5x: resampled 240 x 60 into 240 x 51, 1 colours',
+        join(out, 'backdrops-hires', 'zone-1.png'),
+      ])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('finds the painted band inside the magenta key', () => {
     const s = sheet(100, 60, (x, y) => (y >= 20 && y < 50 && x >= 5 && x < 95 ? 0x336633 : KEY))
     expect(paintedBand(s)).toEqual({ x0: 5, y0: 20, x1: 95, y1: 50 })
@@ -61,23 +102,26 @@ describe('backdrop', () => {
     for (const c of used) expect(q.palette).toContain(c)
   })
 
-  it('cuts both densities from one sheet: fit by width, the sky extended or cropped', () => {
+  it('cuts only the 1.5x painting from a sheet: fit by width, the sky extended or cropped', () => {
     // A 1536 × 1024 sheet with a 1536 × 240 band: fitting 240 wide leaves 38 rows, extended to 51.
     const s = sheet(1536, 1024, (_, y) =>
       y >= 600 && y < 840 ? (y < 700 ? 0x8899cc : 0x557733) : KEY,
     )
     const out = backdropFrom(s, { fit: 'width', colours: 16, sample: 'vote' })
     if ('error' in out) throw new Error(out.error)
-    expect([out.hires.width, out.hires.height, out.full.width, out.full.height]).toEqual([
-      240, 51, 160, 34,
+    expect([out.hires.width, out.hires.height]).toEqual([240, 51])
+    expect(out).not.toHaveProperty('full')
+    expect(out.report).toEqual([
+      'band: x 0..1536, y 600..840 (1536 x 240)',
+      '1.5x: resampled 240 x 38 into 240 x 51, 2 colours',
     ])
-    expect(out.report[1]).toContain('resampled 240 x 38')
     expect(at(out.hires, 0, 0)).toBe(0x8899cc)
     expect(at(out.hires, 239, 50)).toBe(0x557733)
     // Fit by height: wider than the canvas, cropped from the centre.
     const byHeight = cutBackdrop(s, { x0: 0, y0: 600, x1: 1536, y1: 840 }, 240, 51, {
       fit: 'height',
       colours: 16,
+      sample: 'vote',
     })
     expect(byHeight.resampled).toEqual({ width: 326, height: 51 })
     expect([byHeight.image.width, byHeight.image.height]).toEqual([240, 51])

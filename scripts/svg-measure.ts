@@ -477,7 +477,7 @@ export function fullerFrames(): Fixed[] {
   return [false, true].flatMap((acting) =>
     [null, ...zones].map((zone) => {
       const f = fullerFrame(acting, NOW)
-      const backdrop = zone === null ? null : (BACKDROPS[zone]?.hires ?? null)
+      const backdrop = zone === null ? null : (BACKDROPS[zone] ?? null)
       return {
         name: `fuller ${acting ? 'lunging' : 'at rest'}, ${zone === null ? 'no backdrop' : `zone ${zone}`}`,
         model: { ...f.model, backdrop },

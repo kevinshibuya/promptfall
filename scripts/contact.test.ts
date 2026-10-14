@@ -31,15 +31,20 @@ describe('contact', () => {
     expect([readPng(slime).width, readPng(slime).height]).toEqual([12, 8])
   })
 
-  it('writes each sprite at 1.5x beside the 1x one, and each stage view at 1.5x alone', () => {
+  it('writes each sprite at both sizes, and each backdrop and stage view at 1.5x alone', () => {
     const dir = mkdtempSync(join(tmpdir(), 'contact-'))
     const out = join(dir, 'out')
-    contact({ kind: 'zone', zone: 1 }, { out, native: join(dir, 'native') })
+    const written = contact({ kind: 'zone', zone: 1 }, { out, native: join(dir, 'native') })
     const folder = join(out, 'zone-1')
     const hires = readPng(join(folder, 'enemy-road_slime-hires.png'))
     expect([hires.width, hires.height]).toEqual([96, 96])
     const lo = readPng(join(folder, 'enemy-road_slime.png'))
     expect([lo.width, lo.height]).toEqual([96, 96])
+    const backdropPath = join(folder, 'backdrop-hires.png')
+    expect(written).toContain(backdropPath)
+    const backdrop = readPng(backdropPath)
+    expect([backdrop.width, backdrop.height]).toEqual([960, 204])
+    expect(existsSync(join(folder, 'backdrop.png'))).toBe(false)
     for (const view of ['stage-rest', 'stage-boss', 'stage-turn']) {
       expect(existsSync(join(folder, `${view}.png`)), view).toBe(true)
       expect(existsSync(join(folder, `${view}-1x.png`)), view).toBe(false)
