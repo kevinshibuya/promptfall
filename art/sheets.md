@@ -1818,3 +1818,15 @@ sheet's idiom, a one-pixel black outline around a flame over two crossed logs, b
 its canvas. The 1× is 16 × 16 in black, `#7c0800` logs, `#d82800` flame and `#f0bc3c` core; the
 1.5× is 24 × 24 with a darker log knot and a pale `#fcf0a0` heart, snapped to the master like any
 1.5× art. `pnpm grid art/sprites/effect/campfire.png` gives the 1× as a grid for a redraw.
+
+## shield (hand-drawn)
+
+2026-10-14, spec #221 (ticket #224): Guard's big shield, `effect:shield`, an ordinary `nes` effect
+sprite with no frames, in place of the small shield mark that floated over the front hero's head.
+No sheet and no image run: both arts are hand-placed pixels, a heater shield face on with a
+one-pixel black outline, a light rib down its middle and its far side in shade, bottom-anchored on
+its canvas. The 1.5× is 13 × 21, a hero's height, in black, `#14307c` shade, `#3f8cc6` steel, a
+`#9fd0eb` lit rim and a `#d3e4e7` rib, snapped to the master. The 1× is 10 × 14 in black,
+`#2038ec`, `#5c94fc` and `#c4d4fc`; it only feeds the compact art, so its rib is two pixels wide on
+even columns and survives the halving. `pnpm grid art/sprites/effect/shield.png` gives the 1× as a
+grid for a redraw.

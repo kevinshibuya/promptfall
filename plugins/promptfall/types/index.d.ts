@@ -112,6 +112,8 @@ export type GameView = {
   waiting: number
   gold: number
   farm: boolean
+  /** The party is camped: the fight is held until camp breaks. */
+  camping: boolean
   /** The account's auto-vendor setting. */
   autoVendor: boolean
   lastDrop: LootView | null

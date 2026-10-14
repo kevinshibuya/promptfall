@@ -2,7 +2,7 @@ import type { GameView } from '../../types'
 import { encode } from '../sprites/base64'
 import { lighten, opaqueBox, shear, squash, stance } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
-import { backdropFor, spriteFor } from '../sprites/index'
+import { backdropFor, decodePixels, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { zoneAt } from '../vendor/sim.js'
 import { zoneHead } from '../zone-words'
@@ -14,6 +14,8 @@ import {
   type ChestPhase,
   chestPhaseAt,
   enemySpriteId,
+  type HuddleMotion,
+  huddles,
   type Motion,
   type StageTimeline,
 } from './timeline'
@@ -22,7 +24,6 @@ import {
   ACTOR_PITCH,
   BLINK_MS,
   CAMPFIRE_FADE_MS,
-  CAMPFIRE_MS,
   CLASS_RGB,
   COMPACT_PITCH,
   DROP_RISE_PX,
@@ -33,12 +34,14 @@ import {
   GLOW_RADIUS_PX,
   HASTE_FRAME_MS,
   HIRES_SCALE,
+  HUDDLE_GAP_PX,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
+  SHIELD_OVERLAP_PX,
   SPRITE_PX,
   STEP_OUT_MS,
   STEP_PX,
@@ -74,6 +77,8 @@ export const POSES: readonly Pose[] = [
 
 /** An art drawn with an actor, its top-left `dx`, `dy` from the actor's idle top-left. */
 export type Mark = { art: SpriteArt; dx: number; dy: number }
+/** Guard's big shield beside its holder, white while a hit lands on it. */
+export type ShieldMark = Mark & { flashing: boolean }
 
 /** Every pose the same art, for hand-built actors (tests and fixtures). */
 export function samePoses(
@@ -127,10 +132,21 @@ export type StageActor = {
   rest?: 'idle' | 'guard'
   /** The bob's frame, twice as fast for a hasted hero; null for an actor holding still. */
   bobMs?: number | null
-  /** Haste's speed streak behind a hero at rest, drawn under it; 1.5 only. */
-  streak?: Mark | null
-  /** Guard's shield over the front hero; 1.5 only. */
-  shield?: Mark | null
+  /**
+   * Haste's speed lines trailing a hasted hero's back, a pattern for idle A and one for idle B,
+   * drawn under it in those poses; full stage only, and none in the stance or while camping.
+   */
+  speedLines?: readonly [Mark, Mark] | null
+  /**
+   * Guard's big shield, held by the front living hero on the enemies' side and drawn over it;
+   * flashing white while a hit on any guarding hero flashes.
+   */
+  shield?: ShieldMark | null
+  /**
+   * A huddle member's huddle position less its slot, and the share of that offset in `x` at the
+   * model's instant (0 at the slot, 1 huddled); null for a hero outside the huddle and an enemy.
+   */
+  huddle?: { dx: number; share: number } | null
   /** Enrage's red flash, as `flashing` is the white one. */
   redFlashing?: boolean
   /** A level-up's gold flash, as `flashing` is the white one. */
@@ -171,7 +187,10 @@ export type StageModel = {
   drops: StageDrop[]
   /** Drawn after the drops, before the numbers. */
   effects: StageEffect[]
-  /** Camp's campfire between the lines, drawn with the effects; `alpha` 0 before it is lit. */
+  /**
+   * Camp's campfire, drawn with the effects: a hero's width ahead of the front hero while the party
+   * camps, between the lines on a camp with a world boss engaged; `alpha` 0 before it is lit.
+   */
   campfire?: { art: SpriteArt; x: number; y: number; alpha: number } | null
   alt: string
   /** Stage pixels per half-block cell: HIRES_SCALE for the full stage, 1 for the compact one. */
@@ -181,6 +200,8 @@ export type StageModel = {
 const FALLBACK = spriteFor('item', '')
 /** Camp's campfire: an effect sprite, not content. */
 export const CAMPFIRE = spriteFor('effect', 'campfire')
+/** Guard's big shield: an effect sprite, not content. */
+export const SHIELD = spriteFor('effect', 'shield')
 /** The chest's three drawings, all one size, so each places as the closed one does. */
 export const CHESTS = {
   closed: spriteFor('chest', 'closed'),
@@ -235,6 +256,29 @@ export function travelAt(
   return { dx: 0, alpha: 1 }
 }
 
+/**
+ * An enemy's walk for a camp, its offset and opacity: off toward its own edge (the left) while
+ * fading out, the spawn played backward; back in from there while fading in, held at the edge
+ * and unseen until it starts. None outside a camp's walk.
+ */
+export function campWalkAt(
+  leave: Motion | undefined,
+  back: Motion | undefined,
+  now: number,
+  scale = 1,
+): { dx: number; alpha: number } {
+  const span = Math.round(TRAVEL_PX * scale)
+  if (back?.kind === 'camp_return') {
+    const p = progress(back, now)
+    return { dx: -Math.round(span * (1 - p)), alpha: p }
+  }
+  if (leave?.kind === 'camp_leave') {
+    const p = progress(leave, now)
+    return { dx: -Math.round(span * p), alpha: 1 - p }
+  }
+  return { dx: 0, alpha: 1 }
+}
+
 /** An actor's offset from its place: the step, and the lunge from the stepped position. */
 export function actionOffset(
   step: Motion | undefined,
@@ -243,6 +287,27 @@ export function actionOffset(
   scale = 1,
 ): number {
   return stepOffset(step, now, scale) + lungeOffset(lunge, now, scale)
+}
+
+/**
+ * How far into its huddle the party stands at `now`, 0 at the slots to 1 huddled, and the huddle
+ * motion that says so: the latest started, else the next to come (it holds the party where it
+ * starts), else none and the view's own (`huddled`).
+ */
+function huddleShare(
+  motions: readonly Motion[],
+  now: number,
+  huddled: boolean,
+): { share: number; motion: HuddleMotion | null } {
+  const slides = motions
+    .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.until > now)
+    .sort((a, b) => a.from - b.from)
+  const started = slides.filter((m) => m.from <= now).at(-1)
+  const motion = started ?? slides[0] ?? null
+  if (motion === null) return { share: huddled ? 1 : 0, motion }
+  // The step's ramp: straight from one end to the other.
+  const p = started ? progress(motion, now) : 0
+  return { share: motion.dir === 'in' ? p : 1 - p, motion }
 }
 
 /** `rgb` moved `share` of the way to `to`, per channel. */
@@ -254,7 +319,7 @@ function mix(rgb: number, to: number, share: number): number {
   return ch(16) | ch(8) | ch(0)
 }
 
-/** A one-colour art from rows of '#' and '.'. */
+/** An art from rows of '.' (clear) and 'K', 'S', 'W', the palette's first three colours. */
 function solid(rows: readonly string[], palette: readonly number[]): SpriteArt {
   const width = rows[0]?.length ?? 0
   const px = new Uint8Array(width * rows.length)
@@ -264,42 +329,108 @@ function solid(rows: readonly string[], palette: readonly number[]): SpriteArt {
   return { width, height: rows.length, palette: [0, ...palette], pixels: encode(px) }
 }
 
-/** Haste's speed streak: two pixels tall, broken toward its tail. */
-const STREAK_ROWS = ['KKKKK.KK', 'KKKKK.KK']
-const streaks = new Map<number, SpriteArt>()
+/**
+ * Haste's speed lines: a pattern per bob frame, each run at its share of the figure's height, from
+ * the row's back out toward the tail, '.' a gap and K, S, W the tint's steps; each step how far
+ * the class colour is mixed toward white, lighter as the line fades.
+ */
+const SPEED_LINES = {
+  tint: [0.45, 0.65, 0.85],
+  patterns: [
+    [
+      { at: 0.3, run: 'KKSSW.W' },
+      { at: 0.5, run: 'KKKSSSW.W.W' },
+      { at: 0.7, run: 'KKSSW' },
+      { at: 0.9, run: 'KKKSSW.W' },
+    ],
+    [
+      { at: 0.3, run: 'KKKSSW.W' },
+      { at: 0.5, run: 'KKSSW.W' },
+      { at: 0.7, run: 'KKKSSSW.W.W' },
+      { at: 0.9, run: 'KKSW' },
+    ],
+  ],
+} as const
+const speedLinesCache = new WeakMap<SpriteArt, Map<number, readonly [Mark, Mark]>>()
 
 /**
- * The streak in `rgb` behind a hero's idle art: a pixel clear of its back (heroes face left, so
- * their back is on the right), on the middle of its figure.
+ * One pattern of the speed lines in `rgb` behind `art`, a hero's idle A or B, from its idle
+ * top-left: each run starts in the first column past the figure's back in its row (heroes face
+ * left, so their back is on the right).
  */
-function streakOf(idle: SpriteArt, rgb: number): Mark | null {
-  const box = opaqueBox(idle)
-  if (!box) return null
-  let art = streaks.get(rgb)
-  if (!art) {
-    art = solid(STREAK_ROWS, [rgb])
-    streaks.set(rgb, art)
+function speedLinesOn(art: SpriteArt, pattern: number, rgb: number): Mark | null {
+  const box = opaqueBox(art)
+  const runs = SPEED_LINES.patterns[pattern]
+  if (!box || !runs) return null
+  const px = decodePixels(art)
+  const lines = runs.map(({ at, run }) => {
+    const y = box.y0 + Math.round(at * (box.y1 - box.y0))
+    // The row's back, mirrored: the first opaque source column is the last drawn one.
+    let back = box.x0
+    while (back < art.width && (px[y * art.width + back] ?? 0) === 0) back++
+    return { y, x: art.width - back, run }
+  })
+  const x0 = Math.min(...lines.map((l) => l.x))
+  const y0 = Math.min(...lines.map((l) => l.y))
+  const width = Math.max(...lines.map((l) => l.x + l.run.length)) - x0
+  const height = Math.max(...lines.map((l) => l.y)) - y0 + 1
+  const rows = Array.from({ length: height }, () => '.'.repeat(width).split(''))
+  for (const l of lines) {
+    const row = rows[l.y - y0]
+    for (let i = 0; i < l.run.length && row; i++) row[l.x - x0 + i] = l.run[i] ?? '.'
   }
-  const mid = Math.round((box.y0 + box.y1 + 1) / 2)
-  return { art, dx: idle.width - box.x0 + 1, dy: mid - 1 }
+  const palette = SPEED_LINES.tint.map((share) => mix(rgb, 0xffffff, share))
+  return {
+    art: solid(
+      rows.map((r) => r.join('')),
+      palette,
+    ),
+    dx: x0,
+    dy: y0,
+  }
 }
 
-/** Guard's shield mark: steel with a light rib and a dark outline, at 1.5. */
-export const SHIELD = solid(
-  ['.KKKKK.', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', '.KSWSK.', '..KSK..', '...K...'],
-  [0x101018, 0x5070c0, 0xe0e8f0],
-)
+/** Haste's speed lines in a class colour behind a hero, for its idle A and its idle B. */
+function speedLinesOf(
+  idle: SpriteArt,
+  idleB: SpriteArt,
+  rgb: number,
+): readonly [Mark, Mark] | null {
+  let byRgb = speedLinesCache.get(idle)
+  if (!byRgb) {
+    byRgb = new Map()
+    speedLinesCache.set(idle, byRgb)
+  }
+  const hit = byRgb.get(rgb)
+  if (hit) return hit
+  const a = speedLinesOn(idle, 0, rgb)
+  const b = speedLinesOn(idleB, 1, rgb)
+  if (!a || !b) return null
+  const pair = [a, b] as const
+  byRgb.set(rgb, pair)
+  return pair
+}
 
-/** The shield centred over a hero's idle figure, a pixel above its head. */
-function shieldOver(idle: SpriteArt): Mark | null {
-  const box = opaqueBox(idle)
-  if (!box) return null
-  // Heroes are drawn flipped: the figure's centre mirrors with the art.
-  const centre = idle.width - (box.x0 + box.x1 + 1) / 2
+/**
+ * The big shield `art` beside a hero's idle figure, on the enemies' side: its bottom on the
+ * figure's ground row, its back edge over the figure's first `overlap` columns. Heroes are drawn
+ * flipped, so the figure's front is the mirror of its art's right edge.
+ */
+function shieldBeside(
+  idle: SpriteArt,
+  art: SpriteArt,
+  overlap: number,
+  flashing: boolean,
+): ShieldMark | null {
+  const figure = opaqueBox(idle)
+  const shield = opaqueBox(art)
+  if (!figure || !shield) return null
+  const front = idle.width - 1 - figure.x1
   return {
-    art: SHIELD,
-    dx: Math.round(centre - SHIELD.width / 2),
-    dy: box.y0 - SHIELD.height - 1,
+    art,
+    dx: front + overlap - 1 - shield.x1,
+    dy: figure.y1 - shield.y1,
+    flashing,
   }
 }
 
@@ -415,11 +546,14 @@ export function stageAt(
     fallen: boolean,
     rest: 'idle' | 'guard',
     bobMs: number | null,
+    sliding = false,
   ): Pose => {
     if (fallen) return 'idle'
     for (const kind of ['hit', 'follow', 'strike', 'windup', 'victory'] as const) {
       if (motionOf(actor, kind)) return kind
     }
+    // A huddle's slide holds idle A, as a step costs no new frame.
+    if (sliding) return 'idle'
     if (rest === 'guard') return 'guard'
     return bobMs !== null && bobbingAt(now, bobMs) === 1 ? 'idle_b' : 'idle'
   }
@@ -474,6 +608,15 @@ export function stageAt(
     if (dissolve !== undefined) alpha = now < dissolve.from ? 1 : 1 - progress(dissolve, now)
     const spawn = motionOf(known.id, 'spawn')
     if (spawn) alpha = Math.min(alpha, progress(spawn, now))
+    // Camping, an enemy is drawn only on its walk off; breaking camp, it walks back in.
+    const leave = all.find((m) => m.actor === known.id && m.kind === 'camp_leave')
+    const walk = campWalkAt(
+      leave,
+      all.find((m) => m.actor === known.id && m.kind === 'camp_return'),
+      now,
+      scale,
+    )
+    alpha = view.camping && leave === undefined ? 0 : Math.min(alpha, walk.alpha)
     const lunge = motionOf(known.id, 'lunge')
     const step = motionOf(known.id, 'step')
     const flashing = isFlashing(known.id)
@@ -491,7 +634,7 @@ export function stageAt(
         : tinted
           ? shown.palette.map((c, i) => (i === 0 ? c : mix(c, ENRAGE_RGB, ENRAGE_TINT)))
           : shown.palette
-    const x = baseX + actionOffset(step, lunge, now, scale)
+    const x = baseX + actionOffset(step, lunge, now, scale) + walk.dx
     const ground = { y: height - art.height, width: art.width, height: art.height }
     grounded.set(known.id, { ...ground, x })
     stands.set(known.id, { ...ground, x: baseX })
@@ -516,14 +659,43 @@ export function stageAt(
       tinted,
     })
   }
-  // The right edge of the enemies' line: where the campfire's ground starts.
+  // The right edge of the enemies' line: where a world boss camp's fire finds its ground.
   const enemyRight = view.enemies.length > 0 ? nextFree - gap : edge
 
   // Bosses draw over their minions, never under.
   actors.push(...bosses)
 
-  // The front of the party is its first hero standing: a fallen one wears no shield.
+  // The front of the party is its first hero standing: a fallen one holds no shield, and the next
+  // one standing takes it at once.
   const front = view.heroes.findIndex((h) => h.alive)
+  // A hit on any guarding hero lands on the shield: it flashes in the struck hero's flash.
+  const shieldFlashing = view.heroes.some((h) => isFlashing(h.id))
+  /** A hero's place in the line, without its offsets. */
+  const slotX = (index: number, art: SpriteArt) =>
+    width - edge - art.width - (partySize - 1 - index) * pitch
+  // Guard's huddle, on the full stage (the compact one draws one hero): its members, fixed as it
+  // began, stand in party order, the first in its slot and each other with its figure a gap behind
+  // the figure before it. Heroes face left, so a figure's back is its right edge.
+  const huddle = huddleShare(all, now, huddles(view))
+  const huddleDx = new Map<string, number>()
+  if (!opts.compact) {
+    const members = new Set(
+      huddle.motion?.members ??
+        timeline.huddled() ??
+        view.heroes.filter((h) => h.alive).map((h) => h.id),
+    )
+    let back: number | null = null
+    view.heroes.forEach((hero, index) => {
+      if (!members.has(hero.id)) return
+      const art = variant(spriteFor('hero', hero.cls), false)
+      const box = opaqueBox(art) ?? { x0: 0, x1: art.width - 1 }
+      const slot = slotX(index, art)
+      const x = back === null ? slot : back + 1 + HUDDLE_GAP_PX - (art.width - 1 - box.x1)
+      huddleDx.set(hero.id, x - slot)
+      back = x + art.width - 1 - box.x0
+    })
+  }
+  const sliding = huddle.motion !== null && huddle.motion.from <= now
   view.heroes.forEach((hero, index) => {
     const fallen = !hero.alive
     const lunge = fallen ? undefined : motionOf(hero.id, 'lunge')
@@ -540,13 +712,27 @@ export function stageAt(
     }
     const poses = posesOf(sprite, attack, opts.compact, true, recolour)
     const rest = hero.guarding && !fallen ? 'guard' : 'idle'
-    const bobMs = fallen || rest === 'guard' ? null : bobOf(hero.hasted)
-    const pose = poseOf(hero.id, fallen, rest, bobMs)
+    // Camping, the bob stops: the party rests in idle A.
+    const bobMs = fallen || rest === 'guard' || view.camping ? null : bobOf(hero.hasted)
+    const dx = huddleDx.get(hero.id)
+    const pose = poseOf(hero.id, fallen, rest, bobMs, sliding && dx !== undefined)
     const shown = poses[pose]
-    // Haste's streak and Guard's shield are the full stage's: compact, the bob and the stance alone.
-    const marks = !opts.compact && !fallen
-    const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
-    const shield = marks && rest === 'guard' && index === front ? shieldOver(poses.idle.art) : null
+    // Haste's speed lines are the full stage's (compact, the bob alone), at rest in the idle
+    // pair only: never in the stance, never in camp. Guard's shield is on both stages.
+    const speedLines =
+      !opts.compact && !fallen && hero.hasted && rest === 'idle' && !view.camping
+        ? speedLinesOf(poses.idle.art, poses.idle_b.art, CLASS_RGB[hero.cls] ?? 0)
+        : null
+    // Camping, there is nothing to block: the stance alone.
+    const shield =
+      rest === 'guard' && index === front && !view.camping
+        ? shieldBeside(
+            poses.idle.art,
+            variant(SHIELD, opts.compact),
+            px(SHIELD_OVERLAP_PX),
+            shieldFlashing,
+          )
+        : null
     const flashing = !fallen && isFlashing(hero.id)
     const goldFlashing = !fallen && !flashing && isFlashing(hero.id, 'gold_flash')
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
@@ -557,10 +743,8 @@ export function stageAt(
       scale,
     )
     const x =
-      width -
-      edge -
-      art.width -
-      (partySize - 1 - index) * pitch +
+      slotX(index, art) +
+      Math.round((dx ?? 0) * huddle.share) +
       actionOffset(step, lunge, now, scale) +
       travel.dx
     grounded.set(hero.id, { x, y: height - art.height, width: art.width, height: art.height })
@@ -582,8 +766,9 @@ export function stageAt(
       poses,
       rest,
       bobMs,
-      streak,
+      speedLines,
       shield,
+      huddle: dx === undefined ? null : { dx, share: huddle.share },
     })
   })
 
@@ -625,7 +810,7 @@ export function stageAt(
       })
       continue
     }
-    if (m.kind === 'campfire') continue
+    if (m.kind === 'campfire' || m.kind === 'huddle') continue
     const actor = at.get(m.actor)
     if (!actor) continue
     // Numbers measure from the idle art, whatever the pose.
@@ -656,17 +841,28 @@ export function stageAt(
   }
 
   let campfire: StageModel['campfire'] = null
-  const camp = all.find((m) => m.kind === 'campfire')
-  if (camp) {
-    // Centred on the ground between the enemies' line and the party, in the frame.
+  const camp = all.findLast((m) => m.kind === 'campfire')
+  // A party first drawn camping sits at its fire, lit, with no motion.
+  const place = camp?.kind === 'campfire' ? camp.place : view.camping ? 'party' : null
+  if (place !== null) {
     const art = variant(CAMPFIRE, opts.compact)
-    const x = clamp(
-      Math.round((enemyRight + heroLeft - art.width) / 2),
-      0,
-      Math.max(0, width - art.width),
-    )
-    const lit = camp.from + CAMPFIRE_MS
-    const alpha = now < camp.from ? 0 : now < lit ? 1 : 1 - (now - lit) / CAMPFIRE_FADE_MS
+    // At the party, centred a hero's width ahead of the front hero standing (it keeps its slot in
+    // the huddle); else centred between the enemies' line and the party. On the ground, in the frame.
+    const hero = view.heroes[Math.max(0, front)]
+    const heroArt = hero ? variant(spriteFor('hero', hero.cls), opts.compact) : null
+    const centre =
+      place === 'party' && heroArt
+        ? slotX(Math.max(0, front), heroArt) - heroArt.width / 2
+        : (enemyRight + heroLeft) / 2
+    const x = clamp(Math.round(centre - art.width / 2), 0, Math.max(0, width - art.width))
+    const alpha =
+      camp?.kind !== 'campfire' || now >= camp.until
+        ? 1
+        : now < camp.from
+          ? 0
+          : now < camp.fade
+            ? 1
+            : 1 - (now - camp.fade) / CAMPFIRE_FADE_MS
     campfire = { art, x, y: height - art.height, alpha }
   }
 

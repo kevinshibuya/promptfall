@@ -7,6 +7,7 @@ import {
   hashState,
   type Item,
   type MigrationChain,
+  type PlayerEvent,
   replay,
   type ServerEvent,
   SIM_VERSION,
@@ -197,7 +198,7 @@ describe('a record behind the sim version', () => {
       turn_end: 30,
       turn_start: 30,
       tool_mishap: 30,
-      camp: 5,
+      camp: 10,
       guard: 60,
     })
     const fresh = ['turn_start', 'tool_mishap', 'camp', 'guard'] as const
@@ -213,7 +214,7 @@ describe('a record behind the sim version', () => {
     await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: m.deviceToken })
     await ledger.host.credit(m.accountId, 1, 'test')
     const after = await stored(kv, m.accountId)
-    expect(after.buckets).toMatchObject({ turn_start: 30, tool_mishap: 30, camp: 5, guard: 60 })
+    expect(after.buckets).toMatchObject({ turn_start: 30, tool_mishap: 30, camp: 10, guard: 60 })
     for (const kind of fresh) expect(after.refillAt[kind]).toBe(START + 60_000)
     expect(after.buckets.tick).toBe(3)
   })
@@ -237,6 +238,28 @@ describe('a record behind the sim version', () => {
     expect(after.buckets.travel).toBe(BUDGETS.rest.capacity)
     expect(after.refillAt.travel).toBe(START + 60_000)
     expect(after.buckets.rest).toBe(4)
+  })
+
+  it('keeps a camp bucket from before its resize at its count, and refills it to the new capacity', async () => {
+    const kv = new MemoryKeyValue()
+    const { ledger, advance } = makeLedger(kv)
+    const boot = booted(await ledger.bootstrap({ clientVersion: '0.1.0', deviceToken: null }))
+    const record = await stored(kv, boot.account.accountId)
+    // Full at the old capacity of 5.
+    await kv.set(recordKey(boot.account.accountId), {
+      ...record,
+      buckets: { ...record.buckets, camp: 5 },
+    })
+    const mirror = new Mirror(boot)
+    const camps = (n: number): PlayerEvent[] => Array.from({ length: n }, () => ({ t: 'camp' }))
+    const auth = { deviceToken: boot.deviceToken }
+    expect(await ledger.submit(mirror.batch(camps(6)), auth)).toMatchObject({
+      ok: false,
+      reason: 'rate_capped',
+      kind: 'camp',
+    })
+    advance(5 * BUDGETS.camp.refillMs)
+    expect(await ledger.submit(mirror.batch(camps(10)), auth)).toMatchObject({ ok: true })
   })
 
   it('normalises the market book and the returns once through the goods rule', async () => {

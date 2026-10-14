@@ -52,6 +52,7 @@ import {
   FLASH_MS,
   FULL_MIN_COLUMNS,
   HASTE_FRAME_MS,
+  HUDDLE_MS,
   LEVEL_STAGGER_MS,
   LUNGE_MS,
   REVEAL_RISE_MS,
@@ -88,7 +89,13 @@ export const SCENARIOS = [
   'haste',
   'enrage',
   'camp',
+  'camp-break',
+  'camp-boss',
+  'compact-camping',
   'guard',
+  'guard-huddle',
+  'guard-hit',
+  'compact-guard',
   'travel',
   'level-up',
   'victory',
@@ -210,6 +217,20 @@ function attacking(actor: string, ms: number, target = 'e1'): Case {
   return staging(wave(), t, FULL, NOW - ms)
 }
 
+/** The wave with the knight and the white mage 25 HP down: what a camp's heals restore. */
+const hurt = (): GameView => {
+  const v = wave()
+  v.heroes = v.heroes.map((h) => (h.id === 'h2' ? h : { ...h, hp: h.hp - 25 }))
+  return v
+}
+const CAMP_HEALS = [
+  { heroId: 'h1', amount: 25 },
+  { heroId: 'h2', amount: 0 },
+  { heroId: 'h3', amount: 25 },
+]
+/** The wave held while the party camps. */
+const campingView = (): GameView => ({ ...wave(), camping: true })
+
 /** The scenario staged at its golden instant. */
 export function stage(name: Scenario): Staged {
   const c = caseOf(name)
@@ -285,46 +306,97 @@ export function caseOf(name: Scenario): Case {
       t.observe(wave(), NOW)
       return staging(wave(), t, FULL, NOW)
     }
-    // The reactive events (spec #131). Haste: every hero trails its streak and bobs twice as fast,
-    // a quarter-second in: the heroes in the second half of their bob, the enemies in the first.
+    // The reactive events (spec #131). Haste: every living hero trails its speed lines and bobs
+    // twice as fast, a quarter-second in: the heroes in the second half of their bob, the enemies
+    // in the first. The white mage has fallen and shows none.
     case 'haste': {
       const v = party({ hasted: true })
+      v.heroes = v.heroes.map((h) => (h.id === 'h3' ? { ...h, hp: 0, alive: false } : h))
       t.observe(v, NOW)
       return staging(v, t, FULL, NOW, { now: NOW + HASTE_FRAME_MS })
     }
-    // A mishap 40 ms ago: the goblin scout mid red flash, then tinted until its next hit.
+    // A mishap 40 ms ago enraged the strongest enemy: the bandit captain behind the field rat,
+    // mid red flash, then tinted until its next hit.
     case 'enrage': {
-      t.observe(wave(), NOW - 1000)
-      t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW - 40)
-      t.observe(wave(), NOW)
-      return staging(wave(), t, FULL, NOW)
+      const v = boss()
+      v.enemies = [...wave().enemies.filter((e) => e.id === 'e2'), ...v.enemies]
+      t.observe(v, NOW - 1000)
+      t.onEffects([{ k: 'enraged', enemyId: 'e9' }], NOW - 40)
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 120, rows: t.rowsAt(v, NOW) }, NOW)
     }
-    // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
+    // Camp made 500 ms ago: the enemies have walked off, the party stands huddled at the fire a
+    // hero's width ahead of the knight, the bob stopped, two heroes' heals still rising green.
     case 'camp': {
-      const hurt = wave()
-      hurt.heroes = hurt.heroes.map((h) => (h.id === 'h2' ? h : { ...h, hp: h.hp - 25 }))
-      t.observe(hurt, NOW - 1000)
-      t.onEffects(
-        [
-          {
-            k: 'camp',
-            heals: [
-              { heroId: 'h1', amount: 25 },
-              { heroId: 'h2', amount: 0 },
-              { heroId: 'h3', amount: 25 },
-            ],
-          },
-        ],
-        NOW - 300,
-      )
-      t.observe(wave(), NOW)
-      return staging(wave(), t, FULL, NOW)
+      t.observe(hurt(), NOW - 1000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 500)
+      t.observe(campingView(), NOW - 500)
+      return staging(campingView(), t, FULL, NOW - 500, { now: NOW })
     }
-    // Guard: every hero in the stance, the bob stopped, the knight under the shield.
+    // Camp broken half a spawn ago: the held enemies halfway back in from the left, the party
+    // stepped back to its slots, the fire fading.
+    case 'camp-break': {
+      t.observe(hurt(), NOW - 6000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 5000)
+      t.observe(campingView(), NOW - 4000)
+      t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW - SPAWN_MS / 2)
+      t.observe(wave(), NOW - SPAWN_MS / 2)
+      return staging(wave(), t, FULL, NOW - SPAWN_MS / 2, { now: NOW })
+    }
+    // A camp with a world boss engaged, 300 ms ago: the fire mid-field, the boss still standing,
+    // the heals rising green; no pause.
+    case 'camp-boss': {
+      const v = worldBoss()
+      const sore = worldBoss()
+      sore.heroes = hurt().heroes
+      t.observe(sore, NOW - 1000)
+      t.onEffects([{ k: 'camp', heals: CAMP_HEALS }], NOW - 300)
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 120, rows: t.rowsAt(v, NOW) }, NOW)
+    }
+    // Camping on the compact stage: the compact fire, no enemy.
+    case 'compact-camping': {
+      t.observe(hurt(), NOW - 1000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 500)
+      t.observe(campingView(), NOW)
+      return staging(campingView(), t, { columns: 52, rows: 4 }, NOW, { compact: true })
+    }
+    // Guard, first drawn on a guarding party: huddled toward the knight with no step, every hero
+    // in the stance, the bob stopped, the knight holding the big shield on the enemies' side.
     case 'guard': {
       const v = party({ guarding: true })
       t.observe(v, NOW)
       return staging(v, t, FULL, NOW)
+    }
+    // Guard coming on, halfway through the huddle: the black mage and the white mage sliding in
+    // toward the knight in their idle art.
+    case 'guard-huddle': {
+      t.observe(wave(), NOW - 1000)
+      t.onEffects([{ k: 'guard', on: true }], NOW - HUDDLE_MS / 2)
+      const v = party({ guarding: true })
+      t.observe(v, NOW - HUDDLE_MS / 2)
+      return staging(v, t, FULL, NOW - HUDDLE_MS / 2, { now: NOW })
+    }
+    // Guard under attack: the goblin scout's lunge at its apex on the knight, the impact. The
+    // shield flashes white with the knight's blink, the knight in its hit frame.
+    case 'guard-hit': {
+      const v = party({ guarding: true })
+      const ms = WINDUP_HOLD_MS + LUNGE_MS / 2
+      t.observe(v, NOW - ms)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+          { k: 'hit', by: 'e1', target: 'h1', amount: 4 },
+        ],
+        NOW - ms,
+      )
+      return staging(v, t, FULL, NOW - ms)
+    }
+    // Guard on the compact stage: the knight in the stance with the 1x shield beside it.
+    case 'compact-guard': {
+      const v = party({ guarding: true })
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 52, rows: 4 }, NOW, { compact: true })
     }
     // The stage moments (spec #132). A travel from zone 1 to 3 halfway through the party's step
     // off: the heroes stepped right and half faded, the encounter it left standing on zone 1's
@@ -528,6 +600,8 @@ export const STRIP_SCENARIOS = [
   'strip-world',
   'strip-notice',
   'strip-waiting',
+  'strip-camping',
+  'strip-compact-camping',
 ] as const
 export type StripScenario = (typeof STRIP_SCENARIOS)[number]
 export type StripGolden = {
@@ -654,7 +728,23 @@ export function strip(name: StripScenario): StripInput {
     // Three on the field and four queued behind them, in a zone the party has fallen in once.
     case 'strip-waiting':
       return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
+    // The party camps: the encounter held with two queued behind it, the log's newest line the camp's.
+    case 'strip-camping':
+      return camping({})
+    case 'strip-compact-camping':
+      return camping({ kind: 'compact', columns: 110 })
   }
+}
+
+/** A camp made after the burst: its heal lands and the log says so, the encounter held. */
+function camping(patch: Partial<StripInput>): StripInput {
+  const v = { ...wave(), camping: true, waiting: 2 }
+  const heals = v.heroes.map((h) => ({ heroId: h.id, amount: 0 }))
+  return stripInput(v, patch, [
+    { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'h1', target: v.enemies[0]?.id ?? 'e1', amount: 12 },
+    { k: 'camp', on: true, heals },
+  ])
 }
 
 /**

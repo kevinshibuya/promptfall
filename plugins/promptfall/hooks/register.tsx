@@ -433,6 +433,17 @@ class GameSession implements GameHandle {
     if (this.canApply()) this.engine.apply(event, at)
   }
 
+  /**
+   * Camp off, only while the party camps: the sim also breaks camp on events the plugin never
+   * sees, so the engine's own state is the flag, read before any await so two breaks at once send
+   * one off, and the off goes once per camp, unpaced.
+   */
+  async breakCamp(at: number): Promise<boolean> {
+    if (!this.canApply() || !this.engine.camping()) return false
+    this.engine.apply({ t: 'camp', on: false }, at)
+    return true
+  }
+
   /** A reactive event, on the primary and at its kind's pace. `fresh`: a turn's own start. */
   react(event: ReactiveEvent, at: number, fresh = false): void {
     if (this.canApply() && this.pacer.admits(event, at, fresh)) this.engine.apply(event, at)
@@ -691,6 +702,8 @@ class GameSession implements GameHandle {
    * allows; when the process ends too, stop the timers and give the lease up.
    */
   async end(processEnds: boolean, remainingMs: () => number): Promise<void> {
+    // The party is out of camp when the save rests; a clear or a resume plays on in camp.
+    if (processEnds) await this.breakCamp(await this.io.now())
     if (this.role === 'primary' && remainingMs() > 200) await this.engine.flush()
     await this.stamp()
     if (!processEnds) return
@@ -870,6 +883,9 @@ class GameSession implements GameHandle {
     this.steppingAside = true
     try {
       const held = await holds(this.kv, this.owner)
+      // The party is out of camp when this process stops playing: /exit's teardown draws
+      // nowhere before the session ends, so the end's own break would find a secondary.
+      if (held) await this.breakCamp(await this.io.now())
       if (held) await this.engine.flush()
       await this.becomeSecondary()
       if (held) await release(this.kv, this.owner)
@@ -1325,9 +1341,11 @@ export const register: Register = (on) => {
     return next(e)
   })
 
-  // Manual and auto alike: the engine raises it for neither its own precompute nor a forked one.
-  on('classic.PostCompact', async ($, e, next) => {
-    game?.react({ t: 'camp' }, await $.clock.now())
+  // As a compaction of the main conversation is about to run, manual, auto or a plugin's: the party
+  // camps while Claude gathers its thoughts. The engine's precompute and a fork's own make none.
+  on('session.compact', async ($, e, next) => {
+    if (e.trigger !== 'precompute' && !e.agentId)
+      game?.react({ t: 'camp', on: true }, await $.clock.now())
     return next(e)
   })
 

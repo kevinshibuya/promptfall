@@ -49,7 +49,7 @@ const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('rest'), at }),
   z.object({ t: z.literal('travel'), zone: positive, at }),
   z.object({ t: z.literal('tool_mishap'), at }),
-  z.object({ t: z.literal('camp'), at }),
+  z.object({ t: z.literal('camp'), on: z.boolean().optional(), at }),
   z.object({ t: z.literal('guard'), on: z.boolean(), at }),
   z.object({ t: z.literal('equip'), heroId: id, itemId: id, at }),
   z.object({ t: z.literal('unequip'), heroId: id, slot, at }),
@@ -64,8 +64,9 @@ const PlayerEventSchema = z.discriminatedUnion('t', [
   z.object({ t: z.literal('expand_roster'), at }),
 ])
 
-// The tool call's optional hint: zod infers `hint?: T | undefined`, which exactOptionalPropertyTypes
-// will not assign to `hint?: T`; the cast is sound because an absent key is dropped.
+// The tool call's optional hint and camp's optional on: zod infers `hint?: T | undefined`, which
+// exactOptionalPropertyTypes will not assign to `hint?: T`; the cast is sound because an absent key
+// is dropped.
 export const TimedEventSchema = PlayerEventSchema as unknown as z.ZodType<TimedEvent>
 
 export const PLAYER_EVENT_KINDS = [

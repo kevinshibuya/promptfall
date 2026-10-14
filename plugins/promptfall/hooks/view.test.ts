@@ -90,6 +90,18 @@ test('a hero fills at the sim’s own rate, hasted and guarding, and the views c
   expect(guarding.heroes[0]).toMatchObject({ hasted: true, guarding: true, gaugePerStep: 0 })
 })
 
+test('the view’s camping follows the state, and a camped hero fills at zero', () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  const s = step(createInitialState(1), { t: 'tool_call' }).state
+  expect(toGameView(s, 'a1', false, account).camping).toBe(false)
+  const camped = step(s, { t: 'camp', on: true }).state
+  const view = toGameView(camped, 'a1', false, account)
+  expect(view.camping).toBe(true)
+  expect(view.heroes.map((h) => h.gaugePerStep)).toEqual([0, 0, 0])
+  const broken = step(camped, { t: 'camp', on: false }).state
+  expect(toGameView(broken, 'a1', false, account).camping).toBe(false)
+})
+
 test('the view carries the tallies and the recruits remaining to each guarantee', () => {
   const account = toAccountView(null, null, 'in-process', 0)
   const s0 = createInitialState(1)

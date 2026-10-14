@@ -23,6 +23,7 @@ import {
   DISSOLVE_MS,
   FLASH_MS,
   FOLLOW_MS,
+  HUDDLE_MS,
   IDLE_FRAME_MS,
   LEVEL_NUMBER_MS,
   LEVEL_RGB,
@@ -95,8 +96,37 @@ export type Motion =
   | ({ kind: 'chest'; actor: string } & ChestFields)
   /** A drop with no row to fall from: its chest on the ground of the slot it holds (`slot`). */
   | ({ kind: 'chest'; actor: null; slot: number } & ChestFields)
-  /** Camp's campfire between the lines: it sits CAMPFIRE_MS, then fades over CAMPFIRE_FADE_MS. */
-  | { kind: 'campfire'; actor: null; from: number; until: number }
+  /**
+   * Camp's campfire, fading over CAMPFIRE_FADE_MS from `fade`: between the lines for CAMPFIRE_MS
+   * on a camp with a world boss engaged; at the party while it camps, `fade` and `until` infinite
+   * until the camp breaks.
+   */
+  | {
+      kind: 'campfire'
+      actor: null
+      place: 'between' | 'party'
+      from: number
+      fade: number
+      until: number
+    }
+  /** An enemy walking off toward its own edge as the party makes camp: the spawn played backward. */
+  | { kind: 'camp_leave'; actor: string; from: number; until: number }
+  /** A held enemy walking back in as the party breaks camp: the spawn, from its own edge. */
+  | { kind: 'camp_return'; actor: string; from: number; until: number }
+  /**
+   * The party's huddle: `members`, the heroes standing as it began, slide from their slots to
+   * their huddle positions (`in`) or back (`out`).
+   */
+  | HuddleMotion
+
+export type HuddleMotion = {
+  kind: 'huddle'
+  actor: null
+  dir: 'in' | 'out'
+  members: readonly string[]
+  from: number
+  until: number
+}
 
 type ChestFields = {
   /** The dropped item's id, its rarity and its sprite's id. */
@@ -260,6 +290,14 @@ export function bobbingAt(now: number, frameMs: number = IDLE_FRAME_MS): 0 | 1 {
   return Math.floor(now / frameMs) % 2 === 0 ? 0 : 1
 }
 
+/**
+ * The party stands huddled: while it is guarding or camping. The stage's positions follow it, so
+ * a stage first drawn on a huddled party draws it huddled with no motion.
+ */
+export function huddles(view: GameView): boolean {
+  return view.camping || view.heroes.some((h) => h.guarding)
+}
+
 /** An enemy's sprite: the world boss's by name, any other by its content id. */
 export function enemySpriteId(enemy: { def: string; name: string; kind: string }): string {
   return enemy.kind === 'world_boss'
@@ -310,6 +348,18 @@ export class StageTimeline {
   private leftByTravel = new Set<string>()
   /** The zone bosses whose kill advanced the zone: the party walks on once the hold is over. */
   private walking = new Set<string>()
+  /**
+   * The heroes standing as the party huddled, held until the huddle breaks: their huddle positions
+   * stay fixed, so a hero that falls in it keeps its place and nothing shifts.
+   */
+  private huddle: readonly string[] | null = null
+  /** Why the party huddles, as the last observe or effect left it: a huddle starts and ends with both. */
+  private reasons = { guard: false, camp: false }
+  /**
+   * The enemies off the stage for a camp, from their walk off until their walk back in ends: one
+   * that leaves the view meanwhile goes with no dissolve, as it was never on the field.
+   */
+  private camped = new Set<string>()
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -317,6 +367,18 @@ export class StageTimeline {
     this.travels = this.travels.filter((t) => t.end > now)
     this.scene = { zone: view.zone, zoneName: view.zoneName, wave: view.wave }
     this.heroes = new Map(view.heroes.map((h) => [h.id, h.cls]))
+    // A party first seen huddled stands as it is seen.
+    if (!huddles(view)) this.huddle = null
+    else this.huddle ??= view.heroes.filter((h) => h.alive).map((h) => h.id)
+    this.reasons = { guard: view.heroes.some((h) => h.guarding), camp: view.camping }
+    // A camp whose break the stage never heard (a resync): its fire goes out as the view stops camping.
+    if (!view.camping) {
+      this.motions = this.motions.map((m) =>
+        m.kind === 'campfire' && !Number.isFinite(m.until)
+          ? { ...m, fade: now, until: now + CAMPFIRE_FADE_MS }
+          : m,
+      )
+    }
     // A hero the travel applied with a pending party walks off and on with the rest.
     for (const travel of this.travels) {
       for (const actor of this.heroes.keys()) {
@@ -335,6 +397,11 @@ export class StageTimeline {
 
     for (const [id, known] of this.entries) {
       if (live.has(id) || this.departed.has(id)) continue
+      // Off the stage for the camp, and not listed when it broke: it never walks back in.
+      if (this.camped.has(id)) {
+        this.forget(id)
+        continue
+      }
       this.departed.add(id)
       // It leaves with the HP its burst leaves it: 0 for a kill, its last HP when it left alive.
       // The world boss's bar was never its row's.
@@ -381,6 +448,11 @@ export class StageTimeline {
       this.entries.delete(id)
     }
     for (const id of this.walking) if (!this.entries.has(id)) this.walking.delete(id)
+    for (const id of this.camped) {
+      if (view.camping || this.motions.some((m) => m.actor === id && m.kind === 'camp_return'))
+        continue
+      this.camped.delete(id)
+    }
 
     for (const enemy of view.enemies) {
       const known = this.entries.get(enemy.id)
@@ -787,7 +859,12 @@ export class StageTimeline {
           continue
         }
         if (effect.k === 'camp') {
-          this.camp(effect.heals, start, hp)
+          if (effect.on === false) this.breakCamp(start, hp)
+          else this.camp(effect.heals, effect.on === true, start, hp)
+          continue
+        }
+        if (effect.k === 'guard') {
+          this.huddleFor('guard', effect.on, start, hp)
           continue
         }
         if (effect.k === 'level_up') {
@@ -938,6 +1015,11 @@ export class StageTimeline {
     }
     for (const id of this.entries.keys()) {
       if (this.departed.has(id)) continue
+      // Off the stage for the camp the travel broke: already gone, it never walks back in.
+      if (this.camped.has(id)) {
+        this.forget(id)
+        continue
+      }
       this.motions.push({ kind: 'leave', actor: id, from: at, until: show })
       this.leftByTravel.add(id)
     }
@@ -971,17 +1053,25 @@ export class StageTimeline {
     )
   }
 
-  /** The campfire between the lines from `at`, and each hero's heal rising green as it lands. */
+  /**
+   * A camp from `at`: each hero's heal rising green as it lands. Making camp (`pause`), each enemy
+   * on the field walks off over the spawn's span, the party huddles and its fire burns until the
+   * camp breaks; with a world boss engaged, the fire sits between the lines and fades.
+   */
   private camp(
     heals: readonly { heroId: string; amount: number }[],
+    pause: boolean,
     at: number,
     hp: Map<string, number>,
   ): void {
+    const fade = pause ? Number.POSITIVE_INFINITY : at + CAMPFIRE_MS
     this.motions.push({
       kind: 'campfire',
       actor: null,
+      place: pause ? 'party' : 'between',
       from: at,
-      until: at + CAMPFIRE_MS + CAMPFIRE_FADE_MS,
+      fade,
+      until: fade + CAMPFIRE_FADE_MS,
     })
     for (const { heroId, amount } of heals) {
       if (amount <= 0 || !this.heroes.has(heroId)) continue
@@ -995,6 +1085,130 @@ export class StageTimeline {
         until: at + NUMBER_MS,
       })
     }
+    if (!pause) return
+    for (const id of this.entries.keys()) {
+      if (this.departed.has(id) || this.camped.has(id)) continue
+      this.motions.push({ kind: 'camp_leave', actor: id, from: at, until: at + SPAWN_MS })
+      this.camped.add(id)
+    }
+    // After the heal, so a hero it raised huddles with the rest.
+    this.huddleFor('camp', true, at, hp)
+  }
+
+  /**
+   * Breaking camp at `at`: the fire fades, the party steps back, and every enemy still in the line
+   * walks back in from its edge. A stage first drawn camping has a fire of the state's to fade.
+   */
+  private breakCamp(at: number, hp: Map<string, number>): void {
+    const wasCamping = this.reasons.camp
+    let open = false
+    this.motions = this.motions.map((m) => {
+      if (m.kind !== 'campfire' || Number.isFinite(m.until)) return m
+      open = true
+      return { ...m, fade: at, until: at + CAMPFIRE_FADE_MS }
+    })
+    if (!open && wasCamping && this.observed) {
+      this.motions.push({
+        kind: 'campfire',
+        actor: null,
+        place: 'party',
+        from: at,
+        fade: at,
+        until: at + CAMPFIRE_FADE_MS,
+      })
+    }
+    if (wasCamping || this.camped.size > 0) {
+      for (const id of this.entries.keys()) {
+        if (this.departed.has(id)) continue
+        this.motions = this.motions.filter((m) => !(m.actor === id && m.kind === 'camp_leave'))
+        this.motions.push({ kind: 'camp_return', actor: id, from: at, until: at + SPAWN_MS })
+        this.camped.add(id)
+      }
+    }
+    this.huddleFor('camp', false, at, hp)
+  }
+
+  /** The party's huddle turns with its reasons: in as the first comes on, out as the last ends. */
+  private huddleFor(
+    reason: 'guard' | 'camp',
+    on: boolean,
+    at: number,
+    hp: Map<string, number>,
+  ): void {
+    const was = this.reasons.guard || this.reasons.camp
+    this.reasons[reason] = on
+    const is = this.reasons.guard || this.reasons.camp
+    if (was !== is) this.huddleStep(is ? 'in' : 'out', at, hp)
+    else if (is) this.rejoin(hp)
+  }
+
+  /** Drops an entry and everything on the timeline about it, with no motion. */
+  private forget(id: string): void {
+    this.entries.delete(id)
+    this.departed.delete(id)
+    this.camped.delete(id)
+    this.leftByTravel.delete(id)
+    this.walking.delete(id)
+    this.gaps.delete(id)
+    this.seen.delete(id)
+    this.places.delete(id)
+    this.motions = this.motions.filter((m) => m.actor !== id)
+  }
+
+  /**
+   * The party's huddle from `at`: in, the heroes standing as it begins are its members, fixed
+   * until it breaks; out, the same members step back. On a stage never drawn it plays nothing: the
+   * first observe places the party as the view stands.
+   */
+  private huddleStep(dir: 'in' | 'out', at: number, hp: Map<string, number>): void {
+    if (!this.observed) return
+    const standing = [...this.heroes.keys()].filter((id) => (hp.get(id) ?? 0) > 0)
+    const members = dir === 'in' ? standing : (this.huddle ?? standing)
+    this.huddle = dir === 'in' ? members : null
+    // A slide still running at `at` turns back from where it stands: the new one starts as far
+    // along as the party is, and the old one goes, so every picture draws one slide.
+    const running = this.motions
+      .filter((m): m is HuddleMotion => m.kind === 'huddle' && m.from <= at && m.until > at)
+      .sort((a, b) => a.from - b.from)
+      .at(-1)
+    let from = at
+    if (running) {
+      const p = (at - running.from) / (running.until - running.from)
+      const share = running.dir === 'in' ? p : 1 - p
+      from = at - (dir === 'in' ? share : 1 - share) * HUDDLE_MS
+      this.motions = this.motions.filter((m) => m !== running)
+    }
+    this.motions.push({
+      kind: 'huddle',
+      actor: null,
+      dir,
+      members,
+      from,
+      until: from + HUDDLE_MS,
+    })
+  }
+
+  /**
+   * Already huddled, a hero the step raised (camp's heal under Guard) joins the huddle at once:
+   * the members behind it make room in the same frame.
+   */
+  private rejoin(hp: Map<string, number>): void {
+    const held = this.huddle
+    if (held === null) return
+    const standing = [...this.heroes.keys()].filter((id) => (hp.get(id) ?? 0) > 0)
+    if (standing.every((id) => held.includes(id))) return
+    const members = [...this.heroes.keys()].filter(
+      (id) => held.includes(id) || standing.includes(id),
+    )
+    this.huddle = members
+    this.motions = this.motions.map((m) =>
+      m.kind === 'huddle' && m.dir === 'in' ? { ...m, members } : m,
+    )
+  }
+
+  /** The members of the huddle the party stands in, fixed as it began; null when none is held. */
+  huddled(): readonly string[] | null {
+    return this.huddle
   }
 
   /** Records a hit's or heal's HP change, as far as the actor's HP allows, to land at `at`. */
@@ -1118,11 +1332,11 @@ export class StageTimeline {
     return best?.id ?? null
   }
 
-  /** The live enemy in the lowest slot. */
+  /** The live enemy in the lowest slot, off the stage for no camp. */
   private front(): string | null {
     let best: Known | null = null
     for (const known of this.entries.values()) {
-      if (this.departed.has(known.id)) continue
+      if (this.departed.has(known.id) || this.camped.has(known.id)) continue
       if (best === null || known.slot < best.slot) best = known
     }
     return best?.id ?? null
@@ -1180,7 +1394,10 @@ export class StageTimeline {
     // Through the pause after a kill too, so the next enemy steps on at its time.
     if (now < this.enterAfter()) return true
     if ([...this.places.values()].some((p) => p.until > now)) return true
-    // A tint holds still until its hit, whose own motions keep the stage busy.
-    return this.motions.some((m) => m.until > now && m.kind !== 'enraged')
+    // A tint holds still until its hit, whose own motions keep the stage busy; a camp's fire burns
+    // with nothing to play until the camp breaks.
+    return this.motions.some(
+      (m) => m.until > now && m.kind !== 'enraged' && Number.isFinite(m.until),
+    )
   }
 }

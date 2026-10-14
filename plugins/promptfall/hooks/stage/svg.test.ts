@@ -11,17 +11,21 @@ import { stagedState } from './staged'
 import { backdropPlacements, fitSvg, framesInUse, renderSvg, strokePaths } from './svg'
 import { type Motion, type StageEffect, StageTimeline } from './timeline'
 import {
+  BLINK_MS,
   CAMPFIRE_FADE_MS,
   CAMPFIRE_MS,
   CLASS_RGB,
   ENRAGE_RGB,
   ENRAGE_TINT,
+  FLASH_MS,
   HASTE_FRAME_MS,
   HIRES_SCALE,
+  HUDDLE_MS,
   IDLE_BOB_PX,
   LEVEL_RGB,
   LUNGE_MS,
   RARITY_RGB,
+  SPAWN_MS,
   SVG_FALLBACK_FRAME_MS,
   SVG_MAX_CHARS,
   TRAVEL_OFF_MS,
@@ -590,21 +594,43 @@ const party = (patch: Partial<GameView['heroes'][number]>): GameView => {
   return v
 }
 
-test('hasted, the idle pair turns on a half-second clock with the streak under it', () => {
-  const hi = svgOf(party({ hasted: true }))
+test('hasted, the idle pair turns on a half-second clock, each frame over its own speed lines', () => {
+  const v = party({ hasted: true })
+  const hi = svgOf(v)
   expect(balanced(hi)).toBe(true)
   expect(hi).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
-  for (const h of wave().heroes) {
-    expect(hi).toContain(`="${colour(CLASS_RGB[h.cls] ?? 0)}"`)
-  }
-  const calm = svgOf(wave())
-  expect(calm).not.toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
-  // Under still the streak draws and nothing bobs.
-  const still = svgOf(party({ hasted: true }), [], NOW, {
-    smil: true,
-    motion: 'still',
+  const t = new StageTimeline()
+  t.observe(v, NOW)
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
+    compact: false,
+    motion: 'full',
   })
-  expect(still).toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
+  /** The tints a hero's speed lines draw in. */
+  const tints = (key: string) =>
+    model.actors.find((a) => a.key === key)?.speedLines?.[0].art.palette.slice(1) ?? []
+  for (const h of wave().heroes) {
+    expect(tints(h.id).length, h.id).toBe(3)
+    for (const c of tints(h.id)) expect(hi, h.id).toContain(`="${colour(c)}"`)
+    // The lines are a light tint, not the class colour itself.
+    expect(hi).not.toContain(`="${colour(CLASS_RGB[h.cls] ?? 0)}"`)
+  }
+  // Each pattern rides its own frame of the bob's clock, under the hero.
+  const lines = model.actors.find((a) => a.key === 'h1')?.speedLines
+  if (!lines) throw new Error('no lines')
+  const [a, b] = lines.map((m) => `transform="translate(${m.dx} ${m.dy})"/>`)
+  const idleA =
+    hi.match(/<g><animate attributeName="visibility" values="visible;hidden"[\s\S]*?<\/g>/g) ?? []
+  const idleB =
+    hi.match(
+      /<g visibility="hidden"><animate attributeName="visibility" values="hidden;visible"[\s\S]*?<\/g>/g,
+    ) ?? []
+  expect(idleA.some((g) => g.includes(a ?? '-'))).toBe(true)
+  expect(idleB.some((g) => g.includes(b ?? '-'))).toBe(true)
+  const calm = svgOf(wave())
+  for (const c of tints('h1')) expect(calm).not.toContain(`="${colour(c)}"`)
+  // Under still the first pattern draws and nothing bobs.
+  const still = svgOf(v, [], NOW, { smil: true, motion: 'still' })
+  for (const c of tints('h1')) expect(still).toContain(`="${colour(c)}"`)
   expect(still).not.toContain('repeatCount')
 })
 
@@ -636,12 +662,159 @@ test('a camp lights the campfire, then fades it, under SMIL and without it', () 
   expect(flat).toContain('opacity="0.5"/>')
 })
 
-test('guarding heroes hold the stance with no idle clock; the front hero wears the shield', () => {
+test('making camp under SMIL: the enemies walk off toward their edge as they fade, the fire holds lit with no fade', () => {
+  const s = svgOf(wave(), [{ k: 'camp', on: true, heals: [] }], NOW + 100)
+  expect(balanced(s)).toBe(true)
+  const walk = Math.round(TRAVEL_PX * HIRES_SCALE)
+  const leave = `values="0 0;-${walk} 0" begin="-0.1s" dur="${SPAWN_MS / 1000}s" fill="freeze"/><animate attributeName="opacity" values="1;0"`
+  expect(s.split(leave).length - 1).toBe(wave().enemies.length)
+  expect(s).toContain('<set attributeName="opacity" to="1" begin="-0.1s"/>')
+  expect(s).not.toMatch(/NaN|Infinity/)
+})
+
+test('breaking camp under SMIL: the held enemies walk back in from their edge, the fire fades', () => {
+  const t = new StageTimeline()
+  t.observe(wave(), NOW - 2000)
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW - 1000)
+  t.observe({ ...wave(), camping: true }, NOW - 500)
+  t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW)
+  const at = NOW + 100
+  t.observe(wave(), at)
+  const model = stageAt(stagedState(wave(), WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  const s = renderSvg(model, t.active(at), { smil: true, motion: 'full', now: at, width: 960 })
+  expect(balanced(s)).toBe(true)
+  const walk = Math.round(TRAVEL_PX * HIRES_SCALE)
+  const back = `values="-${walk} 0;0 0" begin="-0.1s" dur="${SPAWN_MS / 1000}s" fill="freeze"/><animate attributeName="opacity" values="0;1"`
+  expect(s.split(back).length - 1).toBe(wave().enemies.length)
+  const sit = Number((1000 / (1000 + CAMPFIRE_FADE_MS)).toFixed(3))
+  expect(s).toContain(`values="1;1;0" keyTimes="0;${sit};1" begin="-1.1s"`)
+  expect(s).not.toMatch(/NaN|Infinity/)
+})
+
+test('a party first drawn camping sits at its lit fire under SMIL, with no enemy drawn', () => {
+  const s = svgOf({ ...wave(), camping: true })
+  const campfire = spriteFor('effect', 'campfire')
+  expect(s).toContain(strokePaths(campfire.hires, null))
+  expect(s).not.toContain('<set attributeName="opacity" to="1"')
+  // Only the heroes are drawn, and camping they hold still: no clock in the picture.
+  expect(s).not.toContain('repeatCount="indefinite"')
+})
+
+test('guarding heroes hold the stance with no idle clock; the front hero holds the big shield', () => {
   const hi = svgOf(party({ guarding: true }))
   expect(balanced(hi)).toBe(true)
   // Only the enemies still bob.
   expect(hi.match(/repeatCount="indefinite"/g)?.length).toBe(2 * wave().enemies.length)
-  expect(hi).toContain(strokePaths(SHIELD, null))
+  expect(hi).toContain(strokePaths(SHIELD.hires, null))
+})
+
+test("an enemy's hit under Guard flashes the shield white in the struck hero's flash, under SMIL and without it", () => {
+  const blow: StageEffect[] = [
+    { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'e1', target: 'h2', amount: 7 },
+  ]
+  const impact = NOW + WINDUP_HOLD_MS + LUNGE_MS / 2
+  const white = (begin: number, dur: number) =>
+    new RegExp(
+      `translate\\(-?\\d+ -?\\d+\\)" filter="url\\(#f\\)" opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin / 1000}s" dur="${dur / 1000}s"/></use>`,
+    )
+  // Drawn before the blow, the shield's white is scheduled at the impact for the hero's blink.
+  const hi = svgOf(party({ guarding: true }), blow, NOW)
+  expect(balanced(hi)).toBe(true)
+  expect(hi).toMatch(white(impact - NOW, BLINK_MS))
+  expect(svgOf(party({ guarding: true }), [], NOW)).not.toContain('filter="url(#f)" opacity="0"')
+  // The compact stage holds its white for the whole flash, as the struck hero's.
+  const t = new StageTimeline()
+  const v = party({ guarding: true })
+  t.observe(v, NOW)
+  t.onEffects(blow, NOW)
+  const box = { columns: 52, rows: 4 }
+  const compact = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, box, {
+    compact: true,
+    motion: 'full',
+  })
+  const lo = renderSvg(compact, t.active(NOW), { smil: true, motion: 'full', now: NOW, width: 960 })
+  expect(lo).toContain(strokePaths(SHIELD.compact, null))
+  expect(lo).toMatch(white(impact - NOW, FLASH_MS))
+  // Without SMIL, the shield is white at the impact and plain before it.
+  const flatWhite = /translate\(-?\d+ -?\d+\)" filter="url\(#f\)"\/>/
+  const flat = { smil: false, motion: 'full' } as const
+  expect(svgOf(party({ guarding: true }), blow, impact, flat)).toMatch(flatWhite)
+  expect(svgOf(party({ guarding: true }), blow, impact - 1, flat)).not.toMatch(flatWhite)
+})
+
+/** A stage that saw the party off or on guard, then the guard effect turning it `on` at NOW. */
+function guardTurned(on: boolean, at: number, smil = true) {
+  const t = new StageTimeline()
+  t.observe(party({ guarding: !on }), NOW - 1000)
+  t.onEffects([{ k: 'guard', on }], NOW)
+  const v = party({ guarding: on })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  return {
+    model,
+    svg: renderSvg(model, t.active(at), { smil, motion: 'full', now: at, width: 960 }),
+  }
+}
+
+test('the huddle slides each hero from its slot as a transform animation, frozen huddled, in idle A until it arrives', () => {
+  const xOf = (m: { model: { actors: { key: string; x: number; y: number }[] } }, key: string) =>
+    m.model.actors.find((a) => a.key === key) ?? { x: 0, y: 0 }
+  const slot = xOf(guardTurned(false, NOW + HUDDLE_MS), 'h3')
+  const huddled = xOf(guardTurned(true, NOW + HUDDLE_MS), 'h3')
+  const dx = huddled.x - slot.x
+  expect(dx).toBeLessThan(0)
+  const slide = (values: string) =>
+    `<animateTransform attributeName="transform" type="translate" additive="sum" values="${values}" begin="-0.05s" dur="0.2s" fill="freeze"/>`
+  // In: drawn 50 ms in, from the slot, frozen at the huddle.
+  const on = guardTurned(true, NOW + 50).svg
+  expect(balanced(on)).toBe(true)
+  expect(on).toContain(`<g transform="translate(${slot.x} ${slot.y})">${slide(`0 0;${dx} 0`)}`)
+  // Idle A shows through the rest of the slide; the stance is hidden under it.
+  expect(on).toContain('<set attributeName="visibility" to="visible" begin="-0.05s" dur="0.2s"/>')
+  expect(on).toContain('<set attributeName="visibility" to="hidden" begin="-0.05s" dur="0.2s"/>')
+  // Out: from the huddle back to the slot.
+  const off = guardTurned(false, NOW + 50).svg
+  expect(off).toContain(
+    `<g transform="translate(${huddled.x} ${huddled.y})">${slide(`0 0;${-dx} 0`)}`,
+  )
+  // Arrived, the huddle is the place and nothing slides; the flat picture draws the model's x.
+  const after = guardTurned(true, NOW + HUDDLE_MS + 10).svg
+  expect(after).not.toContain('fill="freeze"/>')
+  expect(after).toContain(`<g transform="translate(${huddled.x} ${huddled.y})">`)
+  const flat = guardTurned(true, NOW + 50, false)
+  const mid = xOf(flat, 'h3')
+  expect(mid.x).not.toBe(slot.x)
+  expect(flat.svg).toContain(`translate(${mid.x} ${mid.y})`)
+})
+
+test('a huddle reversed mid-slide is one slide back from where the party stands, as the pixels draw it', () => {
+  const xOf = (m: { actors: { key: string; x: number; y: number }[] }, key: string) =>
+    m.actors.find((a) => a.key === key) ?? { x: 0, y: 0 }
+  const slot = xOf(guardTurned(false, NOW + HUDDLE_MS).model, 'h3')
+  const huddled = xOf(guardTurned(true, NOW + HUDDLE_MS).model, 'h3')
+  const dx = huddled.x - slot.x
+  const t = new StageTimeline()
+  t.observe(party({ guarding: false }), NOW - 1000)
+  t.onEffects([{ k: 'guard', on: true }], NOW)
+  t.onEffects([{ k: 'guard', on: false }], NOW + 50)
+  const now = NOW + 60
+  const v = party({ guarding: false })
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, now), t, now, BOX, {
+    compact: false,
+    motion: 'full',
+  })
+  const svg = renderSvg(model, t.active(now), { smil: true, motion: 'full', now, width: 960 })
+  // Turned a quarter in, the slide back runs as if it began 150 ms before the turn.
+  expect(svg).toContain(
+    `<g transform="translate(${huddled.x} ${huddled.y})"><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;${-dx} 0" begin="-0.16s" dur="0.2s" fill="freeze"/>`,
+  )
+  expect(svg).not.toContain(`values="0 0;${dx} 0"`)
 })
 
 test('a level-up flashes gold beside the white flash filter and its deltas rise as gold text', () => {

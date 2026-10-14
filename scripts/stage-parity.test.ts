@@ -10,8 +10,49 @@ const frame = (width: number, height: number, rgba: number[]): Frame => ({
 })
 
 describe('stage-parity', () => {
-  it('writes the strike, spawn and chest sheets', () => {
-    expect(SHEETS.map((s) => s.name)).toEqual(['strike', 'spawn', 'chest'])
+  it('writes the strike, spawn, chest, haste, guard and camp sheets', () => {
+    expect(SHEETS.map((s) => s.name)).toEqual([
+      'strike',
+      'spawn',
+      'chest',
+      'haste',
+      'guard',
+      'camp',
+    ])
+  })
+
+  it("stages guard's huddle in from its start to its end, then the hit on the shield", () => {
+    const guard = SHEETS.find((s) => s.name === 'guard')
+    const columns = columnsOf(guard ?? { name: '', stretches: [] })
+    expect(columns.map((col) => col.head)).toEqual([
+      'huddle 0ms',
+      'huddle 40ms',
+      'huddle 80ms',
+      'huddle 120ms',
+      'huddle 160ms',
+      'huddle 200ms',
+      'step 0ms',
+      'step 100ms',
+      'step 200ms',
+      'step 300ms',
+      'step 400ms',
+      'step 500ms',
+    ])
+    const huddling = columns[0]?.staged.motions.find((m) => m.kind === 'huddle')
+    expect(huddling && 'dir' in huddling ? huddling.dir : undefined).toBe('in')
+    const striking = columns[INSTANTS.length + 3]?.staged.motions.find((m) => m.kind === 'strike')
+    expect(striking?.actor).toBe('e1')
+  })
+
+  it('stages the enemies walking off as camp is made, then walking back in as it breaks', () => {
+    const camp = SHEETS.find((s) => s.name === 'camp')
+    const columns = columnsOf(camp ?? { name: '', stretches: [] })
+    expect(columns).toHaveLength(INSTANTS.length * 2)
+    expect(columns[0]?.head).toBe('camp_leave 0ms')
+    expect(columns[INSTANTS.length - 1]?.head).toBe('camp_leave 360ms')
+    expect(columns[INSTANTS.length]?.head).toBe('camp_return 0ms')
+    expect(columns.at(-1)?.head).toBe('camp_return 360ms')
+    expect(columns[0]?.staged.model.box).toEqual(columns.at(-1)?.staged.model.box)
   })
 
   it("stages the knight's attack from its start to its end at the fixed instants", () => {
@@ -48,6 +89,30 @@ describe('stage-parity', () => {
     expect(columns.at(-1)?.head).toBe('chest 3200ms')
   })
 
+  it('stages haste over two hasted bob frames, its desktop row labelled static', () => {
+    const haste = SHEETS.find((s) => s.name === 'haste')
+    const columns = columnsOf(haste ?? { name: '', stretches: [] })
+    const c = caseOf('haste')
+    expect(columns.map((col) => col.staged.now - c.from)).toEqual([0, 100, 200, 300, 400, 500])
+    expect(columns[0]?.head).toBe('haste 0ms')
+    expect(haste?.desktop).toBe('desktop (static)')
+    expect(SHEETS.find((s) => s.name === 'strike')?.desktop).toBeUndefined()
+  })
+
+  it('stages a fixed span of a scenario from its events at the fixed instants', () => {
+    const columns = columnsOf({ name: 'rest', stretches: [{ scenario: 'rest', span: 1000 }] })
+    const c = caseOf('rest')
+    expect(columns.map((col) => col.staged.now - c.from)).toEqual([0, 200, 400, 600, 800, 1000])
+    expect(columns.map((col) => col.head)).toEqual([
+      'rest 0ms',
+      'rest 200ms',
+      'rest 400ms',
+      'rest 600ms',
+      'rest 800ms',
+      'rest 1000ms',
+    ])
+  })
+
   it('scales the Image frame into the box the terminal shows it in, nearest pixel', () => {
     // 2 × 1: red, then clear; into 4 × 2.
     const f = imageRow(frame(2, 1, [255, 0, 0, 255, 0, 0, 0, 0]), 4, 2)
@@ -56,6 +121,16 @@ describe('stage-parity', () => {
       255, 0, 0, 255, 255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 0, 0,
     ])
     expect([...f.rgba.slice(16, 20)]).toEqual([255, 0, 0, 255])
+  })
+
+  it('widens the gutter to the longest label, so the frames start past it', () => {
+    const red = frame(1, 16, Array.from({ length: 16 }, () => [255, 0, 0, 255]).flat())
+    const short = contactSheet(['a'], [{ label: 'desktop', frames: [red] }])
+    const long = contactSheet(['a'], [{ label: 'desktop (static)', frames: [red] }])
+    expect(long.layout.label).toBeGreaterThan(short.layout.label)
+    // Past the label's 16 glyphs, the frame's one red column.
+    expect(long.png.width).toBe(long.layout.label + 1)
+    expect(long.layout.label).toBeGreaterThanOrEqual(16 * 8)
   })
 
   it('lays the rows under their heads beside their labels, the clear pixels on the background', () => {

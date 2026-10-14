@@ -617,7 +617,7 @@ describe('Ledger with a v1 record', () => {
         turn_end: 30,
         turn_start: 30,
         tool_mishap: 30,
-        camp: 5,
+        camp: 10,
         guard: 60,
       },
       committed: [],

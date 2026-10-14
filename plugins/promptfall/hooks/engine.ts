@@ -99,6 +99,8 @@ export type GameHandle = {
   }
   apply: (event: PlayerEvent, at: number) => void
   canApply: () => boolean
+  /** Applies `camp` off while the view says camping, the band's `g` and `/promptfall go`; false when not. */
+  breakCamp: (at: number) => Promise<boolean>
   /** This session holds the lease and its engine has paused: its refusals say paused. */
   isPaused: () => boolean
   /** This session's engine paused for a ban: the delete is the one verb it still lets through. */
@@ -403,6 +405,11 @@ export class GameEngine {
   /** Whether `apply` takes events now: not paused, and not past the outage's buffer window. */
   accepting(): boolean {
     return this.local !== null && !this.stopped && this.paused === null && !this.outage?.expired
+  }
+
+  /** Whether the party camps in the local state, as `apply` last left it. */
+  camping(): boolean {
+    return this.local?.camp === true
   }
 
   // ---------------------------------------------------------------------------
