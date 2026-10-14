@@ -20,7 +20,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 | # | Spec | Issue | Tickets | Run | PR | State |
 |---|---|---|---|---|---|---|
 | 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | #187, merged 2026-10-13 as `259ce09` | merged |
-| 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | | running |
+| 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | #200, merged 2026-10-14 as `a49ef45` | merged |
 | 3 | #179 waves | #179 | the ticket itself | | | not started |
 | 4 | One stage | | | | | not started |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
@@ -120,6 +120,22 @@ What the build changed (PR #187):
   its range before the pick, and shows the result in place.
 - **The fake's bots** (bulk, codex): buy only under vendor ×2, vendor when full, a slower default
   tick, so the market can be seen on the fake.
+
+What the build changed (PR #200):
+
+- **The band during prompts is an engine finding.** The plugin no longer hides on `hasSurvey`,
+  but in the terminal Claude Code (2.1.299) stops calling the band's render hook while a permission
+  dialog or a question is up, so the band is still gone until the answer (debug log, manual pass of
+  #200). Guard's revamp (5) leans on the band staying up: its huddle and shield will not show during
+  a prompt until the engine changes.
+- **The recruit cursor is a timing retry**, not a total rule: three `$.ui.focus` sends at 0, 50 and
+  150 ms. A slow redraw or an Enter within 50 ms can still land on the hero just recruited. #202
+  tracks the total fix, which needs an engine signal or a per-drawing key.
+- **Level-ups:** adjacent slots stand two columns apart, so staggered numbers overprint for about
+  half a second as the later one rises into the earlier one's row. Readability left open.
+- **The fake's bots** heartbeat twice a round: each act once a minute, and the bot half a round on
+  polls the world too, so all of them stay inside the 45 s presence TTL and join the world boss.
+- **Reforge ranges** draw with a hyphen (`3-7`): the pane font has no en dash.
 
 ## 3. #179 Waves
 
