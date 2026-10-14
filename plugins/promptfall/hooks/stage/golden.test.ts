@@ -20,6 +20,7 @@ import {
   BAND_SCENARIOS,
   band,
   bandGoldenOf,
+  caseOf,
   type Golden,
   goldenOf,
   PANE_SCENARIOS,
@@ -99,6 +100,30 @@ for (const name of SCENARIOS) {
     }
   })
 }
+
+test("a case stages at any instant after its events: the windup's knight, later, is the strike's and the follow-through's", () => {
+  const windup = caseOf('windup')
+  expect(windup.from).toBeLessThan(windup.now)
+  for (const [name, later] of [
+    ['strike', 120],
+    ['follow', 240],
+  ] as const) {
+    // The Svg's SMIL clock counts from its own instant, so its hash is the instant's own.
+    const g = goldenOf(renders(windup.at(windup.now + later)))
+    expect(g.imageHash, `${name}: Image`).toBe(GOLDENS[name].imageHash)
+    expect(g.rasterHash, `${name}: Raster`).toBe(GOLDENS[name].rasterHash)
+  }
+})
+
+test('the spawn scenario stages the hedge sprite halfway through its fade in, after the kill has faded', () => {
+  const c = caseOf('spawn')
+  const s = c.at(c.now)
+  expect(s.motions.filter((m) => m.kind === 'dissolve')).toEqual([])
+  const spawn = s.motions.find((m) => m.kind === 'spawn')
+  expect(spawn?.actor).toBe('e4')
+  expect(spawn?.from).toBe(c.from)
+  expect(((spawn?.until ?? 0) + (spawn?.from ?? 0)) / 2).toBe(c.now)
+})
 
 const NOW = 1_000_000
 

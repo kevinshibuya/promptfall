@@ -38,6 +38,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
   victory: {rasterHash: "f044c212d84ed2d0", imageHash: "f3c274faa12c847c", svgHash: "7c7b62eb259a1e82", svgChars: 23212, rasterPairs: 130},
   'boss-kill-travel': {rasterHash: "70095e75ecb67a40", imageHash: "df27ae878baa5894", svgHash: "f695767f9ff6132a", svgChars: 18253, rasterPairs: 100},
   boss_move: {rasterHash: "a5e90ca27d3b21a1", imageHash: "5a42e7924860172b", svgHash: "85dbdad2209ffcac", svgChars: 29591, rasterPairs: 112},
+  spawn: {rasterHash: "d8e7a89aeb0cfb58", imageHash: "a7c2df6b756ddca5", svgHash: "8c83f923c33fca1b", svgChars: 21133, rasterPairs: 140},
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
