@@ -32,6 +32,7 @@ import {
   GLOW_ALPHA,
   GLOW_RADIUS_PX,
   HASTE_FRAME_MS,
+  HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
@@ -173,7 +174,7 @@ export type StageModel = {
   /** Camp's campfire between the lines, drawn with the effects; `alpha` 0 before it is lit. */
   campfire?: { art: SpriteArt; x: number; y: number; alpha: number } | null
   alt: string
-  /** Stage pixels per half-block cell: 1, or HIRES_SCALE for the full stage on Image and Svg. */
+  /** Stage pixels per half-block cell: HIRES_SCALE for the full stage, 1 for the compact one. */
   scale: 1 | 1.5
 }
 
@@ -306,17 +307,17 @@ function halve(rgb: number): number {
   return ((rgb >> 1) & 0x7f0000) | ((rgb >> 1) & 0x007f00) | ((rgb >> 1) & 0x00007f)
 }
 
-/** The art an actor carries and its rarity slot: compact, 1x full or 1.5x. */
-export function variant(sprite: Sprite, compact: boolean, scale: number): SpriteArt {
-  return compact ? sprite.compact : scale === 1 ? sprite.full : sprite.hires
+/** The art an actor carries on the stage and its rarity slot: compact, or 1.5x. */
+export function variant(sprite: Sprite, compact: boolean): SpriteArt {
+  return compact ? sprite.compact : sprite.hires
 }
 
-function slotOf(sprite: Sprite, compact: boolean, scale: number): number | null {
-  return compact || scale === 1 ? sprite.raritySlot : sprite.raritySlotHires
+function slotOf(sprite: Sprite, compact: boolean): number | null {
+  return compact ? sprite.raritySlot : sprite.raritySlotHires
 }
 
 /**
- * The art of each pose. At 1.5 the drawn frames, the squash and the hit lean; at 1 and on the
+ * The art of each pose. On the full stage the drawn frames, the squash and the hit lean; on the
  * compact stage one drawing, the hero's attack art through the wind-up and strike (as the lunge
  * span showed it before the frames), the idle art otherwise.
  */
@@ -324,7 +325,6 @@ function posesOf(
   sprite: Sprite,
   attack: Sprite | null,
   compact: boolean,
-  scale: number,
   flipX: boolean,
   recolour: (palette: readonly number[], slot: number | null) => readonly number[],
 ): Record<Pose, PoseArt> {
@@ -337,18 +337,16 @@ function posesOf(
       dx,
     }
   }
-  const idleArt = variant(sprite, compact, scale)
-  const idle = pose(idleArt, slotOf(sprite, compact, scale))
+  const idleArt = variant(sprite, compact)
+  const idle = pose(idleArt, slotOf(sprite, compact))
   /** The stance leans toward the art's facing; flipped, it moves left to keep the feet. */
   const guardOf = (): PoseArt => {
     const lean = stance(idleArt)
     return pose(lean.art, idle.raritySlot, flipX ? -lean.grow : 0)
   }
-  if (compact || scale === 1) {
-    const act = attack
-      ? pose(variant(attack, compact, scale), slotOf(attack, compact, scale))
-      : idle
-    // At 1x a hero keeps its idle through the victory too (ADR 0007).
+  if (compact) {
+    const act = attack ? pose(variant(attack, compact), slotOf(attack, compact)) : idle
+    // On the compact stage a hero keeps its idle through the victory too (ADR 0007).
     return {
       idle,
       idle_b: idle,
@@ -389,10 +387,10 @@ export function stageAt(
   timeline: StageTimeline,
   now: number,
   box: Box,
-  opts: { compact: boolean; motion: 'full' | 'still'; scale?: 1 | 1.5 },
+  opts: { compact: boolean; motion: 'full' | 'still' },
 ): StageModel {
-  // The compact stage is always 1x.
-  const scale = opts.compact ? 1 : (opts.scale ?? 1)
+  // The full stage is the one scene at 1.5 on every surface; the compact stage is 1x.
+  const scale = opts.compact ? 1 : HIRES_SCALE
   const px = (v: number) => Math.round(v * scale)
   const width = Math.ceil(box.columns * scale)
   const height = Math.ceil(box.rows * 2 * scale)
@@ -405,9 +403,9 @@ export function stageAt(
   /** The bob's frame: twice as fast while hasted; none under still. */
   const bobOf = (hasted: boolean): number | null =>
     opts.motion === 'full' ? (hasted ? HASTE_FRAME_MS : IDLE_FRAME_MS) : null
-  /** The bob: at 1 the 1-pixel lift on the actor's clock; at 1.5 the idle pair replaces it. */
+  /** The bob: on the compact stage the 1-pixel lift on the actor's clock; else the idle pair. */
   const liftOf = (bobMs: number | null): number =>
-    scale === 1 && bobMs !== null ? bobbingAt(now, bobMs) * px(IDLE_BOB_PX) : 0
+    opts.compact && bobMs !== null ? bobbingAt(now, bobMs) * px(IDLE_BOB_PX) : 0
   /**
    * Hit wins, then the follow-through, the strike and the wind-up, then a hero's victory pose; at
    * rest Guard's stance, or the idle pair on the actor's bob.
@@ -425,13 +423,13 @@ export function stageAt(
     if (rest === 'guard') return 'guard'
     return bobMs !== null && bobbingAt(now, bobMs) === 1 ? 'idle_b' : 'idle'
   }
-  /** At 1.5 a flash is a blink at its start; at 1 it holds for the whole flash. */
+  /** A flash is a blink at its start; on the compact stage it holds for the whole flash. */
   const isFlashing = (
     actor: string,
     kind: 'flash' | 'red_flash' | 'gold_flash' = 'flash',
   ): boolean => {
     const flash = motionOf(actor, kind)
-    return flash !== undefined && (scale === 1 || now < flash.from + BLINK_MS)
+    return flash !== undefined && (opts.compact || now < flash.from + BLINK_MS)
   }
   const fill = (rgb: number) => (palette: readonly number[]) =>
     palette.map((c, i) => (i === 0 ? c : rgb))
@@ -449,7 +447,7 @@ export function stageAt(
   const heroLeft = frontHero
     ? width -
       edge -
-      variant(spriteFor('hero', frontHero.cls), opts.compact, scale).width -
+      variant(spriteFor('hero', frontHero.cls), opts.compact).width -
       (partySize - 1) * pitch
     : width
   // Enemies stand in slot order, each clear of the one before when there is room: a boss is
@@ -463,7 +461,7 @@ export function stageAt(
   const stands = new Map<string, { x: number; y: number; width: number; height: number }>()
   for (const known of view.enemies) {
     const sprite = SPRITES[enemySpriteId(known)] ?? FALLBACK
-    const art = variant(sprite, opts.compact, scale)
+    const art = variant(sprite, opts.compact)
     const slotX = edge + Math.round(timeline.placeAt(known.id, now) * pitch)
     const roomLeft = heroLeft - gap - art.width
     const baseX = Math.max(edge, Math.min(Math.max(slotX, nextFree), roomLeft))
@@ -482,7 +480,7 @@ export function stageAt(
     const redFlashing = !flashing && isFlashing(known.id, 'red_flash')
     const tinted = motionOf(known.id, 'enraged') !== undefined
     const boss = known.kind !== 'wave'
-    const poses = posesOf(sprite, null, opts.compact, scale, false, (p) => p)
+    const poses = posesOf(sprite, null, opts.compact, false, (p) => p)
     const bobMs = bobOf(false)
     const pose = poseOf(known.id, false, 'idle', bobMs)
     const shown = poses[pose]
@@ -532,7 +530,7 @@ export function stageAt(
     const step = fallen ? undefined : motionOf(hero.id, 'step')
     const sprite = spriteFor('hero', hero.cls)
     const attack = spriteFor('hero_attack', hero.cls)
-    const art = variant(sprite, opts.compact, scale)
+    const art = variant(sprite, opts.compact)
     const rarity = RARITY_RGB[hero.rarity] ?? RARITY_RGB.common ?? 0
     const recolour = (base: readonly number[], slot: number | null): readonly number[] => {
       let palette = [...base]
@@ -540,13 +538,13 @@ export function stageAt(
       if (fallen) palette = palette.map((c, i) => (i === 0 ? c : halve(c)))
       return palette
     }
-    const poses = posesOf(sprite, attack, opts.compact, scale, true, recolour)
+    const poses = posesOf(sprite, attack, opts.compact, true, recolour)
     const rest = hero.guarding && !fallen ? 'guard' : 'idle'
     const bobMs = fallen || rest === 'guard' ? null : bobOf(hero.hasted)
     const pose = poseOf(hero.id, fallen, rest, bobMs)
     const shown = poses[pose]
-    // Haste's streak and Guard's shield are the 1.5 stage's: at 1 the bob and the stance alone.
-    const marks = !opts.compact && scale !== 1 && !fallen
+    // Haste's streak and Guard's shield are the full stage's: compact, the bob and the stance alone.
+    const marks = !opts.compact && !fallen
     const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
     const shield = marks && rest === 'guard' && index === front ? shieldOver(poses.idle.art) : null
     const flashing = !fallen && isFlashing(hero.id)
@@ -599,7 +597,7 @@ export function stageAt(
   for (const m of started) {
     if (m.kind === 'chest') {
       // A chest from where its actor stands; one with no actor from its slot's ground.
-      const closed = variant(CHESTS.closed, opts.compact, scale)
+      const closed = variant(CHESTS.closed, opts.compact)
       const stood =
         m.actor === null
           ? groundStand(m.slot, closed, height, opts.compact, scale)
@@ -607,8 +605,8 @@ export function stageAt(
       if (!stood) continue
       const { phase, p } = chestPhaseAt(m, now)
       const sprite = chestSprite(phase, p)
-      const art = variant(sprite, opts.compact, scale)
-      const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact, scale)
+      const art = variant(sprite, opts.compact)
+      const item = variant(SPRITES[m.spriteId] ?? FALLBACK, opts.compact)
       const place = chestPlace(stood, closed, item, { width, height }, scale)
       const alpha = phase === 'fade' ? 1 - p : 1
       // The fall eases in, as a thing dropped does.
@@ -647,7 +645,7 @@ export function stageAt(
       const shift = stepOffset(step, m.from, scale) - stepOffset(step, now, scale)
       const from = { ...at, x: at.x + shift }
       const sprite = SPRITES[`effect:${m.effect}`] ?? FALLBACK
-      const art = variant(sprite, opts.compact, scale)
+      const art = variant(sprite, opts.compact)
       const flipX = actor.flipX
       const p = m.shape === 'bolt' ? progress(m, now) : 1
       const placed = effectAt(art, flipX, from, to, p)
@@ -661,7 +659,7 @@ export function stageAt(
   const camp = all.find((m) => m.kind === 'campfire')
   if (camp) {
     // Centred on the ground between the enemies' line and the party, in the frame.
-    const art = variant(CAMPFIRE, opts.compact, scale)
+    const art = variant(CAMPFIRE, opts.compact)
     const x = clamp(
       Math.round((enemyRight + heroLeft - art.width) / 2),
       0,

@@ -1,8 +1,8 @@
 // Contact sheets for art review: each built sprite at ship size (its 1x art at 6x, its 1.5x art at
 // 4x as `-hires`), its native cut beside it, and a zone's monsters and bosses on the real stage at
-// scale 1.5 (4x) and at scale 1 (6x, as `-1x`). Each actor with drawn frames also gets its frame
-// strip (`-frames`: idle A, idle B, wind-up, strike, follow-through when set, hit, at 4x). One PNG
-// per picture so the review page can caption each with its id.
+// 1.5 (4x). Each actor with drawn frames also gets its frame strip (`-frames`: idle A, idle B,
+// wind-up, strike, follow-through when set, hit, at 4x). One PNG per picture so the review page
+// can caption each with its id.
 //
 // tsx scripts/contact.ts --zone <n> | --heroes | --items <name,name,…> | --world-bosses
 //   [--out <dir>] [--native <dir>]
@@ -16,7 +16,7 @@ import { artFrame, composeFrame, type Frame } from '../plugins/promptfall/hooks/
 import { boss, turnBoss, wave } from '../plugins/promptfall/hooks/stage/fixtures'
 import { stageAt } from '../plugins/promptfall/hooks/stage/model'
 import { StageTimeline } from '../plugins/promptfall/hooks/stage/timeline'
-import { HIRES_SCALE, RARITY_RGB } from '../plugins/promptfall/hooks/stage/tuning'
+import { RARITY_RGB } from '../plugins/promptfall/hooks/stage/tuning'
 import type { GameView } from '../plugins/promptfall/types'
 import { type Rgba, readPng, writePng } from './png'
 
@@ -117,13 +117,13 @@ function inZone(view: GameView, zone: number, defs: readonly string[]): GameView
   }
 }
 
-/** The view at rest on the full stage at `scale`, grown for a boss. */
-function staged(view: GameView, scale: 1 | 1.5): Frame {
+/** The view at rest on the full stage, grown for a boss. */
+function staged(view: GameView): Frame {
   const t = new StageTimeline()
   t.observe(view, NOW - SETTLED)
   t.observe(view, NOW)
   const box = { columns: 120, rows: t.rowsAt(view, NOW) }
-  return composeFrame(stageAt(view, t, NOW, box, { compact: false, motion: 'full', scale }), {
+  return composeFrame(stageAt(view, t, NOW, box, { compact: false, motion: 'full' }), {
     numbers: false,
   })
 }
@@ -141,7 +141,7 @@ function acting(view: GameView, actor: string, target: string, ms: number): Rgba
   )
   t.observe(view, NOW)
   const box = { columns: 120, rows: t.rowsAt(view, NOW) }
-  const model = stageAt(view, t, NOW, box, { compact: false, motion: 'still', scale: HIRES_SCALE })
+  const model = stageAt(view, t, NOW, box, { compact: false, motion: 'still' })
   return scaled(rgbaOf(composeFrame(model, { numbers: false })), 4)
 }
 
@@ -168,10 +168,9 @@ export function contact(target: ContactTarget, opts: { out: string; native: stri
     put(`${kind}-${name}${suffix}`, scaled(rgbaOf(artFrame(s.full, full)), 6))
     put(`${kind}-${name}${suffix}-hires`, scaled(rgbaOf(artFrame(s.hires, hires)), 4))
   }
-  // The same picture at both scales: 1.5x at 4x, 1x at 6x, the same size on screen.
+  // The stage at 1.5, at 4x.
   const views = (name: string, view: GameView) => {
-    put(name, scaled(rgbaOf(staged(view, HIRES_SCALE)), 4))
-    put(`${name}-1x`, scaled(rgbaOf(staged(view, 1)), 6))
+    put(name, scaled(rgbaOf(staged(view)), 4))
   }
   const nativeOf = (id: string) => {
     const [kind, name] = id.split(':') as [string, string]

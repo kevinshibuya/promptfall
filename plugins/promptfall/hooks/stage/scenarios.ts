@@ -41,7 +41,7 @@ import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
 import { CLEAR, encodeRaster, intoCells, rasterPairs } from './raster'
 import { stagedState } from './staged'
-import { fitSvg, type Rung, renderSvg, stageSvg, svgOrFallback } from './svg'
+import { fitSvg, type Rung, stageSvg } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
   CHEST_FALL_MS,
@@ -52,7 +52,6 @@ import {
   FLASH_MS,
   FULL_MIN_COLUMNS,
   HASTE_FRAME_MS,
-  HIRES_SCALE,
   LEVEL_STAGGER_MS,
   LUNGE_MS,
   REVEAL_RISE_MS,
@@ -102,18 +101,10 @@ export type Golden = {
   svgHash: string
   svgChars: number
   rasterPairs: number
-  /** The Image frame of the scale-1.5 model. */
-  imageHashHires: string
-  /** The scale-1 Svg: the desktop's fall-back past the cap. */
-  svgHashLo: string
 }
-/**
- * `model` at scale 1 (the 1x Image and the desktop's fall-back, until the one-model cut);
- * `hires` at HIRES_SCALE, the one scene: the Raster, the Image, and the Svg under its cap.
- */
+/** The scenario's one model, the scene every surface draws: the Raster, the Image and the Svg. */
 export type Staged = {
   model: StageModel
-  hires: StageModel
   motions: readonly Motion[]
   now: number
 }
@@ -143,14 +134,12 @@ const withoutFront = (): GameView => {
   return v
 }
 
-/** The scenario's models at scale 1 and at HIRES_SCALE, with its motions at `now` (NOW). */
+/** The scenario's model, with its motions at `now` (NOW). */
 function staged(view: GameView, t: StageTimeline, box: Box, compact = false, now = NOW): Staged {
-  const opts = { compact, motion: 'full' as const }
   return {
-    model: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts),
-    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, {
-      ...opts,
-      scale: HIRES_SCALE,
+    model: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, {
+      compact,
+      motion: 'full',
     }),
     motions: t.active(now),
     now,
@@ -427,50 +416,31 @@ export function stage(name: Scenario): Staged {
 
 /**
  * A staged scenario's encodings, each rendered once: what its golden hashes, and the goldens test's
- * budget and fall-back checks, read.
+ * budget and rung checks, read.
  */
 export type Renders = {
-  /**
-   * The desktop's Svg, SMIL on and off: the hires one on the ladder's rung that fits the cap, or
-   * the scale-1 one past its last; and the rung each took.
-   */
+  /** The desktop's Svg, SMIL on and off, each on the ladder's rung that fits the cap, and that rung. */
   svg: string
   svgFlat: string
   rung: Rung
   rungFlat: Rung
-  /** The scale-1 model's Svg (the desktop's fall-back past the cap), SMIL on and off. */
-  svgLo: string
-  svgLoFlat: string
-  /** The one scene's Raster cells: the hires model resampled into its box's cells. */
+  /** The Raster cells: the model's scene resampled into its box's cells. */
   cells: string
-  /** The scale-1 model's Image frame. */
+  /** The Image frame. */
   image: Frame
-  /** The hires model's Svg, SMIL on and off, and its Image frame. */
-  svgHi: string
-  svgHiFlat: string
-  hires: Frame
 }
 
 export function renders(s: Staged): Renders {
   const at = (smil: boolean) => ({ smil, now: s.now, width: 960, motion: 'full' as const })
-  const svgLo = renderSvg(s.model, s.motions, at(true))
-  const svgLoFlat = renderSvg(s.model, s.motions, at(false))
-  const svgHi = renderSvg(s.hires, s.motions, at(true))
-  const svgHiFlat = renderSvg(s.hires, s.motions, at(false))
-  const fit = fitSvg(s.hires, s.motions, at(true))
-  const fitFlat = fitSvg(s.hires, s.motions, at(false))
+  const fit = fitSvg(s.model, s.motions, at(true))
+  const fitFlat = fitSvg(s.model, s.motions, at(false))
   return {
-    svg: svgOrFallback(fit.svg, () => svgLo),
-    svgFlat: svgOrFallback(fitFlat.svg, () => svgLoFlat),
+    svg: fit.svg,
+    svgFlat: fitFlat.svg,
     rung: fit.rung,
     rungFlat: fitFlat.rung,
-    svgLo,
-    svgLoFlat,
-    cells: rasterCells(s.hires),
+    cells: rasterCells(s.model),
     image: composeFrame(s.model, { numbers: true }),
-    svgHi,
-    svgHiFlat,
-    hires: composeFrame(s.hires, { numbers: true }),
   }
 }
 
@@ -491,8 +461,6 @@ export function goldenOf(r: Renders): Golden {
     svgHash: fnv1a64(r.svg),
     svgChars: r.svg.length,
     rasterPairs: rasterPairs(r.cells),
-    imageHashHires: fnv1a64(encodeImage(r.hires, 1).rgba),
-    svgHashLo: fnv1a64(r.svgLo),
   }
 }
 
@@ -1031,7 +999,6 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
   const model = stageAt(view, t, NOW, layout.box, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
   const box = { columns, rows: layout.bandRows }

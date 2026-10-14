@@ -806,29 +806,37 @@ test("the Raster stage stands each actor in the 1x stage's box, a 24-pixel hero 
   const layout = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
   if (!layout.box) throw new Error('expected a full stage')
   const box = layout.box
-  const at = (scale: 1 | 1.5) =>
-    stageAt(wave(), t, 0, box, { compact: false, motion: 'still', scale })
+  const hires = stageAt(wave(), t, 0, box, { compact: false, motion: 'still' })
+  // Where the 1x stage stood each actor, its 16-pixel box's top-left corner, before it retired.
+  const was: Record<string, { x: number; y: number }> = {
+    e1: { x: 4, y: 18 },
+    e2: { x: 22, y: 18 },
+    e3: { x: 40, y: 18 },
+    h1: { x: 64, y: 18 },
+    h2: { x: 82, y: 18 },
+    h3: { x: 100, y: 18 },
+  }
   const alone = (m: StageModel, key: string | null): StageModel => ({
     ...m,
     backdrop: null,
     actors: m.actors.filter((a) => a.key === key),
   })
-  const [hires, lo] = [at(1.5), at(1)]
   const ground = rasterStage(alone(hires, null), layout).frame
   expect([ground.width, ground.height]).toEqual([120, 34])
+  expect(hires.actors.map((a) => a.key).sort()).toEqual(Object.keys(was).sort())
   for (const actor of hires.actors) {
-    const was = lo.actors.find((a) => a.key === actor.key)
-    if (!was) throw new Error(`${actor.key} is not on the 1x stage`)
-    expect([actor.art.height, was.art.height], actor.key).toEqual([24, 16])
+    const box = was[actor.key]
+    if (!box) throw new Error(`${actor.key} was not on the 1x stage`)
+    expect(actor.art.height, actor.key).toBe(24)
     const [left, top, right, bottom] = bounds(
       rasterStage(alone(hires, actor.key), layout).frame,
       ground,
     )
     // Inside the 16-pixel box the 1x stage drew it in, standing on that box's bottom row.
-    expect(left, `${actor.key}: left`).toBeGreaterThanOrEqual(was.x)
-    expect(right, `${actor.key}: right`).toBeLessThan(was.x + 16)
-    expect(top, `${actor.key}: top`).toBeGreaterThanOrEqual(was.y)
-    expect(bottom, `${actor.key}: bottom`).toBe(was.y + 15)
+    expect(left, `${actor.key}: left`).toBeGreaterThanOrEqual(box.x)
+    expect(right, `${actor.key}: right`).toBeLessThan(box.x + 16)
+    expect(top, `${actor.key}: top`).toBeGreaterThanOrEqual(box.y)
+    expect(bottom, `${actor.key}: bottom`).toBe(box.y + 15)
     // Two thirds of the figure's height in the scene, give or take the pixel the vote rounds.
     const scene = composeFrame(alone(hires, actor.key), { numbers: false })
     const [, sceneTop, , sceneBottom] = bounds(
@@ -852,7 +860,7 @@ test("a short Raster band shows the full stage's bottom rows, three scene pixels
   expect(short).toMatchObject({ kind: 'full', cells: { columns: 120, rows: 11 } })
   if (!full.box) throw new Error('expected a full stage')
   const model = {
-    ...stageAt(wave(), t, 0, full.box, { compact: false, motion: 'still', scale: 1.5 }),
+    ...stageAt(wave(), t, 0, full.box, { compact: false, motion: 'still' }),
     numbers: [{ text: '9', x: 30, y: 0, rgb: 0xffffff }],
   }
   const whole = rasterStage(model, full).frame

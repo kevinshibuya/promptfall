@@ -1,7 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView } from '../../types'
 import { encode } from '../sprites/base64'
-import { stance } from '../sprites/derive'
 import { spriteFor } from '../sprites/index'
 import { WORLD_DEFAULT } from '../state'
 import type { Effect } from '../vendor/sim.js'
@@ -9,14 +8,7 @@ import { wave } from './fixtures'
 import { effectAt, SHIELD, stageAt } from './model'
 import { stage } from './scenarios'
 import { stagedState } from './staged'
-import {
-  backdropPlacements,
-  fitSvg,
-  framesInUse,
-  renderSvg,
-  strokePaths,
-  svgWithFallback,
-} from './svg'
+import { backdropPlacements, fitSvg, framesInUse, renderSvg, strokePaths } from './svg'
 import { type Motion, type StageEffect, StageTimeline } from './timeline'
 import {
   CAMPFIRE_FADE_MS,
@@ -79,7 +71,7 @@ test('a well-formed document on the stage box', () => {
   expect(s.startsWith('<svg')).toBe(true)
   expect(s.endsWith('</svg>')).toBe(true)
   expect(balanced(s)).toBe(true)
-  expect(s).toContain('viewBox="0 0 120 16"')
+  expect(s).toContain('viewBox="0 0 180 24"')
   expect(s).not.toContain('<script')
   expect(s).not.toContain('<image')
 })
@@ -96,14 +88,16 @@ test('each art stem is defined once, one path per colour, the rarity colour as c
     expect(new Set(fills).size).toBe(fills.length)
   }
   expect(s).toMatch(/(fill|stroke)="currentColor"/)
-  const slime = spriteFor('enemy', 'road_slime').full
+  const slime = spriteFor('enemy', 'road_slime').hires
   expect(slime.palette.length).toBeGreaterThan(1)
 })
 
 test('smil animates a lunge already under way from a negative begin', () => {
-  const s = svg([act, hit], NOW + 100)
-  expect(s.match(/<animateTransform[^>]*values="0 0;-4 0;0 0"[^>]*>/g)).toHaveLength(1)
-  expect(s).toContain('begin="-0.1s"')
+  // The lunge moves after the wind-up's hold, 0.14 s in: 0.06 s under way at 0.2 s.
+  const s = svg([act, hit], NOW + 200)
+  expect(s.match(/<animateTransform[^>]*values="0 0;-6 0;0 0"[^>]*>/g)).toEqual([
+    '<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-6 0;0 0" begin="-0.06s" dur="0.24s"/>',
+  ])
   expect(s).toContain('filter="url(#f)"')
 })
 
@@ -111,12 +105,13 @@ test('smil plays the step as a translate on the stepper from its place, under Mo
   const still: Opts = { smil: true, motion: 'still' }
   const held = NOW + 110
   const s = svg([act, hit], held, still)
-  expect(s.match(/<animateTransform[^>]*values="0 0;-4 0;-4 0;0 0"[^>]*>/g)).toEqual([
-    '<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-4 0;-4 0;0 0" keyTimes="0;0.16;0.84;1" begin="-0.11s" dur="0.5s"/>',
+  expect(s.match(/<animateTransform[^>]*values="0 0;-6 0;-6 0;0 0"[^>]*>/g)).toEqual([
+    '<animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;-6 0;-6 0;0 0" keyTimes="0;0.16;0.84;1" begin="-0.11s" dur="0.5s"/>',
   ])
-  // The groups stand where they stand at rest: the animation adds the step.
+  // The actors' groups stand where they stand at rest: the animation adds the step. (A hit frame's
+  // lean is a group of its own inside its actor's, with its filter.)
   const places = (doc: string) =>
-    [...doc.matchAll(/<g transform="(translate\([^)]*\))"/g)].map((m) => m[1])
+    [...doc.matchAll(/<g transform="(translate\([^)]*\))">/g)].map((m) => m[1])
   expect(places(s)).toEqual(places(svg([], held, still)))
   // Without SMIL the knight is drawn stepped.
   const flat = places(svg([act, hit], held, { smil: false, motion: 'still' }))
@@ -133,7 +128,7 @@ test('without smil no animation element appears', () => {
   expect(svg([act, hit], NOW + 100, { smil: false, motion: 'full' })).not.toContain('<animate')
 })
 
-test('the idle bob animates with motion full only', () => {
+test('the idle pair animates with motion full only', () => {
   expect(svg([], NOW, { smil: true, motion: 'full' })).toContain('repeatCount="indefinite"')
   expect(svg([], NOW, { smil: true, motion: 'still' })).not.toContain('<animateTransform')
 })
@@ -178,25 +173,25 @@ function defIdOf(doc: string, art: Parameters<typeof strokePaths>[0] | undefined
 
 test('the SMIL Svg drops the chest with a translate, shows its three arts in turn and raises its item', () => {
   const [closed, opening, open] = (['closed', 'opening', 'open'] as const).map(
-    (id) => spriteFor('chest', id).full,
+    (id) => spriteFor('chest', id).hires,
   )
-  // Before the chest starts: e1 stood at x 4 on a 34 px stage; the chest falls 8 px to y 18 from
-  // 0.4 s over 0.3 s, shows closed to 1 s, opening to 1.25 s and open after; the item rises 10 px
-  // from y 15 from 1.5 s, the end of the open phase. Both fade over the last 0.2 s of the rare
+  // Before the chest starts: e1 stood at x 6 on a 51 px stage; the chest falls 12 px to y 27 from
+  // 0.4 s over 0.3 s, shows closed to 1 s, opening to 1.25 s and open after; the item rises 15 px
+  // from y 22 from 1.5 s, the end of the open phase. Both fade over the last 0.2 s of the rare
   // item's 2.8 s.
   const before = chestSvg(NOW, true).doc
   const [c, o, a] = [closed, opening, open].map((art) => defIdOf(before, art))
   expect(before).toContain(
-    `<g transform="translate(4 18)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.929;1" begin="0.4s" dur="2.8s"/>`,
+    `<g transform="translate(6 27)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.929;1" begin="0.4s" dur="2.8s"/>`,
   )
   expect(before).toMatch(
-    /<animateTransform attributeName="transform" type="translate" additive="sum" values="0 -8;0 0" [^>]*begin="0.4s" dur="0.3s"\/>/,
+    /<animateTransform attributeName="transform" type="translate" additive="sum" values="0 -12;0 0" [^>]*begin="0.4s" dur="0.3s"\/>/,
   )
   expect(before).toContain(
     `<use href="#${c}" visibility="hidden"><set attributeName="visibility" to="visible" begin="0.4s" dur="0.6s"/></use><use href="#${o}" visibility="hidden"><set attributeName="visibility" to="visible" begin="1s" dur="0.25s"/></use><use href="#${a}" visibility="hidden"><set attributeName="visibility" to="visible" begin="1.25s" dur="1.95s"/></use></g>`,
   )
   expect(before).toMatch(
-    /<use href="#\w+" transform="translate\(4 15\)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.882;1" begin="1.5s" dur="1.7s"\/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -10" begin="1.5s" dur="0.3s" fill="freeze"\/><\/use>/,
+    /<use href="#\w+" transform="translate\(6 22\)" opacity="0"><animate attributeName="opacity" values="1;1;0" keyTimes="0;0.882;1" begin="1.5s" dur="1.7s"\/><animateTransform attributeName="transform" type="translate" additive="sum" values="0 0;0 -15" begin="1.5s" dur="0.3s" fill="freeze"\/><\/use>/,
   )
   // A redraw mid-hold, the enemy long faded, resumes the same chest: open, the only art it draws.
   const held = chestSvg(NOW + 2000, true)
@@ -204,19 +199,19 @@ test('the SMIL Svg drops the chest with a translate, shows its three arts in tur
   expect(held.doc).toContain('begin="-1.6s" dur="2.8s"')
   expect(held.doc).toContain(`<use href="#${defIdOf(held.doc, open)}"/></g>`)
   for (const id of ['closed', 'opening']) {
-    expect(held.doc).not.toContain(defOf(spriteFor('chest', id).full, null))
+    expect(held.doc).not.toContain(defOf(spriteFor('chest', id).hires, null))
   }
-  expect(held.doc).toContain('values="0 0;0 -10" begin="-0.5s"')
+  expect(held.doc).toContain('values="0 0;0 -15" begin="-0.5s"')
   // Without SMIL, the model as of now: the open chest on the ground, the item risen.
   const flat = chestSvg(NOW + 2000, false).doc
-  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(4 18)"/>`)
-  expect(flat).toMatch(/<use href="#\w+" transform="translate\(4 5\)"\/>/)
+  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(6 27)"/>`)
+  expect(flat).toMatch(/<use href="#\w+" transform="translate\(6 7\)"\/>/)
   expect(flat).not.toContain('<animate')
 })
 
 test("a chest with no actor draws on the front slot's ground, under SMIL and without it", () => {
   // A sandbox item dropped at NOW onto a drawn, empty 17-row stage: no row to fall from, so its
-  // chest falls onto slot 0's ground, where a kill's there lands (x 4, y 18; the test above).
+  // chest falls onto slot 0's ground, where a kill's there lands (x 6, y 27; the test above).
   const t = new StageTimeline()
   const view = { ...wave(), enemies: [] }
   t.observe(view, NOW)
@@ -229,26 +224,26 @@ test("a chest with no actor draws on the front slot's ground, under SMIL and wit
     return renderSvg(model, t.active(at), { smil, motion: 'still', now: at, width: 960 })
   }
   const before = doc(NOW, true)
-  expect(before).toContain('<g transform="translate(4 18)" opacity="0">')
-  expect(before).toMatch(/values="0 -8;0 0" [^>]*begin="0s" dur="0.3s"\/>/)
-  expect(before).toMatch(/<use href="#\w+" transform="translate\(4 15\)" opacity="0">/)
+  expect(before).toContain('<g transform="translate(6 27)" opacity="0">')
+  expect(before).toMatch(/values="0 -12;0 0" [^>]*begin="0s" dur="0.3s"\/>/)
+  expect(before).toMatch(/<use href="#\w+" transform="translate\(6 22\)" opacity="0">/)
   expect(before.match(/<circle/g)).toHaveLength(1)
   const flat = doc(NOW + 1600, false)
-  const open = spriteFor('chest', 'open').full
-  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(4 18)"/>`)
-  expect(flat).toMatch(/<use href="#\w+" transform="translate\(4 5\)"\/>/)
+  const open = spriteFor('chest', 'open').hires
+  expect(flat).toContain(`<use href="#${defIdOf(flat, open)}" transform="translate(6 27)"/>`)
+  expect(flat).toMatch(/<use href="#\w+" transform="translate\(6 7\)"\/>/)
 })
 
 test('the glow is one circle in the rarity colour, behind the chest, its alpha ramping in over the rise', () => {
-  // The rare item risen at (4, 5), 16 px: the glow on its centre (12, 13), radius 10. Its rise
+  // The rare item risen at (6, 7), 24 px: the glow on its centre (18, 19), radius 15. Its rise
   // runs 1.5 s to 1.8 s and its fade from 3 s to 3.2 s: of its 1.7 s, 0.176 and 0.882.
   const blue = colour(RARITY_RGB.rare ?? 0)
   const before = chestSvg(NOW, true).doc
   expect(before.match(/<circle/g)).toHaveLength(1)
   expect(before).toContain(
-    `<circle cx="12" cy="13" r="10" fill="${blue}" opacity="0"><animate attributeName="opacity" values="0;0.5;0.5;0" keyTimes="0;0.176;0.882;1" begin="1.5s" dur="1.7s"/></circle>`,
+    `<circle cx="18" cy="19" r="15" fill="${blue}" opacity="0"><animate attributeName="opacity" values="0;0.5;0.5;0" keyTimes="0;0.176;0.882;1" begin="1.5s" dur="1.7s"/></circle>`,
   )
-  const chest = before.indexOf('<g transform="translate(4 18)" opacity="0">')
+  const chest = before.indexOf('<g transform="translate(6 27)" opacity="0">')
   expect(chest).toBeGreaterThan(0)
   expect(before.indexOf('<circle')).toBeLessThan(chest)
   // A redraw mid-hold resumes it.
@@ -258,18 +253,18 @@ test('the glow is one circle in the rarity colour, behind the chest, its alpha r
   // Without SMIL, the glow as of now.
   const flat = chestSvg(NOW + 2000, false).doc
   expect(flat.match(/<circle/g)).toHaveLength(1)
-  expect(flat).toContain(`<circle cx="12" cy="13" r="10" fill="${blue}" opacity="0.5"/>`)
+  expect(flat).toContain(`<circle cx="18" cy="19" r="15" fill="${blue}" opacity="0.5"/>`)
   // Before the rise, no glow.
   expect(chestSvg(NOW + 1200, false).doc).not.toContain('<circle')
 })
 
-test('the reveal scenarios stay under the Svg cap with SMIL on and never fall back to the 1x Svg', () => {
+test('the reveal scenarios stay under the Svg cap with SMIL on, on the first rung', () => {
   for (const name of ['reveal', 'reveal-legendary'] as const) {
     const s = stage(name)
     const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
-    const hi = renderSvg(s.hires, s.motions, opts)
+    const hi = renderSvg(s.model, s.motions, opts)
     expect(hi.length, name).toBeLessThan(SVG_MAX_CHARS)
-    expect(svgWithFallback(s.hires, s.model, s.motions, opts), name).toBe(hi)
+    expect(fitSvg(s.model, s.motions, opts), name).toEqual({ svg: hi, rung: 0 })
     expect(hi.match(/<circle/g), name).toHaveLength(1)
   }
 })
@@ -294,10 +289,8 @@ test('a hero flashing at a redraw keeps its rarity colour under the flash', () =
 test('the rest scenario at 1.5: viewBox 0 0 180 51 at the same rendered width', () => {
   const s = stage('rest')
   const opts = { smil: true, now: s.now, width: 960, motion: 'full' as const }
-  const hi = svgWithFallback(s.hires, s.model, s.motions, opts)
-  const lo = renderSvg(s.model, s.motions, opts)
+  const hi = fitSvg(s.model, s.motions, opts).svg
   expect(hi).toContain('viewBox="0 0 180 51" width="960" height="272"')
-  expect(lo).toContain('viewBox="0 0 120 34" width="960" height="272"')
   // The hero art carries its 1.5x rarity slot as currentColor.
   expect(hi).toMatch(/(fill|stroke)="currentColor"/)
 })
@@ -305,7 +298,7 @@ test('the rest scenario at 1.5: viewBox 0 0 180 51 at the same rendered width', 
 const SMIL = { smil: true, width: 960, motion: 'full' as const }
 const hiSvg = (name: Parameters<typeof stage>[0], smil = true) => {
   const s = stage(name)
-  return renderSvg(s.hires, s.motions, { ...SMIL, smil, now: s.now })
+  return renderSvg(s.model, s.motions, { ...SMIL, smil, now: s.now })
 }
 const knightHi = spriteFor('hero', 'knight')
 const defOf = (art: Parameters<typeof strokePaths>[0], slot: number | null) =>
@@ -368,7 +361,6 @@ test('an action that starts after the next redraw carries none of its frames', (
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, moving), t, moving, BOX, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const svg = renderSvg(model, t.active(moving), { ...SMIL, now: moving })
   const f = knightHi.frames
@@ -395,7 +387,6 @@ test('two queued casts both throw from the stepped position', () => {
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const svg = renderSvg(model, t.active(NOW), { ...SMIL, now: NOW })
   const launches = [
@@ -409,11 +400,11 @@ test('two queued casts both throw from the stepped position', () => {
 
 test("the bolt scenario flies a fireball from the mage's front edge to the target's centre", () => {
   const s = stage('bolt')
-  const svg = renderSvg(s.hires, s.motions, { ...SMIL, now: s.now })
+  const svg = renderSvg(s.model, s.motions, { ...SMIL, now: s.now })
   const fireball = spriteFor('effect', 'fireball').hires
   expect(svg).toContain(defOf(fireball, null))
-  const mage = s.hires.actors.find((a) => a.key === 'h2')
-  const goblin = s.hires.actors.find((a) => a.key === 'e1')
+  const mage = s.model.actors.find((a) => a.key === 'h2')
+  const goblin = s.model.actors.find((a) => a.key === 'e1')
   if (!mage || !goblin) throw new Error('missing actors')
   const place = (a: typeof mage) => ({
     x: a.x,
@@ -454,7 +445,6 @@ test('in the B half of a second, or during a hit, the 1.5x SMIL Svg defines no d
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   expect(model.actors.every((a) => a.pose === 'idle_b')).toBe(true)
   const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
@@ -462,7 +452,7 @@ test('in the B half of a second, or during a hit, the 1.5x SMIL Svg defines no d
   // The same document as at rest in the A half, but for the clock's begin offsets.
   expect(Math.abs(svg.length - hiSvg('rest').length)).toBeLessThan(100)
   const s = stage('strike')
-  const goblin = s.hires.actors.find((a) => a.key === 'e1')
+  const goblin = s.model.actors.find((a) => a.key === 'e1')
   if (!goblin) throw new Error('no goblin')
   expect(goblin.pose).toBe('hit')
   expect(hiSvg('strike')).not.toContain(defOf(goblin.art, goblin.raritySlot))
@@ -483,7 +473,6 @@ test('without SMIL, a hero in its hit frame carries its idle rarity colour under
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const svg = renderSvg(model, t.active(at), { ...SMIL, smil: false, now: at })
   const common = colour(RARITY_RGB.common ?? 0)
@@ -507,7 +496,6 @@ test('under SMIL an effect draws under the numbers, as on the pixel surfaces', (
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const svg = renderSvg(model, t.active(at), { ...SMIL, now: at })
   const burst = svg.indexOf(`href="#${''}`, svg.indexOf('values="1;1" begin'))
@@ -529,7 +517,6 @@ test('a backdrop is one def of stroked and filled paths, used under the actors i
   const base = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
     compact: false,
     motion: 'still',
-    scale: HIRES_SCALE,
   })
   // A sky over a one-pixel ground row, a one-pixel post down its left edge.
   const idx = new Uint8Array(240 * 51).fill(1)
@@ -581,12 +568,11 @@ test('backdropPlacements covers a frame of any width with mirrored copies, every
   ])
 })
 
-/** The Svg of `v` after `effects` at `at`, at `scale`. */
+/** The full stage's Svg of `v` after `effects` at `at`. */
 function svgOf(
   v: GameView,
   effects: StageEffect[] = [],
   at = NOW,
-  scale: 1 | 1.5 = HIRES_SCALE,
   opts: Opts = { smil: true, motion: 'full' },
 ) {
   const t = new StageTimeline()
@@ -595,7 +581,6 @@ function svgOf(
   const model = stageAt(stagedState(v, WORLD_DEFAULT, t, at), t, at, BOX, {
     compact: false,
     motion: opts.motion,
-    scale,
   })
   return renderSvg(model, t.active(at), { ...opts, now: at, width: 960 })
 }
@@ -605,7 +590,7 @@ const party = (patch: Partial<GameView['heroes'][number]>): GameView => {
   return v
 }
 
-test('hasted, the idle pair turns on a half-second clock with the streak under it; at 1 the bob does', () => {
+test('hasted, the idle pair turns on a half-second clock with the streak under it', () => {
   const hi = svgOf(party({ hasted: true }))
   expect(balanced(hi)).toBe(true)
   expect(hi).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
@@ -614,11 +599,8 @@ test('hasted, the idle pair turns on a half-second clock with the streak under i
   }
   const calm = svgOf(wave())
   expect(calm).not.toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
-  const lo = svgOf(party({ hasted: true }), [], NOW, 1)
-  expect(lo).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
-  expect(lo).not.toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
   // Under still the streak draws and nothing bobs.
-  const still = svgOf(party({ hasted: true }), [], NOW, HIRES_SCALE, {
+  const still = svgOf(party({ hasted: true }), [], NOW, {
     smil: true,
     motion: 'still',
   })
@@ -628,17 +610,13 @@ test('hasted, the idle pair turns on a half-second clock with the streak under i
 
 test('a mishap flashes red beside the white flash filter and holds the tint until the hit', () => {
   const enraged: Effect[] = [{ k: 'enraged', enemyId: 'e1' }]
-  for (const scale of [1, HIRES_SCALE] as const) {
-    const s = svgOf(wave(), enraged, NOW + 10, scale)
-    expect(balanced(s), `${scale}`).toBe(true)
-    expect(s, `${scale}`).toContain(`<filter id="r"><feFlood flood-color="${colour(ENRAGE_RGB)}"/>`)
-    expect(s, `${scale}`).toContain(`<filter id="f"><feFlood flood-color="#fff"/>`)
-    expect(s, `${scale}`).toContain(
-      `<set attributeName="opacity" to="${ENRAGE_TINT}" begin="-0.01s"/>`,
-    )
-    const flat = svgOf(wave(), enraged, NOW + 1000, scale, { smil: false, motion: 'full' })
-    expect(flat, `${scale}`).toContain(`filter="url(#r)" opacity="${ENRAGE_TINT}"`)
-  }
+  const s = svgOf(wave(), enraged, NOW + 10)
+  expect(balanced(s)).toBe(true)
+  expect(s).toContain(`<filter id="r"><feFlood flood-color="${colour(ENRAGE_RGB)}"/>`)
+  expect(s).toContain(`<filter id="f"><feFlood flood-color="#fff"/>`)
+  expect(s).toContain(`<set attributeName="opacity" to="${ENRAGE_TINT}" begin="-0.01s"/>`)
+  const flat = svgOf(wave(), enraged, NOW + 1000, { smil: false, motion: 'full' })
+  expect(flat).toContain(`filter="url(#r)" opacity="${ENRAGE_TINT}"`)
   // No mishap, no red in the document.
   expect(svgOf(wave())).not.toContain('<filter id="r"')
 })
@@ -646,69 +624,57 @@ test('a mishap flashes red beside the white flash filter and holds the tint unti
 test('a camp lights the campfire, then fades it, under SMIL and without it', () => {
   const camp: Effect[] = [{ k: 'camp', heals: [] }]
   const campfire = spriteFor('effect', 'campfire')
-  for (const scale of [1, HIRES_SCALE] as const) {
-    const s = svgOf(wave(), camp, NOW + 1000, scale)
-    expect(s, `${scale}`).toContain(
-      `keyTimes="0;${Number((CAMPFIRE_MS / (CAMPFIRE_MS + CAMPFIRE_FADE_MS)).toFixed(3))};1" begin="-1s"`,
-    )
-    const art = scale === 1 ? campfire.full : campfire.hires
-    expect(s, `${scale}`).toContain(strokePaths(art, null))
-    const flat = svgOf(wave(), camp, NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS / 2, scale, {
-      smil: false,
-      motion: 'full',
-    })
-    expect(flat, `${scale}`).toContain('opacity="0.5"/>')
-  }
+  const s = svgOf(wave(), camp, NOW + 1000)
+  expect(s).toContain(
+    `keyTimes="0;${Number((CAMPFIRE_MS / (CAMPFIRE_MS + CAMPFIRE_FADE_MS)).toFixed(3))};1" begin="-1s"`,
+  )
+  expect(s).toContain(strokePaths(campfire.hires, null))
+  const flat = svgOf(wave(), camp, NOW + CAMPFIRE_MS + CAMPFIRE_FADE_MS / 2, {
+    smil: false,
+    motion: 'full',
+  })
+  expect(flat).toContain('opacity="0.5"/>')
 })
 
-test('guarding heroes hold the stance with no idle clock; the front hero wears the shield at 1.5', () => {
+test('guarding heroes hold the stance with no idle clock; the front hero wears the shield', () => {
   const hi = svgOf(party({ guarding: true }))
   expect(balanced(hi)).toBe(true)
   // Only the enemies still bob.
   expect(hi.match(/repeatCount="indefinite"/g)?.length).toBe(2 * wave().enemies.length)
   expect(hi).toContain(strokePaths(SHIELD, null))
-  const lo = svgOf(party({ guarding: true }), [], NOW, 1)
-  expect(lo.match(/repeatCount="indefinite"/g)?.length).toBe(wave().enemies.length)
-  expect(lo).not.toContain(strokePaths(SHIELD, null))
-  const knight = spriteFor('hero', 'knight')
-  expect(lo).toContain(strokePaths(stance(knight.full).art, knight.raritySlot))
 })
 
 test('a level-up flashes gold beside the white flash filter and its deltas rise as gold text', () => {
   const up: StageEffect[] = [{ k: 'level_up', heroId: 'h1', level: 6, deltas: { atk: 3, def: 2 } }]
   const gold = colour(LEVEL_RGB)
-  for (const scale of [1, HIRES_SCALE] as const) {
-    const s = svgOf(wave(), up, NOW + 10, scale)
-    expect(balanced(s), `${scale}`).toBe(true)
-    expect(s, `${scale}`).toContain(`<filter id="g"><feFlood flood-color="${gold}"/>`)
-    expect(s, `${scale}`).toContain(`<filter id="f"><feFlood flood-color="#fff"/>`)
-    expect(s, `${scale}`).toContain(`fill="${gold}"`)
-    expect(s, `${scale}`).toContain('+3 atk  +2 def</text>')
-    const flat = svgOf(wave(), up, NOW + 10, scale, { smil: false, motion: 'full' })
-    expect(flat, `${scale}`).toContain('filter="url(#g)"/>')
-  }
+  const s = svgOf(wave(), up, NOW + 10)
+  expect(balanced(s)).toBe(true)
+  expect(s).toContain(`<filter id="g"><feFlood flood-color="${gold}"/>`)
+  expect(s).toContain(`<filter id="f"><feFlood flood-color="#fff"/>`)
+  expect(s).toContain(`fill="${gold}"`)
+  expect(s).toContain('+3 atk  +2 def</text>')
+  const flat = svgOf(wave(), up, NOW + 10, { smil: false, motion: 'full' })
+  expect(flat).toContain('filter="url(#g)"/>')
   expect(svgOf(wave())).not.toContain('<filter id="g"')
 })
 
 test('a travel steps the party off fading and on from the left, under SMIL and without it', () => {
   const traveled: StageEffect[] = [{ k: 'traveled', from: 1, to: 3 }]
-  for (const scale of [1, HIRES_SCALE] as const) {
-    const px = Math.round(TRAVEL_PX * scale)
-    const s = svgOf(wave(), traveled, NOW + 100, scale)
-    expect(balanced(s), `${scale}`).toBe(true)
-    expect(s, `${scale}`).toContain(`values="0 0;${px} 0" begin="-0.1s"`)
-    expect(s, `${scale}`).toContain(`values="1;0" begin="-0.1s" dur="0.5s" fill="freeze"`)
-    expect(s, `${scale}`).toContain(`values="-${px} 0;0 0" begin="0.4s"`)
-    // Drawn once the backdrop has changed, the party starts unseen and fades in.
-    const on = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS + 100, scale)
-    expect(on, `${scale}`).toContain(`values="0;1" begin="-0.1s" dur="0.5s" fill="freeze"`)
-    expect(on, `${scale}`).not.toContain(`values="1;0" begin=`)
-    const flat = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS / 2, scale, {
-      smil: false,
-      motion: 'full',
-    })
-    expect(flat, `${scale}`).toContain('opacity="0.5"')
-  }
+  const px = Math.round(TRAVEL_PX * HIRES_SCALE)
+  const s = svgOf(wave(), traveled, NOW + 100)
+  expect(balanced(s)).toBe(true)
+  expect(s).toContain(`values="0 0;${px} 0" begin="-0.1s"`)
+  expect(s).toContain(`values="1;0" begin="-0.1s" dur="0.5s" fill="freeze"`)
+  expect(s).toContain(`values="-${px} 0;0 0" begin="0.4s"`)
+  // Drawn once the backdrop has changed, the party starts unseen and fades in.
+  const on = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS + 100)
+  expect(on).toContain(`values="0;1" begin="-0.1s" dur="0.5s" fill="freeze"`)
+  expect(on).not.toContain(`values="1;0" begin=`)
+  const flat = svgOf(wave(), traveled, NOW + TRAVEL_OFF_MS / 2, {
+    smil: false,
+    motion: 'full',
+  })
+  expect(flat).toContain('opacity="0.5"')
 })
 
 test('a victory pose is carried from the kill, however far ahead it starts', () => {
@@ -727,7 +693,7 @@ test('a victory pose is carried from the kill, however far ahead it starts', () 
 test('the ladder: each rung drops one thing in order, never a drawn frame, and a picture under the cap stays on the first', () => {
   const s = stage('strike')
   const opts = { ...SMIL, now: s.now }
-  const at = ([0, 1, 2, 3] as const).map((rung) => renderSvg(s.hires, s.motions, { ...opts, rung }))
+  const at = ([0, 1, 2, 3] as const).map((rung) => renderSvg(s.model, s.motions, { ...opts, rung }))
   const [first, still, unlit, bare] = at
   if (!first || !still || !unlit || !bare) throw new Error('no rung')
   // The first rung: the idle pair on its clock, the hit filter, the backdrop painting.
@@ -751,5 +717,5 @@ test('the ladder: each rung drops one thing in order, never a drawn frame, and a
     if (i > 0) expect(doc.length, `rung ${i}`).toBeLessThan(at[i - 1]?.length ?? 0)
   }
   // Under the cap, the ladder answers the first rung and its picture.
-  expect(fitSvg(s.hires, s.motions, opts)).toEqual({ svg: first, rung: 0 })
+  expect(fitSvg(s.model, s.motions, opts)).toEqual({ svg: first, rung: 0 })
 })

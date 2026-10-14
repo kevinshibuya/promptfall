@@ -194,19 +194,18 @@ function placed(
 }
 
 /**
- * ADR 0006's fuller legal frame at `scale`: a 48 × 34 (72 × 51) boss and four 16 × 16 (24 × 24)
- * enemies dithered with index (x + 3y) % 16 + 1, two of the enemies dissolving, three checker
- * heroes with distinct palettes, a chest and its item. `acting`: the boss 60 ms into a lunge action with its
- * wind-up and strike as dithered frames of its own, the first hero taking the hit.
+ * ADR 0006's fuller legal frame at 1.5: a 72 × 51 boss and four 24 × 24 enemies dithered with
+ * index (x + 3y) % 16 + 1, two of the enemies dissolving, three checker heroes with distinct
+ * palettes, a chest and its item. `acting`: the boss 60 ms into a lunge action with its wind-up and
+ * strike as dithered frames of its own, the first hero taking the hit.
  */
 export function fullerFrame(
-  scale: 1 | 1.5,
   acting: boolean,
   now: number,
 ): { model: StageModel; motions: Motion[] } {
+  const scale = 1.5
   const k = (v: number) => Math.round(v * scale)
   const boss = dithered(k(48), k(34), 1)
-  const frames = acting && scale !== 1
   const actors = [
     placed(
       'e0',
@@ -215,8 +214,8 @@ export function fullerFrame(
       0,
       false,
       1,
-      frames ? { windup: dithered(k(48), k(34), 7), strike: dithered(k(48), k(34), 8) } : {},
-      frames ? 'windup' : 'idle',
+      acting ? { windup: dithered(k(48), k(34), 7), strike: dithered(k(48), k(34), 8) } : {},
+      acting ? 'windup' : 'idle',
     ),
     ...[0, 1, 2, 3].map((i) =>
       placed(

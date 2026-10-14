@@ -469,14 +469,14 @@ const NOW = 1_000_000
 
 export function scenarioFrame(name: (typeof SCENARIOS)[number]): Fixed {
   const s = stage(name)
-  return { name, model: s.hires, motions: s.motions, now: s.now }
+  return { name, model: s.model, motions: s.motions, now: s.now }
 }
 
 export function fullerFrames(): Fixed[] {
   const zones = Object.keys(BACKDROPS).sort((a, b) => Number(a) - Number(b))
   return [false, true].flatMap((acting) =>
     [null, ...zones].map((zone) => {
-      const f = fullerFrame(1.5, acting, NOW)
+      const f = fullerFrame(acting, NOW)
       const backdrop = zone === null ? null : (BACKDROPS[zone]?.hires ?? null)
       return {
         name: `fuller ${acting ? 'lunging' : 'at rest'}, ${zone === null ? 'no backdrop' : `zone ${zone}`}`,

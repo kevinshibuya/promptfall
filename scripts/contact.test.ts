@@ -31,20 +31,19 @@ describe('contact', () => {
     expect([readPng(slime).width, readPng(slime).height]).toEqual([12, 8])
   })
 
-  it('writes each sprite and stage view at 1.5x beside the 1x one', () => {
+  it('writes each sprite at 1.5x beside the 1x one, and each stage view at 1.5x alone', () => {
     const dir = mkdtempSync(join(tmpdir(), 'contact-'))
     const out = join(dir, 'out')
     contact({ kind: 'zone', zone: 1 }, { out, native: join(dir, 'native') })
     const folder = join(out, 'zone-1')
     const hires = readPng(join(folder, 'enemy-road_slime-hires.png'))
     expect([hires.width, hires.height]).toEqual([96, 96])
+    const lo = readPng(join(folder, 'enemy-road_slime.png'))
+    expect([lo.width, lo.height]).toEqual([96, 96])
     for (const view of ['stage-rest', 'stage-boss', 'stage-turn']) {
-      expect(existsSync(join(folder, `${view}-1x.png`)), view).toBe(true)
+      expect(existsSync(join(folder, `${view}.png`)), view).toBe(true)
+      expect(existsSync(join(folder, `${view}-1x.png`)), view).toBe(false)
     }
-    const hi = readFileSync(join(folder, 'stage-boss.png'))
-    const lo = readFileSync(join(folder, 'stage-boss-1x.png'))
-    expect([readPng(join(folder, 'stage-boss-1x.png')).width]).toEqual([720])
-    expect(hi.equals(lo)).toBe(false)
   })
 
   it("writes each hero's rarity variants at 1x and 1.5x", () => {
