@@ -98,13 +98,16 @@ test('the view carries the tallies and the recruits remaining to each guarantee'
   expect(fresh.tallies.enemies).toEqual({})
   expect(fresh.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
 
+  // The call opens a wave: its enemy and the draw come on together, and the sandbox kills the front.
   let s = step(s0, { t: 'tool_call' }).state
+  const front = s.encounter?.enemies[0]
+  if (!front) throw new Error('nothing spawned')
+  const seen = s.encounter?.enemies.filter((e) => e.def === front.def).length
   s = step(s, { t: 'sandbox_item', base: 'oak_staff', rarity: 'epic' }).state
   s = { ...s, guarantee: { rare: 19, epic: 3, legendary: 7 } }
   const v = toGameView(s, 'a1', false, account)
-  const def = Object.keys(s.tallies.enemies)[0]
-  if (!def) throw new Error('nothing seen')
-  expect(v.tallies.enemies[def]).toEqual({ seen: 1, defeated: 1 })
+  expect(v.tallies.enemies).toEqual(s.tallies.enemies)
+  expect(v.tallies.enemies[front.def]).toEqual({ seen, defeated: 1 })
   expect(v.tallies.collection.oak_staff?.epic).toBe(1)
   expect(v.tallies.drops.epic).toBe(1)
   expect(v.tallies.goldEarned).toBe(s.tallies.goldEarned)
