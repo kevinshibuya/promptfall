@@ -11,11 +11,13 @@ import { stagedState } from './staged'
 import { backdropPlacements, fitSvg, framesInUse, renderSvg, strokePaths } from './svg'
 import { type Motion, type StageEffect, StageTimeline } from './timeline'
 import {
+  BLINK_MS,
   CAMPFIRE_FADE_MS,
   CAMPFIRE_MS,
   CLASS_RGB,
   ENRAGE_RGB,
   ENRAGE_TINT,
+  FLASH_MS,
   HASTE_FRAME_MS,
   HIRES_SCALE,
   HUDDLE_MS,
@@ -637,12 +639,47 @@ test('a camp lights the campfire, then fades it, under SMIL and without it', () 
   expect(flat).toContain('opacity="0.5"/>')
 })
 
-test('guarding heroes hold the stance with no idle clock; the front hero wears the shield', () => {
+test('guarding heroes hold the stance with no idle clock; the front hero holds the big shield', () => {
   const hi = svgOf(party({ guarding: true }))
   expect(balanced(hi)).toBe(true)
   // Only the enemies still bob.
   expect(hi.match(/repeatCount="indefinite"/g)?.length).toBe(2 * wave().enemies.length)
-  expect(hi).toContain(strokePaths(SHIELD, null))
+  expect(hi).toContain(strokePaths(SHIELD.hires, null))
+})
+
+test("an enemy's hit under Guard flashes the shield white in the struck hero's flash, under SMIL and without it", () => {
+  const blow: StageEffect[] = [
+    { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+    { k: 'hit', by: 'e1', target: 'h2', amount: 7 },
+  ]
+  const impact = NOW + WINDUP_HOLD_MS + LUNGE_MS / 2
+  const white = (begin: number, dur: number) =>
+    new RegExp(
+      `translate\\(-?\\d+ -?\\d+\\)" filter="url\\(#f\\)" opacity="0"><animate attributeName="opacity" values="1;0" begin="${begin / 1000}s" dur="${dur / 1000}s"/></use>`,
+    )
+  // Drawn before the blow, the shield's white is scheduled at the impact for the hero's blink.
+  const hi = svgOf(party({ guarding: true }), blow, NOW)
+  expect(balanced(hi)).toBe(true)
+  expect(hi).toMatch(white(impact - NOW, BLINK_MS))
+  expect(svgOf(party({ guarding: true }), [], NOW)).not.toContain('filter="url(#f)" opacity="0"')
+  // The compact stage holds its white for the whole flash, as the struck hero's.
+  const t = new StageTimeline()
+  const v = party({ guarding: true })
+  t.observe(v, NOW)
+  t.onEffects(blow, NOW)
+  const box = { columns: 52, rows: 4 }
+  const compact = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, box, {
+    compact: true,
+    motion: 'full',
+  })
+  const lo = renderSvg(compact, t.active(NOW), { smil: true, motion: 'full', now: NOW, width: 960 })
+  expect(lo).toContain(strokePaths(SHIELD.compact, null))
+  expect(lo).toMatch(white(impact - NOW, FLASH_MS))
+  // Without SMIL, the shield is white at the impact and plain before it.
+  const flatWhite = /translate\(-?\d+ -?\d+\)" filter="url\(#f\)"\/>/
+  const flat = { smil: false, motion: 'full' } as const
+  expect(svgOf(party({ guarding: true }), blow, impact, flat)).toMatch(flatWhite)
+  expect(svgOf(party({ guarding: true }), blow, impact - 1, flat)).not.toMatch(flatWhite)
 })
 
 /** A stage that saw the party off or on guard, then the guard effect turning it `on` at NOW. */
