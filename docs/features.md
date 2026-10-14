@@ -117,34 +117,40 @@ moving on.
 
 **Reactive events.** The fight answers what Claude is doing, on the stage and in the combat log, and
 never with a toast or a cue. While Claude works on a prompt the party has Haste: the heroes' gauges
-fill a quarter faster and they bob twice as fast, each trailing a speed streak in its class's
-colour, and the log says "The party quickens." The compact stage shows the faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three minutes of
-battle with no sign of work, and the log says "The party slows." A subagent's turn leaves it alone.
-A failed tool call enrages the strongest enemy on the field: a world boss, then a zone boss, then a
-turn boss, then the wave enemy that hits hardest, the toughest and then the front-most of equals. It
-flashes red and stays tinted red until its next hit, which lands half again as hard, and the log
-says "Claude stumbles. Bandit Captain is enraged!" With no enemy on the field, or the strongest
-already enraged, nothing happens, and stopping Claude or answering no to a prompt is no stumble. A
-compaction makes the party camp: a campfire burns between the party and the enemies for about four
-seconds, every hero heals half its HP and the fallen get up at half, as at a rest, and the log says
-"The party makes camp while Claude gathers its thoughts." The fight then holds where it stands, every
-gauge, enemy and queued enemy kept, until camp breaks at the next prompt or tool call, a travel or a
-world boss appearing, the session ending, or `g` on the band or `/promptfall go`, and the log says
-"The party breaks camp." The camp starts as the compaction starts, from a manual, auto or plugin
-compaction of the main conversation, never the engine's precompute or a subagent's own. While the
-party camps the enemy window's rows go blank but a dim `camping`, the message window shows
+fill a quarter faster, they bob twice as fast, and each hero standing trails light speed lines from
+its back in a pale tint of its class's colour, flickering with the bob, and the log says "The party
+quickens." A fallen hero shows no lines, nor does one in the guard stance or at camp, and the compact
+stage shows the faster bob alone. A long turn stays hasted. Haste ends with the turn, or after three
+minutes of battle with no sign of work, and the log says "The party slows." A subagent's turn leaves
+it alone. A failed tool call enrages the strongest enemy on the field: a world boss, then a zone
+boss, then a turn boss, then the wave enemy that hits hardest, the toughest and then the front-most
+of equals, so a zone boss behind a field rat takes it. It flashes red and stays tinted red until its
+next hit, which lands half again as hard, and the log says "Claude stumbles. Bandit Captain is
+enraged!" With no enemy on the field, the strongest already enraged, or the party camped, nothing
+happens, and stopping Claude or answering no to a prompt is no stumble. A compaction makes the party
+camp as it starts, from a manual, auto or plugin compaction of the main conversation, never the
+engine's precompute or a subagent's own: every hero heals half its HP and the fallen get up at half,
+as at a rest, and the log says "The party makes camp while Claude gathers its thoughts." The fight
+pauses. The enemies walk off the stage with their HP kept, the party huddles at a campfire with the
+bob stopped, the enemy window's rows go blank but a dim `camping`, the message window shows
 `g: back to the fight` under the newest log line, and the compact window shows `camping` for the
-front enemy. A failed tool call while camped
-enrages nobody. With a world boss engaged the party heals and fights on. While Claude Code shows a permission
-prompt the party stands guard: the heroes lean into a guard stance and stop bobbing, the front hero
-standing raises a small shield on the full stage, and the heroes take half damage and
-attack nobody while the enemies fight on. The log says "The party stands guard." The party lowers
-its guard when the call resolves, allowed or denied, or after two minutes of battle with no answer.
-Guard comes from Claude Code's permission-request hook, which fires only as a permission prompt
-shows and never for an auto-allowed call. Haste, Enrage, Camp and Guard leave XP, gold and drops
-alone, and a tool's enemy pays by its toughness, so faking an event buys nothing but the picture.
-The server caps each kind on its own clock, and the plugin paces them under those caps. Under Motion
-still the streaks and the stance still draw and the bob stays stopped.
+front enemy. Every gauge, enemy and queued enemy holds until the party breaks camp: at the next
+prompt or tool call, a travel, a world boss appearing, the session ending, or `g` on the band or
+`/promptfall go`. Then the fire goes out, the heroes step back to their slots, the same enemies walk
+back in with the HP they had, and the log says "The party breaks camp." Haste never starts while
+camped. With a world boss engaged there is no pause: the fire burns mid-field for four seconds, the
+party heals and fights on. While Claude Code shows a permission prompt the party stands guard: the
+heroes lean into a guard stance, stop bobbing and huddle in toward the front hero standing, who holds
+a big blue shield on the enemies' side; a hit lands on the shield with a white flash. The heroes take
+half damage and attack nobody while the enemies fight on, and the log says "The party stands guard."
+The party lowers its guard and steps back to its slots when the call resolves, allowed or denied, or
+after two minutes of battle with no answer. Guard comes from Claude Code's permission-request hook,
+which fires only as a permission prompt shows and never for an auto-allowed call; the terminal stops
+drawing the band while the prompt is up, so the huddle shows once it is answered. Haste, Enrage, Camp
+and Guard leave XP, gold and drops alone, and a tool's enemy pays by its toughness, so faking an
+event buys nothing but the picture. The server caps each kind on its own clock, and the plugin paces
+them under those caps. Under Motion still the speed lines draw static, the stance and the shield
+still draw, and the bob stays stopped.
 
 **Combat log.** The Party tab's message window types out each action as the stage plays it, in
 Dragon Quest's words: "Aldric hits Wood Goblin for 12.", "Wood Goblin is defeated!". Hit lines
