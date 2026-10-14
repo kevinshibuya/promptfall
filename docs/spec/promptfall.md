@@ -950,7 +950,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   terminal shows beyond it. At 255 columns and 22 rows the PNG is 2040 × 352.
   Every other terminal draws one Raster of the same placement in cells, up to
   512 columns: the stage in half-blocks, the strip and the line in box-drawing
-  text, each window's side joining the line. The Raster's line takes the
+  text, each window's side joining the line. The Raster's stage is the one
+  1.5x scene the Image draws, composed the same way and resampled into the
+  cells' pixels (one a column, two a row) at the Image's zoom-out factor, the
+  scene's pixels over the cells', 3 to 2 at full size: each cell pixel takes
+  the one scene colour, clear included, with the most area under it, so no new
+  colour enters the cells (ADR 0018). Damage numbers stay text cells, each at
+  the cell its scene position maps to, over the scene pixel there. The Raster's line takes the
   margin only when the margin is two cells or more a side, so 160 to 163
   columns draw like 160, and over the stage's top row it opens where an actor's
   art reaches it, so a boss keeps its head. Ghostty and cmux fit the Image to
@@ -971,10 +977,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   playfield's width: the Image zooms the whole scene out into the rows left,
   widened so it still spans the playfield, down to 4 rows, the 5 strip rows
   under it; the
-  Raster keeps its art size and shows the stage's bottom rows, the sky cut,
-  down to the tallest actor on it (8 rows for the party, 12 with a turn boss,
-  17 with a zone or world boss, held through a departed boss's dissolve)
-  (ADR 0010). Compact, when the full band does
+  Raster crops the scene to the stage's bottom rows, three scene pixels a
+  row, the sky cut, and resamples that, down to the tallest actor on it
+  (8 rows for the party, 12 with a turn boss, 17 with a zone or world boss,
+  held through a departed boss's dissolve) (ADR 0010). It does not zoom out:
+  at 8 rows it has 16 pixels of height, and a 24-pixel figure scaled into
+  them is a smear. Compact, when the full band does
   not fit or `bodyColumns` is 100 to 115: one 6-row picture, the 4-row stage
   (sprites downsampled) beside one party window (three hero rows, the front
   enemy, the command line in its border), the window on the right with its
@@ -1048,22 +1056,24 @@ flags. No second server program, no Postgres, no Redis, no worker.
   table and the cue set are unchanged. Spawn by tool kind shows as the enemy
   that walks in and has no line of its own. The other four:
   - **Haste**: while the view says a hero is hasted its idle bob runs on a
-    250 ms clock instead of 500 ms, and at 1.5× and in the SMIL picture it
+    250 ms clock instead of 500 ms, and on the full stage, on every surface, it
     trails a streak two pixels tall in its class colour (`CLASS_RGB`) behind its
-    back; at 1× and on the compact stage the faster bob alone. The streak
+    back; on the compact stage the faster bob alone. The streak
     follows the state, so it holds across ticks and goes when Haste ends; under
     Motion still it draws and the bob stays stopped. The party window's gauges
     fill at the sim's effective per-step rate (`heroFill`, Haste and Guard
     applied), so the strip agrees with the stage.
   - **Enrage**: at the mishap the enemy flashes red, the white flash's
-    mechanism in `ENRAGE_RGB` (a blink at 1.5×, the whole flash at 1×), with a
+    mechanism in `ENRAGE_RGB` (a blink on the full stage, the whole flash on
+    the compact stage), with a
     `redflash` SMIL filter beside `flash`, emitted only in a document that uses
     it. From then until its next hit's impact the enemy's palette is mixed 40%
     toward red (the filter at opacity 0.4 in the SMIL picture). The sim clears
     the flag in the tick that resolves the hit, before the stage plays it, so
     the timeline holds the tint to that hit's show time, and drops it when the
     enemy departs or a later view no longer has it enraged.
-  - **Camp**: the `effect:campfire` sprite, 1× and 1.5× art, sits on the
+  - **Camp**: the `effect:campfire` sprite, its 1.5× art (its compact art on
+    the compact stage), sits on the
     ground between the enemies' line and the party for 4 seconds, then fades
     over 400 ms; each hero's heal lands at the camp's start with a green
     rising number, from the amounts the effect carries.
@@ -1071,9 +1081,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
     `guard` pose derived from its idle (`stance()` in `sprites/derive.ts`: a
     one-row squash leaned one column per 12 rows toward the enemies, feet kept,
     no drawn frame, within ADR 0007) and the idle bob stops; a hit still shows
-    the hit frame. At 1.5× and in the SMIL picture a small shield drawn in code
-    sits over the party's front hero, its first hero standing; at 1× the stance
-    alone.
+    the hit frame. On the full stage, on every surface, a small shield drawn in
+    code sits over the party's front hero, its first hero standing; on the
+    compact stage the stance alone.
   - The log prints six lines for four effects, each at its effect's time and
     keyed as a line that is never dropped: "The party quickens." and "The
     party slows." for haste on and off; "Claude stumbles. Wood Goblin is
@@ -1081,10 +1091,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
     its thoughts."; "The party stands guard." and "The party lowers its
     guard." for guard on and off.
   - Each visual has a golden scenario, `haste`, `enrage`, `camp` and `guard`,
-    at both densities and in the SMIL picture, under the size caps.
+    on every surface (the Raster, the Image and the SMIL picture), under the
+    size caps.
 - Stage moments and lines of the pull (spec #132). Each has a golden
   scenario, `travel`, `level-up`, `victory`, `boss-kill-travel` and
-  `boss_move`, at both densities and in the SMIL picture, under the size caps.
+  `boss_move`, on every surface (the Raster, the Image and the SMIL picture),
+  under the size caps.
   - **Travel**: on `traveled` the heroes step off toward the right
     (`TRAVEL_PX`), fading over 500 ms (`TRAVEL_OFF_MS`); the enemies the travel left
     stand until the backdrop changes to the destination's at the end of it,
@@ -1113,8 +1125,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
     boss's row is held through the step-off, so the arrival's words land at the
     new zone's first frame. With Farm here the party holds and does not walk.
     The pose is a slot: the drawn 1.5× victory frame of the hero's class where
-    the manifest has one, its idle where it has none, and the idle always at 1×
-    (ADR 0007). A turn boss and the world boss get no hold.
+    the manifest has one, its idle where it has none, on every surface, and the
+    idle always on the compact stage (ADR 0007, ADR 0018). A turn boss and the world boss get no hold.
   - **Boss moves** (§4.2): the log prints "Gorvax strikes twice!" as the act
     starts, then each hit's own line; "Gorvax heals itself for 40.", the White
     Mage's light burst playing on the boss, in place; "Gorvax's rage grows!" on
@@ -1420,9 +1432,9 @@ are excluded (no black mage with a shadowed face and glowing eyes under a wide
 brim, no white mage with red triangle trim, no archer in a green pointed cap).
 
 - Heroes, monsters and items in the NES style. A sprite may use 16 colours: its
-  1.5× art, for the stage on Image and Svg, fits 24 × 24 with at most 16
-  colours from a shared 128-colour master; its 1× art, for the Raster, the
-  compact stage and the list windows, fits 16 × 16 with at most 4 colours from
+  1.5× art, for the stage on every surface, fits 24 × 24 with at most 16
+  colours from a shared 128-colour master; its 1× art, for the compact stage
+  and the list windows, fits 16 × 16 with at most 4 colours from
   the NES master palette, the black outline included. One sprite per hero
   class plus an attack or cast pose; one palette slot takes the hero's rarity
   colour (Common grey, Uncommon green, Rare blue, Epic magenta, Legendary gold).

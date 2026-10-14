@@ -14,6 +14,17 @@ smaller on the Image and the desktop; the Raster, which cannot scale, shows the 
 zoom-out's widened scene, continues it with mirrored copies on each side, without a seam. The compact stage and a zone without a painting keep the ground strip
 of `ZONE_GROUND`. The `Svg` draws it as paths like any art, never an `<image>`.
 
+_ADR 0018 (2026-10-14): one cut per zone. The 1× cut retired with the 1× stage art: `pnpm
+backdrop` writes the 240 × 51 painting alone, and `art/backdrops/` is gone. The Raster draws the
+1.5× painting with the rest of the one scene, resampled into its cells, and keeps the crop on a
+short band for legibility, not because it cannot scale (ADR 0010's note). The fallback line
+below no longer holds: there is no 1× `Svg`, and in ADR 0018's strokes encoding the fuller frame
+at rest fits the cap over every zone on the first rung; lunging, it drops at worst the painting
+(the ladder's last rung). The rejection of an `<image>` has lost its second reason: Kevin
+confirmed on 2026-10-14 that the desktop app draws a PNG data URI in the stage picture. The
+painting is still drawn as paths, since strokes fit the cap; moving it to an image is ADR
+0018's later decision._
+
 Kevin asked for backdrops because the stage drew a flat strip under finished sprites
 (2026-10-08). The stage is a strip, not a canvas: 24 rows at rest. A painting designed around
 that, with its ground on the bottom edge, its calm low-contrast band where the actors stand and
