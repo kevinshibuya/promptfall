@@ -505,9 +505,10 @@ daily goal met ("Daily goal met: 40 gold"). A gold credit whose reason is neithe
 stipend, toasts nothing, and neither of the two prints a log line. Everyday toasts last four seconds and the weighty ones (a legendary drop, a
 recruit, a reward, a retreat, a world boss appearing, a revoked item) eight. Effects of one kind that
 land in the same burst, such as a boss kill levelling the party or a day of sales arriving at
-once, fold into one toast with the count and the sum ("3 items sold for 410 gold", "3
-achievements, 2,000 gold"), while a legendary, epic or rare drop, a vendored item, a recruit, a
-reward, a wipe, a retreat, a zone arrival or a goal met keeps its own. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
+once, fold into one toast with the count and the sum ("3 items sold for 410 gold"), while a
+legendary, epic or rare drop, a vendored item, a recruit, a reward, a wipe, a retreat, a zone
+arrival, an achievement or a goal met keeps its own. Achievements never fold: each toasts its
+step's words and gold, oldest first. Toasts follow the game, not the stage, except a held line: a drop's or a vendored item's
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.

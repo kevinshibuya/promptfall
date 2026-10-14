@@ -650,14 +650,31 @@ test('a one-off achievement toasts its step words', () => {
   ])
 })
 
-test('achievements in one burst fold into a count and the gold', () => {
+test('each achievement in a burst toasts on its own, oldest first, each with the goal cue', () => {
   const effects = [
     credited(100, 'achievement:kills:1'),
     credited(400, 'achievement:kills:2'),
     credited(1500, 'achievement:kills:3'),
   ]
   expect(toastsFor(effects, null, BOSSES)).toEqual([
-    { row: 'achievement', text: '3 achievements, 2,000 gold', timeoutMs: SHORT, cue: 'goal' },
+    {
+      row: 'achievement',
+      text: 'Achievement: a hundred kills, 100 gold',
+      timeoutMs: SHORT,
+      cue: 'goal',
+    },
+    {
+      row: 'achievement',
+      text: 'Achievement: a thousand kills, 400 gold',
+      timeoutMs: SHORT,
+      cue: 'goal',
+    },
+    {
+      row: 'achievement',
+      text: 'Achievement: ten thousand kills, 1,500 gold',
+      timeoutMs: SHORT,
+      cue: 'goal',
+    },
   ])
 })
 
