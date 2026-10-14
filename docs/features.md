@@ -242,8 +242,11 @@ Account tab, and the plain number inside tier 1.
 fight the world boss through the same routes as a player. Each one's name starts `[bot] `, and
 none ever holds a row on either leaderboard. A bot saved under an older name or sim version is
 minted again on the server's start, and its old account is deleted first, so the replaced bot
-leaves both boards with it. The public server runs six during the soft wave and
-none from the public listing on.
+leaves both boards with it. At normal speed each bot acts about once a minute. Bots buy item
+listings only below twice vendor value, keep listing at three times and up, and vendor their
+cheapest unequipped item through a batch when their inventory is full before trading. A player's
+bargain can sell while the bots' stock stays available to browse. The public server runs six
+during the soft wave with the same tuning and none from the public listing on.
 
 **Flags and the mint cap.** An HTTP server started with `PROMPTFALL_ADMIN_TOKEN` in its environment
 takes `POST /v1/admin/flags` with that token as a bearer and a body like `{"chat.enabled": false}`:

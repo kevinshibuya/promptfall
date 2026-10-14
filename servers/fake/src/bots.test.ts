@@ -8,7 +8,14 @@ import {
   MemoryKeyValue,
   weekStartOf,
 } from '@promptfall/protocol'
-import { type MigrationChain, RARITIES, type Rarity, SIM_VERSION } from '@promptfall/sim'
+import {
+  type Item,
+  type MigrationChain,
+  RARITIES,
+  type Rarity,
+  SIM_VERSION,
+  vendorValue,
+} from '@promptfall/sim'
 import { describe, expect, it } from 'vitest'
 import { BOT_NAMES, BOT_TICK_MS, botName } from './bot-config'
 import { rollBotState } from './bot-seed'
@@ -96,6 +103,7 @@ async function run(
     },
   }
   const lines: string[] = []
+  const scheduled: number[] = []
   const bots = startBots({
     client,
     host,
@@ -103,7 +111,10 @@ async function run(
     seed,
     count: COUNT,
     speed: 1,
-    schedule: () => ({ cancel: () => undefined }),
+    schedule: (ms) => {
+      scheduled.push(ms)
+      return { cancel: () => undefined }
+    },
     log: (line) => lines.push(line),
   })
   try {
@@ -144,7 +155,7 @@ async function run(
       records.push((await kv.get(`pf:acct:${saved.accountId}:record`)) as AccountRecord)
     }
     const stored = (await kv.get(BOARDS)) as StoredBoards
-    return { all, world, boards, stored, orders, records, lines, calls, kv }
+    return { all, world, boards, stored, orders, records, lines, calls, kv, scheduled }
   } finally {
     await listening.close()
   }
@@ -171,6 +182,118 @@ describe('bot population', () => {
 })
 
 describe('bots over HTTP', () => {
+  it("a full bot vendors its cheapest unequipped item before it acts, no bot buys over twice vendor value, a player's bargain sells, and the stock stays browsable", async () => {
+    const purchases: { listingId: string; price: number; vendor: number }[] = []
+    const full: { itemId?: string; wornId?: string; token?: string } = {}
+    const vendors: string[] = []
+    const actions: { room: boolean; worn: boolean }[] = []
+    let bargainId = ''
+    let ceilingId = ''
+    const { all, lines } = await run(1, 120, START, async (ledger, kv, client) => {
+      const state = rollBotState(1, 0)
+      const cheapest = state.inventory
+        .filter((item) => item.equippedBy === null)
+        .sort((a, b) => vendorValue(a) - vendorValue(b))[0]
+      const hero = state.roster[0]
+      if (!cheapest || !hero) throw new Error('no unequipped item or hero')
+      const worn: Item = {
+        id: 'bot-worn',
+        base: 'iron_sword',
+        rarity: 'common',
+        tier: 1,
+        affixes: [],
+        equippedBy: hero.id,
+        tradeableAt: null,
+      }
+      hero.equipment.weapon = worn.id
+      state.inventory.unshift(worn)
+      // The cheapest item is worn: selecting merely an unlisted item would stall.
+      expect(vendorValue(worn)).toBeLessThan(vendorValue(cheapest))
+      state.inventoryCap = state.inventory.length
+      const saved = await ledger.host.mint({ state, name: botName(0), linked: true, bot: true })
+      await kv.set('pf:bot:0', saved)
+      Object.assign(full, { itemId: cheapest.id, wornId: worn.id, token: saved.deviceToken })
+
+      const player = rollBotState(2, 0)
+      const item = player.inventory.find(
+        (item) => rarePlus(item.rarity) && item.equippedBy === null,
+      )
+      if (!item) throw new Error('no player item')
+      const ceilingItem = { ...item, id: 'player-ceiling' }
+      player.inventory = [item, ceilingItem]
+      const seller = await ledger.host.mint({ state: player, name: 'Bargains', linked: true })
+      for (const [goods, price] of [
+        [item, vendorValue(item) * 2 - 1],
+        [ceilingItem, vendorValue(item) * 2],
+      ] as const) {
+        const listed = await client.list(
+          { deviceToken: seller.deviceToken },
+          { kind: 'item', id: goods.id, price },
+        )
+        const event = listed.ok ? listed.delivery.events.at(-1)?.event : undefined
+        if (event?.t !== 'listed') throw new Error('player item not listed')
+        if (goods === item) bargainId = event.listingId
+        else ceilingId = event.listingId
+      }
+
+      const submit = client.submit.bind(client)
+      client.submit = async (batch, auth) => {
+        const ack = await submit(batch, auth)
+        if (ack.ok && auth.deviceToken === full.token) {
+          for (const event of batch.events) {
+            if (event.t === 'vendor') vendors.push(event.itemId)
+          }
+        }
+        return ack
+      }
+      const inspect = async (token: string) => {
+        if (token !== full.token) return
+        const before = await booted(client, { clientVersion: '0.1.0', deviceToken: token })
+        actions.push({
+          room: before.state.inventory.length < before.state.inventoryCap,
+          worn: before.state.inventory.some(
+            (item) => item.id === full.wornId && item.equippedBy !== null,
+          ),
+        })
+      }
+      // Keep the real HTTP calls; observe the state just before the bot trades.
+      const buy = client.buy.bind(client)
+      client.buy = async (auth, id) => {
+        await inspect(auth.deviceToken)
+        const result = await buy(auth, id)
+        if (result.ok) {
+          for (const { event } of result.delivery.events) {
+            if (event.t === 'bought' && event.goods.kind === 'item') {
+              purchases.push({
+                listingId: event.listingId,
+                price: event.price,
+                vendor: vendorValue(event.goods.item),
+              })
+            }
+          }
+        }
+        return result
+      }
+      const list = client.list.bind(client)
+      client.list = async (auth, input) => {
+        await inspect(auth.deviceToken)
+        return list(auth, input)
+      }
+    })
+    expect(vendors[0]).toBe(full.itemId)
+    expect(actions.length).toBeGreaterThan(0)
+    expect(actions.every((action) => action.room && action.worn)).toBe(true)
+    expect(lines.some((line) => /bot \[bot\] Ashgrove (buy|list) ok$/.test(line))).toBe(true)
+    expect(
+      lines.some((line) => / (no_space|buyer_full|hash_mismatch|item_equipped)$/.test(line)),
+    ).toBe(false)
+    expect(purchases.map((purchase) => purchase.listingId)).toContain(bargainId)
+    for (const purchase of purchases) expect(purchase.price).toBeLessThan(purchase.vendor * 2)
+    expect(all.map((listing) => listing.id)).toContain(ceilingId)
+    expect(all.length).toBeGreaterThanOrEqual(10)
+    expect(all.length).toBeLessThanOrEqual(40)
+  }, 120_000)
+
   it('after three rounds every bot has committed batches and shows as online', async () => {
     // A bot polls before it plays, so a batch that clears a zone leaves its presence a zone
     // behind its record until its next poll: one more poll each, and the two agree.
@@ -218,7 +341,8 @@ describe('bots over HTTP', () => {
     const boss = world.boss
     if (!boss) throw new Error('no boss')
     expect(boss.spawnedAt).toBe(grid)
-    expect(boss.maxHp).toBe(COUNT * BOSS_BASE_HP)
+    // A round now spans 60s: only eight bots remain within the 45s presence TTL at spawn.
+    expect(boss.maxHp).toBe(8 * BOSS_BASE_HP)
     expect(boss.hp).toBeLessThan(boss.maxHp)
     // Only bots played and fought: neither board holds a row.
     expect(boards.damage).toEqual([])
@@ -226,7 +350,9 @@ describe('bots over HTTP', () => {
   }, 120_000)
 
   it('bots are minted with the mark and named as bots', async () => {
-    const { records, world } = await run(1, COUNT)
+    const { records, world, scheduled } = await run(1, COUNT)
+    // One bot every 5s at the default twelve bots: each acts once per real minute.
+    expect(scheduled).toEqual([5000])
     expect(records.map((r) => r.account.displayName)).toEqual(
       Array.from({ length: COUNT }, (_, i) => `[bot] ${BOT_NAMES[i % BOT_NAMES.length]}`),
     )
@@ -235,8 +361,8 @@ describe('bots over HTTP', () => {
       // The mark is the record's alone: the account is what the wire carries.
       expect(record.account).not.toHaveProperty('bot')
     }
-    // Still in presence like anyone else.
-    expect(world.online).toBe(COUNT + 1)
+    // A 60s round outlasts the 45s presence TTL: eight recent bots plus the viewer.
+    expect(world.online).toBe(9)
   }, 120_000)
 
   it('a bot saved before the mark is minted again, marked and named as a bot', async () => {

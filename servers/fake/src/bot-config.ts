@@ -38,7 +38,7 @@ export const ACTION_WEIGHTS = { list: 4, buy: 3, order: 2, fill: 2, cancel: 1 } 
 export const LIST_MULT_MIN = 3
 export const LIST_MULT_SPREAD = 6
 /** A bot buys an item listed under vendor value × this. */
-export const BUY_UNDER_MULT = 4
+export const BUY_UNDER_MULT = 2
 /** A bot's buy order offers the base's rare vendor value × this. */
 export const ORDER_MULT = 3
 
@@ -52,7 +52,7 @@ export const HERO_PRICE: Record<Rarity, number> = {
 }
 
 /** Virtual ms between one bot's acts: the scheduler fires every BOT_TICK_MS / count / speed real ms. */
-export const BOT_TICK_MS = 20_000
+export const BOT_TICK_MS = 60_000
 
 /** A bot's batch holds BATCH_TICKS_MIN + roll(BATCH_TICKS_SPREAD) ticks: an idle human's cadence. */
 export const BATCH_TICKS_MIN = 4
