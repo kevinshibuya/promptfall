@@ -20,10 +20,12 @@ import { encodeRaster } from './raster'
 import { stagedState } from './staged'
 import type { StageTimeline } from './timeline'
 import {
+  ALT_REMOUNT_MS,
   EVENT_FRAME_MS,
   HASTE_FRAME_MS,
   HIRES_SCALE,
   IDLE_FRAME_MS,
+  IMAGE_ALT_DENY,
   SVG_FALLBACK_FRAME_MS,
 } from './tuning'
 
@@ -255,6 +257,9 @@ export class StageLoop {
   private beat: number | null = null
   /** The clock at the last SMIL wake: a travel's backdrop change since then redraws. */
   private wokeAt = Number.NEGATIVE_INFINITY
+  /** Images found laid out as their alt: the band's key carries it, so each count mounts anew. */
+  private remounts = 0
+  private remountedAt = Number.NEGATIVE_INFINITY
 
   constructor(
     private readonly io: LoopIo,
@@ -290,6 +295,11 @@ export class StageLoop {
       this.stopped = false
       this.arm(EVENT_FRAME_MS)
     }
+  }
+
+  /** The suffix the band's Image key takes: empty until an Image is found laid out as its alt. */
+  remountKey(): string {
+    return this.remounts === 0 ? '' : `-r${this.remounts}`
   }
 
   /** A stage is mounted on this surface: held toasts wait for the stage to play their event. */
@@ -502,6 +512,18 @@ export class StageLoop {
         if (result.deny !== undefined) {
           this.stopped = true
           this.lastStage = null
+          // An Image drawing its alt keeps it until it is mounted afresh: a background worker's band,
+          // laid out before the terminal attached (no pictures, no image id), stays text otherwise. A
+          // new key and a render mount one, at most every ALT_REMOUNT_MS while the alt stands.
+          if (
+            site.renderer === 'image' &&
+            result.deny.startsWith(IMAGE_ALT_DENY) &&
+            now - this.remountedAt >= ALT_REMOUNT_MS
+          ) {
+            this.remounts += 1
+            this.remountedAt = now
+            this.io.invalidate()
+          }
           return null
         }
         if (band) this.sent.set('band', band.json)

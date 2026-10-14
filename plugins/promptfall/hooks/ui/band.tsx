@@ -221,7 +221,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           : null
     if (terminal && picture) {
       const box = { columns: Math.min(width, picture.max), rows: layout.bandRows - extra }
-      const key = bandKey(box)
+      // An Image the loop found laid out as its alt takes a new key, so it is mounted afresh.
+      const key = bandKey(box) + (picture.renderer === 'image' ? (loop?.remountKey() ?? '') : '')
       // The stage and its alt draw the staged state, as everywhere else.
       const shown = layout.box ? stagedState(view, world, timeline, now) : view
       let element = null
