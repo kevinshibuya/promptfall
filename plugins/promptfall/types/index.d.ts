@@ -52,6 +52,7 @@ export type EnemyView = {
 export type LootKind = 'drop' | 'vendored' | 'market'
 /** A Loot row. `itemId` is the dropped item's id, the key to its chest; null for a row of no item. */
 export type LootView = { text: string; rarity: string; kind: LootKind; itemId: string | null }
+export type AffixRollView = { value: number; min: number; max: number }
 export type ItemView = {
   id: string
   /** The item base's content id: the sprite key. */
@@ -61,6 +62,8 @@ export type ItemView = {
   slot: string
   rarity: string
   affixes: string[]
+  /** Per affix, beside its string: what it counts for and the range a reforge rolls, at the item's tier. */
+  affixRolls: AffixRollView[]
   equippedBy: string | null
   classes: string[]
   vendorValue: number

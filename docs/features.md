@@ -172,7 +172,11 @@ plays as a full inventory's does and the combat log says `Oak Staff vendored, 3G
 **Reforging.** Reforging rerolls one affix of an item for gold: it rolls the same flat range and
 the item keeps its tier. The price is the rarity's price times the item tier's multiplier, shown on
 the Reforge row of the Inventory command window before the pick, and the Odds tab says reforge is
-priced by rarity and tier. The affix to reroll is chosen in a command window.
+priced by rarity and tier. The affix to reroll is chosen in a pick window that lists each affix
+with its value and the range a roll can give at the item's tier, as `Vicious +3 atk · 3-7`. A roll
+leaves the pick open with the new value in place and the price on its header, so the next roll is
+one press; a roll without the gold is refused in the message window and the pick stays. q closes
+it.
 
 **Expansions.** The inventory starts at 30 slots and grows to 90; the roster starts at 24 heroes
 and grows to 48. Each step is bought with gold from the Odds tab, which shows the next step's

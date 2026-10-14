@@ -56,6 +56,18 @@ test("an inventory item's affixes and reforge price read its tier", () => {
   expect(item?.reforgeCost).toBe(87)
 })
 
+test("an item's affixes carry their value and their tier-scaled range", () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  const at = (tier: number) =>
+    toGameView({ ...createInitialState(1), inventory: [{ ...blade, tier }] }, 'a1', false, account)
+      .inventory[0]
+  // Brutal rolls 2 to 4: at ×3.5 its 4 counts 14 and its ends 7 and 14, floored as the value is.
+  expect(at(3)?.affixRolls).toEqual([{ value: 14, min: 7, max: 14 }])
+  expect(at(1)?.affixRolls).toEqual([{ value: 4, min: 2, max: 4 }])
+  // The strings stay beside the field.
+  expect(at(3)?.affixes).toEqual(['Brutal +14 atk'])
+})
+
 test('a hero fills at the sim’s own rate, hasted and guarding, and the views carry the states', () => {
   const account = toAccountView(null, null, 'in-process', 0)
   let s = step(createInitialState(1), { t: 'tool_call' }).state
