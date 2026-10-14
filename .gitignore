@@ -6,3 +6,4 @@ dist
 .promptfall/
 spikes/*/.claude-plugin/types/
 art/sheets/
+.pnpm-store/

@@ -6,7 +6,7 @@ import { WORLD_DEFAULT } from '../state'
 import type { Effect } from '../vendor/sim.js'
 import { wave } from './fixtures'
 import { effectAt, SHIELD, stageAt } from './model'
-import { stage } from './scenarios'
+import { caseOf, stage } from './scenarios'
 import { stagedState } from './staged'
 import { backdropPlacements, fitSvg, framesInUse, renderSvg, strokePaths } from './svg'
 import { type Motion, type StageEffect, StageTimeline } from './timeline'
@@ -688,6 +688,31 @@ test('a victory pose is carried from the kill, however far ahead it starts', () 
   const windup: Motion = { kind: 'windup', actor: 'h1', from: NOW + 900, until: NOW + 1000 }
   expect(NOW + SVG_FALLBACK_FRAME_MS).toBeLessThan(victory.from)
   expect(framesInUse([victory, windup], NOW)).toEqual([victory])
+})
+
+test('the ladder without SMIL: the second rung draws idle B as idle A, the one frame held', () => {
+  // An instant in the bob's second half, where a resting actor's pose at now is idle B.
+  const c = caseOf('rest')
+  const at = [0, 250, 500, 750]
+    .map((d) => c.now + d)
+    .find((t) => c.at(t).model.actors.some((a) => a.pose === 'idle_b'))
+  if (at === undefined) throw new Error('no idle B instant')
+  const s = c.at(at)
+  const opts = { smil: false, now: at, width: 960, motion: 'full' as const }
+  const first = renderSvg(s.model, s.motions, { ...opts, rung: 0 })
+  const still = renderSvg(s.model, s.motions, { ...opts, rung: 1 })
+  // The first rung carries the squashed idle B; the second the idle art alone (one def swaps for
+  // another, so the count need not drop: the rung is for the SMIL picture's pair).
+  expect(still).not.toBe(first)
+  const bobbing = s.model.actors.filter((a) => a.pose === 'idle_b')
+  for (const a of bobbing) {
+    const idle = strokePaths(a.poses.idle.art, a.raritySlot)
+    const squashed = strokePaths(a.art, a.raritySlot)
+    expect(still).toContain(idle)
+    expect(still).not.toContain(squashed)
+  }
+  // The flat picture never climbs: under the cap the ladder answers the first rung.
+  expect(fitSvg(s.model, s.motions, opts)).toEqual({ svg: first, rung: 0 })
 })
 
 test('the ladder: each rung drops one thing in order, never a drawn frame, and a picture under the cap stays on the first', () => {

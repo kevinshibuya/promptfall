@@ -506,9 +506,12 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     }
     // The pose-at-now art, for the paths that draw it: the 1.5x SMIL path draws every pose from
     // `poses` and must not define it (an idle B or hit art here is a def nothing uses).
+    const held = rung >= 1 && actor.pose === 'idle_b'
     const drawNow = () => {
+      // From the ladder's second rung the idle pair goes here too: idle B draws as idle A.
+      const art = held ? actor.poses.idle.art : actor.art
       const slot = actor.raritySlot
-      const id = define(actor.art, slot)
+      const id = define(art, slot)
       // The accent before any flash: the flash is an overlay here, never baked into the base. A
       // hit's own palette is already lightened; its filter lightens the idle colour instead.
       const accent =
@@ -516,7 +519,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
           ? actor.poses.idle.palette[slot]
           : (actor.accent ?? (slot === null ? undefined : actor.palette[slot]))
       const color = slot === null ? '' : ` color="${paint(accent ?? 0)}"`
-      const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
+      const flip = actor.flipX ? ` transform="translate(${art.width} 0) scale(-1 1)"` : ''
       return {
         use: `<use href="#${id}"${flip}${color}/>`,
         flashUse: `<use href="#${id}"${flip} filter="url(#${ID.flash})"`,
@@ -543,7 +546,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         : actor.tinted
           ? `${redUse} opacity="${ENRAGE_TINT}"/>`
           : ''
-      const dx = actor.poses[actor.pose].dx
+      const dx = actor.poses[held ? 'idle' : actor.pose].dx
       const hit = hitLit && actor.pose === 'hit' ? ` filter="url(#${ID.hit})"` : ''
       const drawn = hit ? `<g${hit}>${use}</g>` : use
       body.push(streakAt(actor.x, actor.y))
