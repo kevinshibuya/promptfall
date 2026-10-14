@@ -38,7 +38,7 @@ async function band(ui: Ui) {
     title,
     rows,
     rank: encounter ? rank(Number(encounter[1]), Number(encounter[2] ?? 11)) : 0,
-    stage: { zone, backdrop: source.match(/<g id="bg">[\s\S]*?<\/g>/)?.[0] ?? '' },
+    stage: { zone, backdrop: source.match(/<g id="b" fill="none">[\s\S]*?<\/g>/)?.[0] ?? '' },
   }
 }
 

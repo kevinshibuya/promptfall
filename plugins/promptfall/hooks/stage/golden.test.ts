@@ -33,7 +33,7 @@ import {
   strip,
   stripGoldenOf,
 } from './scenarios'
-import { renderSvg, svgWithFallback } from './svg'
+import { fitSvg, type Rung, renderSvg, svgWithFallback } from './svg'
 import type { Motion } from './timeline'
 import {
   DESKTOP_COLUMN_PX_CEILING,
@@ -115,13 +115,17 @@ for (const name of SCENARIOS) {
       const hi = { svg: r.svgHi, flat: r.svgHiFlat, cells: r.cells, image: r.hires }
       scaleOneWithinBudgets(hi, `${name} hires at scale 1`)
     }
-    // The desktop's Svg through the production fall-back: the hires one, or the scale-1 one over
-    // the cap.
-    for (const [smil, svg] of [
-      ['on', r.svg],
-      ['off', r.svgFlat],
+    // The desktop's Svg through the production ladder: on its first rung, under three quarters of
+    // the cap, SMIL on and off.
+    for (const [smil, svg, rung, hi] of [
+      ['on', r.svg, r.rung, r.svgHi],
+      ['off', r.svgFlat, r.rungFlat, r.svgHiFlat],
     ] as const) {
-      expect(svg.length, `${name}: the desktop's Svg, SMIL ${smil}`).toBeLessThan(SVG_MAX_CHARS)
+      expect(rung, `${name}: the desktop's Svg's rung, SMIL ${smil}`).toBe(0)
+      expect(svg, `${name}: the desktop's Svg, SMIL ${smil}`).toBe(hi)
+      expect(svg.length, `${name}: the desktop's Svg, SMIL ${smil}`).toBeLessThan(
+        (SVG_MAX_CHARS * 3) / 4,
+      )
     }
   })
 }
@@ -509,46 +513,70 @@ test('adversarial legal art at 1.5 (a 72 × 51 checker boss, 24 × 24 heroes) ke
   }
 })
 
-test('a 1.5x Svg over the cap falls back to the 1x Svg, under it', () => {
-  // Past legal art: every hero a 72 × 51 checker, so the 1.5x markup passes the cap.
-  const hi = adversarial(1.5, { width: 48, height: 34 })
+test('a 1.5x Svg over the cap on every rung falls back to the 1x Svg, under it', () => {
+  // Past legal art: every hero a 144 × 51 checker, so the 1.5x markup passes the cap on the
+  // ladder's last rung.
+  const hi = adversarial(1.5, { width: 96, height: 34 })
   const lo = adversarial(1)
   const motions = busyMotions('e1').filter((m) => m.kind !== 'chest')
   for (const smil of [true, false]) {
     const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
-    expect(renderSvg(hi, motions, opts).length).toBeGreaterThanOrEqual(SVG_MAX_CHARS)
+    const last = fitSvg(hi, motions, opts)
+    expect(last.rung).toBe(3)
+    expect(last.svg.length).toBeGreaterThanOrEqual(SVG_MAX_CHARS)
     const svg = svgWithFallback(hi, lo, motions, opts)
     expect(svg).toBe(renderSvg(lo, motions, opts))
     expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
   }
 })
 
-test("ADR 0006's fuller legal frame at rest with the idle pair: the 1.5x Svg with its chest, 117,722 characters", () => {
-  const hi = fullerFrame(1.5, false, NOW)
-  const lo = fullerFrame(1, false, NOW)
-  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
-  expect(svg).toBe(renderSvg(hi.model, hi.motions, opts))
-  expect(svg.length).toBe(117_722)
+/**
+ * ADR 0006's fuller legal frame through the production ladder, SMIL on, at rest with the idle pair
+ * and 60 ms into a dithered boss lunge with a hero hit: the rung it lands on and its characters.
+ * These are ticket #210's numbers for its strokes encoding (`pnpm svg:measure`), every rung of
+ * each; the lunge over zones 3, 8, 9 and 10 lands on the last rung, with no backdrop.
+ */
+const FULLER_RUNGS: Record<string, { rest: [Rung, number]; lunging: [Rung, number] }> = {
+  'no backdrop': { rest: [0, 64_487], lunging: [0, 118_952] },
+  1: { rest: [0, 75_363], lunging: [0, 129_828] },
+  2: { rest: [0, 76_431], lunging: [0, 130_896] },
+  3: { rest: [0, 83_706], lunging: [3, 114_061] },
+  4: { rest: [0, 74_686], lunging: [0, 129_151] },
+  5: { rest: [0, 73_493], lunging: [0, 127_958] },
+  6: { rest: [0, 75_636], lunging: [0, 130_101] },
+  7: { rest: [0, 79_394], lunging: [1, 129_201] },
+  8: { rest: [0, 83_715], lunging: [3, 114_061] },
+  9: { rest: [0, 82_444], lunging: [3, 114_061] },
+  10: { rest: [0, 84_894], lunging: [3, 114_061] },
+  11: { rest: [0, 78_790], lunging: [1, 128_597] },
+  12: { rest: [0, 72_905], lunging: [0, 127_370] },
+}
+
+test('the fuller legal frame at rest and lunging, with no backdrop and over every zone backdrop, fits on a rung', () => {
+  const zones = Object.keys(BACKDROPS)
+  expect(Object.keys(FULLER_RUNGS).sort()).toEqual(['no backdrop', ...zones].sort())
+  for (const [zone, pins] of Object.entries(FULLER_RUNGS)) {
+    for (const acting of [false, true]) {
+      const f = fullerFrame(1.5, acting, NOW)
+      const model = { ...f.model, backdrop: BACKDROPS[zone]?.hires ?? null }
+      const at = `${acting ? 'lunging' : 'at rest'}, ${zone}`
+      const on = fitSvg(model, f.motions, { smil: true, now: NOW, width: 960, motion: 'full' })
+      expect([on.rung, on.svg.length], at).toEqual(acting ? pins.lunging : pins.rest)
+      expect(on.svg.length, at).toBeLessThan(SVG_MAX_CHARS)
+      // Without SMIL the picture carries one frame: the first rung, whatever the zone.
+      const off = fitSvg(model, f.motions, { smil: false, now: NOW, width: 960, motion: 'full' })
+      expect(off.rung, at).toBe(0)
+    }
+  }
 })
 
-test('the fuller frame with the boss 60 ms into a lunge on dithered frames and a hero hit: 221,085 characters at 1.5x with its chest, so the 1x Svg (54,288)', () => {
-  const hi = fullerFrame(1.5, true, NOW)
-  const lo = fullerFrame(1, true, NOW)
-  const opts = { smil: true, now: NOW, width: 960, motion: 'full' as const }
-  expect(renderSvg(hi.model, hi.motions, opts).length).toBe(221_085)
-  const svg = svgWithFallback(hi.model, lo.model, hi.motions, opts)
-  expect(svg).toBe(renderSvg(lo.model, hi.motions, opts))
-  expect(svg.length).toBe(54_288)
-})
-
-test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 53,279 characters over the zone 1 backdrop, under the cap', () => {
+test('the bandit captain 60 ms into its lunge, on its drawn frames and stepped: a 1.5x SMIL Svg of 30,386 characters over the zone 1 backdrop, under the cap', () => {
   const svg = staged('boss-strike').renders.svgHi
-  expect(svg.length).toBe(53_279)
+  expect(svg.length).toBe(30_386)
   expect(svg.length).toBeLessThan(SVG_MAX_CHARS)
 })
 
-test('the fuller frame over every zone backdrop stays in budget at both scales', () => {
+test('the fuller frame over every zone backdrop stays in the Image budget at both scales', () => {
   const zones = Object.keys(BACKDROPS)
   expect(zones.length).toBeGreaterThan(0)
   for (const zone of zones) {
@@ -560,11 +588,5 @@ test('the fuller frame over every zone backdrop stays in budget at both scales',
     const hiModel = { ...hi.model, backdrop: b.hires }
     withinBudgets(loModel, lo.motions, NOW)
     withinBudgets(hiModel, hi.motions, NOW)
-    for (const smil of [true, false]) {
-      const opts = { smil, now: NOW, width: 960, motion: 'full' as const }
-      expect(svgWithFallback(hiModel, loModel, hi.motions, opts).length, zone).toBeLessThan(
-        SVG_MAX_CHARS,
-      )
-    }
   }
 })
