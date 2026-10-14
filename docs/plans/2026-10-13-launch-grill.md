@@ -23,8 +23,8 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 | 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | #200, merged 2026-10-14 as `a49ef45` | merged |
 | 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 as `f08a125` | merged |
 | 4 | One stage | #209 | #210, #211, #212, #213, #214, #215, #216 | `afk run 209`, started 2026-10-14, stopped during #213 and resumed once | #218, merged 2026-10-14 as `6618f4e` | merged |
-| 5 | Reactive revamp | | #174 to #177 | | | not started |
-| 6 | Band polish | | #173 | | | not started |
+| 5 | Reactive revamp | #221 | #222, #223, #224, #225, #226, #227, #228 | `afk run 221`, started 2026-10-14 | #229, merged 2026-10-14 as `16f7a0e` | merged |
+| 6 | Band polish | | #173, #230 | | | not started |
 | 7 | Rerolls | | | | | not started |
 | 8 | Market rules | | | | | not started |
 | 9 | Closing arc ticket | | | | | not started |
@@ -225,6 +225,31 @@ What the build changed (PR #218):
   bob stopped, gathered around the fire with Guard's huddle hop; the enemy window's rows go blank
   with a dim `camping`; the message window shows `g: back to the fight`. Haste cannot start while
   camped; Guard shows the stance only. A `camp` field on the state, sim bump.
+
+What the build changed (PR #229):
+
+- **Camp starts at `session.compact`**, not a classic hook: the engine's precompute and a fork's
+  own compaction are filtered out, and the post-compaction handler is gone.
+- **Every `turn_start` breaks camp,** since the sim cannot tell a prompt from a long turn's
+  refresh; the sandbox's boss, zone and wipe grants break it too. A Haste already on when camp
+  starts waits through it with its countdown frozen.
+- **The off is gated on the party's own state,** not a flag of the plugin's: the sim breaks camp
+  on events the plugin never sees. **A primary stepping aside breaks camp** before its flush: the
+  manual pass found `/exit`'s teardown draws nowhere for seconds before the session ends, so the
+  end's own break met a secondary and the next session came back camping.
+- **No lunge to the shield's face:** the stage's lunge is a fixed offset in place and never reaches
+  a target; a hit on Guard reads as the shield's flash.
+- **Speed lines hide** in the guard stance, the hit frame and at the fire. **No status glyph:** the
+  lines read on the Raster, judged on `parity-haste` at the pass.
+- **The review's fix pass:** `g` reads the clock at the keypress; two breaks at once send one off;
+  a huddle turned mid-slide goes back from where the party stands; a hero camp's heal raises under
+  Guard joins the huddle.
+- **Carried out:** #230 (a boss fight on the Raster goes compact in a large terminal) goes to 6;
+  #231 (the renderer falls back to what the terminal draws, and `auto` never sits blank) waits for
+  its own slot.
+- **The run:** seven tickets, one review wave with its fix pass, one manual-pass fix (step 7). The
+  arcs have not run since the sim bump to 19 (row 9). The GREEN pass is
+  `docs/manual-pass/2026-10-14-reactive-revamp.md`.
 
 ## 6. Band polish (#173)
 
