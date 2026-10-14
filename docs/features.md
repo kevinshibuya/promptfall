@@ -339,7 +339,8 @@ stage over the 5-row strip, and never more than Claude Code gives it. With fewer
 that draws images zooms the whole scene out to fit and the desktop scales it; a half-block
 terminal crops the sky, down to the tallest actor on the stage. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
-under 100 columns, and it hides while Claude asks a question.
+under 100 columns. It stays up while Claude asks for a permission or a question, at whatever size
+the rows left to it allow, so the party is on screen while a prompt waits.
 
 **The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
 field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and

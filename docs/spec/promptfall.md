@@ -29,8 +29,9 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
   whole stage smaller where it can (the Image zooms out, the Svg scales) and
   crops the Raster's sky down to the tallest actor on the stage; past that it
   drops to a 6-row compact band, as it does at 100 to 115 columns, collapses to
-  1 row under 100 columns or 6 rows, hides while Claude asks a question, and
-  switches off per session with one command. Loot and World are the strip
+  1 row under 100 columns or 6 rows, and switches off per session with one
+  command. It stays up while Claude asks for a permission or a question, at
+  the layout the rows it is given allow. Loot and World are the strip
   alone, 5 rows. VS Code and mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
@@ -906,7 +907,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   fills between ticks and turns gold when full) and the purse window (gold and
   the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
-  the last two drops, or the World rows. Hidden while `hasSurvey`. The band is
+  the last two drops, or the World rows. While `hasSurvey` the band stays up at
+  the layout its rows allow and the stage keeps playing. The band is
   22 rows and never changes height for a fight.
 - The band as one picture (ADR 0011): a playfield on a shell. The shell is the
   windows' charcoal, flat, with no decoration, and fills every cell of the
