@@ -1268,7 +1268,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 | rare / epic drop | rare good news | short | `Rare drop: Ironwood Staff` / `Epic drop: …`, at the reveal; epic before rare in one burst | never folds | drop |
 | vendored, Rare or better | wants a decision | short | `Inventory full: Ironwood Staff vendored for 40 gold`, at the reveal | never folds | none |
 | level up | rare good news | short | `Aldric reached level 5` | `Aldric reached level 6, Morwen level 4`; same level: `Aldric and Morwen reached level 6`; one hero several levels in a burst: the highest only | level_up |
-| achievement | rare good news | short | `Achievement: a thousand kills, 1,500 gold` (the step's words from the table, on a credit with reason `achievement:<id>:<step>`) | `3 achievements, 2,000 gold` | goal |
+| achievement | rare good news | short | `Achievement: a thousand kills, 1,500 gold` (the step's words from the table, on a credit with reason `achievement:<id>:<step>`) | never folds, oldest first | goal |
 | goal met | rare good news | short | `Daily goal met: 40 gold` (a credit with reason `goal:<day>`) | never folds | goal |
 | sold | money moved | short | `Ironwood Staff sold for 120 gold` | `3 items sold for 410 gold` | none |
 | bought | money moved | short | `Ironwood Staff bought for 120 gold` | `2 items bought for 300 gold` | none |
@@ -1370,8 +1370,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
   Folding. Within a burst, effects are grouped by row. A row that folds yields
   one toast carrying the count and, where the row has one, the sum; a row that
-  never folds yields one toast per effect. A toast with a show time never
-  folds: each lands at its own show time. A folded name list shows up to three
+  never folds yields one toast per effect. Each achievement keeps its own
+  toast with its step's words and gold, oldest first. A toast with a show time
+  never folds: each lands at its own show time. A folded name list shows up to three
   names, then "and N more". A folded level-up joins its heroes with "and" only
   when every hero reached the same level; otherwise it has one clause per hero,
   in effect order.
