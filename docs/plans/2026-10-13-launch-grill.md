@@ -19,8 +19,8 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 
 | # | Spec | Issue | Tickets | Run | PR | State |
 |---|---|---|---|---|---|---|
-| 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | | running |
-| 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | | | tickets published 2026-10-13; `afk run 188` starts after #182 merges |
+| 1 | Launch bugs | #182 | #183, #184, #185, #186 | `afk run 182`, started 2026-10-13 | #187, merged 2026-10-13 as `259ce09` | merged |
+| 2 | Launch polish | #188 | #190, #191, #192, #193, #194, #195 | `afk run 188`, started 2026-10-13 | | running |
 | 3 | #179 waves | #179 | the ticket itself | | | not started |
 | 4 | One stage | | | | | not started |
 | 5 | Reactive revamp | | #174 to #177 | | | not started |
@@ -82,6 +82,24 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 - **#128, narrowed.** All three sandbox cases showed a chest in the pass, but one chestless code
   path remains at `hooks/stage/timeline.ts:834` (the Opus re-check comment). Small, sandbox-only.
 - **The test split** (ADR 0017): `test:arc`, the harness excluded from `pnpm test`.
+
+What the build changed (PR #187):
+
+- **The agents view.** The take-back keyed on equal `startedAt` is gone, so a resumed or forked
+  conversation in a second terminal no longer takes the lease. The spare session marks itself
+  `CLAUDE_BG_SOURCE=spare`; the plugin treats spare-or-unset as the spare and `slash` as the
+  conversation's own process. The spare never takes a free lease, the process left behind lets go
+  within 2 s, and the conversation's process picks the lease up within 2 s, so ← then Enter at once
+  reads "playing in another session" for about 2 s.
+- **The link flow.** The lead above was false: the link state survived the resize. The dock clipped
+  the code off screen (`ui/pane/account.ts`); the code now sits directly under the Account title.
+- **Returns vanish.** The lead above was false: Kevin's item had sold before the cancel. The ledger
+  side is pinned by contract rules 18 and 18b. The sim still rejects a `returned` event on a full
+  inventory, and the sim test the spec asked for was not added; #187 merged without either.
+  A refused trade whose listing or order closed reads "Already sold, filled or expired".
+- **#128 is not sandbox-only.** A monster killed in the tick it spawned, before the band drew it,
+  also leaves a ground chest in real play. A chest with no row to fall from lands on the lowest
+  free slot, not under the enemy in front.
 
 ## 2. Launch polish
 
