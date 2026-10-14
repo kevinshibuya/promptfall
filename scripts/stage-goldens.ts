@@ -1,5 +1,5 @@
-// Writes plugins/promptfall/hooks/stage/goldens/: the golden hashes of each stage scenario and an
-// .svg of each for eyeballing. Run it only when a scenario's drawing is meant to change, and say
+// Writes plugins/promptfall/hooks/stage/goldens/: the golden hashes of each stage scenario, and an
+// .svg and a Raster .png of each for eyeballing. Run it only when a scenario's drawing is meant to change, and say
 // so in the commit message: `tsx scripts/stage-goldens.ts`.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -11,6 +11,7 @@ import {
   bandGoldenOf,
   bandPicture,
   bandSvgOf,
+  cellsPicture,
   goldenOf,
   PANE_SCENARIOS,
   pane,
@@ -45,21 +46,9 @@ const lines = [
   '',
   'export const GOLDENS: Record<Scenario, Golden> = {',
 ]
-for (const name of SCENARIOS) {
-  const r = renders(stage(name))
-  const g = goldenOf(r)
-  lines.push(
-    `  ${/^\w+$/.test(name) ? name : `'${name}'`}: ${JSON.stringify(g)
-      .replace(/"(\w+)":/g, '$1: ')
-      .replace(/,/g, ', ')},`,
-  )
-  writeFileSync(join(OUT, `${name}.svg`), `${r.svg}\n`)
-}
-lines.push('}', '', 'export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {')
-// A strip's or pane's PNG lays its windows on a dark terminal background, to be looked at.
+// A stage's Raster, strip's or pane's PNG lays its pixels on a dark terminal background, to be looked at.
 const BG = [0x1e, 0x1e, 0x24]
-function png(name: string, pic: Frame): void {
-  const scale = 2
+function png(name: string, pic: Frame, scale = 2): void {
   const data = new Uint8Array(pic.width * scale * pic.height * scale * 4)
   for (let y = 0; y < pic.height * scale; y++) {
     for (let x = 0; x < pic.width * scale; x++) {
@@ -74,6 +63,20 @@ function png(name: string, pic: Frame): void {
   }
   writePng(join(OUT, `${name}.png`), { width: pic.width * scale, height: pic.height * scale, data })
 }
+for (const name of SCENARIOS) {
+  const s = stage(name)
+  const r = renders(s)
+  const g = goldenOf(r)
+  lines.push(
+    `  ${/^\w+$/.test(name) ? name : `'${name}'`}: ${JSON.stringify(g)
+      .replace(/"(\w+)":/g, '$1: ')
+      .replace(/,/g, ', ')},`,
+  )
+  writeFileSync(join(OUT, `${name}.svg`), `${r.svg}\n`)
+  // The Raster's cells as the terminal draws them: one cell CELL_W × CELL_H, numbers as glyphs.
+  png(`${name}.raster`, cellsPicture(r.cells, s.hires.box.columns), 1)
+}
+lines.push('}', '', 'export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {')
 for (const name of STRIP_SCENARIOS) {
   const input = strip(name)
   const g = stripGoldenOf(input)

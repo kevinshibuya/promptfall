@@ -1,5 +1,6 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
+import { decode } from '../sprites/base64'
 import { WORLD_DEFAULT } from '../state'
 import { accountPane, noViewPane } from '../ui/pane/account'
 import { chatPane } from '../ui/pane/chat'
@@ -24,7 +25,7 @@ import type { PaneBuild } from '../ui/pane/types'
 import { type StripInput, stripScene, stripTracks } from '../ui/strip'
 import type { Effect } from '../vendor/sim.js'
 import { windowFrame } from '../windows/image'
-import type { Scene } from '../windows/kit'
+import { glyphFor, type Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
 import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
@@ -38,7 +39,7 @@ import { MessageLog } from './log'
 import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
-import { encodeRaster, rasterPairs } from './raster'
+import { CLEAR, encodeRaster, intoCells, rasterPairs } from './raster'
 import { stagedState } from './staged'
 import { renderSvg, stageSvg, svgOrFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
@@ -106,7 +107,10 @@ export type Golden = {
   /** The scale-1 Svg: the desktop's fall-back past the cap. */
   svgHashLo: string
 }
-/** `model` at scale 1 (Raster); `hires` at HIRES_SCALE (Image, and the Svg under its cap). */
+/**
+ * `model` at scale 1 (the 1x Image and the desktop's fall-back, until the one-model cut);
+ * `hires` at HIRES_SCALE, the one scene: the Raster, the Image, and the Svg under its cap.
+ */
 export type Staged = {
   model: StageModel
   hires: StageModel
@@ -432,15 +436,14 @@ export type Renders = {
   /** The scale-1 model's Svg (the desktop's fall-back past the cap), SMIL on and off. */
   svgLo: string
   svgLoFlat: string
-  /** The scale-1 model's Raster cells and Image frame. */
+  /** The one scene's Raster cells: the hires model resampled into its box's cells. */
   cells: string
+  /** The scale-1 model's Image frame. */
   image: Frame
   /** The hires model's Svg, SMIL on and off, and its Image frame. */
   svgHi: string
   svgHiFlat: string
   hires: Frame
-  /** The hires model's Raster cells where it stays at scale 1 (compact); past it, it draws on Image only. */
-  hiresCells: string | null
 }
 
 export function renders(s: Staged): Renders {
@@ -454,16 +457,22 @@ export function renders(s: Staged): Renders {
     svgFlat: svgOrFallback(svgHiFlat, () => svgLoFlat),
     svgLo,
     svgLoFlat,
-    cells: encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers),
+    cells: rasterCells(s.hires),
     image: composeFrame(s.model, { numbers: true }),
     svgHi,
     svgHiFlat,
     hires: composeFrame(s.hires, { numbers: true }),
-    hiresCells:
-      s.hires.scale === 1
-        ? encodeRaster(composeFrame(s.hires, { numbers: false }), s.hires.numbers)
-        : null,
   }
+}
+
+/** A model's Raster cells: its scene resampled into its box's cells, its numbers as text. */
+function rasterCells(model: StageModel): string {
+  const { frame, numbers } = intoCells(
+    composeFrame(model, { numbers: false }),
+    model.numbers,
+    model.box,
+  )
+  return encodeRaster(frame, numbers)
 }
 
 export function goldenOf(r: Renders): Golden {
@@ -616,6 +625,49 @@ export function strip(name: StripScenario): StripInput {
     case 'strip-waiting':
       return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
   }
+}
+
+/**
+ * Raster cells as the terminal shows them, for eyeballing: each cell CELL_W × CELL_H pixels, a
+ * half block its two halves, any other character its background under its glyph in the strip's
+ * font; the terminal's default colour transparent.
+ */
+export function cellsPicture(cells: string, columns: number): Frame {
+  const bytes = decode(cells)
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const rows = words.length / 3 / columns
+  const width = columns * CELL_W
+  const rgba = new Uint8ClampedArray(width * rows * CELL_H * 4)
+  const fill = (x0: number, y0: number, h: number, rgb: number) => {
+    if (rgb === CLEAR) return
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + CELL_W; x++) put(x, y, rgb)
+    }
+  }
+  const put = (x: number, y: number, rgb: number) =>
+    rgba.set([(rgb >>> 16) & 0xff, (rgb >>> 8) & 0xff, rgb & 0xff, 255], (y * width + x) * 4)
+  const half = CELL_H / 2
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < columns; cx++) {
+      const w = (cy * columns + cx) * 3
+      const [ch, fg, bg] = [words[w] ?? 0x20, words[w + 1] ?? CLEAR, words[w + 2] ?? CLEAR]
+      const [x0, y0] = [cx * CELL_W, cy * CELL_H]
+      if (ch === 0x2580 || ch === 0x2584) {
+        fill(x0, y0, half, ch === 0x2580 ? fg : bg)
+        fill(x0, y0 + half, half, ch === 0x2580 ? bg : fg)
+        continue
+      }
+      fill(x0, y0, CELL_H, bg)
+      if (ch === 0x20) continue
+      const glyph = glyphFor(String.fromCodePoint(ch))
+      for (let gy = 0; gy < CELL_H; gy++) {
+        for (let gx = 0; gx < CELL_W; gx++) {
+          if ((glyph[gy] ?? 0) & (0x80 >> gx)) put(x0 + gx, y0 + gy, fg)
+        }
+      }
+    }
+  }
+  return { width, height: rows * CELL_H, rgba }
 }
 
 /** Every window's picture, composed onto one canvas at its cells (transparent between). */
@@ -975,9 +1027,9 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
   const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
   const box = { columns, rows: layout.bandRows }
   const scene = stripScene({ ...input, columns: playfield }).scene
-  // The Raster cannot zoom: it shows the stage's bottom rows at the same box (ADR 0010). A boss
-  // needs all 17, so in play a 12-row band goes compact on the Raster; the zoomed scenario's
-  // cells pin the crop at that box all the same.
+  // The Raster does not zoom out into a short band: it shows the stage's bottom rows at the same
+  // box, resampled (ADR 0010). A boss needs all 17, so in play a 12-row band goes compact on the
+  // Raster; the zoomed scenario's cells pin the crop at that box all the same.
   const room = box.rows - scene.rows
   const raster: Layout = {
     kind: 'full',
