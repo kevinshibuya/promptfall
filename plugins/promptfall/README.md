@@ -445,8 +445,8 @@ fails when it is stale (`pnpm sprites:check`).
   cleaned up this way.
 - `pnpm contact --zone <n> | --heroes | --items <a,b> | --world-bosses` renders each built sprite
   at 6× and its 1.5× art at 4× (`-hires`), its native cut at 4× and, for a zone, the stage at
-  rest, with its zone boss and with its turn boss, at 1.5× (`stage-*.png`) and at 1×
-  (`stage-*-1x.png`), into `.promptfall/contact/<label>/`, for review.
+  rest, with its zone boss and with its turn boss, at 1.5× (`stage-*.png`), into
+  `.promptfall/contact/<label>/`, for review.
 - **Frames.** An entry may name its drawn 1.5× frames with `frames: { windup, strike?, follow? }`
   (PNGs in `art/sprites-frames/<kind>/<name>-<frame>.png`). A frame snaps to the 1.5× master (16
   colours at most) and lands on its idle 1.5× art's canvas: shrunk to fit if larger, then padded

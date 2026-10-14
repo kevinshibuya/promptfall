@@ -1,5 +1,6 @@
 // The golden-frame scenarios, shared by golden.test.ts and scripts/stage-goldens.ts.
 import type { GameView, WorldState } from '../../types'
+import { decode } from '../sprites/base64'
 import { WORLD_DEFAULT } from '../state'
 import { accountPane, noViewPane } from '../ui/pane/account'
 import { chatPane } from '../ui/pane/chat'
@@ -24,7 +25,7 @@ import type { PaneBuild } from '../ui/pane/types'
 import { type StripInput, stripScene, stripTracks } from '../ui/strip'
 import type { Effect } from '../vendor/sim.js'
 import { windowFrame } from '../windows/image'
-import type { Scene } from '../windows/kit'
+import { glyphFor, type Scene } from '../windows/kit'
 import { sceneCells } from '../windows/raster'
 import { sceneSvg } from '../windows/svg'
 import { CELL_H, CELL_W, STRIP_MAX_COLUMNS, WINDOW_SCALE } from '../windows/tuning'
@@ -38,9 +39,9 @@ import { MessageLog } from './log'
 import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
-import { encodeRaster, rasterPairs } from './raster'
+import { CLEAR, encodeRaster, intoCells, rasterPairs } from './raster'
 import { stagedState } from './staged'
-import { renderSvg, stageSvg, svgOrFallback } from './svg'
+import { fitSvg, type Rung, stageSvg } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
   CHEST_FALL_MS,
@@ -51,7 +52,6 @@ import {
   FLASH_MS,
   FULL_MIN_COLUMNS,
   HASTE_FRAME_MS,
-  HIRES_SCALE,
   LEVEL_STAGGER_MS,
   LUNGE_MS,
   REVEAL_RISE_MS,
@@ -61,6 +61,7 @@ import {
   STEP_OUT_MS,
   TRAVEL_OFF_MS,
   VICTORY_MS,
+  WAVE_GAP_MS,
   WINDUP_HOLD_MS,
 } from './tuning'
 
@@ -93,6 +94,7 @@ export const SCENARIOS = [
   'victory',
   'boss-kill-travel',
   'boss_move',
+  'spawn',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -101,15 +103,10 @@ export type Golden = {
   svgHash: string
   svgChars: number
   rasterPairs: number
-  /** The Image frame of the scale-1.5 model. */
-  imageHashHires: string
-  /** The scale-1 Svg: the desktop's fall-back past the cap. */
-  svgHashLo: string
 }
-/** `model` at scale 1 (Raster); `hires` at HIRES_SCALE (Image, and the Svg under its cap). */
+/** The scenario's one model, the scene every surface draws: the Raster, the Image and the Svg. */
 export type Staged = {
   model: StageModel
-  hires: StageModel
   motions: readonly Motion[]
   now: number
 }
@@ -139,33 +136,68 @@ const withoutFront = (): GameView => {
   return v
 }
 
-/** The scenario's models at scale 1 and at HIRES_SCALE, with its motions at `now` (NOW). */
-function staged(view: GameView, t: StageTimeline, box: Box, compact = false, now = NOW): Staged {
-  const opts = { compact, motion: 'full' as const }
+/**
+ * A scenario's case: its timeline built once from its events and observations, staged at any
+ * instant from `from`, the last of them, on. Its golden stages it at `now`.
+ */
+export type Case = {
+  from: number
+  now: number
+  at: (now: number) => Staged
+}
+
+/** The case staging `view` on `t` in `box`, last observed or given its events at `from`. */
+function staging(
+  view: GameView,
+  t: StageTimeline,
+  box: Box,
+  from: number,
+  { compact = false, now = NOW } = {},
+): Case {
   return {
-    model: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, opts),
-    hires: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, {
-      ...opts,
-      scale: HIRES_SCALE,
-    }),
-    motions: t.active(now),
+    from,
     now,
+    at: (at) => ({
+      model: stageAt(stagedState(view, WORLD_DEFAULT, t, at), t, at, box, {
+        compact,
+        motion: 'full',
+      }),
+      motions: t.active(at),
+      now: at,
+    }),
   }
 }
 
-/** A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill observed right after. */
-function killed(t1: number, effects: Effect[], box: Box): Staged {
+/** The enemy that steps on after the `spawn` scenario's kill, in the slot-0 enemy's place. */
+const NEWCOMER = {
+  id: 'e4',
+  def: 'hedge_sprite',
+  name: 'Hedge Sprite',
+  glyph: '?',
+  hp: 24,
+  maxHp: 24,
+  kind: 'wave',
+  enraged: false,
+}
+
+/**
+ * A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill
+ * observed right after; with `enters`, the next observe at that instant brings the newcomer on.
+ */
+function killed(t1: number, effects: Effect[], box: Box, enters?: number): Case {
   const t = new StageTimeline()
   t.observe(wave(), t1 - 1000)
   t.onEffects(effects, t1)
   const after = withoutFront()
   t.observe(after, t1 + 10)
-  t.observe(after, NOW)
-  return staged(after, t, box)
+  if (enters === undefined) return staging(after, t, box, t1 + 10)
+  const next = { ...after, enemies: [...after.enemies, NEWCOMER] }
+  t.observe(next, enters)
+  return staging(next, t, box, enters)
 }
 
 /** `actor` attacked `target` (the slot-0 enemy by default) `ms` before NOW. */
-function attacking(actor: string, ms: number, target = 'e1'): Staged {
+function attacking(actor: string, ms: number, target = 'e1'): Case {
   const t = new StageTimeline()
   t.observe(wave(), NOW - ms)
   t.onEffects(
@@ -175,11 +207,24 @@ function attacking(actor: string, ms: number, target = 'e1'): Staged {
     ],
     NOW - ms,
   )
-  t.observe(wave(), NOW)
-  return staged(wave(), t, FULL)
+  return staging(wave(), t, FULL, NOW - ms)
 }
 
+/** The scenario staged at its golden instant. */
 export function stage(name: Scenario): Staged {
+  const c = caseOf(name)
+  return c.at(c.now)
+}
+
+/** The kill's actions the `dissolve` and `spawn` scenarios play, at `t1`. */
+const KILL: Effect[] = [
+  { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+  { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
+  { k: 'act', actor: 'e2', action: 'attack', at: 500 },
+  { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
+]
+
+export function caseOf(name: Scenario): Case {
   const t = new StageTimeline()
   switch (name) {
     // Each attack holds its wind-up WINDUP_HOLD_MS before it moves; past the hold, the knight
@@ -208,8 +253,12 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - WINDUP_HOLD_MS - 60,
       )
-      t.observe(boss(), NOW)
-      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+      return staging(
+        boss(),
+        t,
+        { columns: 120, rows: t.rowsAt(boss(), NOW) },
+        NOW - WINDUP_HOLD_MS - 60,
+      )
     }
     // The black mage 30 ms past its step out, still in its hold: stepped toward the enemies in
     // its wind-up frame, its fireball not yet thrown.
@@ -225,26 +274,30 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - STEP_OUT_MS - 30,
       )
-      t.observe(worldBoss(), NOW)
-      return staged(worldBoss(), t, { columns: 120, rows: t.rowsAt(worldBoss(), NOW) })
+      return staging(
+        worldBoss(),
+        t,
+        { columns: 120, rows: t.rowsAt(worldBoss(), NOW) },
+        NOW - STEP_OUT_MS - 30,
+      )
     }
     case 'rest': {
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // The reactive events (spec #131). Haste: every hero trails its streak and bobs twice as fast,
     // a quarter-second in: the heroes in the second half of their bob, the enemies in the first.
     case 'haste': {
       const v = party({ hasted: true })
       t.observe(v, NOW)
-      return staged(v, t, FULL, false, NOW + HASTE_FRAME_MS)
+      return staging(v, t, FULL, NOW, { now: NOW + HASTE_FRAME_MS })
     }
     // A mishap 40 ms ago: the goblin scout mid red flash, then tinted until its next hit.
     case 'enrage': {
       t.observe(wave(), NOW - 1000)
       t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW - 40)
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
     case 'camp': {
@@ -265,13 +318,13 @@ export function stage(name: Scenario): Staged {
         NOW - 300,
       )
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // Guard: every hero in the stance, the bob stopped, the knight under the shield.
     case 'guard': {
       const v = party({ guarding: true })
       t.observe(v, NOW)
-      return staged(v, t, FULL)
+      return staging(v, t, FULL, NOW)
     }
     // The stage moments (spec #132). A travel from zone 1 to 3 halfway through the party's step
     // off: the heroes stepped right and half faded, the encounter it left standing on zone 1's
@@ -281,7 +334,7 @@ export function stage(name: Scenario): Staged {
       t.onEffects([{ k: 'traveled', from: 1, to: 3 }], NOW - TRAVEL_OFF_MS / 2)
       const next = { ...empty(), zone: 3, zoneName: 'Marsh of Sighs', wave: 1 }
       t.observe(next, NOW)
-      return staged(next, t, FULL)
+      return staging(next, t, FULL, NOW)
     }
     // Two level-ups in one group, the second a stagger behind the first: the knight's deltas
     // rising in gold, the second hero mid gold flash 40 ms in, its own deltas just off.
@@ -294,8 +347,7 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - LEVEL_STAGGER_MS - 40,
       )
-      t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW - LEVEL_STAGGER_MS - 40)
     }
     // The bandit captain fell and dissolved; at NOW the party holds its victory pose, a quarter
     // into the hold, over zone 1's backdrop.
@@ -312,8 +364,7 @@ export function stage(name: Scenario): Staged {
       )
       const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
       t.observe(next, t1 + 10)
-      t.observe(next, NOW)
-      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+      return staging(next, t, { columns: 120, rows: t.rowsAt(next, NOW) }, t1 + 10)
     }
     // The bandit captain fell with Push on: past the dissolve and the victory hold, at NOW the
     // party is halfway through its step-off, over zone 1's backdrop until it ends.
@@ -332,8 +383,7 @@ export function stage(name: Scenario): Staged {
       )
       const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
       t.observe(next, t1 + 10)
-      t.observe(next, NOW)
-      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+      return staging(next, t, { columns: 120, rows: t.rowsAt(next, NOW) }, t1 + 10)
     }
     // A boss move (#169): the bandit captain's whole-party hit 20 ms past its lunge's one impact,
     // every hero in its hit frame with its number rising.
@@ -349,35 +399,32 @@ export function stage(name: Scenario): Staged {
         ],
         t1,
       )
-      t.observe(boss(), NOW)
-      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+      return staging(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) }, t1)
     }
     case 'boss': {
       // The boss spawned half a spawn ago.
       t.observe(empty(), NOW - SPAWN_MS)
       t.observe(boss(), NOW - SPAWN_MS / 2)
-      t.observe(boss(), NOW)
       const box = { columns: 120, rows: t.rowsAt(boss(), NOW) }
-      return staged(boss(), t, box)
+      return staging(boss(), t, box, NOW - SPAWN_MS / 2)
     }
     case 'compact': {
       t.observe(wave(), NOW)
       const box = { columns: 52, rows: 4 }
-      return staged(wave(), t, box, true)
+      return staging(wave(), t, box, NOW, { compact: true })
     }
     case 'dissolve': {
       // The dissolve starts when the kill's flash ends; at NOW it is half done.
       const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS / 2)
-      return killed(
-        t1,
-        [
-          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
-          { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
-          { k: 'act', actor: 'e2', action: 'attack', at: 500 },
-          { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
-        ],
-        FULL,
-      )
+      return killed(t1, KILL, FULL)
+    }
+    // The goblin scout's kill as `dissolve` plays it: once its fade and the pause after it are
+    // over, the next observe brings the hedge sprite on in its place; at NOW it is halfway
+    // through its fade in, the field rat and the road slime sliding up the line ahead of it.
+    case 'spawn': {
+      const enters = NOW - SPAWN_MS / 2
+      const t1 = enters - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + WAVE_GAP_MS)
+      return killed(t1, KILL, FULL, enters)
     }
     // A sandbox item dropped between spawns: no row to fall from, so its chest fell onto the
     // front slot's empty ground; at NOW it has opened and the sword is halfway up its rise.
@@ -385,8 +432,7 @@ export function stage(name: Scenario): Staged {
       const t0 = NOW - (CHEST_FALL_MS + CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS / 2)
       t.observe(empty(), t0 - 1000)
       t.onEffects([{ k: 'drop', item }], t0)
-      t.observe(empty(), NOW)
-      return staged(empty(), t, FULL)
+      return staging(empty(), t, FULL, t0)
     }
     // The kill's chest lands as its fade ends. At NOW, for `chest`, it sits closed halfway
     // through its sit; for `drop`, it has opened and the sword is halfway up its rise; for
@@ -423,47 +469,42 @@ export function stage(name: Scenario): Staged {
 
 /**
  * A staged scenario's encodings, each rendered once: what its golden hashes, and the goldens test's
- * budget and fall-back checks, read.
+ * budget and rung checks, read.
  */
 export type Renders = {
-  /** The desktop's Svg, SMIL on and off: the hires one, or the scale-1 one over the cap. */
+  /** The desktop's Svg, SMIL on and off, each on the ladder's rung that fits the cap, and that rung. */
   svg: string
   svgFlat: string
-  /** The scale-1 model's Svg (the desktop's fall-back past the cap), SMIL on and off. */
-  svgLo: string
-  svgLoFlat: string
-  /** The scale-1 model's Raster cells and Image frame. */
+  rung: Rung
+  rungFlat: Rung
+  /** The Raster cells: the model's scene resampled into its box's cells. */
   cells: string
+  /** The Image frame. */
   image: Frame
-  /** The hires model's Svg, SMIL on and off, and its Image frame. */
-  svgHi: string
-  svgHiFlat: string
-  hires: Frame
-  /** The hires model's Raster cells where it stays at scale 1 (compact); past it, it draws on Image only. */
-  hiresCells: string | null
 }
 
 export function renders(s: Staged): Renders {
   const at = (smil: boolean) => ({ smil, now: s.now, width: 960, motion: 'full' as const })
-  const svgLo = renderSvg(s.model, s.motions, at(true))
-  const svgLoFlat = renderSvg(s.model, s.motions, at(false))
-  const svgHi = renderSvg(s.hires, s.motions, at(true))
-  const svgHiFlat = renderSvg(s.hires, s.motions, at(false))
+  const fit = fitSvg(s.model, s.motions, at(true))
+  const fitFlat = fitSvg(s.model, s.motions, at(false))
   return {
-    svg: svgOrFallback(svgHi, () => svgLo),
-    svgFlat: svgOrFallback(svgHiFlat, () => svgLoFlat),
-    svgLo,
-    svgLoFlat,
-    cells: encodeRaster(composeFrame(s.model, { numbers: false }), s.model.numbers),
+    svg: fit.svg,
+    svgFlat: fitFlat.svg,
+    rung: fit.rung,
+    rungFlat: fitFlat.rung,
+    cells: rasterCells(s.model),
     image: composeFrame(s.model, { numbers: true }),
-    svgHi,
-    svgHiFlat,
-    hires: composeFrame(s.hires, { numbers: true }),
-    hiresCells:
-      s.hires.scale === 1
-        ? encodeRaster(composeFrame(s.hires, { numbers: false }), s.hires.numbers)
-        : null,
   }
+}
+
+/** A model's Raster cells: its scene resampled into its box's cells, its numbers as text. */
+function rasterCells(model: StageModel): string {
+  const { frame, numbers } = intoCells(
+    composeFrame(model, { numbers: false }),
+    model.numbers,
+    model.box,
+  )
+  return encodeRaster(frame, numbers)
 }
 
 export function goldenOf(r: Renders): Golden {
@@ -473,8 +514,6 @@ export function goldenOf(r: Renders): Golden {
     svgHash: fnv1a64(r.svg),
     svgChars: r.svg.length,
     rasterPairs: rasterPairs(r.cells),
-    imageHashHires: fnv1a64(encodeImage(r.hires, 1).rgba),
-    svgHashLo: fnv1a64(r.svgLo),
   }
 }
 
@@ -616,6 +655,49 @@ export function strip(name: StripScenario): StripInput {
     case 'strip-waiting':
       return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
   }
+}
+
+/**
+ * Raster cells as the terminal shows them, for eyeballing: each cell CELL_W × CELL_H pixels, a
+ * half block its two halves, any other character its background under its glyph in the strip's
+ * font; the terminal's default colour transparent.
+ */
+export function cellsPicture(cells: string, columns: number): Frame {
+  const bytes = decode(cells)
+  const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+  const rows = words.length / 3 / columns
+  const width = columns * CELL_W
+  const rgba = new Uint8ClampedArray(width * rows * CELL_H * 4)
+  const fill = (x0: number, y0: number, h: number, rgb: number) => {
+    if (rgb === CLEAR) return
+    for (let y = y0; y < y0 + h; y++) {
+      for (let x = x0; x < x0 + CELL_W; x++) put(x, y, rgb)
+    }
+  }
+  const put = (x: number, y: number, rgb: number) =>
+    rgba.set([(rgb >>> 16) & 0xff, (rgb >>> 8) & 0xff, rgb & 0xff, 255], (y * width + x) * 4)
+  const half = CELL_H / 2
+  for (let cy = 0; cy < rows; cy++) {
+    for (let cx = 0; cx < columns; cx++) {
+      const w = (cy * columns + cx) * 3
+      const [ch, fg, bg] = [words[w] ?? 0x20, words[w + 1] ?? CLEAR, words[w + 2] ?? CLEAR]
+      const [x0, y0] = [cx * CELL_W, cy * CELL_H]
+      if (ch === 0x2580 || ch === 0x2584) {
+        fill(x0, y0, half, ch === 0x2580 ? fg : bg)
+        fill(x0, y0 + half, half, ch === 0x2580 ? bg : fg)
+        continue
+      }
+      fill(x0, y0, CELL_H, bg)
+      if (ch === 0x20) continue
+      const glyph = glyphFor(String.fromCodePoint(ch))
+      for (let gy = 0; gy < CELL_H; gy++) {
+        for (let gx = 0; gx < CELL_W; gx++) {
+          if ((glyph[gy] ?? 0) & (0x80 >> gx)) put(x0 + gx, y0 + gy, fg)
+        }
+      }
+    }
+  }
+  return { width, height: rows * CELL_H, rgba }
 }
 
 /** Every window's picture, composed onto one canvas at its cells (transparent between). */
@@ -970,14 +1052,13 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
   const model = stageAt(view, t, NOW, layout.box, {
     compact: false,
     motion: 'full',
-    scale: HIRES_SCALE,
   })
   const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
   const box = { columns, rows: layout.bandRows }
   const scene = stripScene({ ...input, columns: playfield }).scene
-  // The Raster cannot zoom: it shows the stage's bottom rows at the same box (ADR 0010). A boss
-  // needs all 17, so in play a 12-row band goes compact on the Raster; the zoomed scenario's
-  // cells pin the crop at that box all the same.
+  // The Raster does not zoom out into a short band: it shows the stage's bottom rows at the same
+  // box, resampled (ADR 0010). A boss needs all 17, so in play a 12-row band goes compact on the
+  // Raster; the zoomed scenario's cells pin the crop at that box all the same.
   const room = box.rows - scene.rows
   const raster: Layout = {
     kind: 'full',

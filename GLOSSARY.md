@@ -357,9 +357,8 @@ _Avoid_: shown state, played state, predicted HP, animation state
 **Sprite**:
 The pixel art of one hero class, enemy, world boss or item, with its animation frames.
 Replaces the glyph where pixels draw; the glyph stays as its fallback. Each sprite has two
-drawings of the same design: its **1.5× art**, for the stage on surfaces that draw pictures, and
-its **1× art**, for half-block terminals, the compact stage and the list windows. Its frames are
-1.5× art only.
+drawings of the same design: its **1.5× art**, for the stage on every surface, and its **1× art**,
+for the compact stage and the list windows. Its frames are 1.5× art only.
 _Avoid_: portrait (the hero template's field name, unused), icon, image
 
 **Frame**:

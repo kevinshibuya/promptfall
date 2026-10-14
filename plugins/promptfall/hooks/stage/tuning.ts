@@ -18,7 +18,7 @@ export const FULL_MIN_COLUMNS = 116
 export const MIN_COLUMNS = 100
 export const STAGE_MAX_COLUMNS = 160
 
-// Geometry in stage pixels at scale 1; the full stage on Image and Svg multiplies every
+// Geometry in stage pixels at scale 1; the full stage, on every surface, multiplies every
 // stage-pixel quantity by HIRES_SCALE and rounds (ADR 0006).
 export const HIRES_SCALE = 1.5
 export const SPRITE_PX = 16
@@ -51,9 +51,9 @@ export const FOLLOW_MS = 120
 export const BOLT_MS = 200
 /** The light burst on its target; the impact lands halfway through. */
 export const BURST_MS = 200
-/** The hit frame's duration, and the 1x white flash. */
+/** The hit frame's duration, and the compact stage's white flash. */
 export const FLASH_MS = 160
-/** The white overlay at 1.5x: longer than one event frame, so the Image loop cannot step over it. */
+/** The full stage's white overlay: longer than one event frame, so the Image loop cannot step over it. */
 export const BLINK_MS = 100
 export const NUMBER_MS = 700
 /** A level-up's gold numbers rise this long: slow enough to read what the hero gained. */

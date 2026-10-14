@@ -1,6 +1,6 @@
 // Cuts a zone backdrop from a gpt-image-2 sheet: the painted band (everything that is not the
-// magenta key) is resampled to the full stage's width at 1.5x (240 px) and at 1x (160 px), fitted
-// to the stage's boss height (51 and 34 rows: the top is cropped, or the sky extended), and
+// magenta key) is resampled to the full stage's width at 1.5x (240 px), fitted
+// to the stage's boss height (51 rows: the top is cropped, or the sky extended), and
 // quantised to at most 16 colours so the pixels stay flat. The stage bottom-anchors the result, so
 // the painting's ground must sit on the band's bottom edge.
 //
@@ -10,7 +10,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { blank, medianCut, nearest, type Rgba, readPng, rgbOf, writePng } from './png'
 import { isKey } from './slice-sheet'
-import { BACKDROP, BACKDROP_COLOURS, BACKDROP_HIRES } from './sprites'
+import { BACKDROP_COLOURS, BACKDROP_HIRES } from './sprites'
 
 export type Band = { x0: number; y0: number; x1: number; y1: number }
 export type BackdropOptions = {
@@ -216,18 +216,16 @@ export function cutBackdrop(
 export function backdropFrom(
   sheet: Rgba,
   opts: BackdropOptions,
-): { full: Rgba; hires: Rgba; band: Band; report: string[] } | { error: string } {
+): { hires: Rgba; band: Band; report: string[] } | { error: string } {
   const found = paintedBand(sheet)
   if (!found) return { error: 'the sheet is all magenta' }
   const band = opts.band ? { ...found, y0: opts.band.y0, y1: opts.band.y1 } : found
   const hires = cutBackdrop(sheet, band, BACKDROP_HIRES.width, BACKDROP_HIRES.height, opts)
-  const full = cutBackdrop(sheet, band, BACKDROP.width, BACKDROP.height, opts)
   const report = [
     `band: x ${band.x0}..${band.x1}, y ${band.y0}..${band.y1} (${band.x1 - band.x0} x ${band.y1 - band.y0})`,
     `1.5x: resampled ${hires.resampled.width} x ${hires.resampled.height} into ${BACKDROP_HIRES.width} x ${BACKDROP_HIRES.height}, ${hires.palette.length} colours`,
-    `1x: resampled ${full.resampled.width} x ${full.resampled.height} into ${BACKDROP.width} x ${BACKDROP.height}, ${full.palette.length} colours`,
   ]
-  return { full: full.image, hires: hires.image, band, report }
+  return { hires: hires.image, band, report }
 }
 
 function parseArgs(argv: string[]): {
@@ -280,15 +278,10 @@ function main(): void {
     process.exit(1)
   }
   for (const line of result.report) console.log(line)
-  const fullDir = join(out, 'backdrops')
   const hiresDir = join(out, 'backdrops-hires')
-  mkdirSync(fullDir, { recursive: true })
   mkdirSync(hiresDir, { recursive: true })
-  const fullPath = join(fullDir, `zone-${zone}.png`)
   const hiresPath = join(hiresDir, `zone-${zone}.png`)
-  writePng(fullPath, result.full)
   writePng(hiresPath, result.hires)
-  console.log(fullPath)
   console.log(hiresPath)
 }
 

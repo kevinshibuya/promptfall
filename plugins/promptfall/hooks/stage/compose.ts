@@ -162,6 +162,26 @@ export function cropBottom(frame: Frame, height: number): Frame {
   return { width: frame.width, height: h, rgba: frame.rgba.slice(from) }
 }
 
+/**
+ * For each of `to` pixels, the `from` pixels its footprint covers and the share of each: the tap
+ * weights the band composer scales a zoomed-out scene with, and the Raster's resample votes with.
+ */
+export function taps(from: number, to: number): [number, number][][] {
+  const step = from / to
+  const out: [number, number][][] = []
+  for (let i = 0; i < to; i++) {
+    const a = i * step
+    const b = a + step
+    const row: [number, number][] = []
+    for (let s = Math.floor(a); s < Math.min(from, Math.ceil(b)); s++) {
+      const cover = Math.min(b, s + 1) - Math.max(a, s)
+      if (cover > 0) row.push([s, cover / step])
+    }
+    out.push(row)
+  }
+  return out
+}
+
 /** The frame's size in stage pixels: the box's columns and half-block rows, times the scale. */
 export function frameSize(model: { box: { columns: number; rows: number }; scale: number }): {
   width: number

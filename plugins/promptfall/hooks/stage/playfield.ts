@@ -7,7 +7,7 @@ import { windowFrame } from '../windows/image'
 import { footerPlates, type Scene } from '../windows/kit'
 import { sceneWords } from '../windows/raster'
 import { BORDER_PX, BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, PAD_PX } from '../windows/tuning'
-import type { Frame } from './compose'
+import { type Frame, taps } from './compose'
 import type { Box } from './layout'
 import type { StageNumber } from './model'
 import { CLEAR, rasterWords } from './raster'
@@ -141,23 +141,6 @@ function drawStage(band: Frame, stage: Frame, x0: number, y0: number, w: number,
 
 function rgbAt(f: Frame, i: number): number {
   return ((f.rgba[i] ?? 0) << 16) | ((f.rgba[i + 1] ?? 0) << 8) | (f.rgba[i + 2] ?? 0)
-}
-
-/** For each of `to` pixels, the `from` pixels its footprint covers and the share of each. */
-function taps(from: number, to: number): [number, number][][] {
-  const step = from / to
-  const out: [number, number][][] = []
-  for (let i = 0; i < to; i++) {
-    const a = i * step
-    const b = a + step
-    const row: [number, number][] = []
-    for (let s = Math.floor(a); s < Math.min(from, Math.ceil(b)); s++) {
-      const cover = Math.min(b, s + 1) - Math.max(a, s)
-      if (cover > 0) row.push([s, cover / step])
-    }
-    out.push(row)
-  }
-  return out
 }
 
 /** The strip's windows, each opaque pixel as it is; the shell shows between and around them. */
@@ -388,7 +371,11 @@ function lay(
   }
 }
 
-/** For each column of a 1x frame drawn without its backdrop: whether its top cell (art rows 0 and 1) holds art. */
+/**
+ * For each column of the Raster's stage pixels drawn without its backdrop (the 1.5x frame
+ * resampled into the cells, or compact's 1x one): whether its top cell (pixel rows 0 and 1) holds
+ * art.
+ */
 export function headsOf(art: Frame): boolean[] {
   const px = words(art)
   const out: boolean[] = []
@@ -402,8 +389,8 @@ export function headsOf(art: Frame): boolean[] {
 
 /**
  * The band as Raster cells, `band` columns by rows, base64: the shell's cells, and on them the
- * playfield at `playfieldOf`, `stage` (a 1x frame of the stage rows shown, its sky cropped on a
- * short band) above `strip`, or compact's beside its window, inside one line; Loot and World pass
+ * playfield at `playfieldOf`, `stage` (the stage's pixels in its cells, a column and half a row
+ * each: the 1.5x scene resampled, its sky cropped on a short band) above `strip`, or compact's beside its window, inside one line; Loot and World pass
  * no stage. The line takes the shell's margin when it is two cells or more a side; under that it
  * sits over the playfield's outermost columns, so 160 to 163 columns draw like 160. Its top row is
  * over the stage's top row, or the strip's own top line with no stage, and its bottom row over the

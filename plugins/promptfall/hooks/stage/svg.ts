@@ -23,6 +23,7 @@ import {
   travelAt,
   variant,
 } from './model'
+import { colourPath } from './paths'
 import { svgFrame } from './playfield'
 import { bobbingAt, CHEST_SHOW_MS, type Motion, type StageTimeline } from './timeline'
 import {
@@ -35,7 +36,6 @@ import {
   ENRAGE_RGB,
   ENRAGE_TINT,
   GLOW_ALPHA,
-  HIRES_SCALE,
   IDLE_BOB_PX,
   IDLE_FRAME_MS,
   LEVEL_RGB,
@@ -131,6 +131,8 @@ const appearing = (mine: readonly Motion[]): boolean =>
   (mine.some((m) => m.kind === 'travel_on') && !mine.some((m) => m.kind === 'travel_off'))
 
 const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
+/** The stage picture's colours: `#abc` where the six digits pair up. */
+const paint = (rgb: number) => hex(rgb).replace(/^#(\w)\1(\w)\2(\w)\3$/, '#$1$2$3')
 const seconds = (ms: number) => `${Number((ms / 1000).toFixed(3))}s`
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
 
@@ -163,51 +165,6 @@ export function artPaths(art: SpriteArt, raritySlot: number | null): string {
 }
 
 /**
- * One <path> per colour of a painting, each a set of rectangles: a horizontal run joins the run
- * directly under it when both start and end at the same columns, so a sky or ground band is one
- * `M x y h w v h h -w z`. Against `artPaths` this saves 10% (zone 1) to 45% (zone 11).
- */
-export function rectPaths(art: SpriteArt): string {
-  const px = decodePixels(art)
-  type Run = { x: number; y: number; w: number; h: number }
-  const rects = new Map<number, Run[]>()
-  /** The runs of the row above still open for joining, by colour. */
-  let above = new Map<number, Run[]>()
-  for (let y = 0; y < art.height; y++) {
-    const open = new Map<number, Run[]>()
-    let x = 0
-    while (x < art.width) {
-      const v = px[y * art.width + x] ?? 0
-      let end = x + 1
-      while (end < art.width && px[y * art.width + end] === v) end++
-      if (v !== 0) {
-        const w = end - x
-        const join = above.get(v)?.find((r) => r.x === x && r.w === w && r.y + r.h === y)
-        let run = join
-        if (!run) {
-          run = { x, y, w, h: 1 }
-          const list = rects.get(v) ?? []
-          list.push(run)
-          rects.set(v, list)
-        } else run.h++
-        const list = open.get(v) ?? []
-        list.push(run)
-        open.set(v, list)
-      }
-      x = end
-    }
-    above = open
-  }
-  return [...rects.keys()]
-    .sort((a, b) => a - b)
-    .map((v) => {
-      const d = (rects.get(v) ?? []).map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h-${r.w}z`).join('')
-      return `<path fill="${hex(art.palette[v] ?? 0)}" d="${d}"/>`
-    })
-    .join('')
-}
-
-/**
  * Where each copy of a `w`-wide painting goes across a `W`-wide frame whose painting starts at
  * `ox`: the painting itself, then mirrored copies outward on both sides until the frame is covered,
  * every other one plain again. A mirrored copy at `x` is drawn with `scale(-1 1)`, so `x` is its
@@ -227,15 +184,64 @@ export function backdropPlacements(
   return out
 }
 
-/** A backdrop's paths, built once per painting: it is static and the largest art on the stage. */
-const backdropCache = new WeakMap<SpriteArt, string>()
-function backdropPaths(art: SpriteArt): string {
-  let paths = backdropCache.get(art)
+/**
+ * An art on the stage picture (ticket #210's encoding): each colour one path, the shortest of its
+ * rectangles filled and its runs stroked (`paths.ts`), the rarity colour as currentColor. Built
+ * once per art and slot: the backdrop is the largest art on the stage, and every redraw draws
+ * the same arts again.
+ */
+const strokeCache = new WeakMap<SpriteArt, Map<number | null, string>>()
+export function strokePaths(art: SpriteArt, raritySlot: number | null): string {
+  let bySlot = strokeCache.get(art)
+  if (bySlot === undefined) {
+    bySlot = new Map()
+    strokeCache.set(art, bySlot)
+  }
+  let paths = bySlot.get(raritySlot)
   if (paths === undefined) {
-    paths = rectPaths(art)
-    backdropCache.set(art, paths)
+    const grid = { width: art.width, height: art.height, px: decodePixels(art) }
+    paths = [...new Set(grid.px)]
+      .filter((v) => v !== 0)
+      .sort((a, b) => a - b)
+      .map((v) =>
+        colourPath(grid, v, v === raritySlot ? 'currentColor' : paint(art.palette[v] ?? 0)),
+      )
+      .join('')
+    bySlot.set(raritySlot, paths)
   }
   return paths
+}
+
+/**
+ * The stage picture's ids, one letter each while there are few enough: the filters and the
+ * backdrop on their own, the arts and their row clips in turn from the letters left.
+ */
+const ID = { flash: 'f', redflash: 'r', goldflash: 'g', hit: 'h', backdrop: 'b' } as const
+const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+const FREE = [...LETTERS].filter((c) => !Object.values(ID).some((id) => id === c))
+const nthId = (i: number): string => {
+  if (i < FREE.length) return FREE[i] ?? ''
+  const j = i - FREE.length
+  return `${LETTERS[Math.floor(j / LETTERS.length) % LETTERS.length]}${LETTERS[j % LETTERS.length]}`
+}
+
+/**
+ * The degradation ladder (spec #209) for a picture past the engine's cap: each rung keeps the ones
+ * before it. The idle pair goes (idle A alone, the actor holds still), then the hit filter (the
+ * hit frame's lean without its lightening), then the backdrop painting (the ground strip alone).
+ * No rung drops a drawn frame.
+ */
+export const RUNGS = ['first rung', 'no idle pair', 'no hit filter', 'no backdrop'] as const
+export type Rung = 0 | 1 | 2 | 3
+
+export type SvgOpts = {
+  smil: boolean
+  now: number
+  width: number
+  motion: 'full' | 'still'
+  fit?: number
+  /** The ladder's rung drawn; the first when absent. */
+  rung?: Rung
 }
 
 /**
@@ -244,25 +250,25 @@ function backdropPaths(art: SpriteArt): string {
  * (negative `begin` for one already under way), so a redraw resumes mid-motion; without it,
  * the model as of `now`. Dissolve and spawn are opacity here, not the Bayer pattern.
  */
-export function renderSvg(
-  model: StageModel,
-  motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; fit?: number },
-): string {
+export function renderSvg(model: StageModel, motions: readonly Motion[], opts: SvgOpts): string {
   const { width: W, height: H } = frameSize(model)
+  const rung = opts.rung ?? 0
+  const hitLit = model.scale !== 1 && rung < 2
+  const backdrop = rung < 3 ? model.backdrop : null
   const scale = model.scale
   const px = (v: number) => Math.round(v * scale)
   const block = glyphBlock(scale)
   const compact = model.box.rows <= COMPACT_STAGE_ROWS
   const live = motions.filter((m) => m.until > opts.now)
+  let named = 0
   const ids = new Map<SpriteArt, string>()
   const defs: string[] = []
   const define = (art: SpriteArt, raritySlot: number | null): string => {
     let id = ids.get(art)
     if (id === undefined) {
-      id = `a${ids.size}`
+      id = nthId(named++)
       ids.set(art, id)
-      defs.push(`<g id="${id}">${artPaths(art, raritySlot)}</g>`)
+      defs.push(`<g id="${id}" fill="none">${strokePaths(art, raritySlot)}</g>`)
     }
     return id
   }
@@ -271,7 +277,7 @@ export function renderSvg(
   const rowClip = (key: string, width: number, y: number, h: number): string => {
     let id = clips.get(key)
     if (id === undefined) {
-      id = key
+      id = nthId(named++)
       clips.set(key, id)
       defs.push(
         `<clipPath id="${id}"><rect x="0" y="${y}" width="${width}" height="${h}"/></clipPath>`,
@@ -311,19 +317,18 @@ export function renderSvg(
   // as compose places it, and mirrored outward on each side while the frame is wider (the
   // Image zoom-out; the desktop Svg never outgrows the painting, ADR 0004).
   const body: string[] = [
-    model.backdrop
+    backdrop
       ? (() => {
-          const art = model.backdrop
-          const at = backdropOrigin(art, W, H)
-          defs.push(`<g id="bg">${backdropPaths(art)}</g>`)
-          return backdropPlacements(art.width, W, at.x)
+          const at = backdropOrigin(backdrop, W, H)
+          defs.push(`<g id="${ID.backdrop}" fill="none">${strokePaths(backdrop, null)}</g>`)
+          return backdropPlacements(backdrop.width, W, at.x)
             .map(
               (p) =>
-                `<use href="#bg" transform="translate(${p.x} ${at.y})${p.mirror ? ' scale(-1 1)' : ''}"/>`,
+                `<use href="#${ID.backdrop}" transform="translate(${p.x} ${at.y})${p.mirror ? ' scale(-1 1)' : ''}"/>`,
             )
             .join('')
         })()
-      : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${hex(model.ground)}"/>`,
+      : `<rect x="0" y="${H - ground}" width="${W}" height="${ground}" fill="${paint(model.ground)}"/>`,
   ]
   const base = new Map<string, { x: number; y: number; actor: StageActor }>()
   /** Guard's shield on the flat Svg: drawn over every actor. */
@@ -345,8 +350,8 @@ export function renderSvg(
     const flood = filter !== null && filter !== 'hit'
     if (filter === 'redflash') red = true
     if (filter === 'goldflash') gold = true
-    const color = slot === null || flood ? '' : ` color="${hex(tint[slot] ?? 0)}"`
-    const filt = filter ? ` filter="url(#${filter})"` : ''
+    const color = slot === null || flood ? '' : ` color="${paint(tint[slot] ?? 0)}"`
+    const filt = filter ? ` filter="url(#${ID[filter]})"` : ''
     const derivedFrom = pose === 'hit' || pose === 'idle_b' ? actor.poses.idle : shown
     const art = derivedFrom.art
     const id = define(art, derivedFrom.raritySlot)
@@ -355,8 +360,8 @@ export function renderSvg(
       const cut = squashRow(art)
       if (!cut)
         return `<use href="#${id}"${actor.flipX ? ` transform="${flipOf(art.width)}"` : ''}${color}${filt}/>`
-      const up = rowClip(`${id}u`, art.width, 0, cut.m)
-      const low = rowClip(`${id}l`, art.width, cut.m + 1, art.height - cut.m - 1)
+      const up = rowClip(`${id}:u`, art.width, 0, cut.m)
+      const low = rowClip(`${id}:l`, art.width, cut.m + 1, art.height - cut.m - 1)
       return `<g${color}${filt}><use href="#${id}" clip-path="url(#${up})" transform="${['translate(0 1)', flipOf(art.width)].filter(Boolean).join(' ')}"/><use href="#${id}" clip-path="url(#${low})"${actor.flipX ? ` transform="${flipOf(art.width)}"` : ''}/></g>`
     }
     if (pose === 'hit') {
@@ -373,7 +378,7 @@ export function renderSvg(
             y1 = y
           }
           if (y0 < 0) continue
-          const c = rowClip(`${id}h${v}`, art.width, y0, y1 - y0 + 1)
+          const c = rowClip(`${id}:h${v}`, art.width, y0, y1 - y0 + 1)
           bands.push(`<use href="#${id}" clip-path="url(#${c})" transform="translate(${v} 0)"/>`)
         }
       } else bands.push(`<use href="#${id}"/>`)
@@ -393,13 +398,18 @@ export function renderSvg(
   /** A mark drawn with an actor (Haste's streak, Guard's shield), from its idle top-left. */
   const markUse = (m: Mark | null | undefined): string =>
     m ? `<use href="#${define(m.art, null)}" transform="translate(${m.dx} ${m.dy})"/>` : ''
-  /** The bob's frame of an actor: its own, or (a hand-built actor) the plain one unless it holds still. */
+  /**
+   * The bob's frame of an actor: its own, or (a hand-built actor) the plain one unless it holds
+   * still; none from the ladder's second rung.
+   */
   const bobMsOf = (actor: StageActor): number | null =>
-    actor.bobMs !== undefined
-      ? actor.bobMs
-      : opts.motion === 'full' && !actor.fallen
-        ? IDLE_FRAME_MS
-        : null
+    rung >= 1
+      ? null
+      : actor.bobMs !== undefined
+        ? actor.bobMs
+        : opts.motion === 'full' && !actor.fallen
+          ? IDLE_FRAME_MS
+          : null
   /** Each tint's red overlay held from its start to its hit's show time (or for good, still to come). */
   const tintSets = (mine: readonly Motion[]): string =>
     mine
@@ -470,7 +480,7 @@ export function renderSvg(
     }
     for (const [pose, sets] of byPose) {
       parts.push(
-        `<g visibility="hidden">${sets.join('')}${poseMarkup(actor, pose, pose === 'hit' ? 'hit' : null)}${tinted(pose)}</g>`,
+        `<g visibility="hidden">${sets.join('')}${poseMarkup(actor, pose, pose === 'hit' && hitLit ? 'hit' : null)}${tinted(pose)}</g>`,
       )
     }
     // The white blink, Enrage's red one and a level-up's gold: over the hit frame while it shows,
@@ -496,22 +506,25 @@ export function renderSvg(
     }
     // The pose-at-now art, for the paths that draw it: the 1.5x SMIL path draws every pose from
     // `poses` and must not define it (an idle B or hit art here is a def nothing uses).
+    const held = rung >= 1 && actor.pose === 'idle_b'
     const drawNow = () => {
+      // From the ladder's second rung the idle pair goes here too: idle B draws as idle A.
+      const art = held ? actor.poses.idle.art : actor.art
       const slot = actor.raritySlot
-      const id = define(actor.art, slot)
+      const id = define(art, slot)
       // The accent before any flash: the flash is an overlay here, never baked into the base. A
       // hit's own palette is already lightened; its filter lightens the idle colour instead.
       const accent =
         scale !== 1 && actor.pose === 'hit' && slot !== null
           ? actor.poses.idle.palette[slot]
           : (actor.accent ?? (slot === null ? undefined : actor.palette[slot]))
-      const color = slot === null ? '' : ` color="${hex(accent ?? 0)}"`
-      const flip = actor.flipX ? ` transform="translate(${actor.art.width} 0) scale(-1 1)"` : ''
+      const color = slot === null ? '' : ` color="${paint(accent ?? 0)}"`
+      const flip = actor.flipX ? ` transform="translate(${art.width} 0) scale(-1 1)"` : ''
       return {
         use: `<use href="#${id}"${flip}${color}/>`,
-        flashUse: `<use href="#${id}"${flip} filter="url(#flash)"`,
-        redUse: `<use href="#${id}"${flip} filter="url(#redflash)"`,
-        goldUse: `<use href="#${id}"${flip} filter="url(#goldflash)"`,
+        flashUse: `<use href="#${id}"${flip} filter="url(#${ID.flash})"`,
+        redUse: `<use href="#${id}"${flip} filter="url(#${ID.redflash})"`,
+        goldUse: `<use href="#${id}"${flip} filter="url(#${ID.goldflash})"`,
       }
     }
     // Haste's streak, drawn under the idle pair from the idle's place.
@@ -533,8 +546,8 @@ export function renderSvg(
         : actor.tinted
           ? `${redUse} opacity="${ENRAGE_TINT}"/>`
           : ''
-      const dx = actor.poses[actor.pose].dx
-      const hit = scale !== 1 && actor.pose === 'hit' ? ' filter="url(#hit)"' : ''
+      const dx = actor.poses[held ? 'idle' : actor.pose].dx
+      const hit = hitLit && actor.pose === 'hit' ? ` filter="url(#${ID.hit})"` : ''
       const drawn = hit ? `<g${hit}>${use}</g>` : use
       body.push(streakAt(actor.x, actor.y))
       body.push(
@@ -596,8 +609,8 @@ export function renderSvg(
       })
       .join('')
     const tints = tintSets(mine)
-    if (tints || flashes.includes('redflash')) red = true
-    if (flashes.includes('goldflash')) gold = true
+    if (tints || flashes.includes(`url(#${ID.redflash})`)) red = true
+    if (flashes.includes(`url(#${ID.goldflash})`)) gold = true
     const tinted = tints ? `${redUse} opacity="0">${tints}</use>` : ''
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     body.push(
@@ -608,7 +621,7 @@ export function renderSvg(
 
   /** A glow's circle in its rarity fill; `extra` its opacity or its animation. */
   const circle = (g: { x: number; y: number; r: number; rgb: number }, extra: string) =>
-    `<circle cx="${g.x}" cy="${g.y}" r="${g.r}" fill="${hex(g.rgb)}"${extra}`
+    `<circle cx="${g.x}" cy="${g.y}" r="${g.r}" fill="${paint(g.rgb)}"${extra}`
 
   if (!opts.smil) {
     for (const g of model.glows) {
@@ -642,8 +655,8 @@ export function renderSvg(
       if (m.kind === 'chest') {
         const sprite = SPRITES[m.spriteId]
         if (!sprite) continue
-        const closed = variant(CHESTS.closed, compact, scale)
-        const item = variant(sprite, compact, scale)
+        const closed = variant(CHESTS.closed, compact)
+        const item = variant(sprite, compact)
         // Where the actor stood, on the ground whatever its bob; with no actor, its slot's ground.
         const at = m.actor === null ? undefined : base.get(m.actor)
         const idle = at?.actor.poses.idle.art
@@ -673,7 +686,7 @@ export function renderSvg(
           { sprite: CHESTS.open, from: opens + CHEST_OPEN_MS / 2, until: m.until },
         ].filter((a) => a.until > opts.now)
         const uses = arts.map((a) => {
-          const href = `#${define(variant(a.sprite, compact, scale), null)}`
+          const href = `#${define(variant(a.sprite, compact), null)}`
           if (arts.length === 1 && a.from <= opts.now) return `<use href="${href}"/>`
           return `<use href="${href}" visibility="hidden"><set attributeName="visibility" to="visible" begin="${seconds(a.from - opts.now)}" dur="${seconds(a.until - a.from)}"/></use>`
         })
@@ -720,7 +733,7 @@ export function renderSvg(
         const to = base.get(m.target)
         const sprite = SPRITES[`effect:${m.effect}`]
         if (!to || !sprite) continue
-        const art = variant(sprite, compact, scale)
+        const art = variant(sprite, compact)
         // The attacker throws from where it stands as it throws: stepped out, in its own action's
         // step (a second queued action has its own).
         const step = live.find(
@@ -750,20 +763,18 @@ export function renderSvg(
     body.splice(firstNumber < 0 ? body.length : firstNumber, 0, ...effects)
   }
 
-  const flashFilter =
-    '<filter id="flash"><feFlood flood-color="#ffffff"/><feComposite operator="in" in2="SourceAlpha"/></filter>'
-  // `lighten` on every fill, currentColor included: gamma 0.6 per channel, in sRGB.
-  const hitFilter =
-    scale === 1
-      ? ''
-      : '<filter id="hit" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" exponent="0.6"/><feFuncG type="gamma" exponent="0.6"/><feFuncB type="gamma" exponent="0.6"/></feComponentTransfer></filter>'
+  const flashFilter = `<filter id="${ID.flash}"><feFlood flood-color="#fff"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
+  // `lighten` on every fill and stroke, currentColor included: gamma 0.6 per channel, in sRGB.
+  const hitFilter = hitLit
+    ? `<filter id="${ID.hit}" color-interpolation-filters="sRGB"><feComponentTransfer><feFuncR type="gamma" exponent="0.6"/><feFuncG type="gamma" exponent="0.6"/><feFuncB type="gamma" exponent="0.6"/></feComponentTransfer></filter>`
+    : ''
   // Enrage's red, beside the white: the flash at the mishap and, at ENRAGE_TINT, the tint.
   const redFilter = red
-    ? `<filter id="redflash"><feFlood flood-color="${hex(ENRAGE_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
+    ? `<filter id="${ID.redflash}"><feFlood flood-color="${paint(ENRAGE_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
     : ''
   // A level-up's gold, beside the white.
   const goldFilter = gold
-    ? `<filter id="goldflash"><feFlood flood-color="${hex(LEVEL_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
+    ? `<filter id="${ID.goldflash}"><feFlood flood-color="${paint(LEVEL_RGB)}"/><feComposite operator="in" in2="SourceAlpha"/></filter>`
     : ''
   const head = (w: number, h: number, fill = '') =>
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${opts.width}" height="${Math.round((opts.width * h) / w)}" shape-rendering="crispEdges"${fill}><defs>${flashFilter}${redFilter}${goldFilter}${hitFilter}${defs.join('')}</defs>`
@@ -781,26 +792,27 @@ export function renderSvg(
 }
 
 /**
- * The 1.5x Svg when its markup fits the engine's cap, else the 1x Svg (grill Q12): the rendered
- * size is the same either way; only the viewBox differs.
+ * The picture on the ladder's first rung its markup fits the engine's cap on, and that rung; the
+ * last rung's when none fits. A rung past the first is rendered only when the one before it is
+ * over the cap, so a picture under the cap never changes.
  */
-export function svgWithFallback(
-  hi: StageModel,
-  lo: StageModel,
+export function fitSvg(
+  model: StageModel,
   motions: readonly Motion[],
-  opts: { smil: boolean; now: number; width: number; motion: 'full' | 'still'; fit?: number },
-): string {
-  return svgOrFallback(renderSvg(hi, motions, opts), () => renderSvg(lo, motions, opts))
-}
-
-/** The 1.5x Svg while it is under the cap, else the 1x one, `lo` rendered only then. */
-export function svgOrFallback(hi: string, lo: () => string): string {
-  return hi.length < SVG_MAX_CHARS ? hi : lo()
+  opts: Omit<SvgOpts, 'rung'>,
+): { svg: string; rung: Rung } {
+  let rung: Rung = 0
+  let svg = renderSvg(model, motions, opts)
+  while (svg.length >= SVG_MAX_CHARS && rung < 3) {
+    rung = (rung + 1) as Rung
+    svg = renderSvg(model, motions, { ...opts, rung })
+  }
+  return { svg, rung }
 }
 
 /**
- * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the 1.5x model,
- * falling back to the 1x one over the cap. `view` is the staged state at `now`.
+ * The desktop's full stage as the band's stage Svg, `fit` of its natural height: the one model on
+ * the ladder's rung that fits the engine's cap. `view` is the staged state at `now`.
  */
 export function stageSvg(
   view: GameView,
@@ -809,10 +821,8 @@ export function stageSvg(
   box: Box,
   opts: { smil: boolean; width: number; motion: 'full' | 'still'; fit: number },
 ): string {
-  const at = { compact: false, motion: opts.motion }
-  const hi = stageAt(view, timeline, now, box, { ...at, scale: HIRES_SCALE })
-  const lo = stageAt(view, timeline, now, box, at)
-  return svgWithFallback(hi, lo, timeline.active(now), { ...opts, now })
+  const model = stageAt(view, timeline, now, box, { compact: false, motion: opts.motion })
+  return fitSvg(model, timeline.active(now), { ...opts, now }).svg
 }
 
 /** One art alone at its own size, in its own colours: the dialog's list sprites. */
@@ -831,5 +841,5 @@ function text(
   extra = '',
 ): string {
   // The stroke under the fill is the pixel surfaces' one-pixel outline, for pale backdrops.
-  return `<text x="${x}" y="${y + GLYPH_HEIGHT * block}" fill="${hex(rgb)}" stroke="${hex(TEXT_OUTLINE_RGB)}" stroke-width="1" paint-order="stroke" font-family="monospace" font-size="${6 * block}" font-weight="bold"${extra}>${anim}${s}</text>`
+  return `<text x="${x}" y="${y + GLYPH_HEIGHT * block}" fill="${paint(rgb)}" stroke="${paint(TEXT_OUTLINE_RGB)}" stroke-width="1" paint-order="stroke" font-family="monospace" font-size="${6 * block}" font-weight="bold"${extra}>${anim}${s}</text>`
 }
