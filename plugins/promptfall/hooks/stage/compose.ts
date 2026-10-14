@@ -2,6 +2,7 @@ import { decodePixels } from '../sprites/index'
 import type { SpriteArt } from '../sprites/types'
 import { drawOutlinedText, glyphBlock } from './font'
 import type { Mark, StageActor, StageModel } from './model'
+import { FLASH_RGB } from './tuning'
 
 /** RGBA, alpha 0 or 255 only. */
 export type Frame = { width: number; height: number; rgba: Uint8ClampedArray }
@@ -119,7 +120,7 @@ function drawBackdrop(frame: Frame, art: SpriteArt): void {
 /**
  * The stage as pixels: the zone's backdrop over the whole frame (or, without one, the ground strip
  * on the bottom two rows, three at scale 1.5), the actors in slot order (a hasted hero's streak
- * under it), Guard's shield, the glows, the chests, the items rising from them, the campfire, the
+ * under it), Guard's shield (white while a hit lands on it), the glows, the chests, the items rising from them, the campfire, the
  * effect sprites, then (when `numbers`) the damage numbers. Raster draws numbers as text cells
  * instead.
  */
@@ -133,14 +134,18 @@ export function composeFrame(model: StageModel, opts: { numbers: boolean }): Fra
       for (let x = 0; x < frame.width; x++) put(frame, x, y, model.ground)
     }
   }
-  const mark = (a: StageActor, m: Mark) =>
-    blit(frame, m.art, m.art.palette, a.x + m.dx, a.y + m.dy, false, a.alpha)
+  const mark = (a: StageActor, m: Mark, palette = m.art.palette) =>
+    blit(frame, m.art, palette, a.x + m.dx, a.y + m.dy, false, a.alpha)
   for (const a of model.actors) {
     // Haste's streak trails the idle pair, under the hero and under the next one along.
     if (a.streak && (a.pose === 'idle' || a.pose === 'idle_b')) mark(a, a.streak)
     blit(frame, a.art, a.palette, a.x + a.poses[a.pose].dx, a.y, a.flipX, a.alpha)
   }
-  for (const a of model.actors) if (a.shield) mark(a, a.shield)
+  for (const a of model.actors) {
+    const s = a.shield
+    if (s)
+      mark(a, s, s.flashing ? s.art.palette.map((c, i) => (i === 0 ? c : FLASH_RGB)) : undefined)
+  }
   for (const g of model.glows) disc(frame, g.x, g.y, g.r, g.rgb, g.alpha)
   for (const c of model.chests) blit(frame, c.art, c.art.palette, c.x, c.y, false, c.alpha)
   for (const d of model.drops) blit(frame, d.art, d.art.palette, d.x, d.y, false, d.alpha)

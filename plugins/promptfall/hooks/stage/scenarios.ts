@@ -91,6 +91,8 @@ export const SCENARIOS = [
   'camp',
   'guard',
   'guard-huddle',
+  'guard-hit',
+  'compact-guard',
   'travel',
   'level-up',
   'victory',
@@ -323,7 +325,7 @@ export function caseOf(name: Scenario): Case {
       return staging(wave(), t, FULL, NOW)
     }
     // Guard, first drawn on a guarding party: huddled toward the knight with no step, every hero
-    // in the stance, the bob stopped, the knight under the shield.
+    // in the stance, the bob stopped, the knight holding the big shield on the enemies' side.
     case 'guard': {
       const v = party({ guarding: true })
       t.observe(v, NOW)
@@ -337,6 +339,27 @@ export function caseOf(name: Scenario): Case {
       const v = party({ guarding: true })
       t.observe(v, NOW)
       return staging(v, t, FULL, NOW)
+    }
+    // Guard under attack: the goblin scout's lunge at its apex on the knight, the impact. The
+    // shield flashes white with the knight's blink, the knight in its hit frame.
+    case 'guard-hit': {
+      const v = party({ guarding: true })
+      const ms = WINDUP_HOLD_MS + LUNGE_MS / 2
+      t.observe(v, NOW - ms)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+          { k: 'hit', by: 'e1', target: 'h1', amount: 4 },
+        ],
+        NOW - ms,
+      )
+      return staging(v, t, FULL, NOW - ms)
+    }
+    // Guard on the compact stage: the knight in the stance with the 1x shield beside it.
+    case 'compact-guard': {
+      const v = party({ guarding: true })
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 52, rows: 4 }, NOW, { compact: true })
     }
     // The stage moments (spec #132). A travel from zone 1 to 3 halfway through the party's step
     // off: the heroes stepped right and half faded, the encounter it left standing on zone 1's

@@ -42,6 +42,7 @@ import {
   LUNGE_PX,
   NUMBER_RISE_PX,
   RARITY_RGB,
+  SHIELD_OVERLAP_PX,
   SPRITE_PX,
   STEP_OUT_MS,
   STEP_PX,
@@ -77,6 +78,8 @@ export const POSES: readonly Pose[] = [
 
 /** An art drawn with an actor, its top-left `dx`, `dy` from the actor's idle top-left. */
 export type Mark = { art: SpriteArt; dx: number; dy: number }
+/** Guard's big shield beside its holder, white while a hit lands on it. */
+export type ShieldMark = Mark & { flashing: boolean }
 
 /** Every pose the same art, for hand-built actors (tests and fixtures). */
 export function samePoses(
@@ -132,8 +135,11 @@ export type StageActor = {
   bobMs?: number | null
   /** Haste's speed streak behind a hero at rest, drawn under it; 1.5 only. */
   streak?: Mark | null
-  /** Guard's shield over the front hero; 1.5 only. */
-  shield?: Mark | null
+  /**
+   * Guard's big shield, held by the front living hero on the enemies' side and drawn over it;
+   * flashing white while a hit on any guarding hero flashes.
+   */
+  shield?: ShieldMark | null
   /**
    * A huddle member's huddle position less its slot, and the share of that offset in `x` at the
    * model's instant (0 at the slot, 1 huddled); null for a hero outside the huddle and an enemy.
@@ -189,6 +195,8 @@ export type StageModel = {
 const FALLBACK = spriteFor('item', '')
 /** Camp's campfire: an effect sprite, not content. */
 export const CAMPFIRE = spriteFor('effect', 'campfire')
+/** Guard's big shield: an effect sprite, not content. */
+export const SHIELD = spriteFor('effect', 'shield')
 /** The chest's three drawings, all one size, so each places as the closed one does. */
 export const CHESTS = {
   closed: spriteFor('chest', 'closed'),
@@ -313,22 +321,26 @@ function streakOf(idle: SpriteArt, rgb: number): Mark | null {
   return { art, dx: idle.width - box.x0 + 1, dy: mid - 1 }
 }
 
-/** Guard's shield mark: steel with a light rib and a dark outline, at 1.5. */
-export const SHIELD = solid(
-  ['.KKKKK.', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', 'KSSWSSK', '.KSWSK.', '..KSK..', '...K...'],
-  [0x101018, 0x5070c0, 0xe0e8f0],
-)
-
-/** The shield centred over a hero's idle figure, a pixel above its head. */
-function shieldOver(idle: SpriteArt): Mark | null {
-  const box = opaqueBox(idle)
-  if (!box) return null
-  // Heroes are drawn flipped: the figure's centre mirrors with the art.
-  const centre = idle.width - (box.x0 + box.x1 + 1) / 2
+/**
+ * The big shield `art` beside a hero's idle figure, on the enemies' side: its bottom on the
+ * figure's ground row, its back edge over the figure's first `overlap` columns. Heroes are drawn
+ * flipped, so the figure's front is the mirror of its art's right edge.
+ */
+function shieldBeside(
+  idle: SpriteArt,
+  art: SpriteArt,
+  overlap: number,
+  flashing: boolean,
+): ShieldMark | null {
+  const figure = opaqueBox(idle)
+  const shield = opaqueBox(art)
+  if (!figure || !shield) return null
+  const front = idle.width - 1 - figure.x1
   return {
-    art: SHIELD,
-    dx: Math.round(centre - SHIELD.width / 2),
-    dy: box.y0 - SHIELD.height - 1,
+    art,
+    dx: front + overlap - 1 - shield.x1,
+    dy: figure.y1 - shield.y1,
+    flashing,
   }
 }
 
@@ -554,8 +566,11 @@ export function stageAt(
   // Bosses draw over their minions, never under.
   actors.push(...bosses)
 
-  // The front of the party is its first hero standing: a fallen one wears no shield.
+  // The front of the party is its first hero standing: a fallen one holds no shield, and the next
+  // one standing takes it at once.
   const front = view.heroes.findIndex((h) => h.alive)
+  // A hit on any guarding hero lands on the shield: it flashes in the struck hero's flash.
+  const shieldFlashing = view.heroes.some((h) => isFlashing(h.id))
   /** A hero's place in the line, without its offsets. */
   const slotX = (index: number, art: SpriteArt) =>
     width - edge - art.width - (partySize - 1 - index) * pitch
@@ -602,10 +617,20 @@ export function stageAt(
     const dx = huddleDx.get(hero.id)
     const pose = poseOf(hero.id, fallen, rest, bobMs, sliding && dx !== undefined)
     const shown = poses[pose]
-    // Haste's streak and Guard's shield are the full stage's: compact, the bob and the stance alone.
-    const marks = !opts.compact && !fallen
-    const streak = marks && hero.hasted ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0) : null
-    const shield = marks && rest === 'guard' && index === front ? shieldOver(poses.idle.art) : null
+    // Haste's streak is the full stage's: compact, the bob alone. Guard's shield is on both.
+    const streak =
+      !opts.compact && !fallen && hero.hasted
+        ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0)
+        : null
+    const shield =
+      rest === 'guard' && index === front
+        ? shieldBeside(
+            poses.idle.art,
+            variant(SHIELD, opts.compact),
+            px(SHIELD_OVERLAP_PX),
+            shieldFlashing,
+          )
+        : null
     const flashing = !fallen && isFlashing(hero.id)
     const goldFlashing = !fallen && !flashing && isFlashing(hero.id, 'gold_flash')
     const accent = shown.raritySlot === null ? null : (shown.palette[shown.raritySlot] ?? null)
