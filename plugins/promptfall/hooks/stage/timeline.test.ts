@@ -1239,7 +1239,14 @@ test('a camp sets the campfire for its sit and fade, and each healed hero rises 
   )
   const from = at ?? 0
   expect(of(t.active(NOW + 100), 'campfire')).toEqual([
-    { kind: 'campfire', actor: null, from, until: from + CAMPFIRE_MS + CAMPFIRE_FADE_MS },
+    {
+      kind: 'campfire',
+      actor: null,
+      place: 'between',
+      from,
+      fade: from + CAMPFIRE_MS,
+      until: from + CAMPFIRE_MS + CAMPFIRE_FADE_MS,
+    },
   ])
   expect(of(t.active(NOW + 100), 'number')).toEqual([
     {
@@ -1254,6 +1261,77 @@ test('a camp sets the campfire for its sit and fade, and each healed hero rises 
   expect(t.pending(from - 1)).toEqual([{ actor: 'h1', delta: 25, at: from }])
   expect(t.isBusy(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS - 1)).toBe(true)
   expect(of(t.active(from + CAMPFIRE_MS + CAMPFIRE_FADE_MS), 'campfire')).toEqual([])
+})
+
+const camped = (): GameView => ({ ...wave(), camping: true })
+
+test("making camp walks each enemy off over the spawn's span and lights the fire at the party for as long as the camp holds", () => {
+  const t = observed()
+  const [start] = t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW + 100)
+  const from = start ?? 0
+  expect(of(t.active(from), 'camp_leave').map((m) => [m.actor, m.from, m.until])).toEqual(
+    ['e1', 'e2', 'e3'].map((e) => [e, from, from + SPAWN_MS]),
+  )
+  expect(of(t.active(from), 'campfire')).toEqual([
+    {
+      kind: 'campfire',
+      actor: null,
+      place: 'party',
+      from,
+      fade: Number.POSITIVE_INFINITY,
+      until: Number.POSITIVE_INFINITY,
+    },
+  ])
+  expect(of(t.active(from), 'huddle').map((m) => m.kind === 'huddle' && m.dir)).toEqual(['in'])
+  // The walk and the huddle over, the burning fire is no busy work: the stage rests.
+  t.observe(camped(), from + SPAWN_MS)
+  expect(t.isBusy(from + SPAWN_MS)).toBe(false)
+  expect(of(t.active(from + 600_000), 'campfire')).toHaveLength(1)
+})
+
+test('breaking camp fades the fire, slides the huddle out and walks the held enemies back in', () => {
+  const t = observed()
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW)
+  t.observe(camped(), NOW + 1000)
+  const [start] = t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW + 5000)
+  const from = start ?? 0
+  expect(of(t.active(from), 'camp_return').map((m) => [m.actor, m.from, m.until])).toEqual(
+    ['e1', 'e2', 'e3'].map((e) => [e, from, from + SPAWN_MS]),
+  )
+  expect(
+    of(t.active(from), 'campfire').map((m) => m.kind === 'campfire' && [m.fade, m.until]),
+  ).toEqual([[from, from + CAMPFIRE_FADE_MS]])
+  expect(of(t.active(from), 'huddle').map((m) => m.kind === 'huddle' && m.dir)).toEqual(['out'])
+  t.observe(wave(), from)
+  expect(t.isBusy(from + CAMPFIRE_FADE_MS - 1)).toBe(true)
+  expect(t.isBusy(from + CAMPFIRE_FADE_MS)).toBe(false)
+})
+
+test('a camp whose break the stage never heard puts its fire out as the view stops camping', () => {
+  const t = observed()
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW)
+  t.observe(camped(), NOW + 1000)
+  t.observe(wave(), NOW + 5000)
+  expect(
+    of(t.active(NOW + 5000), 'campfire').map((m) => m.kind === 'campfire' && [m.fade, m.until]),
+  ).toEqual([[NOW + 5000, NOW + 5000 + CAMPFIRE_FADE_MS]])
+  expect(t.isBusy(NOW + 5000 + CAMPFIRE_FADE_MS)).toBe(false)
+})
+
+test('a camp with a world boss engaged leaves nothing: no enemy walks off and the party does not huddle', () => {
+  const t = observed(worldBoss())
+  t.onEffects([{ k: 'camp', heals: [] }], NOW)
+  expect(of(t.active(NOW), 'camp_leave')).toEqual([])
+  expect(of(t.active(NOW), 'huddle')).toEqual([])
+})
+
+test('guard on and off while camped slide nothing: the party already stands huddled', () => {
+  const t = observed()
+  t.onEffects([{ k: 'camp', on: true, heals: [] }], NOW)
+  t.observe(camped(), NOW + 1000)
+  t.onEffects([{ k: 'guard', on: true }], NOW + 2000)
+  t.onEffects([{ k: 'guard', on: false }], NOW + 3000)
+  expect(of(t.active(NOW + 2000), 'huddle')).toEqual([])
 })
 
 /** The party traveled from zone 1 to zone 3: the encounter ended, wave 1, no enemy yet. */

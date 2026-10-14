@@ -89,6 +89,9 @@ export const SCENARIOS = [
   'haste',
   'enrage',
   'camp',
+  'camp-break',
+  'camp-boss',
+  'compact-camping',
   'guard',
   'guard-huddle',
   'guard-hit',
@@ -214,6 +217,20 @@ function attacking(actor: string, ms: number, target = 'e1'): Case {
   return staging(wave(), t, FULL, NOW - ms)
 }
 
+/** The wave with the knight and the white mage 25 HP down: what a camp's heals restore. */
+const hurt = (): GameView => {
+  const v = wave()
+  v.heroes = v.heroes.map((h) => (h.id === 'h2' ? h : { ...h, hp: h.hp - 25 }))
+  return v
+}
+const CAMP_HEALS = [
+  { heroId: 'h1', amount: 25 },
+  { heroId: 'h2', amount: 0 },
+  { heroId: 'h3', amount: 25 },
+]
+/** The wave held while the party camps. */
+const campingView = (): GameView => ({ ...wave(), camping: true })
+
 /** The scenario staged at its golden instant. */
 export function stage(name: Scenario): Staged {
   const c = caseOf(name)
@@ -308,26 +325,41 @@ export function caseOf(name: Scenario): Case {
       t.observe(v, NOW)
       return staging(v, t, { columns: 120, rows: t.rowsAt(v, NOW) }, NOW)
     }
-    // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
+    // Camp made 500 ms ago: the enemies have walked off, the party stands huddled at the fire a
+    // hero's width ahead of the knight, the bob stopped, two heroes' heals still rising green.
     case 'camp': {
-      const hurt = wave()
-      hurt.heroes = hurt.heroes.map((h) => (h.id === 'h2' ? h : { ...h, hp: h.hp - 25 }))
-      t.observe(hurt, NOW - 1000)
-      t.onEffects(
-        [
-          {
-            k: 'camp',
-            heals: [
-              { heroId: 'h1', amount: 25 },
-              { heroId: 'h2', amount: 0 },
-              { heroId: 'h3', amount: 25 },
-            ],
-          },
-        ],
-        NOW - 300,
-      )
+      t.observe(hurt(), NOW - 1000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 500)
+      t.observe(campingView(), NOW)
+      return staging(campingView(), t, FULL, NOW)
+    }
+    // Camp broken half a spawn ago: the held enemies halfway back in from the left, the party
+    // stepped back to its slots, the fire fading.
+    case 'camp-break': {
+      t.observe(hurt(), NOW - 6000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 5000)
+      t.observe(campingView(), NOW - 4000)
+      t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW - SPAWN_MS / 2)
       t.observe(wave(), NOW)
       return staging(wave(), t, FULL, NOW)
+    }
+    // A camp with a world boss engaged, 300 ms ago: the fire mid-field, the boss still standing,
+    // the heals rising green; no pause.
+    case 'camp-boss': {
+      const v = worldBoss()
+      const sore = worldBoss()
+      sore.heroes = hurt().heroes
+      t.observe(sore, NOW - 1000)
+      t.onEffects([{ k: 'camp', heals: CAMP_HEALS }], NOW - 300)
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 120, rows: t.rowsAt(v, NOW) }, NOW)
+    }
+    // Camping on the compact stage: the compact fire, no enemy.
+    case 'compact-camping': {
+      t.observe(hurt(), NOW - 1000)
+      t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 500)
+      t.observe(campingView(), NOW)
+      return staging(campingView(), t, { columns: 52, rows: 4 }, NOW, { compact: true })
     }
     // Guard, first drawn on a guarding party: huddled toward the knight with no step, every hero
     // in the stance, the bob stopped, the knight holding the big shield on the enemies' side.
