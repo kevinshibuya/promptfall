@@ -41,7 +41,7 @@ import { type StageModel, stageAt } from './model'
 import { composeBand, svgFit } from './playfield'
 import { CLEAR, encodeRaster, intoCells, rasterPairs } from './raster'
 import { stagedState } from './staged'
-import { renderSvg, stageSvg, svgOrFallback } from './svg'
+import { fitSvg, type Rung, renderSvg, stageSvg, svgOrFallback } from './svg'
 import { type Motion, StageTimeline } from './timeline'
 import {
   CHEST_FALL_MS,
@@ -430,9 +430,14 @@ export function stage(name: Scenario): Staged {
  * budget and fall-back checks, read.
  */
 export type Renders = {
-  /** The desktop's Svg, SMIL on and off: the hires one, or the scale-1 one over the cap. */
+  /**
+   * The desktop's Svg, SMIL on and off: the hires one on the ladder's rung that fits the cap, or
+   * the scale-1 one past its last; and the rung each took.
+   */
   svg: string
   svgFlat: string
+  rung: Rung
+  rungFlat: Rung
   /** The scale-1 model's Svg (the desktop's fall-back past the cap), SMIL on and off. */
   svgLo: string
   svgLoFlat: string
@@ -452,9 +457,13 @@ export function renders(s: Staged): Renders {
   const svgLoFlat = renderSvg(s.model, s.motions, at(false))
   const svgHi = renderSvg(s.hires, s.motions, at(true))
   const svgHiFlat = renderSvg(s.hires, s.motions, at(false))
+  const fit = fitSvg(s.hires, s.motions, at(true))
+  const fitFlat = fitSvg(s.hires, s.motions, at(false))
   return {
-    svg: svgOrFallback(svgHi, () => svgLo),
-    svgFlat: svgOrFallback(svgHiFlat, () => svgLoFlat),
+    svg: svgOrFallback(fit.svg, () => svgLo),
+    svgFlat: svgOrFallback(fitFlat.svg, () => svgLoFlat),
+    rung: fit.rung,
+    rungFlat: fitFlat.rung,
     svgLo,
     svgLoFlat,
     cells: rasterCells(s.hires),

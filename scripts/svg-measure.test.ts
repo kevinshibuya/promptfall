@@ -15,6 +15,7 @@ import {
   render,
   scenarioFrame,
   serialize,
+  shapesOf,
   table,
   tightD,
   vRuns,
@@ -51,6 +52,26 @@ describe('svg-measure', () => {
         ? defs.kids.flatMap((d) => (typeof d === 'object' && gridOf(d) ? [d] : []))
         : []
     expect(arts.length).toBeGreaterThan(1)
+    // Today's is the strokes encoding: read back and written again, only its ids' letters move.
+    const strokes = CANDIDATES.find((c) => c.name === 'strokes')
+    if (!strokes) throw new Error('no strokes candidate')
+    expect(encodeAs(svg, strokes).length).toBe(svg.length)
+  })
+
+  it('reads a stroked or filled path back as the pixels it paints', () => {
+    expect(shapesOf('M0 .5h2m-2 1h1', true)).toEqual([
+      { x: 0, y: 0, w: 2, h: 1 },
+      { x: 0, y: 1, w: 1, h: 1 },
+    ])
+    expect(shapesOf('M.5 0v2m1-2v1', true)).toEqual([
+      { x: 0, y: 0, w: 1, h: 2 },
+      { x: 1, y: 0, w: 1, h: 1 },
+    ])
+    expect(shapesOf('M0 0h2v1h-2m0 0h1v1h-1', false)).toEqual([
+      { x: 0, y: 0, w: 2, h: 1 },
+      { x: 0, y: 1, w: 1, h: 1 },
+    ])
+    expect(shapesOf('M2 1h1v1h-1z', false)).toEqual([{ x: 2, y: 1, w: 1, h: 1 }])
   })
 
   it("writes every candidate's markup as one svg document", () => {

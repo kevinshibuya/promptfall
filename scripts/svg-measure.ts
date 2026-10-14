@@ -2,6 +2,8 @@
 // golden scenario at its golden instant, ADR 0006's fuller legal frame at rest and lunging with no
 // backdrop and over each zone's, and the bandit captain's strike, SMIL on and off. Each candidate
 // is a rewrite of today's markup, so the pixels it draws are today's and only the encoding moves.
+// Today's is candidate 4b, strokes, since #212 built it into renderSvg; the ladder's rungs are
+// renderSvg's own.
 // `pnpm svg:measure` prints the tables; `--render` also loads every document in the smoke's
 // headless Chromium, as an Svg document and as an <img>, and compares its pixels with today's.
 
@@ -9,9 +11,18 @@ import { encode } from '../plugins/promptfall/hooks/sprites/base64'
 import { BACKDROPS } from '../plugins/promptfall/hooks/sprites/generated'
 import { fullerFrame } from '../plugins/promptfall/hooks/stage/fixtures'
 import type { StageModel } from '../plugins/promptfall/hooks/stage/model'
+import {
+  hRuns,
+  hStrokeD,
+  joinedRects,
+  type Rect,
+  rectD as tightD,
+  vRuns,
+  vStrokeD,
+} from '../plugins/promptfall/hooks/stage/paths'
 import { crc32 } from '../plugins/promptfall/hooks/stage/png'
 import { SCENARIOS, stage } from '../plugins/promptfall/hooks/stage/scenarios'
-import { renderSvg } from '../plugins/promptfall/hooks/stage/svg'
+import { RUNGS, type Rung, renderSvg } from '../plugins/promptfall/hooks/stage/svg'
 import type { Motion } from '../plugins/promptfall/hooks/stage/timeline'
 import { SVG_MAX_CHARS } from '../plugins/promptfall/hooks/stage/tuning'
 import { zlibSync } from '../plugins/promptfall/hooks/vendor/fflate.js'
@@ -67,7 +78,7 @@ function walk(n: El, f: (e: El) => void): void {
 
 // An art def's pixels, read back from its paths.
 
-export type Rect = { x: number; y: number; w: number; h: number }
+export { hRuns, hStrokeD, joinedRects, type Rect, tightD, vRuns, vStrokeD }
 export type Grid = { width: number; height: number; fills: string[]; px: Uint8Array }
 
 const RECT = /M(-?[\d.]+) (-?[\d.]+)h(\d+)v(\d+)h-\d+z/g
@@ -78,19 +89,76 @@ const rectsOf = (d: string): Rect[] =>
     w: Number(m[3]),
     h: Number(m[4]),
   }))
-/** True when `d` is nothing but today's rectangles, `M x y h w v h h -w z`. */
+/** True when `d` is nothing but the absolute rectangles, `M x y h w v h h -w z`. */
 const allRects = (d: string) => d.replace(RECT, '') === ''
 
-/** An art def's grid, each pixel its fill's index + 1; null for a def that is not an art. */
+/**
+ * The pixels a path's `d` paints, as rectangles: each subpath of a filled one a rectangle
+ * (`m x y h w v h h -w`, absolute or relative, closed or not), each of a stroked one a run one
+ * pixel wide (`m x y h w` along a row's middle, `m x y v h` down a column's). Null for any other.
+ */
+export function shapesOf(d: string, stroked: boolean): Rect[] | null {
+  const out: Rect[] = []
+  let cx = 0
+  let cy = 0
+  let start = { x: 0, y: 0 }
+  let moves: { c: string; n: number }[] = []
+  const close = (): boolean => {
+    if (moves.length === 0) return true
+    const [a, b] = moves
+    if (stroked) {
+      if (moves.length !== 1 || !a) return false
+      out.push(
+        a.c === 'h'
+          ? { x: start.x, y: start.y - 0.5, w: a.n, h: 1 }
+          : { x: start.x - 0.5, y: start.y, w: 1, h: a.n },
+      )
+    } else {
+      if (!a || !b || a.c !== 'h' || b.c !== 'v' || moves.length !== 3) return false
+      out.push({ x: start.x, y: start.y, w: a.n, h: b.n })
+    }
+    moves = []
+    return true
+  }
+  for (const [, c = '', args = ''] of d.matchAll(/([MmHhVvZz])([^MmHhVvZz]*)/g)) {
+    const ns = (args.match(/-?(?:\d+\.?\d*|\.\d+)/g) ?? []).map(Number)
+    if (c === 'M' || c === 'm') {
+      if (!close()) return null
+      cx = (c === 'M' ? 0 : cx) + (ns[0] ?? 0)
+      cy = (c === 'M' ? 0 : cy) + (ns[1] ?? 0)
+      start = { x: cx, y: cy }
+    } else if (c === 'h' || c === 'v') {
+      const n = ns[0] ?? 0
+      moves.push({ c, n })
+      if (c === 'h') cx += n
+      else cy += n
+    } else if (c === 'z' || c === 'Z') {
+      cx = start.x
+      cy = start.y
+    } else return null
+  }
+  return close() ? out : null
+}
+
+/** The absolute grammar of #210's baseline: closed, one separator between every pair of numbers. */
+export const absD = (rs: readonly Rect[]) =>
+  rs.map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h-${r.w}z`).join('')
+
+/** `#abc` as `#aabbcc`; any other paint as it is. */
+const longHex = (p: string) => p.replace(/^#(\w)(\w)(\w)$/, '#$1$1$2$2$3$3')
+
+/** An art def's grid, each pixel its path's index + 1; null for a def that is not an art. */
 export function gridOf(def: El): Grid | null {
   if (def.tag !== 'g' || def.kids.length === 0) return null
   const paths: { fill: string; rects: Rect[] }[] = []
   for (const k of def.kids) {
-    const fill = isEl(k) ? attr(k, 'fill') : undefined
-    const d = isEl(k) ? attr(k, 'd') : undefined
-    if (!isEl(k) || k.tag !== 'path' || fill === undefined || d === undefined || !allRects(d))
-      return null
-    paths.push({ fill, rects: rectsOf(d) })
+    if (!isEl(k) || k.tag !== 'path') return null
+    const stroke = attr(k, 'stroke')
+    const paint = stroke ?? attr(k, 'fill')
+    const d = attr(k, 'd')
+    const rects = d === undefined ? null : shapesOf(d, stroke !== undefined)
+    if (paint === undefined || rects === null) return null
+    paths.push({ fill: longHex(paint), rects })
   }
   const all = paths.flatMap((p) => p.rects)
   const width = Math.max(...all.map((r) => r.x + r.w))
@@ -101,112 +169,6 @@ export function gridOf(def: El): Grid | null {
       for (let y = r.y; y < r.y + r.h; y++) px.fill(i + 1, y * width + r.x, y * width + r.x + r.w)
   })
   return { width, height, fills: paths.map((p) => p.fill), px }
-}
-
-/** Fill `v`'s horizontal runs, row by row. */
-export function hRuns(g: Grid, v: number): Rect[] {
-  const out: Rect[] = []
-  for (let y = 0; y < g.height; y++) {
-    for (let x = 0; x < g.width; x++) {
-      if (g.px[y * g.width + x] !== v) continue
-      let end = x + 1
-      while (end < g.width && g.px[y * g.width + end] === v) end++
-      out.push({ x, y, w: end - x, h: 1 })
-      x = end - 1
-    }
-  }
-  return out
-}
-
-/** Fill `v`'s vertical runs, column by column. */
-export function vRuns(g: Grid, v: number): Rect[] {
-  const out: Rect[] = []
-  for (let x = 0; x < g.width; x++) {
-    for (let y = 0; y < g.height; y++) {
-      if (g.px[y * g.width + x] !== v) continue
-      let end = y + 1
-      while (end < g.height && g.px[end * g.width + x] === v) end++
-      out.push({ x, y, w: 1, h: end - y })
-      y = end - 1
-    }
-  }
-  return out
-}
-
-/** `rectPaths`' rectangles: a run joins the run under it when both span the same columns. */
-export function joinedRects(g: Grid, v: number): Rect[] {
-  const out: Rect[] = []
-  let above: Rect[] = []
-  for (let y = 0; y < g.height; y++) {
-    const open: Rect[] = []
-    for (const run of hRuns({ ...g, height: 1, px: g.px.subarray(y * g.width) }, v)) {
-      let r = above.find((a) => a.x === run.x && a.w === run.w && a.y + a.h === y)
-      if (r) r.h++
-      else {
-        r = { ...run, y }
-        out.push(r)
-      }
-      open.push(r)
-    }
-    above = open
-  }
-  return out
-}
-
-// Path grammars.
-
-/** Today's: absolute, closed, one separator between every pair of numbers. */
-export const absD = (rs: readonly Rect[]) =>
-  rs.map((r) => `M${r.x} ${r.y}h${r.w}v${r.h}h-${r.w}z`).join('')
-
-const num = (n: number) => {
-  const s = String(n)
-  return s.startsWith('0.') ? s.slice(1) : s.startsWith('-0.') ? `-${s.slice(2)}` : s
-}
-/** A command and its numbers, a space only where the next number does not start with `-`. */
-const cmd = (c: string, ...ns: number[]) =>
-  c + ns.map((n, i) => (i > 0 && n >= 0 ? ' ' : '') + num(n)).join('')
-
-/** Relative, unclosed (a fill closes it): `m dx dy h w v h h -w`, from where the last one ended. */
-export function tightD(rs: readonly Rect[]): string {
-  let cx = 0
-  let cy = 0
-  let out = ''
-  rs.forEach((r, i) => {
-    out += i === 0 ? cmd('M', r.x, r.y) : cmd('m', r.x - cx, r.y - cy)
-    out += cmd('h', r.w) + cmd('v', r.h) + cmd('h', -r.w)
-    cx = r.x
-    cy = r.y + r.h
-  })
-  return out
-}
-
-/** Horizontal runs as one-pixel strokes along each row's middle: `m dx dy h w`. */
-export function hStrokeD(rs: readonly Rect[]): string {
-  let cx = 0
-  let cy = 0
-  let out = ''
-  rs.forEach((r, i) => {
-    const y = r.y + 0.5
-    out += (i === 0 ? cmd('M', r.x, y) : cmd('m', r.x - cx, y - cy)) + cmd('h', r.w)
-    cx = r.x + r.w
-    cy = y
-  })
-  return out
-}
-
-/** Vertical runs as one-pixel strokes down each column's middle: `m dx dy v h`. */
-export function vStrokeD(rs: readonly Rect[]): string {
-  let cx = 0
-  let cy = 0
-  let out = ''
-  rs.forEach((r, i) => {
-    const x = r.x + 0.5
-    out += (i === 0 ? cmd('M', x, r.y) : cmd('m', x - cx, r.y - cy)) + cmd('v', r.h)
-    cx = x
-    cy = r.y + r.h
-  })
-  return out
 }
 
 // Embedded images.
@@ -334,7 +296,7 @@ export function tight(root: El): void {
  */
 export function strokes(root: El): void {
   for (const { def, grid } of artDefs(root)) {
-    def.attrs.push(['fill', 'none'])
+    def.attrs = [...def.attrs.filter(([k]) => k !== 'fill'), ['fill', 'none']]
     def.kids = grid.fills.map((f, i) => {
       const v = i + 1
       const filled = tightD(joinedRects(grid, v))
@@ -499,15 +461,6 @@ export function encodeAs(svg: string, c: Candidate): string {
   return serialize(root)
 }
 
-// The degradation ladder (spec #209): each rung keeps the ones before it.
-
-export const RUNGS = ['first rung', 'no idle pair', 'no hit filter', 'no backdrop'] as const
-
-/** The hit frame's lean without its lightening: no `filter="url(#hit)"` and no hit filter. */
-export function noHitFilter(svg: string): string {
-  return svg.replace(/ filter="url\(#hit\)"/g, '').replace(/<filter id="hit"[\s\S]*?<\/filter>/, '')
-}
-
 // The fixed frames.
 
 export type Fixed = { name: string; model: StageModel; motions: readonly Motion[]; now: number }
@@ -544,15 +497,8 @@ export function corpus(): Fixed[] {
 }
 
 /** Today's markup of `f` on `rung` of the ladder. */
-export function render(f: Fixed, smil: boolean, rung = 0): string {
-  const still = (m: StageModel): StageModel => ({
-    ...m,
-    actors: m.actors.map((a) => ({ ...a, bobMs: null })),
-  })
-  let model = rung >= 1 ? still(f.model) : f.model
-  if (rung >= 3) model = { ...model, backdrop: null }
-  const svg = renderSvg(model, f.motions, { smil, now: f.now, width: 960, motion: 'full' })
-  return rung >= 2 ? noHitFilter(svg) : svg
+export function render(f: Fixed, smil: boolean, rung: Rung = 0): string {
+  return renderSvg(f.model, f.motions, { smil, now: f.now, width: 960, motion: 'full', rung })
 }
 
 export type Row = { frame: string; cells: { on: number; off: number }[] }
@@ -610,7 +556,9 @@ export function ladder(cands: readonly Candidate[] = CANDIDATES): string {
       const worst = mine
         .map((f) => ({ f, len: encodeAs(render(f, true), c).length }))
         .reduce((a, b) => (b.len > a.len ? b : a))
-      const counts = RUNGS.map((_, rung) => encodeAs(render(worst.f, true, rung), c).length)
+      const counts = ([0, 1, 2, 3] as const).map(
+        (rung) => encodeAs(render(worst.f, true, rung), c).length,
+      )
       const first = counts.findIndex((v) => v < SVG_MAX_CHARS)
       lines.push(
         `| ${c.label} | ${worst.f.name.replace('fuller ', '')} | ${counts.map(n).join(' | ')} | ${first < 0 ? `none (${n(counts.at(-1) ?? 0)})` : RUNGS[first]} |`,
