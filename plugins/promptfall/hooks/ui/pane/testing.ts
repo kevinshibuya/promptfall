@@ -1,6 +1,8 @@
-// Helpers for the pane tests: a window's lines as text, a build's windows by key.
+// Helpers for the pane tests: a window's lines as text, a build's windows by key, the terminal's
+// focus ring.
 import { decode } from '../../sprites/base64'
 import type { Span, Win } from '../../windows/kit'
+import type { RefocusIo } from './mount'
 import type { PaneBuild } from './types'
 
 /** A span run as cells: ▶ or a space for the cursor, `@@` for a sprite, spaces for a gap. */
@@ -44,4 +46,55 @@ export async function paneText(ui: Finder): Promise<string> {
   }
   const svg = await ui.find({ type: 'Svg' })
   return String(svg?.props.alt ?? '')
+}
+
+/**
+ * The terminal's focus ring as the CLI's debug log showed it (#191), which the kit does not keep:
+ * `io.focus` moves it by key on the drawing mounted when the request lands and answers `{}`, and
+ * `mount` (a drawing taking the screen) keeps it by position. `advance` runs the sends `io.after`
+ * left, in the order they come due.
+ */
+export function cliRing() {
+  let mounted: string[] = []
+  let at = -1
+  let now = 0
+  const timers: { at: number; fn: () => void }[] = []
+  const io: RefocusIo = {
+    after: (ms, fn) => {
+      timers.push({ at: now + ms, fn })
+    },
+    focus: async (key) => {
+      const i = mounted.indexOf(key)
+      if (i < 0) return { deny: `no element ${key} is drawn` }
+      at = i
+      return {}
+    },
+  }
+  return {
+    io,
+    mount: (b: PaneBuild) => {
+      // On a terminal the field's Input comes before the stops that follow it.
+      mounted = [...(b.field ? [b.field.key] : []), ...b.stops.map((s) => s.key)]
+    },
+    /** The person's Tab or arrows onto `key`. */
+    walk: (key: string) => {
+      at = mounted.indexOf(key)
+    },
+    on: (): string | undefined => mounted[at],
+    advance: async (ms: number) => {
+      const end = now + ms
+      for (;;) {
+        timers.sort((a, b) => a.at - b.at)
+        const t = timers[0]
+        if (!t || t.at > end) break
+        timers.shift()
+        now = t.at
+        t.fn()
+        // The focus answer and its `.then`.
+        await Promise.resolve()
+        await Promise.resolve()
+      }
+      now = end
+    },
+  }
 }
