@@ -171,6 +171,19 @@ What a unit does when its turn in the action queue comes: an attack, a heal, lat
 a technique. Picked by a weighted draw among the actions that make sense right now.
 _Avoid_: move, command, turn, ability
 
+**Wave**:
+One of a zone's ten fights before its zone boss. It opens with a draw of one to three of the
+zone's wave enemies, and each tool call made while it is open adds one more. It clears when every
+enemy it got is dead: the party heals 15%, the fallen get up at 15%, and the next wave comes.
+Neither a turn boss nor wave 11's adds count toward one.
+_Avoid_: round, stage, fight, encounter (that is whoever is on the field and waiting)
+
+**Encounter queue**:
+The enemies of the current fight still waiting for a place on the field, up to ten. Three fight
+at once, and whenever one of those three places is free the head of the queue takes it, in the
+same step as the kill that freed it. A tool call's enemy past the tenth is dropped.
+_Avoid_: backlog, reserve, spawn queue, action queue (that is who acts next)
+
 **Wipe**:
 Every hero down. The party restarts the zone it is in at wave 1, healed, and nothing is lost;
 the zone's wipe count rises. An everyday event, not a weighty one.

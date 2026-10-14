@@ -159,7 +159,7 @@ describe('migrate walks a stub step', () => {
 
 describe('the clear', () => {
   it('empties the encounter and the battle outside boss mode, so the next tick spawns', () => {
-    // The golden script ends between turns on an empty field: a tool call puts an enemy on it.
+    // The golden script ends mid-wave, its field full: a tool call joins the fight.
     const fighting = step(golden, { t: 'tool_call' }).state
     expect(fighting.boss).toBeNull()
     expect(fighting.encounter?.enemies.length).toBeGreaterThan(0)
@@ -169,7 +169,10 @@ describe('the clear', () => {
     )
     expect(s.encounter).toBeNull()
     expect(s.battle).toEqual({ gauges: [], queue: [], busy: 0 })
-    expect(step(s, { t: 'tick' }).state.encounter?.enemies.length).toBe(1)
+    // The tick opens a wave, its whole draw on the field.
+    const next = step(s, { t: 'tick' }).state.encounter
+    expect(next?.enemies.length).toBeGreaterThan(0)
+    expect(next?.enemies.length).toBe(next?.waveSize)
   })
 
   it('leaves the encounter and the battle as they are in boss mode', () => {
@@ -192,9 +195,9 @@ describe('the clamp', () => {
 
   it("lowers a hero's HP to its new maximum", () => {
     const s = migrated(golden, chainOf(overfull))
-    // Commons with nothing worn: the level-3 Knight at a base of 60 and two levels' growth of 9,
+    // Commons with nothing worn: the level-2 Knight at a base of 60 and one level's growth of 9,
     // the level-2 Black Mage at a base of 36 and one level's growth of 5.
-    expect(hero(s, 'h0').hp).toBe(78)
+    expect(hero(s, 'h0').hp).toBe(69)
     expect(hero(s, 'h1').hp).toBe(41)
   })
 
@@ -218,7 +221,7 @@ describe('the clamp', () => {
     }
     const s = migrated(golden, chainOf(overfull, record), SIM_VERSION + 2)
     expect(seen).toBe(1_000_000)
-    expect(hero(s, 'h0').hp).toBe(78)
+    expect(hero(s, 'h0').hp).toBe(69)
   })
 })
 
@@ -828,6 +831,43 @@ describe('the 16→17 step: the zone bosses’ moves', () => {
       { kind: 'hero', hero },
     ] as const) {
       expect(migrateGoods(goods, 16, { to: 17 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
+describe('the 17→18 step: waves fill every free slot', () => {
+  // Identity in shape: the waves' counts keep their fields, and the finish clears the fight.
+  const PINNED = { golden: '45e8670c498c63ea', deep: 'f42c206aedf86f88' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v17-deep.json' : 'v17.json')
+    const r = migrate(before, { to: 18 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`keeps every field of the ${kind} fixture but the version and the cleared fight`, () => {
+      expect(after.v).toBe(18)
+      const { v: _v, encounter: _e, battle: _b, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v17 = fixture('v17-deep.json')
+    const [item] = v17.inventory
+    const [hero] = v17.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 17, { to: 18 })).toEqual({ ok: true, goods })
     }
   })
 })
