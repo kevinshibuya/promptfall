@@ -52,7 +52,7 @@ function worldBossRow(
  * each with its HP staged the same way. The zone and wave hold the previous ones while a departed
  * enemy seen in them is held, or while a travel's party steps off. The world boss is staged like
  * any enemy, its bar from the poll. The Loot rows leave out a drop until its own chest's reveal
- * shows it; the last drop is their newest.
+ * shows it; the last drop is their newest. The queue's count is the view's, never staged.
  */
 export function stagedState(
   view: GameView,

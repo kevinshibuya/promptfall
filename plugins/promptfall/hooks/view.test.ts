@@ -119,3 +119,20 @@ test('the view carries the tallies and the recruits remaining to each guarantee'
   expect(before.tallies.zoneBosses).toBe(0)
   expect(before.guarantees).toEqual({ rare: 20, epic: 80, legendary: 400 })
 })
+
+test("the view carries the wave's queue length and the zone's wipes, not the lifetime ones", () => {
+  const account = toAccountView(null, null, 'in-process', 0)
+  const s0 = createInitialState(1)
+  expect(toGameView(s0, 'a1', false, account)).toMatchObject({ waiting: 0, zoneWipes: 0 })
+  const s = step(s0, { t: 'tool_call' }).state
+  const encounter = s.encounter
+  if (!encounter) throw new Error('the call opens a wave')
+  const queue = Array.from({ length: 4 }, () => ({ def: 'goblin_scout', kind: 'wave' as const }))
+  const v = toGameView(
+    { ...s, encounter: { ...encounter, queue }, zoneWipes: 2, stats: { ...s.stats, wipes: 7 } },
+    'a1',
+    false,
+    account,
+  )
+  expect(v).toMatchObject({ waiting: 4, zoneWipes: 2, wipes: 7 })
+})

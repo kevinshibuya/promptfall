@@ -488,6 +488,7 @@ export const STRIP_SCENARIOS = [
   'strip-loot',
   'strip-world',
   'strip-notice',
+  'strip-waiting',
 ] as const
 export type StripScenario = (typeof STRIP_SCENARIOS)[number]
 export type StripGolden = {
@@ -611,6 +612,9 @@ export function strip(name: StripScenario): StripInput {
         tab: 'loot',
         notice: 'Promptfall: server unreachable, retrying',
       })
+    // Three on the field and four queued behind them, in a zone the party has fallen in once.
+    case 'strip-waiting':
+      return stripInput({ ...wave(), waiting: 4, zoneWipes: 1 })
   }
 }
 

@@ -1,10 +1,19 @@
-// The desktop smoke: each stage golden scenario's desktop Svg (SMIL on), loaded as an Svg document
-// in headless Chromium. A scenario fails when its root does not render, when a console error or a
+// The desktop smoke: each stage golden scenario's desktop Svg (SMIL on), each band scenario's
+// desktop strip Svg and each strip scenario's Svg, loaded as an Svg document in headless Chromium. A scenario fails when its root does not render, when a console error or a
 // page error fires, or when it reaches the Svg cap. Broken documents run first and must fail, so
 // a smoke that cannot see a failure fails too. `pnpm smoke:desktop`; needs Playwright's Chromium
 // (`pnpm exec playwright install chromium`).
 import { type Browser, chromium } from 'playwright'
-import { renders, SCENARIOS, stage } from '../plugins/promptfall/hooks/stage/scenarios'
+import {
+  BAND_SCENARIOS,
+  band,
+  renders,
+  SCENARIOS,
+  STRIP_SCENARIOS,
+  stage,
+  strip,
+  stripSvgOf,
+} from '../plugins/promptfall/hooks/stage/scenarios'
 import { SVG_MAX_CHARS } from '../plugins/promptfall/hooks/stage/tuning'
 
 export type Doc = { name: string; svg: string }
@@ -69,8 +78,18 @@ const BROKEN: readonly Doc[] = [
   },
 ]
 
+/** The stages, then the strips the desktop draws under them: each band's, and each strip golden's. */
+function docs(): Doc[] {
+  return [
+    ...SCENARIOS.map((name) => ({ name, svg: renders(stage(name)).svg })),
+    ...BAND_SCENARIOS.map((name) => ({ name: `${name} strip`, svg: band(name).svg.strip })),
+    ...STRIP_SCENARIOS.map((name) => ({ name, svg: stripSvgOf(strip(name)) })),
+  ]
+}
+
 async function main(): Promise<number> {
   const started = Date.now()
+  const all = docs()
   const browser = await chromium.launch()
   try {
     for (const doc of BROKEN) {
@@ -81,18 +100,18 @@ async function main(): Promise<number> {
       }
       console.log(`ok   ${doc.name} (fails: ${why})`)
     }
-    for (const name of SCENARIOS) {
-      const why = await smoke(browser, { name, svg: renders(stage(name)).svg })
+    for (const doc of all) {
+      const why = await smoke(browser, doc)
       if (why !== null) {
-        console.log(`FAIL ${name}: ${why}`)
+        console.log(`FAIL ${doc.name}: ${why}`)
         return 1
       }
-      console.log(`ok   ${name}`)
+      console.log(`ok   ${doc.name}`)
     }
   } finally {
     await browser.close()
   }
-  console.log(`${SCENARIOS.length} scenarios clean in ${Date.now() - started} ms`)
+  console.log(`${all.length} documents clean in ${Date.now() - started} ms`)
   return 0
 }
 

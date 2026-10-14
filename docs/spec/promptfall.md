@@ -914,11 +914,15 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the window strip (ADR 0005), Dragon Quest V's
   windows in its pixel font: the enemy window (titled with the zone and wave,
   `T2 Z1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
-  boss with its percentage), the message window (the command line, then the
+  boss with its percentage, and while the encounter queue holds N enemies a
+  dim `+N waiting` footer cut into its bottom border, the view's `waiting`,
+  never staged), the message window (the command line, then the
   combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
-  fills between ticks and turns gold when full) and the purse window (gold and
-  the tactics, Push on or Farm here). A hero's text turns orange under 25% HP
+  fills between ticks and turns gold when full) and the purse window (gold,
+  the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
+  view's `zoneWipes` out of the sim's `RETREAT_AT`, left out in boss mode).
+  Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
   the last two drops, or the World rows. While `hasSurvey` the band stays up at
   the layout its rows allow and the stage keeps playing. The band is

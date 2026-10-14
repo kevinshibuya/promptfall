@@ -404,9 +404,14 @@ the band holds its height from the second session on.
 
 **The strip.** The strip is the row of windows under the stage, drawn as Dragon Quest V draws
 them: a charcoal field, a thin white line with cut corners, the game's pixel font. Left to right
-come the enemy window (titled with the zone and wave, an HP bar per enemy), the message window,
-the party window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP
-and red at 0) and the purse (the gold and the tactics, or `Sandbox` in the sandbox). The stage
+come the enemy window (titled with the zone and wave, an HP bar per enemy, and a dim `+4 waiting`
+cut into its bottom line while the wave's queue holds enemies), the message window, the party
+window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP and red at
+0) and the purse (the gold, the tactics or `Sandbox` in the sandbox, and the falls, `Falls 1/3`:
+the zone's wipes out of the three that make a retreat, none in a world boss fight). The compact
+layout has neither the enemy window nor the purse, so it shows neither the queue nor the falls. The
+queue's count is the game's own, not the staged one: while a kill's replacement waits out the
+dissolve, the line already reads the shorter queue. The stage
 and every window draw the staged state, the fight as the stage has played it so far, so they never
 run ahead of the picture: a killed monster keeps its row until its death has played, a wiped hero
 falls on his blow and is up at full only once the field has cleared, a monster that leaves alive

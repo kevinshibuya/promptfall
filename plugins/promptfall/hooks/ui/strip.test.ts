@@ -7,7 +7,7 @@ import { StageTimeline } from '../stage/timeline'
 import { DISSOLVE_MS, FLASH_MS, VICTORY_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
-import { DOWN_RGB, WARN_RGB } from '../windows/tuning'
+import { DIM_RGB, DOWN_RGB, WARN_RGB } from '../windows/tuning'
 import { type StripInput, stripScene, stripTracks, wrap } from './strip'
 import { worldRows } from './world-rows'
 
@@ -340,4 +340,78 @@ test('an enemy row’s HP bar drops at the impact; a landing past the horizon wa
   expect(hpBars(input, at - 1, 'enemy', 0)).toEqual([])
   const row = win(stripScene(input).scene, 'enemy').lines[0]?.spans.find((s) => 'bar' in s)
   expect(row && 'bar' in row ? row.bar : null).toBe(7000)
+})
+
+test("the enemy window's footer counts the queue, dim; at 0 and in a world boss fight there is none", () => {
+  const rest = strip('strip-rest')
+  const enemy = (i: StripInput) => win(stripScene(i).scene, 'enemy')
+  const waiting = enemy({ ...rest, view: { ...rest.view, waiting: 4 } })
+  expect(lineText({ spans: waiting.footer ?? [] })).toBe('+4 waiting')
+  expect(waiting.footer?.every((s) => !('text' in s) || s.rgb === DIM_RGB)).toBe(true)
+  expect(lineText({ spans: waiting.title ?? [] })).toBe('Zone 1 · Wave 2')
+  expect(waiting.alt.endsWith('HP. 4 more waiting.')).toBe(true)
+  // Two rows drawn: the footer sits on the bottom border all the same.
+  const two = { ...rest.view, enemies: rest.view.enemies.slice(0, 2), waiting: 1 }
+  expect(lineText({ spans: enemy({ ...rest, view: two }).footer ?? [] })).toBe('+1 waiting')
+  for (const i of [rest, strip('strip-world-boss')]) {
+    expect(enemy(i).footer ?? []).toEqual([])
+    expect(enemy(i).alt).not.toContain('waiting')
+  }
+  expect(lineText({ spans: enemy(strip('strip-world-boss')).title ?? [] })).toBe('World boss · 11m')
+})
+
+test("the purse's third row counts the zone's falls; the sandbox keeps Farm, boss mode shows none", () => {
+  const rest = strip('strip-rest')
+  const purse = (i: StripInput) => stripScene(i)
+  const rows = (i: StripInput) => win(purse(i).scene, 'purse').lines.map((l) => lineText(l).trim())
+  expect(rows(rest)).toEqual(['0G', 'Push on', 'Falls 0/3'])
+  expect(win(purse(rest).scene, 'purse').alt).toContain('Falls 0 of 3 before a retreat.')
+  const two = { ...rest, view: { ...rest.view, zoneWipes: 2, gold: 123_456_789 } }
+  expect(rows(two)[2]).toBe('Falls 2/3')
+  expect(win(purse(two).scene, 'purse').alt).toContain('Falls 2 of 3 before a retreat.')
+  // Nothing clips: each row fits the purse's inner width less its leading gap.
+  const p = win(purse(two).scene, 'purse')
+  for (const l of p.lines) expect([...lineText(l)].length).toBeLessThanOrEqual(p.columns - 2)
+  // The sandbox: Farm keeps the title, Sandbox the tactics row, the falls their own.
+  const sandbox = {
+    ...rest,
+    view: { ...rest.view, farm: true, account: { ...rest.view.account, sandbox: true } },
+  }
+  const s = win(purse(sandbox).scene, 'purse')
+  expect(lineText({ spans: s.title ?? [] })).toBe('Farm')
+  expect(rows(sandbox)).toEqual(['0G', 'Sandbox', 'Falls 0/3'])
+  // The `f` hotspot stays on the tactics row.
+  expect(purse(two).hotspots.find((h) => h.hotkey === 'f')).toMatchObject({ y: 2 })
+  // Boss mode counts no wipes: no row, nothing in the alt.
+  const boss = strip('strip-world-boss')
+  expect(rows(boss)).toHaveLength(2)
+  expect(win(purse(boss).scene, 'purse').alt).not.toContain('Falls')
+})
+
+test("the footer reads the sim's queue while a kill's refill waits out the dissolve and the pause", () => {
+  const now = 1_000_000
+  const t = new StageTimeline()
+  t.observe({ ...wave(), waiting: 3 }, now - 1)
+  const impact = strike(t, 'h1', 'e1', 42, now)
+  // The kill's step refilled the slot: e1 gone, e4 on the field, one fewer queued.
+  const front = wave().enemies[0] as GameView['enemies'][number]
+  const view: GameView = {
+    ...wave(),
+    enemies: [
+      ...wave().enemies.slice(1),
+      { ...front, id: 'e4', name: 'Road Slime', hp: 90, maxHp: 90 },
+    ],
+    waiting: 2,
+  }
+  t.observe(view, now)
+  const at = impact + FLASH_MS + DISSOLVE_MS / 2
+  t.observe(view, at)
+  const enemy = win(
+    stripScene({ ...strip('strip-rest'), view, timeline: t, now: at }).scene,
+    'enemy',
+  )
+  // The dead Goblin Scout still holds its row; the newcomer is off stage.
+  expect(enemy.alt).toContain('Goblin Scout 0 of 60')
+  expect(enemy.alt).not.toContain('Road Slime 90 of 90')
+  expect(lineText({ spans: enemy.footer ?? [] })).toBe('+2 waiting')
 })
