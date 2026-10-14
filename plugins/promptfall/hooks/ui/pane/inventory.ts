@@ -224,10 +224,19 @@ export function inventoryPane(input: PaneInput): PaneBuild {
     } else if (menu.kind === 'reforge') {
       spec.menu = {
         header: header(`Reforge ${gold(menuItem.reforgeCost)}`),
-        items: menuItem.affixes.map((a, i) => ({
-          label: a,
-          action: { t: 'event', event: { t: 'reforge', itemId: menuItem.id, affixIndex: i } },
-        })),
+        items: menuItem.affixes.map((a, i) => {
+          const roll = menuItem.affixRolls[i]
+          return {
+            // A hyphen, not an en dash: the pane font draws no en dash.
+            label: roll ? `${a} · ${roll.min}-${roll.max}` : a,
+            // A roll keeps the pick open, rebuilt with the new value, for another.
+            action: {
+              t: 'event',
+              event: { t: 'reforge', itemId: menuItem.id, affixIndex: i },
+              keep: true,
+            },
+          }
+        }),
         at: menu.at,
       }
       spec.state = ['Reforge which affix?', `It costs ${gold(menuItem.reforgeCost)}. q: back.`]

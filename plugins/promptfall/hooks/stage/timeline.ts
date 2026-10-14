@@ -24,7 +24,9 @@ import {
   FLASH_MS,
   FOLLOW_MS,
   IDLE_FRAME_MS,
+  LEVEL_NUMBER_MS,
   LEVEL_RGB,
+  LEVEL_STAGGER_MS,
   LUNGE_MS,
   NUMBER_MS,
   NUMBER_RGB_ENEMY,
@@ -58,10 +60,13 @@ export type Motion =
   | { kind: 'red_flash'; actor: string; from: number; until: number }
   /** A level-up's gold flash: the white flash's mechanism in gold. */
   | { kind: 'gold_flash'; actor: string; from: number; until: number }
-  /** A hero stepping off toward the right and fading, until the backdrop changes. */
-  | { kind: 'travel_off'; actor: string; from: number; until: number }
+  /**
+   * A hero stepping off toward the right and fading, until the backdrop changes; `boss` names the
+   * zone boss whose kill the party walks on from, as a travel's step-off names none.
+   */
+  | { kind: 'travel_off'; actor: string; from: number; until: number; boss?: string }
   /** A hero stepping on from the left, from the backdrop's change. */
-  | { kind: 'travel_on'; actor: string; from: number; until: number }
+  | { kind: 'travel_on'; actor: string; from: number; until: number; boss?: string }
   /** An enemy of the encounter a travel left: it stands until the backdrop changes, then is gone. */
   | { kind: 'leave'; actor: string; from: number; until: number }
   /** A hero's victory pose over the fallen zone boss `boss`, after its dissolve. */
@@ -303,6 +308,8 @@ export class StageTimeline {
    * has ended still knows them from a kill.
    */
   private leftByTravel = new Set<string>()
+  /** The zone bosses whose kill advanced the zone: the party walks on once the hold is over. */
+  private walking = new Set<string>()
 
   observe(view: GameView, now: number): void {
     this.motions = this.motions.filter((m) => m.until > now)
@@ -357,6 +364,7 @@ export class StageTimeline {
             until: faded + VICTORY_MS,
           })
         }
+        if (this.walking.has(id)) this.walk(id)
       }
     }
     // A kill plays out before the next enemy enters: its fade, its chest, then a pause.
@@ -372,6 +380,7 @@ export class StageTimeline {
       this.departed.delete(id)
       this.entries.delete(id)
     }
+    for (const id of this.walking) if (!this.entries.has(id)) this.walking.delete(id)
 
     for (const enemy of view.enemies) {
       const known = this.entries.get(enemy.id)
@@ -539,6 +548,7 @@ export class StageTimeline {
         }
         return m
       })
+      if (this.walking.has(id)) this.walk(id)
     }
   }
 
@@ -617,8 +627,9 @@ export class StageTimeline {
   }
 
   /**
-   * A departed enemy is held by its dissolve and any chest, by the party's victory pose over it,
-   * or until the backdrop changes when a travel left it; not by a number still rising.
+   * A departed enemy is held by its dissolve and any chest, by the party's victory pose over it
+   * and its step-off when the kill advanced the zone, or until the backdrop changes when a travel
+   * left it; not by a number still rising.
    */
   private holds(id: string, now: number): boolean {
     return this.heldBy(id).some((m) => m.until > now)
@@ -627,7 +638,7 @@ export class StageTimeline {
   /** The motions that hold `id` on the stage once departed. */
   private heldBy(id: string): Motion[] {
     return this.motions.filter((m) =>
-      m.kind === 'victory'
+      m.kind === 'victory' || m.kind === 'travel_off'
         ? m.boss === id
         : m.actor === id && (m.kind === 'dissolve' || m.kind === 'chest' || m.kind === 'leave'),
     )
@@ -760,6 +771,11 @@ export class StageTimeline {
           shape,
         })
       }
+      // Several level-ups play one after another, in party-slot order.
+      const slots = [...this.heroes.keys()]
+      const levelling = group.effects
+        .flatMap((e) => (e.k === 'level_up' && this.heroes.has(e.heroId) ? [e.heroId] : []))
+        .sort((a, b) => slots.indexOf(a) - slots.indexOf(b))
       let last: { target: string; flashEnd: number } | null = null
       // A target's number this action: a second hit on it (a strike twice) adds its own beside it.
       const numbers = new Map<string, Extract<Motion, { kind: 'number' }>>()
@@ -776,7 +792,15 @@ export class StageTimeline {
         }
         if (effect.k === 'level_up') {
           // With the blow that earned it, or as the tick lands when no action is shown.
-          this.levelUp(effect, attacker !== null ? impact : start)
+          const at = attacker !== null ? impact : start
+          this.levelUp(effect, at + levelling.indexOf(effect.heroId) * LEVEL_STAGGER_MS)
+          continue
+        }
+        if (effect.k === 'zone_cleared') {
+          // Push on: after the hold the party walks to the next zone, as a travel does. On a stage
+          // never drawn there is no boss row to walk on from.
+          const boss = this.zoneBoss(effect.zone)
+          if (effect.advancedTo > effect.zone && boss !== undefined) this.walking.add(boss)
           continue
         }
         if (effect.k === 'traveled') {
@@ -871,8 +895,31 @@ export class StageTimeline {
       text,
       rgb: LEVEL_RGB,
       from: at,
-      until: at + NUMBER_MS,
+      until: at + LEVEL_NUMBER_MS,
     })
+  }
+
+  /**
+   * Places the party's walk after `id`'s kill: the step-off once the victory pose and any chest are
+   * over, the backdrop's change as it ends, then the step-on.
+   */
+  private walk(id: string): void {
+    this.motions = this.motions.filter(
+      (m) => !((m.kind === 'travel_off' || m.kind === 'travel_on') && m.boss === id),
+    )
+    const off = this.heldBy(id).reduce((e, m) => Math.max(e, m.until), Number.NEGATIVE_INFINITY)
+    if (!Number.isFinite(off)) return
+    const show = off + TRAVEL_OFF_MS
+    for (const actor of this.heroes.keys()) {
+      this.motions.push({ kind: 'travel_off', actor, boss: id, from: off, until: show })
+      this.motions.push({
+        kind: 'travel_on',
+        actor,
+        boss: id,
+        from: show,
+        until: show + TRAVEL_ON_MS,
+      })
+    }
   }
 
   /**
@@ -997,15 +1044,14 @@ export class StageTimeline {
 
   /**
    * The show time of the arrival past `zone`: the moment the row of the zone boss seen in it
-   * leaves, as the staged state's zone flips. Departed, that is the end of its dissolve and any
-   * chest. Still live (the kill's effects are in and no draw has departed it), it is predicted from
-   * the kill: the end of the blow shown on it plus the dissolve, or its chest's end, whichever is
-   * later. Null with no such row on the timeline.
+   * leaves, as the staged state's zone flips. Departed, that is the end of its dissolve, any chest
+   * and the party's victory pose, or of the party's step-off when the kill advanced the zone. Still
+   * live (the kill's effects are in and no draw has departed it), it is predicted from the kill:
+   * the end of the blow shown on it plus the dissolve and the pose, or its chest's end, whichever
+   * is later, plus the step-off when the party walks on. Null with no such row on the timeline.
    */
   zoneShowAt(zone: number): number | null {
-    const id = [...this.entries.values()].find(
-      (k) => k.kind === 'zone_boss' && this.seen.get(k.id)?.zone === zone,
-    )?.id
+    const id = this.zoneBoss(zone)
     if (id === undefined) return null
     const dissolve = this.motions.find((m) => m.actor === id && m.kind === 'dissolve')
     // Predicted, the party's victory pose follows the dissolve.
@@ -1013,7 +1059,17 @@ export class StageTimeline {
       ? dissolve.until
       : this.lastShownEnd(id, Number.NEGATIVE_INFINITY) + DISSOLVE_MS + VICTORY_MS
     for (const m of this.heldBy(id)) end = Math.max(end, m.until)
+    // Predicted, the step-off follows the pose and the chest.
+    const placed = this.motions.some((m) => m.kind === 'travel_off' && m.boss === id)
+    if (this.walking.has(id) && !placed) end += TRAVEL_OFF_MS
     return Number.isFinite(end) ? end : null
+  }
+
+  /** The zone boss seen in `zone` still on the timeline, if any. */
+  private zoneBoss(zone: number): string | undefined {
+    return [...this.entries.values()].find(
+      (k) => k.kind === 'zone_boss' && this.seen.get(k.id)?.zone === zone,
+    )?.id
   }
 
   /**

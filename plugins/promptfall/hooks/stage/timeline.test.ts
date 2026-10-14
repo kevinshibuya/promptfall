@@ -1344,7 +1344,7 @@ test('a level-up flashes the hero gold and raises its deltas as gold numbers at 
       text: '+3 atk  +2 def',
       rgb: LEVEL_RGB,
       from: impact,
-      until: impact + NUMBER_MS,
+      until: impact + 1200,
     },
   ])
   // The hit flash is unchanged: white, on the enemy struck.
@@ -1356,6 +1356,104 @@ test('a level-up with no deltas from the engine still flashes gold, with no numb
   const [start] = t.onEffects([{ k: 'level_up', heroId: 'h2', level: 6 }], NOW)
   expect(of(t.active(NOW), 'gold_flash').map((m) => [m.actor, m.from])).toEqual([['h2', start]])
   expect(of(t.active(NOW), 'number')).toEqual([])
+})
+
+test('level-ups in one group stagger by party slot and their numbers rise longer', () => {
+  const t = observed()
+  const heroes = ['h1', 'h2', 'h3']
+  // Earned by the blow, in any order: by party slot from its impact, 250 ms apart.
+  t.onEffects(
+    [
+      act('h1', 0),
+      hit('h1', 'e2', 10),
+      levelUp('h3', { spd: 1 }),
+      levelUp('h1', { atk: 3, def: 2 }),
+      levelUp('h2', { def: 1 }),
+    ],
+    NOW,
+  )
+  const impact = NOW + H + LUNGE_MS / 2
+  const byStart = (motions: readonly Motion[]) => [...motions].sort((a, b) => a.from - b.from)
+  expect(byStart(of(t.active(NOW), 'gold_flash')).map((m) => [m.actor, m.from, m.until])).toEqual(
+    heroes.map((h, slot) => [h, impact + 250 * slot, impact + 250 * slot + FLASH_MS]),
+  )
+  // Each number rises for 1.2 s from its own flash; the hit's number keeps its 700 ms.
+  const numbers = byStart(of(t.active(NOW), 'number'))
+  expect(numbers.map((m) => [m.actor, m.from, m.until - m.from])).toEqual([
+    ['e2', impact, NUMBER_MS],
+    ['h1', impact, 1200],
+    ['h2', impact + 250, 1200],
+    ['h3', impact + 500, 1200],
+  ])
+  // With no blow shown, from the group's time.
+  const tick = observed()
+  const [start] = tick.onEffects([levelUp('h2', { atk: 1 }), levelUp('h3', { def: 1 })], NOW)
+  expect(of(tick.active(NOW), 'gold_flash').map((m) => [m.actor, m.from])).toEqual([
+    ['h2', start],
+    ['h3', (start ?? 0) + 250],
+  ])
+})
+
+const advance: Effect = { k: 'zone_cleared', zone: 1, advancedTo: 2 }
+
+test('a zone boss kill that advances walks the party off after the hold and the chest, and on at the new zone', () => {
+  const heroes = ['h1', 'h2', 'h3']
+  const t = observed(boss())
+  t.onEffects([...bossKill(), advance], NOW, 2000)
+  const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
+  const off = faded + VICTORY_MS
+  const show = off + TRAVEL_OFF_MS
+  // With no chest, the show time is the fade, the hold and the step-off; predicted before any
+  // draw departs the boss, and the same once one has.
+  expect(t.zoneShowAt(1)).toBe(show)
+  const next = nextZone()
+  t.observe(next, NOW + 1)
+  expect(t.zoneShowAt(1)).toBe(show)
+  const spans = (tl: StageTimeline, kind: Motion['kind']) =>
+    of(tl.active(NOW + 1), kind).map((m) => [m.actor, m.from, m.until])
+  expect(spans(t, 'victory')).toEqual(heroes.map((h) => [h, faded, off]))
+  expect(spans(t, 'travel_off')).toEqual(heroes.map((h) => [h, off, show]))
+  expect(spans(t, 'travel_on')).toEqual(heroes.map((h) => [h, show, show + TRAVEL_ON_MS]))
+  // The backdrop holds zone 1 through the step-off and changes at the show time, where the
+  // arrival's line and toast wait; the next zone's enemies wait for the step-on and its pause.
+  const zoneAt = (now: number) => {
+    t.observe(next, now)
+    return stagedState(next, WORLD_DEFAULT, t, now).zone
+  }
+  expect(zoneAt(show - 1)).toBe(1)
+  expect(t.known().map((k) => k.id)).toEqual(['e9'])
+  expect(zoneAt(show)).toBe(2)
+  expect(t.isBusy(show + TRAVEL_ON_MS - 1)).toBe(true)
+
+  // A Legendary chest outlasts the hold: the step-off starts as the chest ends.
+  const l = observed(boss())
+  l.onEffects(
+    [...bossKill({ k: 'drop', item: item('iron_sword', 'legendary') }), advance],
+    NOW,
+    2000,
+  )
+  const chestEnd = endOf(l, 'chest')
+  expect(chestEnd).toBeGreaterThan(off)
+  expect(l.zoneShowAt(1)).toBe(chestEnd + TRAVEL_OFF_MS)
+  l.observe(next, NOW + 1)
+  expect(l.zoneShowAt(1)).toBe(chestEnd + TRAVEL_OFF_MS)
+  expect(spans(l, 'travel_off')).toEqual(heroes.map((h) => [h, chestEnd, chestEnd + TRAVEL_OFF_MS]))
+  expect(spans(l, 'travel_on')).toEqual(
+    heroes.map((h) => [h, chestEnd + TRAVEL_OFF_MS, chestEnd + TRAVEL_OFF_MS + TRAVEL_ON_MS]),
+  )
+})
+
+test('a zone boss kill with Farm here holds and does not walk', () => {
+  const t = observed(boss())
+  t.onEffects([...bossKill(), { k: 'zone_cleared', zone: 1, advancedTo: 1 }], NOW, 2000)
+  const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS
+  expect(t.zoneShowAt(1)).toBe(faded + VICTORY_MS)
+  t.observe({ ...wave(), wave: 1 }, NOW + 1)
+  expect(of(t.active(NOW + 1), 'victory').map((m) => [m.from, m.until])).toEqual(
+    ['h1', 'h2', 'h3'].map(() => [faded, faded + VICTORY_MS]),
+  )
+  expect(of(t.active(NOW + 1), 'travel_off')).toEqual([])
+  expect(of(t.active(NOW + 1), 'travel_on')).toEqual([])
 })
 
 test('a zone boss falls: the party holds its victory pose after the dissolve, and the zone show time moves past the hold', () => {

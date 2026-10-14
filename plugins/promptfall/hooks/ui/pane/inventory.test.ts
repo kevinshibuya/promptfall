@@ -157,11 +157,43 @@ test('the equip pick lists only heroes of the item classes; with none Equip is d
 
 test('the reforge pick: one item per affix', () => {
   const b = inventoryPane(menu({ kind: 'reforge', itemId: 'i2', at: 0 }))
-  expect(linesOf(win(b, 'menu'))).toEqual([' Reforge 30G', '▶+3 Defence', ' +5% Speed'])
+  expect(linesOf(win(b, 'menu'))).toEqual([' Reforge 30G', '▶+3 Defence · 1-6', ' +5% Speed · 2-8'])
+  // A roll keeps the pick open for another.
   expect(b.stops.find((s) => s.key === 'menu:1')?.action).toEqual({
     t: 'event',
     event: { t: 'reforge', itemId: 'i2', affixIndex: 1 },
+    keep: true,
   })
+})
+
+test("the reforge pick shows each affix's value and its range at the item's tier", () => {
+  const blade: Item = {
+    id: 'iT',
+    base: 'mithril_blade',
+    rarity: 'uncommon',
+    tier: 3,
+    affixes: [
+      { id: 'brutal', value: 4 },
+      { id: 'tempered', value: 1 },
+    ],
+    equippedBy: null,
+    tradeableAt: null,
+  }
+  const account = toAccountView(null, null, 'in-process', 0)
+  const pick = (item: Item) => {
+    const view = toGameView({ ...createInitialState(1), inventory: [item] }, 'a1', false, account)
+    const b = inventoryPane(
+      withDialog({ menu: { kind: 'reforge', itemId: 'iT', at: 0 } }, { view }),
+    )
+    return linesOf(win(b, 'menu'))
+  }
+  // Brutal rolls 2 to 4 and Tempered 1 to 2: at tier 3's ×3.5 the values and the ends scale alike.
+  expect(pick(blade)).toEqual([' Reforge 87G', '▶Brutal +14 atk · 7-14', ' Tempered +3 def · 3-7'])
+  expect(pick({ ...blade, tier: 1 })).toEqual([
+    ' Reforge 25G',
+    '▶Brutal +4 atk · 2-4',
+    ' Tempered +1 def · 1-2',
+  ])
 })
 
 test('read-only rows do nothing, and no sub-window opens', () => {

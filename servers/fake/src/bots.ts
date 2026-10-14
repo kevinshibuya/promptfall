@@ -235,15 +235,24 @@ export function startBots(options: BotOptions): Bots {
    * The mirror applies `boss_engaged` from a `cursor_behind` answer like any
    * delivery, so a bot in boss mode fights the world boss through its batches.
    */
-  async function play(bot: Bot): Promise<void> {
-    const events = playEvents(bot)
+  async function submit(bot: Bot, events: PlayerEvent[], action: string): Promise<void> {
     let ack = await client.submit(bot.mirror.batch(events), bot.auth)
     apply(bot, events, ack)
     if (!ack.ok && ack.reason === 'cursor_behind') {
       ack = await client.submit(bot.mirror.batch(events), bot.auth)
       apply(bot, events, ack)
     }
-    log(`bot ${bot.name} batch ${ack.ok ? 'ok' : ack.reason}`)
+    log(`bot ${bot.name} ${action} ${ack.ok ? 'ok' : ack.reason}`)
+  }
+
+  /** Frees a slot through the same batch path as a player's vendoring. */
+  async function vendorIfFull(bot: Bot): Promise<void> {
+    const state = bot.mirror.local
+    if (state.inventory.length < state.inventoryCap) return
+    const cheapest = state.inventory
+      .filter((item) => item.equippedBy === null)
+      .sort((a, b) => vendorValue(a) - vendorValue(b))[0]
+    if (cheapest) await submit(bot, [{ t: 'vendor', itemId: cheapest.id }], 'vendor')
   }
 
   /** Logs a market answer and folds its delivery into the mirror. */
@@ -351,8 +360,9 @@ export function startBots(options: BotOptions): Bots {
     const world = await client.world(bot.auth, bot.chatMark)
     if ('reason' in world) return log(`bot ${bot.name} world ${world.reason}`)
     bot.chatMark = world.chat.at(-1)?.id ?? bot.chatMark
-    // 2. A batch of play.
-    await play(bot)
+    // 2. A batch of play, then room for the market even if play filled the inventory.
+    await submit(bot, playEvents(bot), 'batch')
+    await vendorIfFull(bot)
     // 3. The stipend: the `credited` event reaches the mirror in the next answer.
     if (bot.mirror.local.gold < STIPEND_FLOOR) {
       await options.host.credit(bot.accountId, STIPEND, 'bot_stipend')
@@ -374,13 +384,28 @@ export function startBots(options: BotOptions): Bots {
       log(`bots failed to start: ${String(error)}`)
       return
     }
-    const bot = bots[turn % Math.max(1, bots.length)]
+    const count = Math.max(1, bots.length)
+    const bot = bots[turn % count]
+    // A round outlasts PRESENCE_TTL_MS, so the bot half a round on polls too: every bot's
+    // heartbeat lands twice a round and none drops out of presence between its acts.
+    const half = bots[(turn + Math.floor(count / 2)) % count]
     turn += 1
     if (!bot) return
     try {
       await act(bot)
     } catch (error) {
       // The next act retries from the mirror as it is: a lost ack is answered duplicate or seq_mismatch.
+      log(`bot ${bot.name} error ${String(error)}`)
+    }
+    if (half && half !== bot) await heartbeat(half)
+  }
+
+  async function heartbeat(bot: Bot): Promise<void> {
+    try {
+      const world = await client.world(bot.auth, bot.chatMark)
+      if ('reason' in world) return log(`bot ${bot.name} world ${world.reason}`)
+      bot.chatMark = world.chat.at(-1)?.id ?? bot.chatMark
+    } catch (error) {
       log(`bot ${bot.name} error ${String(error)}`)
     }
   }
