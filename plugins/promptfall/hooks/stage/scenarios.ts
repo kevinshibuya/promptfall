@@ -61,6 +61,7 @@ import {
   STEP_OUT_MS,
   TRAVEL_OFF_MS,
   VICTORY_MS,
+  WAVE_GAP_MS,
   WINDUP_HOLD_MS,
 } from './tuning'
 
@@ -93,6 +94,7 @@ export const SCENARIOS = [
   'victory',
   'boss-kill-travel',
   'boss_move',
+  'spawn',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
 export type Golden = {
@@ -134,31 +136,68 @@ const withoutFront = (): GameView => {
   return v
 }
 
-/** The scenario's model, with its motions at `now` (NOW). */
-function staged(view: GameView, t: StageTimeline, box: Box, compact = false, now = NOW): Staged {
+/**
+ * A scenario's case: its timeline built once from its events and observations, staged at any
+ * instant from `from`, the last of them, on. Its golden stages it at `now`.
+ */
+export type Case = {
+  from: number
+  now: number
+  at: (now: number) => Staged
+}
+
+/** The case staging `view` on `t` in `box`, last observed or given its events at `from`. */
+function staging(
+  view: GameView,
+  t: StageTimeline,
+  box: Box,
+  from: number,
+  { compact = false, now = NOW } = {},
+): Case {
   return {
-    model: stageAt(stagedState(view, WORLD_DEFAULT, t, now), t, now, box, {
-      compact,
-      motion: 'full',
-    }),
-    motions: t.active(now),
+    from,
     now,
+    at: (at) => ({
+      model: stageAt(stagedState(view, WORLD_DEFAULT, t, at), t, at, box, {
+        compact,
+        motion: 'full',
+      }),
+      motions: t.active(at),
+      now: at,
+    }),
   }
 }
 
-/** A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill observed right after. */
-function killed(t1: number, effects: Effect[], box: Box): Staged {
+/** The enemy that steps on after the `spawn` scenario's kill, in the slot-0 enemy's place. */
+const NEWCOMER = {
+  id: 'e4',
+  def: 'hedge_sprite',
+  name: 'Hedge Sprite',
+  glyph: '?',
+  hp: 24,
+  maxHp: 24,
+  kind: 'wave',
+  enraged: false,
+}
+
+/**
+ * A killing action on the slot-0 enemy at `t1`, a hit back on a hero 500 ms later, the kill
+ * observed right after; with `enters`, the next observe at that instant brings the newcomer on.
+ */
+function killed(t1: number, effects: Effect[], box: Box, enters?: number): Case {
   const t = new StageTimeline()
   t.observe(wave(), t1 - 1000)
   t.onEffects(effects, t1)
   const after = withoutFront()
   t.observe(after, t1 + 10)
-  t.observe(after, NOW)
-  return staged(after, t, box)
+  if (enters === undefined) return staging(after, t, box, t1 + 10)
+  const next = { ...after, enemies: [...after.enemies, NEWCOMER] }
+  t.observe(next, enters)
+  return staging(next, t, box, enters)
 }
 
 /** `actor` attacked `target` (the slot-0 enemy by default) `ms` before NOW. */
-function attacking(actor: string, ms: number, target = 'e1'): Staged {
+function attacking(actor: string, ms: number, target = 'e1'): Case {
   const t = new StageTimeline()
   t.observe(wave(), NOW - ms)
   t.onEffects(
@@ -168,11 +207,24 @@ function attacking(actor: string, ms: number, target = 'e1'): Staged {
     ],
     NOW - ms,
   )
-  t.observe(wave(), NOW)
-  return staged(wave(), t, FULL)
+  return staging(wave(), t, FULL, NOW - ms)
 }
 
+/** The scenario staged at its golden instant. */
 export function stage(name: Scenario): Staged {
+  const c = caseOf(name)
+  return c.at(c.now)
+}
+
+/** The kill's actions the `dissolve` and `spawn` scenarios play, at `t1`. */
+const KILL: Effect[] = [
+  { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+  { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
+  { k: 'act', actor: 'e2', action: 'attack', at: 500 },
+  { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
+]
+
+export function caseOf(name: Scenario): Case {
   const t = new StageTimeline()
   switch (name) {
     // Each attack holds its wind-up WINDUP_HOLD_MS before it moves; past the hold, the knight
@@ -201,8 +253,12 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - WINDUP_HOLD_MS - 60,
       )
-      t.observe(boss(), NOW)
-      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+      return staging(
+        boss(),
+        t,
+        { columns: 120, rows: t.rowsAt(boss(), NOW) },
+        NOW - WINDUP_HOLD_MS - 60,
+      )
     }
     // The black mage 30 ms past its step out, still in its hold: stepped toward the enemies in
     // its wind-up frame, its fireball not yet thrown.
@@ -218,26 +274,30 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - STEP_OUT_MS - 30,
       )
-      t.observe(worldBoss(), NOW)
-      return staged(worldBoss(), t, { columns: 120, rows: t.rowsAt(worldBoss(), NOW) })
+      return staging(
+        worldBoss(),
+        t,
+        { columns: 120, rows: t.rowsAt(worldBoss(), NOW) },
+        NOW - STEP_OUT_MS - 30,
+      )
     }
     case 'rest': {
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // The reactive events (spec #131). Haste: every hero trails its streak and bobs twice as fast,
     // a quarter-second in: the heroes in the second half of their bob, the enemies in the first.
     case 'haste': {
       const v = party({ hasted: true })
       t.observe(v, NOW)
-      return staged(v, t, FULL, false, NOW + HASTE_FRAME_MS)
+      return staging(v, t, FULL, NOW, { now: NOW + HASTE_FRAME_MS })
     }
     // A mishap 40 ms ago: the goblin scout mid red flash, then tinted until its next hit.
     case 'enrage': {
       t.observe(wave(), NOW - 1000)
       t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW - 40)
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
     case 'camp': {
@@ -258,13 +318,13 @@ export function stage(name: Scenario): Staged {
         NOW - 300,
       )
       t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW)
     }
     // Guard: every hero in the stance, the bob stopped, the knight under the shield.
     case 'guard': {
       const v = party({ guarding: true })
       t.observe(v, NOW)
-      return staged(v, t, FULL)
+      return staging(v, t, FULL, NOW)
     }
     // The stage moments (spec #132). A travel from zone 1 to 3 halfway through the party's step
     // off: the heroes stepped right and half faded, the encounter it left standing on zone 1's
@@ -274,7 +334,7 @@ export function stage(name: Scenario): Staged {
       t.onEffects([{ k: 'traveled', from: 1, to: 3 }], NOW - TRAVEL_OFF_MS / 2)
       const next = { ...empty(), zone: 3, zoneName: 'Marsh of Sighs', wave: 1 }
       t.observe(next, NOW)
-      return staged(next, t, FULL)
+      return staging(next, t, FULL, NOW)
     }
     // Two level-ups in one group, the second a stagger behind the first: the knight's deltas
     // rising in gold, the second hero mid gold flash 40 ms in, its own deltas just off.
@@ -287,8 +347,7 @@ export function stage(name: Scenario): Staged {
         ],
         NOW - LEVEL_STAGGER_MS - 40,
       )
-      t.observe(wave(), NOW)
-      return staged(wave(), t, FULL)
+      return staging(wave(), t, FULL, NOW - LEVEL_STAGGER_MS - 40)
     }
     // The bandit captain fell and dissolved; at NOW the party holds its victory pose, a quarter
     // into the hold, over zone 1's backdrop.
@@ -305,8 +364,7 @@ export function stage(name: Scenario): Staged {
       )
       const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
       t.observe(next, t1 + 10)
-      t.observe(next, NOW)
-      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+      return staging(next, t, { columns: 120, rows: t.rowsAt(next, NOW) }, t1 + 10)
     }
     // The bandit captain fell with Push on: past the dissolve and the victory hold, at NOW the
     // party is halfway through its step-off, over zone 1's backdrop until it ends.
@@ -325,8 +383,7 @@ export function stage(name: Scenario): Staged {
       )
       const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
       t.observe(next, t1 + 10)
-      t.observe(next, NOW)
-      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+      return staging(next, t, { columns: 120, rows: t.rowsAt(next, NOW) }, t1 + 10)
     }
     // A boss move (#169): the bandit captain's whole-party hit 20 ms past its lunge's one impact,
     // every hero in its hit frame with its number rising.
@@ -342,35 +399,32 @@ export function stage(name: Scenario): Staged {
         ],
         t1,
       )
-      t.observe(boss(), NOW)
-      return staged(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) })
+      return staging(boss(), t, { columns: 120, rows: t.rowsAt(boss(), NOW) }, t1)
     }
     case 'boss': {
       // The boss spawned half a spawn ago.
       t.observe(empty(), NOW - SPAWN_MS)
       t.observe(boss(), NOW - SPAWN_MS / 2)
-      t.observe(boss(), NOW)
       const box = { columns: 120, rows: t.rowsAt(boss(), NOW) }
-      return staged(boss(), t, box)
+      return staging(boss(), t, box, NOW - SPAWN_MS / 2)
     }
     case 'compact': {
       t.observe(wave(), NOW)
       const box = { columns: 52, rows: 4 }
-      return staged(wave(), t, box, true)
+      return staging(wave(), t, box, NOW, { compact: true })
     }
     case 'dissolve': {
       // The dissolve starts when the kill's flash ends; at NOW it is half done.
       const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS / 2)
-      return killed(
-        t1,
-        [
-          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
-          { k: 'hit', by: 'h1', target: 'e1', amount: 42 },
-          { k: 'act', actor: 'e2', action: 'attack', at: 500 },
-          { k: 'hit', by: 'e2', target: 'h2', amount: 7 },
-        ],
-        FULL,
-      )
+      return killed(t1, KILL, FULL)
+    }
+    // The goblin scout's kill as `dissolve` plays it: once its fade and the pause after it are
+    // over, the next observe brings the hedge sprite on in its place; at NOW it is halfway
+    // through its fade in, the field rat and the road slime sliding up the line ahead of it.
+    case 'spawn': {
+      const enters = NOW - SPAWN_MS / 2
+      const t1 = enters - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + WAVE_GAP_MS)
+      return killed(t1, KILL, FULL, enters)
     }
     // A sandbox item dropped between spawns: no row to fall from, so its chest fell onto the
     // front slot's empty ground; at NOW it has opened and the sword is halfway up its rise.
@@ -378,8 +432,7 @@ export function stage(name: Scenario): Staged {
       const t0 = NOW - (CHEST_FALL_MS + CHEST_SIT_MS + CHEST_OPEN_MS + REVEAL_RISE_MS / 2)
       t.observe(empty(), t0 - 1000)
       t.onEffects([{ k: 'drop', item }], t0)
-      t.observe(empty(), NOW)
-      return staged(empty(), t, FULL)
+      return staging(empty(), t, FULL, t0)
     }
     // The kill's chest lands as its fade ends. At NOW, for `chest`, it sits closed halfway
     // through its sit; for `drop`, it has opened and the sword is halfway up its rise; for
