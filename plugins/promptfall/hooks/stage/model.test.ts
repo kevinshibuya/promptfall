@@ -6,17 +6,19 @@ import { WORLD_DEFAULT } from '../state'
 import type { Effect, Rarity } from '../vendor/sim.js'
 import { composeFrame } from './compose'
 import { boss, wave, worldBoss } from './fixtures'
-import { lungeOffset, type StageActor, stageAt } from './model'
+import { lungeOffset, SHIELD, type StageActor, stageAt } from './model'
 import { stagedState } from './staged'
 import { StageTimeline } from './timeline'
 import {
   ACTOR_EDGE,
   ACTOR_PITCH,
+  BLINK_MS,
   CAMPFIRE_FADE_MS,
   CAMPFIRE_MS,
   CLASS_RGB,
   COMPACT_PITCH,
   ENRAGE_RGB,
+  FLASH_MS,
   FLASH_RGB,
   HIRES_SCALE,
   HUDDLE_MS,
@@ -26,6 +28,7 @@ import {
   LUNGE_MS,
   LUNGE_PX,
   RARITY_RGB,
+  SHIELD_OVERLAP_PX,
   STEP_OUT_MS,
   STEP_PX,
   TRAVEL_OFF_MS,
@@ -709,7 +712,7 @@ test('under still the streaks draw and the bob stays stopped; once haste ends th
   expect(actor(at(hasted(false), [], NOW, BOX, HI).actors, 'h1').streak ?? null).toBe(null)
 })
 
-test('guarding heroes hold the derived stance with the bob stopped; the front hero wears the shield, but not on the compact stage', () => {
+test('guarding heroes hold the derived stance with the bob stopped; the front hero holds the shield, on the compact stage too', () => {
   for (const later of [NOW, NOW + 700]) {
     const hi = at(guarding(), [], later, BOX, HI)
     for (const key of ['h1', 'h2', 'h3']) {
@@ -723,7 +726,7 @@ test('guarding heroes hold the derived stance with the bob stopped; the front he
     const h1 = actor(compact.actors, 'h1')
     expect(h1.pose).toBe('guard')
     expect(h1.y + h1.art.height).toBe(8)
-    expect(h1.shield ?? null).toBe(null)
+    expect(h1.shield?.art).toBe(SHIELD.compact)
   }
   // The stance leans toward the enemies: its feet stay where the idle's stand.
   const h1 = actor(at(guarding(), [], NOW, BOX, HI).actors, 'h1')
@@ -748,6 +751,71 @@ const figure = (a: StageActor) => {
   const w = a.poses.idle.art.width
   return { left: a.x + w - 1 - (box?.x1 ?? 0), right: a.x + w - 1 - (box?.x0 ?? 0) }
 }
+/** The opaque box Guard's shield covers on the stage, beside the hero `a` that holds it. */
+const shieldBox = (a: StageActor) => {
+  const s = a.shield
+  const box = s ? opaqueBox(s.art) : null
+  if (!s || !box) throw new Error(`no shield on ${a.key}`)
+  const x = a.x + s.dx
+  const y = a.y + s.dy
+  return { left: x + box.x0, right: x + box.x1, top: y + box.y0, bottom: y + box.y1 }
+}
+
+test("the front hero holds the big shield on the enemies' side, about its height, its bottom at its feet and its back edge over its front", () => {
+  for (const [box, opts, art, overlap] of [
+    [BOX, HI, SHIELD.hires, k(SHIELD_OVERLAP_PX)],
+    [BOX_COMPACT, COMPACT, SHIELD.compact, SHIELD_OVERLAP_PX],
+  ] as const) {
+    const h1 = actor(at(guarding(), [], NOW, box, opts).actors, 'h1')
+    const label = opts.compact ? 'compact' : 'full'
+    expect(h1.shield?.art, label).toBe(art)
+    const shield = shieldBox(h1)
+    const hero = figure(h1)
+    // Heroes face left: the shield stands left of the figure, its right edge over the figure's
+    // first columns.
+    expect(shield.right, label).toBe(hero.left + overlap - 1)
+    expect(shield.left, label).toBeLessThan(hero.left)
+    // On the ground at the hero's feet, never over its head.
+    const idle = h1.poses.idle.art
+    const feet = h1.y + idle.height - 1
+    expect(shield.bottom, label).toBe(feet)
+    const figureBox = opaqueBox(idle)
+    const tall = (figureBox?.y1 ?? 0) - (figureBox?.y0 ?? 0) + 1
+    expect(Math.abs(shield.bottom - shield.top + 1 - tall), label).toBeLessThanOrEqual(tall / 4)
+  }
+  // Off guard there is none.
+  expect(actor(at(guarding(false), [], NOW, BOX, HI).actors, 'h1').shield ?? null).toBe(null)
+})
+
+test("an enemy's hit under Guard flashes the shield white in the struck hero's flash, the struck hero shows its hit frame, and the lunge is unchanged", () => {
+  const attack = (target: string): Effect[] => [
+    { k: 'act', actor: 'e1', action: 'attack', at: 0 },
+    hit('e1', target),
+  ]
+  // The attack moves at NOW; its lunge lands halfway through.
+  const impact = NOW + LUNGE_MS / 2
+  const shieldOf = (target: string, now: number, box = BOX, opts = HI) =>
+    actor(at(guarding(), attack(target), now, box, opts).actors, 'h1').shield
+  // A hit on any guarding hero lands on the one shield, the front hero's.
+  for (const target of ['h1', 'h2']) {
+    expect(shieldOf(target, impact - 1)?.flashing, target).toBe(false)
+    expect(shieldOf(target, impact)?.flashing, target).toBe(true)
+    expect(shieldOf(target, impact + BLINK_MS - 1)?.flashing, target).toBe(true)
+    expect(shieldOf(target, impact + BLINK_MS)?.flashing, target).toBe(false)
+    const struck = at(guarding(), attack(target), impact, BOX, HI)
+    expect(actor(struck.actors, target).pose, target).toBe('hit')
+    expect(actor(struck.actors, target).flashing, target).toBe(true)
+  }
+  // The compact stage holds its flash for the whole hit frame, the shield's with it.
+  expect(shieldOf('h1', impact + BLINK_MS, BOX_COMPACT, COMPACT)?.flashing).toBe(true)
+  expect(shieldOf('h1', impact + FLASH_MS, BOX_COMPACT, COMPACT)?.flashing).toBe(false)
+  // The enemy lunges its fixed offset, Guard or not.
+  for (const now of [impact - LUNGE_MS / 4, impact, impact + LUNGE_MS / 4]) {
+    const guarded = actor(at(guarding(), attack('h1'), now, BOX, HI).actors, 'e1').x
+    expect(guarded).toBe(actor(at(wave(), attack('h1'), now, BOX, HI).actors, 'e1').x)
+  }
+})
+
 /** Each hero's x, in party order. */
 const heroXs = (m: { actors: StageActor[] }) =>
   ['h1', 'h2', 'h3'].map((key) => actor(m.actors, key).x)
