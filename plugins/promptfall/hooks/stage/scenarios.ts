@@ -330,8 +330,8 @@ export function caseOf(name: Scenario): Case {
     case 'camp': {
       t.observe(hurt(), NOW - 1000)
       t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 500)
-      t.observe(campingView(), NOW)
-      return staging(campingView(), t, FULL, NOW)
+      t.observe(campingView(), NOW - 500)
+      return staging(campingView(), t, FULL, NOW - 500, { now: NOW })
     }
     // Camp broken half a spawn ago: the held enemies halfway back in from the left, the party
     // stepped back to its slots, the fire fading.
@@ -340,8 +340,8 @@ export function caseOf(name: Scenario): Case {
       t.onEffects([{ k: 'camp', on: true, heals: CAMP_HEALS }], NOW - 5000)
       t.observe(campingView(), NOW - 4000)
       t.onEffects([{ k: 'camp', on: false, heals: [] }], NOW - SPAWN_MS / 2)
-      t.observe(wave(), NOW)
-      return staging(wave(), t, FULL, NOW)
+      t.observe(wave(), NOW - SPAWN_MS / 2)
+      return staging(wave(), t, FULL, NOW - SPAWN_MS / 2, { now: NOW })
     }
     // A camp with a world boss engaged, 300 ms ago: the fire mid-field, the boss still standing,
     // the heals rising green; no pause.
@@ -374,8 +374,8 @@ export function caseOf(name: Scenario): Case {
       t.observe(wave(), NOW - 1000)
       t.onEffects([{ k: 'guard', on: true }], NOW - HUDDLE_MS / 2)
       const v = party({ guarding: true })
-      t.observe(v, NOW)
-      return staging(v, t, FULL, NOW)
+      t.observe(v, NOW - HUDDLE_MS / 2)
+      return staging(v, t, FULL, NOW - HUDDLE_MS / 2, { now: NOW })
     }
     // Guard under attack: the goblin scout's lunge at its apex on the knight, the impact. The
     // shield flashes white with the knight's blink, the knight in its hit frame.

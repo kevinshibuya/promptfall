@@ -269,30 +269,33 @@ _Avoid_: trigger, integration, buff (that is one kind), bonus
 
 **Haste**:
 The reactive event of a running turn: every hero's gauge fills a quarter faster while Claude
-works, with speed streaks behind the heroes and a faster bob.
+works, each hero standing trails its speed lines and bobs twice as fast. It never starts while the
+party camps; one already on waits frozen through the camp.
 _Avoid_: speed-up, boost, turbo, frenzy
 
 **Enrage**:
-The reactive event of a failed tool call: the strongest enemy on the field (by kind, then attack,
-then max HP, then the front) lands its next hit half again as hard, a red flash on it and a red
-tint until that hit lands.
+The reactive event of a failed tool call: the strongest living enemy on the field (by kind, then
+attack, then max HP, then the front) lands its next hit half again as hard, a red flash on it and
+a red tint until that hit lands. A pick already enraged, or a mishap while camped, does nothing.
 _Avoid_: rage, berserk, punishment, penalty
 
 **Camp**:
-The reactive event of a compaction: the party camps and heals half its HP as a rest does, a
-campfire on the stage, and the fight is held where it stands until camp breaks. With a world boss
-engaged it heals and holds nothing.
+The reactive event of a compaction, made as it starts: the party heals half its HP as a rest does
+and the fight pauses. The enemies walk off with their HP kept and the party huddles at a campfire,
+the bob stopped, until it breaks camp. With a world boss engaged it heals and pauses nothing.
 _Avoid_: rest (that is a prompt), inn, respite, break
 
 **Break camp**:
 The way out of Camp: camp off (the band's `g`, `/promptfall go` or the session's end), the next
-prompt, the next tool call, a travel or a world boss appearing ends it, and the held fight goes on
-from where it stood.
+prompt, the next tool call, a travel or a world boss appearing ends it. The fire goes out, the
+party steps back to its slots and the held enemies walk back in, and the fight goes on from where
+it stood. The log says "The party breaks camp."
 _Avoid_: wake, resume, end camp, leave camp
 
 **Guard**:
-The reactive event of a waiting permission prompt: the heroes hold a guard stance, take half
-damage and attack nobody until the player answers.
+The reactive event of a waiting permission prompt: the heroes hold a guard stance in a huddle
+behind the big shield the front hero standing holds, take half damage and attack nobody until the
+player answers.
 _Avoid_: defend, pause, block, shield wall
 
 ### Progress
@@ -391,6 +394,18 @@ The pace every attacker takes forward, toward the other side, before its wind-up
 action (a heal steps the same way), holds through the action and takes back after it. The same
 distance for every actor, the world boss included.
 _Avoid_: lunge (the thrust itself), hop, jump, approach
+
+**Huddle**:
+The party pressed together for Guard and Camp: the front living hero keeps its slot and each
+living hero behind it stands a pixel behind the one before it, the fallen in their slots. The
+heroes slide in when it starts and back when it ends.
+_Avoid_: step (that is an attacker's), hop, formation, turtle
+
+**Speed lines**:
+Haste's mark: three or four light runs trailing a hasted hero's back across its height, fading
+toward the tail, a pattern per bob frame so they flicker with the bob. None on the fallen, in the
+guard stance or at camp, and none on the compact stage.
+_Avoid_: streak, trail, afterimage, blur
 
 **Chest**:
 The box a kill leaves where the enemy stood when it drops an item. One chest, whatever the
