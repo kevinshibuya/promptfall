@@ -491,8 +491,10 @@ declare const MIN_CLIENT_VERSION = "0.3.0";
 type BudgetKind = 'tick' | 'tool_call' | 'rest' | 'travel' | 'turn_end' | 'turn_start' | 'tool_mishap' | 'camp' | 'guard';
 /**
  * One token bucket per kind. The reactive events (#156) are sized so a plugin throttled to the
- * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a camp one a minute,
- * a guard one per 2 seconds, which a pair of on and off every 4 seconds meets and never drains.
+ * hooks' rates never meets them: a turn start or a mishap one per 5 seconds, a guard one per 2
+ * seconds, which a pair of on and off every 4 seconds meets and never drains, and a camp one per
+ * 30 seconds, since each compaction spends an on and an off (#222). A record from before keeps its
+ * count and refills to the new capacity.
  * Travel (#161) is capped as a rest is.
  */
 declare const BUDGETS: Record<BudgetKind, {

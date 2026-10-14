@@ -632,19 +632,22 @@ export function runServerContract(name: string, make: ContractMake): void {
       })
     }
 
-    it('rule 8: five camps in a minute pass, the sixth waits for the next minute', async () => {
+    it('rule 8: ten camps in 30 seconds pass, the eleventh waits for the next 30 seconds', async () => {
       const { client, clock, mirror } = await setup()
-      const five: PlayerEvent[] = Array.from({ length: 5 }, () => ({ t: 'camp' }))
-      expect(await client.submit(mirror.batch(five), mirror.auth())).toMatchObject({ ok: true })
-      mirror.commit(five)
-      clock.advance(30_000)
+      const ten: PlayerEvent[] = Array.from({ length: 10 }, (_, i) => ({
+        t: 'camp',
+        on: i % 2 === 0,
+      }))
+      expect(await client.submit(mirror.batch(ten), mirror.auth())).toMatchObject({ ok: true })
+      mirror.commit(ten)
+      clock.advance(15_000)
       const one: PlayerEvent[] = [{ t: 'camp' }]
       expect(await client.submit(mirror.batch(one), mirror.auth())).toMatchObject({
         ok: false,
         reason: 'rate_capped',
         kind: 'camp',
       })
-      clock.advance(30_000)
+      clock.advance(15_000)
       expect(await client.submit(mirror.batch(one), mirror.auth())).toMatchObject({ ok: true })
     })
 
@@ -660,6 +663,8 @@ export function runServerContract(name: string, make: ContractMake): void {
         tick,
         { t: 'guard', on: false },
         { t: 'camp' },
+        tick,
+        { t: 'camp', on: false },
         { t: 'turn_end' },
       ]
       const batch = mirror.batch(events)

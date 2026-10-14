@@ -107,6 +107,9 @@ export const MIGRATIONS: MigrationChain = {
   // join it, and a kill refills in the same step; `waveSize` and `spawnedInWave` keep their shape and
   // count what the wave got. The finish clears every fight outside boss mode, so nothing changes shape.
   17: { state: (s) => s },
+  // 18 → 19: Camp pauses the fight, and Enrage picks the strongest enemy (#222). The state gains its
+  // camp flag, off: a save never starts camped. Goods keep their shape.
+  18: { state: (s) => ({ ...s, camp: false }) },
 }
 
 /** The 7 → 8 rule, frozen: a base's minimum zone 1 to 3 is tier 1, 10 to 12 tier 4. */

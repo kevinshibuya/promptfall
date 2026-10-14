@@ -872,6 +872,44 @@ describe('the 17→18 step: waves fill every free slot', () => {
   })
 })
 
+describe('the 18→19 step: Camp pauses the fight', () => {
+  // The camp flag, off; the finish clears the fight outside boss mode.
+  const PINNED = { golden: '99abb51e874c7d00', deep: 'c396c4f7031cefe9' } as const
+
+  for (const kind of ['golden', 'deep'] as const) {
+    const before = fixture(kind === 'deep' ? 'v18-deep.json' : 'v18.json')
+    const r = migrate(before, { to: 19 })
+    if (!r.ok) throw new Error(r.reason)
+    const after = r.state
+
+    it(`gives the ${kind} fixture its camp flag, off, and keeps every other field but the cleared fight`, () => {
+      expect(after.v).toBe(19)
+      expect(after.camp).toBe(false)
+      const { v: _v, encounter: _e, battle: _b, camp: _c, ...rest } = after
+      const { v: _v0, encounter: _e0, battle: _b0, ...was } = before as unknown as typeof after
+      expect(rest).toEqual(was)
+    })
+
+    it(`hashes the ${kind} fixture to its pinned value, and the result steps`, () => {
+      expect(hashState(after)).toBe(PINNED[kind])
+      expect(step(after, { t: 'tick' }).effects.filter((e) => e.k === 'rejected')).toEqual([])
+    })
+  }
+
+  it('leaves goods alone', () => {
+    const v18 = fixture('v18-deep.json')
+    const [item] = v18.inventory
+    const [hero] = v18.roster
+    if (!item || !hero) throw new Error('deep fixture')
+    for (const goods of [
+      { kind: 'item', item },
+      { kind: 'hero', hero },
+    ] as const) {
+      expect(migrateGoods(goods, 18, { to: 19 })).toEqual({ ok: true, goods })
+    }
+  })
+})
+
 describe('the chain', () => {
   for (const kind of ['golden', 'deep'] as const) {
     it(`takes the oldest ${kind} fixture to the current version`, () => {
