@@ -903,17 +903,30 @@ test('in play, the strip’s hero HP trails the state until the hit lands, never
     REVEAL_RISE_MS +
     REVEAL_HOLD_MS.legendary +
     REVEAL_FADE_MS
+  const settleSteps = Math.ceil(settleMs / 50)
   const recent: number[][] = []
+  // The step each hero's strip HP went under every recent state, while it stays there.
+  const under = new Map<number, number>()
   for (let step = 0; step < 600; step++) {
     await clock.advance(50)
     const state = view().heroes.map((h) => h.hp)
     recent.push(state)
-    if (recent.length > Math.ceil(settleMs / 50)) recent.shift()
+    if (recent.length > settleSteps) recent.shift()
     const strip = await shown()
     if (strip.length !== state.length) continue
-    // Never below what the state was: the strip only holds back a hit or a heal not yet landed.
-    for (const [i, hp] of strip.entries())
-      expect(hp).toBeGreaterThanOrEqual(Math.min(...recent.map((s) => s[i] ?? 0)))
+    // The strip only holds back a hit or a heal not yet landed. A tick that hits a hero and then
+    // heals the same hero (the white mage, a cleared wave's 15%) ends above the HP the stage shows
+    // between the two, so the strip may go under every state published: only while that heal is
+    // still to land, never for as long as the stage takes to settle.
+    for (const [i, hp] of strip.entries()) {
+      if (hp >= Math.min(...recent.map((s) => s[i] ?? 0))) {
+        under.delete(i)
+        continue
+      }
+      const since = under.get(i) ?? step
+      under.set(i, since)
+      expect(step - since).toBeLessThan(settleSteps)
+    }
     if (strip.some((hp, i) => hp > (state[i] ?? 0))) trailed++
   }
   // Over 30 s of play some hit was ticked before it landed, and the strip waited for it.
