@@ -56,6 +56,10 @@ export const FLASH_MS = 160
 /** The white overlay at 1.5x: longer than one event frame, so the Image loop cannot step over it. */
 export const BLINK_MS = 100
 export const NUMBER_MS = 700
+/** A level-up's gold numbers rise this long: slow enough to read what the hero gained. */
+export const LEVEL_NUMBER_MS = 1200
+/** Several level-ups in one group play one after another, this far apart in party-slot order. */
+export const LEVEL_STAGGER_MS = 250
 export const NUMBER_RISE_PX = 6
 export const DISSOLVE_MS = 420
 export const SPAWN_MS = 360
@@ -109,7 +113,10 @@ export const EVENT_FRAME_MS = 83
 export const TRAVEL_OFF_MS = 500
 export const TRAVEL_ON_MS = 500
 export const TRAVEL_PX = 12
-/** The party's victory pose after a zone boss's dissolve, before the backdrop changes. */
+/**
+ * The party's victory pose after a zone boss's dissolve: with Push on, the party then walks to the
+ * next zone as a travel does; with Farm here, it holds and stays.
+ */
 export const VICTORY_MS = 2000
 export const IDLE_BOB_PX = 1
 

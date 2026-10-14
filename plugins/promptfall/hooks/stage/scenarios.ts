@@ -52,6 +52,7 @@ import {
   FULL_MIN_COLUMNS,
   HASTE_FRAME_MS,
   HIRES_SCALE,
+  LEVEL_STAGGER_MS,
   LUNGE_MS,
   REVEAL_RISE_MS,
   SPAWN_MS,
@@ -90,6 +91,7 @@ export const SCENARIOS = [
   'travel',
   'level-up',
   'victory',
+  'boss-kill-travel',
   'boss_move',
 ] as const
 export type Scenario = (typeof SCENARIOS)[number]
@@ -281,12 +283,16 @@ export function stage(name: Scenario): Staged {
       t.observe(next, NOW)
       return staged(next, t, FULL)
     }
-    // A level-up 40 ms ago: the knight mid gold flash, its deltas rising in gold.
+    // Two level-ups in one group, the second a stagger behind the first: the knight's deltas
+    // rising in gold, the second hero mid gold flash 40 ms in, its own deltas just off.
     case 'level-up': {
       t.observe(wave(), NOW - 1000)
       t.onEffects(
-        [{ k: 'level_up', heroId: 'h1', level: 6, deltas: { hp: 9, atk: 2, def: 2, spd: 0 } }],
-        NOW - 40,
+        [
+          { k: 'level_up', heroId: 'h1', level: 6, deltas: { hp: 9, atk: 2, def: 2, spd: 0 } },
+          { k: 'level_up', heroId: 'h2', level: 6, deltas: { hp: 6, atk: 1, def: 0, spd: 1 } },
+        ],
+        NOW - LEVEL_STAGGER_MS - 40,
       )
       t.observe(wave(), NOW)
       return staged(wave(), t, FULL)
@@ -295,6 +301,26 @@ export function stage(name: Scenario): Staged {
     // into the hold, over zone 1's backdrop.
     case 'victory': {
       const t1 = NOW - (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + VICTORY_MS / 4)
+      t.observe(boss(), t1 - 1000)
+      t.onEffects(
+        [
+          { k: 'act', actor: 'h1', action: 'attack', at: 0 },
+          { k: 'hit', by: 'h1', target: 'e9', amount: 500 },
+          { k: 'zone_cleared', zone: 1, advancedTo: 2 },
+        ],
+        t1,
+      )
+      const next = { ...empty(), zone: 2, zoneName: 'Whisperwood', wave: 1 }
+      t.observe(next, t1 + 10)
+      t.observe(next, NOW)
+      return staged(next, t, { columns: 120, rows: t.rowsAt(next, NOW) })
+    }
+    // The bandit captain fell with Push on: past the dissolve and the victory hold, at NOW the
+    // party is halfway through its step-off, over zone 1's backdrop until it ends.
+    case 'boss-kill-travel': {
+      const t1 =
+        NOW -
+        (WINDUP_HOLD_MS + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS + VICTORY_MS + TRAVEL_OFF_MS / 2)
       t.observe(boss(), t1 - 1000)
       t.onEffects(
         [
