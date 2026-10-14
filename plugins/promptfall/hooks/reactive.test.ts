@@ -1,5 +1,6 @@
 import type { On, SessionMessage, ToolCallResult } from 'claude-code'
 import { type Engine, expect, mock, type Plugin } from 'claude-code/testing'
+import { BAND, RUN } from './inplay/harness'
 import { test } from './testing'
 import { approveAs, Ledger } from './vendor/ledger.js'
 import { BOSS_WINDOW_MS, MemoryKeyValue } from './vendor/protocol.js'
@@ -285,6 +286,34 @@ test('the session’s end breaks camp only while camping, and a clear or a resum
   await $.tool.call({ tool: 'Bash', command: 'make' })
   await quit($)
   expect(reactive(sent)).toEqual(['camp on', 'camp on'])
+})
+
+test('g breaks camp at the keypress, not at the band’s last draw', async ($, on) => {
+  const { sent, time } = playing(on)
+  await start($)
+  await compact($, 'manual')
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...BAND })
+  // Camping, nothing animates: the band's last draw can be a while old when the key comes.
+  await time.advance(500)
+  const pressed = time.now()
+  await ui.press({ key: 'hot-g' })
+  await ui.unmount()
+  await quit($)
+  expect(sent.filter((e) => e.t === 'camp' && e.on === false).map((e) => e.at)).toEqual([pressed])
+})
+
+test('two breaks at once send one camp off', async ($, on) => {
+  const { sent } = playing(on)
+  await start($)
+  await compact($, 'manual')
+  const go = () => $.command.run({ ...RUN, command: 'promptfall', args: 'go' })
+  const answers = await Promise.all([go(), go()])
+  expect(answers.map((a) => a.text).sort()).toEqual([
+    'Back to the fight.',
+    'The party is not camping.',
+  ])
+  await quit($)
+  expect(reactive(sent)).toEqual(['camp on', 'camp off'])
 })
 
 /** A tool call the person is asked about: the request fires inside the call, beneath the plugin. */

@@ -434,11 +434,12 @@ class GameSession implements GameHandle {
   }
 
   /**
-   * Camp off, only while the view says camping: the sim also breaks camp on events the plugin
-   * never sees, so the view is the flag, and the off goes once per camp, unpaced.
+   * Camp off, only while the party camps: the sim also breaks camp on events the plugin never
+   * sees, so the engine's own state is the flag, read before any await so two breaks at once send
+   * one off, and the off goes once per camp, unpaced.
    */
   async breakCamp(at: number): Promise<boolean> {
-    if (!this.canApply() || !(await this.view())?.camping) return false
+    if (!this.canApply() || !this.engine.camping()) return false
     this.engine.apply({ t: 'camp', on: false }, at)
     return true
   }

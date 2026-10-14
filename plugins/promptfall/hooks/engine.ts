@@ -407,6 +407,11 @@ export class GameEngine {
     return this.local !== null && !this.stopped && this.paused === null && !this.outage?.expired
   }
 
+  /** Whether the party camps in the local state, as `apply` last left it. */
+  camping(): boolean {
+    return this.local?.camp === true
+  }
+
   // ---------------------------------------------------------------------------
   // Batches
 
