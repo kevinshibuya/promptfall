@@ -41,6 +41,8 @@ describe('golden replay', () => {
   // zone boss, and the world boss keeps the single attack at its move-free atk.
   // SIM_VERSION 18 (waves fill every free slot) changes every fight: a wave's draw arrives
   // together, each tool call's enemy joins the wave, and a kill refills in its own step.
+  // SIM_VERSION 19 (Camp pauses the fight, Enrage picks the strongest) holds the fight from turn 9's
+  // camp to turn 10's rest, which breaks it, and each mishap enrages the strongest enemy on the field.
   it('replays to the golden hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
     expect(hashState(r.state)).toBe(GOLDEN_HASH)
@@ -49,7 +51,7 @@ describe('golden replay', () => {
   // hit, act and heal are output only: effects are not part of the state the hash reads.
   it('the replay reports hits, actions and heals without moving the hash', () => {
     const r = replay(createInitialState(GOLDEN_SEED), goldenEvents())
-    expect(GOLDEN_HASH).toBe('9856df8da655c357')
+    expect(GOLDEN_HASH).toBe('9054f86741bb1a2d')
     expect(r.effects.some((e) => e.k === 'hit')).toBe(true)
     expect(r.effects.some((e) => e.k === 'act')).toBe(true)
     expect(r.effects.some((e) => e.k === 'heal')).toBe(true)

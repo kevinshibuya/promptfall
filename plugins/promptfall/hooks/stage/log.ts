@@ -222,7 +222,9 @@ export class MessageLog {
       case 'enraged':
         return { text: `Claude stumbles. ${name(e.enemyId)} is enraged!`, key: true }
       case 'camp':
-        return { text: 'The party makes camp while Claude gathers its thoughts.', key: true }
+        return e.on === false
+          ? { text: 'The party breaks camp.', key: true }
+          : { text: 'The party makes camp while Claude gathers its thoughts.', key: true }
       // A boss move's line (#169), never toasted.
       case 'raging':
         return { text: `${name(e.enemyId)}'s rage grows!`, key: true }

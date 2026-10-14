@@ -273,14 +273,21 @@ works, with speed streaks behind the heroes and a faster bob.
 _Avoid_: speed-up, boost, turbo, frenzy
 
 **Enrage**:
-The reactive event of a failed tool call: the front enemy's next hit lands half again as hard,
-a red flash on it and a red tint until that hit lands.
+The reactive event of a failed tool call: the strongest enemy on the field (by kind, then attack,
+then max HP, then the front) lands its next hit half again as hard, a red flash on it and a red
+tint until that hit lands.
 _Avoid_: rage, berserk, punishment, penalty
 
 **Camp**:
 The reactive event of a compaction: the party camps and heals half its HP as a rest does, a
-campfire on the stage.
+campfire on the stage, and the fight is held where it stands until camp breaks. With a world boss
+engaged it heals and holds nothing.
 _Avoid_: rest (that is a prompt), inn, respite, break
+
+**Break camp**:
+The way out of Camp: camp off, the next prompt, the next tool call, a travel or a world boss
+appearing ends it, and the held fight goes on from where it stood.
+_Avoid_: wake, resume, end camp, leave camp
 
 **Guard**:
 The reactive event of a waiting permission prompt: the heroes hold a guard stance, take half

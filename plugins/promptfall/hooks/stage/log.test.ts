@@ -737,9 +737,14 @@ test('each reactive event prints its line at its effect’s time', () => {
     [{ k: 'haste', on: false }, 'The party slows.'],
     [{ k: 'enraged', enemyId: e1 }, 'Claude stumbles. Goblin Scout is enraged!'],
     [
+      { k: 'camp', on: true, heals: [{ heroId: h1, amount: 25 }] },
+      'The party makes camp while Claude gathers its thoughts.',
+    ],
+    [
       { k: 'camp', heals: [{ heroId: h1, amount: 25 }] },
       'The party makes camp while Claude gathers its thoughts.',
     ],
+    [{ k: 'camp', on: false, heals: [] }, 'The party breaks camp.'],
     [{ k: 'guard', on: true }, 'The party stands guard.'],
     [{ k: 'guard', on: false }, 'The party lowers its guard.'],
   ]

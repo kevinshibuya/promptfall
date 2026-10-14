@@ -317,6 +317,8 @@ export function toGameView(
     waiting: state.encounter?.queue.length ?? 0,
     gold: state.gold,
     farm: state.farm,
+    // A state from before version 19 has no camp flag and is not camped.
+    camping: state.camp === true,
     autoVendor: state.autoVendor,
     lastDrop: loot[loot.length - 1] ?? null,
     loot,

@@ -787,7 +787,8 @@ export class StageTimeline {
           continue
         }
         if (effect.k === 'camp') {
-          this.camp(effect.heals, start, hp)
+          // Breaking camp lights no fire; its look is the camp stage's.
+          if (effect.on !== false) this.camp(effect.heals, start, hp)
           continue
         }
         if (effect.k === 'level_up') {
