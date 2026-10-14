@@ -2,8 +2,8 @@ import { expect, test } from 'claude-code/testing'
 import { WORLD_BOSSES } from '../vendor/ledger.js'
 import { content } from '../vendor/sim.js'
 import { decode, encode } from './base64'
-import { PLACEHOLDER_COUNT, SPRITE_COUNT, SPRITES } from './generated'
-import { decodePixels, spriteFor, worldBossKey } from './index'
+import { BACKDROPS, PLACEHOLDER_COUNT, SPRITE_COUNT, SPRITES } from './generated'
+import { backdropFor, decodePixels, spriteFor, worldBossKey } from './index'
 import type { SpriteArt } from './types'
 
 const distinctColours = (art: SpriteArt) =>
@@ -53,6 +53,16 @@ test('an unknown key answers the fallback', () => {
   expect(spriteFor('enemy', 'no_such_enemy').id).toBe('fallback')
   expect(spriteFor('item', 'no_such_item').small).not.toBeNull()
   expect(worldBossKey('The Context Leviathan')).toBe('the_context_leviathan')
+})
+
+test('a zone answers only its 1.5x painting, and an unknown zone answers null', () => {
+  for (const [zone, painting] of Object.entries(BACKDROPS)) {
+    expect(backdropFor(Number(zone))).toBe(painting)
+    expect([painting.width, painting.height]).toEqual([240, 51])
+    expect(decodePixels(painting).length).toBe(240 * 51)
+  }
+  expect(backdropFor(0)).toBe(null)
+  expect(backdropFor(content.zones.length + 1)).toBe(null)
 })
 
 test('one sprite per content id, plus the effects, the chests and the fallback', () => {

@@ -13,13 +13,11 @@ export function spriteFor(kind: SpriteKind, key: string): Sprite {
 }
 
 /**
- * The zone's stage backdrop at `scale` (the 1x painting, or its 1.5x twin), or null when the zone
+ * The zone's 1.5x stage backdrop, or null when the zone
  * has none: the stage then draws the ground strip alone.
  */
-export function backdropFor(zone: number, scale: 1 | 1.5): SpriteArt | null {
-  const b = BACKDROPS[String(zone)]
-  if (!b) return null
-  return scale === 1 ? b.full : b.hires
+export function backdropFor(zone: number): SpriteArt | null {
+  return BACKDROPS[String(zone)] ?? null
 }
 
 /** width * height palette indices, row-major. */

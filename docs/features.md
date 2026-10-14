@@ -375,8 +375,8 @@ the desktop. The compact band is the same: its small stage and its party window 
 on the shell. Only the one-row collapsed band stays plain text.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
-the party on the right, side-on, small against the zone's backdrop painting, one per zone, so a boss
-lands at its full size. Actors bob between two idle drawings and wind up and strike. Every attacker,
+the party on the right, side-on, small against the zone's 1.5× backdrop painting, one per zone, so a boss
+lands at its full size. The compact stage keeps its ground strip. Actors bob between two idle drawings and wind up and strike. Every attacker,
 hero or monster, the world boss included, steps forward as it winds up, a hero toward the
 enemies and a monster toward the party, the same few pixels for all, holds there through its blow and steps back as its action ends; the knight and the
 enemies lunge from the stepped position. Fireballs, arrows and light bursts fly, hits flash white

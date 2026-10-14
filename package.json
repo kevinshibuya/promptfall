@@ -18,7 +18,7 @@
     "build:server": "node scripts/build-server.mjs",
     "fake": "pnpm --filter @promptfall/fake-server start",
     "sprites": "tsx scripts/sprites.ts",
-    "sprites:check": "pnpm sprites && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/sprites/generated.ts)\"",
+    "sprites:check": "tsx scripts/sprites.ts --check",
     "font": "tsx scripts/font.ts",
     "font:check": "pnpm font && test -z \"$(git status --porcelain -- plugins/promptfall/hooks/windows/glyphs.ts)\"",
     "cues": "tsx scripts/cues.ts",

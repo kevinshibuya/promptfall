@@ -360,7 +360,7 @@ test('the compact stage draws every pose and effect from compact art, its frame 
 
 test("the backdrop is the zone's 1.5x painting, and none on the compact stage", () => {
   const full = at(wave(), [], NOW, { columns: 120, rows: 8 }, { compact: false, motion: 'still' })
-  expect(full.backdrop).toBe(backdropFor(1, 1.5))
+  expect(full.backdrop).toBe(backdropFor(1))
   const compact = at(wave(), [], NOW, { columns: 52, rows: 4 }, { compact: true, motion: 'still' })
   expect(compact.backdrop).toBe(null)
 })
@@ -371,7 +371,7 @@ test("tier 2's zone 1 stands on zone 1's ground and backdrop", () => {
   const zone13 = at({ ...wave(), zone: 13 }, [], NOW, { columns: 120, rows: 8 }, opts)
   expect(zone13.ground).toBe(ZONE_GROUND[0])
   expect(zone13.ground).toBe(zone1.ground)
-  expect(zone13.backdrop).toBe(backdropFor(1, 1.5))
+  expect(zone13.backdrop).toBe(backdropFor(1))
 })
 
 test('a world boss at an emptied bar stands whole until the server disengages it, then dissolves', () => {
