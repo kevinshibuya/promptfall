@@ -414,7 +414,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       .join(' ')
     return `<use href="#${define(shown.art, slot)}"${t ? ` transform="${t}"` : ''}${color}${filt}/>`
   }
-  /** A mark drawn with an actor (Haste's streak, Guard's shield), from its idle top-left. */
+  /** A mark drawn with an actor (Haste's speed lines, Guard's shield), from its idle top-left. */
   const markUse = (m: Mark | null | undefined): string =>
     m ? `<use href="#${define(m.art, null)}" transform="translate(${m.dx} ${m.dy})"/>` : ''
   /** The hits Guard's shield takes: each hero's white flash, whoever it struck. */
@@ -496,8 +496,9 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     const tints = tintSets(mine)
     const tinted = (pose: Pose) =>
       tints ? `<g opacity="0">${tints}${poseMarkup(actor, pose, 'redflash')}</g>` : ''
-    // Haste's streak trails the idle pair, under it.
-    const streak = markUse(actor.fallen ? null : actor.streak)
+    // Haste's speed lines trail the idle pair under it, a pattern per frame.
+    const lines = actor.fallen ? null : actor.speedLines
+    const [linesA, linesB] = [markUse(lines?.[0]), markUse(lines?.[1])]
     if (bobMs !== null) {
       // Discrete on the bob's clock (1 s, or half that hasted), B in the second half; begun whole
       // periods early so any pose span (always later) outranks it.
@@ -506,13 +507,13 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       const clock = (values: string) =>
         `<animate attributeName="visibility" values="${values}" calcMode="discrete" begin="${start}" dur="${seconds(period)}" repeatCount="indefinite"/>`
       parts.push(
-        `<g>${clock('visible;hidden')}${hide}${streak}${poseMarkup(actor, 'idle', null)}${tinted('idle')}</g>`,
+        `<g>${clock('visible;hidden')}${hide}${linesA}${poseMarkup(actor, 'idle', null)}${tinted('idle')}</g>`,
       )
       parts.push(
-        `<g visibility="hidden">${clock('hidden;visible')}${hide}${streak}${poseMarkup(actor, 'idle_b', null)}${tinted('idle_b')}</g>`,
+        `<g visibility="hidden">${clock('hidden;visible')}${hide}${linesB}${poseMarkup(actor, 'idle_b', null)}${tinted('idle_b')}</g>`,
       )
     } else {
-      const under = rest === 'idle' ? streak : ''
+      const under = rest === 'idle' ? linesA : ''
       parts.push(`<g>${hide}${under}${poseMarkup(actor, rest, null)}${tinted(rest)}</g>`)
     }
     const byPose = new Map<Pose, string[]>()
@@ -573,11 +574,12 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
         goldUse: `<use href="#${id}"${flip} filter="url(#${ID.goldflash})"`,
       }
     }
-    // Haste's streak, drawn under the idle pair from the idle's place.
+    // Haste's speed lines, drawn under the idle pair from the idle's place: idle B's pattern while
+    // it shows, idle A's otherwise.
     const resting = actor.pose === 'idle' || actor.pose === 'idle_b'
-    const streakAt = (x: number, y: number) =>
-      actor.streak && resting
-        ? `<g transform="translate(${x} ${y})">${markUse(actor.streak)}</g>`
+    const linesAt = (x: number, y: number) =>
+      actor.speedLines && resting
+        ? `<g transform="translate(${x} ${y})">${markUse(actor.speedLines[actor.pose === 'idle_b' && !held ? 1 : 0])}</g>`
         : ''
 
     if (!opts.smil) {
@@ -595,7 +597,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
       const dx = actor.poses[held ? 'idle' : actor.pose].dx
       const hit = hitLit && actor.pose === 'hit' ? ` filter="url(#${ID.hit})"` : ''
       const drawn = hit ? `<g${hit}>${use}</g>` : use
-      body.push(streakAt(actor.x, actor.y))
+      body.push(linesAt(actor.x, actor.y))
       body.push(
         `<g transform="translate(${actor.x + dx} ${actor.y})"${op}>${drawn}${flash}${enraged}</g>`,
       )
@@ -678,7 +680,7 @@ export function renderSvg(model: StageModel, motions: readonly Motion[], opts: S
     const tinted = tints ? `${redUse} opacity="0">${tints}</use>` : ''
     const op = actor.fallen ? ' opacity="0.5"' : appearing(mine) ? ' opacity="0"' : ''
     body.push(
-      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${actor.fallen ? '' : markUse(actor.streak)}${use}${tinted}${flashes}${shieldMarkup(actor.shield, dur)}</g>`,
+      `<g transform="translate(${x} ${y})"${op}>${anim.join('')}${use}${tinted}${flashes}${shieldMarkup(actor.shield, dur)}</g>`,
     )
   }
   body.push(...marks)

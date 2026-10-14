@@ -1,12 +1,12 @@
 import { expect, test } from 'claude-code/testing'
 import type { GameView, WorldState } from '../../types'
 import { lighten, opaqueBox, shear, squash, stance } from '../sprites/derive'
-import { backdropFor, spriteFor } from '../sprites/index'
+import { backdropFor, decodePixels, spriteFor } from '../sprites/index'
 import { WORLD_DEFAULT } from '../state'
 import type { Effect, Rarity } from '../vendor/sim.js'
 import { composeFrame } from './compose'
 import { boss, wave, worldBoss } from './fixtures'
-import { lungeOffset, SHIELD, type StageActor, stageAt } from './model'
+import { lungeOffset, SHIELD, type StageActor, type StageModel, stageAt } from './model'
 import { stagedState } from './staged'
 import { StageTimeline } from './timeline'
 import {
@@ -20,6 +20,7 @@ import {
   ENRAGE_RGB,
   FLASH_MS,
   FLASH_RGB,
+  HASTE_FRAME_MS,
   HIRES_SCALE,
   HUDDLE_MS,
   IDLE_BOB_PX,
@@ -675,17 +676,111 @@ test('with the front hero fallen, the first hero standing wears the shield', () 
   expect(actor(hi.actors, 'h3').shield ?? null).toBe(null)
 })
 
-test('hasted heroes trail a streak in their class colour behind them, and bob twice as fast', () => {
-  const m = at(hasted(), [], NOW, BOX, HI)
-  for (const key of ['h1', 'h2', 'h3']) {
-    const a = actor(m.actors, key)
-    const cls = wave().heroes.find((h) => h.id === key)?.cls ?? ''
-    expect(a.streak?.art.palette.slice(1), key).toEqual([CLASS_RGB[cls]])
-    expect(a.streak?.art.height, key).toBe(2)
-    // Behind the hero: past its back, which faces right.
-    const box = opaqueBox(a.poses.idle.art)
-    expect(a.streak?.dx ?? 0, key).toBeGreaterThan(a.art.width - (box?.x0 ?? 0) - 1)
+/** The wave with only `key` hasted, so every speed-line pixel on the stage is its. */
+const hastedOne = (key: string): GameView => {
+  const v = wave()
+  for (const h of v.heroes) h.hasted = h.id === key
+  return v
+}
+type Px = { x: number; y: number; rgb: number }
+/** The pixels the speed lines add to `m`: its frame against the same stage drawn without them. */
+function linePixels(m: StageModel): Px[] {
+  const calm = { ...m, actors: m.actors.map((a) => ({ ...a, speedLines: null })) }
+  const a = composeFrame(m, { numbers: false })
+  const b = composeFrame(calm, { numbers: false })
+  const out: Px[] = []
+  for (let y = 0; y < a.height; y++) {
+    for (let x = 0; x < a.width; x++) {
+      const i = (y * a.width + x) * 4
+      const rgb = ((a.rgba[i] ?? 0) << 16) | ((a.rgba[i + 1] ?? 0) << 8) | (a.rgba[i + 2] ?? 0)
+      const was = ((b.rgba[i] ?? 0) << 16) | ((b.rgba[i + 1] ?? 0) << 8) | (b.rgba[i + 2] ?? 0)
+      if (rgb !== was || a.rgba[i + 3] !== b.rgba[i + 3]) out.push({ x, y, rgb })
+    }
   }
+  return out
+}
+/** The pixels in each row, left to right. */
+const byRow = (pxs: readonly Px[]): Map<number, Px[]> => {
+  const rows = new Map<number, Px[]>()
+  for (const p of pxs) rows.set(p.y, [...(rows.get(p.y) ?? []), p])
+  for (const row of rows.values()) row.sort((a, b) => a.x - b.x)
+  return rows
+}
+/** Whether stage pixel (x, y) is opaque in `a`'s figure as drawn now (flipped, at its pose). */
+const inFigure = (a: StageActor, x: number, y: number): boolean => {
+  const art = a.art
+  const col = x - (a.x + a.poses[a.pose].dx)
+  const row = y - a.y
+  if (col < 0 || col >= art.width || row < 0 || row >= art.height) return false
+  const src = a.flipX ? art.width - 1 - col : col
+  return (decodePixels(art)[row * art.width + src] ?? 0) !== 0
+}
+const channels = (rgb: number) => [(rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff]
+const luma = (rgb: number) => {
+  const [r = 0, g = 0, b = 0] = channels(rgb)
+  return 2 * r + 3 * g + b
+}
+/** Each line starts against the hero's back, in the row's first pixel past its figure. */
+const attached = (a: StageActor, pxs: readonly Px[]) =>
+  [...byRow(pxs)].every(([y, row]) => inFigure(a, (row[0]?.x ?? 0) - 1, y))
+
+test('a hasted hero trails three or four speed lines from its back across its height, lighter than its class colour and fading toward the tail', () => {
+  for (const hero of wave().heroes) {
+    const m = at(hastedOne(hero.id), [], NOW, BOX, STILL)
+    const a = actor(m.actors, hero.id)
+    const pxs = linePixels(m)
+    const rows = byRow(pxs)
+    expect(rows.size, hero.id).toBeGreaterThanOrEqual(3)
+    expect(rows.size, hero.id).toBeLessThanOrEqual(4)
+    expect(attached(a, pxs), hero.id).toBe(true)
+    // Behind the hero, which faces left: right of its figure's front, within its height.
+    const box = opaqueBox(a.art)
+    if (!box) throw new Error('no figure')
+    for (const p of pxs) {
+      expect(p.x, hero.id).toBeGreaterThan(a.x + a.art.width - 1 - box.x1)
+      expect(p.y, hero.id).toBeGreaterThanOrEqual(a.y + box.y0)
+      expect(p.y, hero.id).toBeLessThanOrEqual(a.y + box.y1)
+    }
+    // A light tint of the class colour, never darker toward the tail.
+    const cls = CLASS_RGB[hero.cls] ?? 0
+    for (const p of pxs) {
+      expect(p.rgb, hero.id).not.toBe(cls)
+      for (const [i, c] of channels(p.rgb).entries()) {
+        expect(c, hero.id).toBeGreaterThanOrEqual(channels(cls)[i] ?? 0)
+      }
+    }
+    for (const row of rows.values()) {
+      for (let i = 1; i < row.length; i++) {
+        expect(luma(row[i]?.rgb ?? 0), hero.id).toBeGreaterThanOrEqual(luma(row[i - 1]?.rgb ?? 0))
+      }
+    }
+  }
+})
+
+test('the lines turn with the hasted bob, a pattern per frame, and ride every offset the hero takes', () => {
+  const a = at(hastedOne('h1'), [], NOW, BOX, HI)
+  const b = at(hastedOne('h1'), [], NOW + HASTE_FRAME_MS, BOX, HI)
+  expect(actor(a.actors, 'h1').pose).toBe('idle')
+  expect(actor(b.actors, 'h1').pose).toBe('idle_b')
+  const [pa, pb] = [linePixels(a), linePixels(b)]
+  expect(pa).not.toEqual(pb)
+  expect(attached(actor(a.actors, 'h1'), pa)).toBe(true)
+  expect(attached(actor(b.actors, 'h1'), pb)).toBe(true)
+  // Sliding back from the huddle, the lines go with the hero.
+  const only = (key: string) => (v: GameView) => {
+    for (const h of v.heroes) h.hasted = h.id === key
+  }
+  const rest = at(hastedOne('h3'), [], NOW, BOX, STILL)
+  const sliding = guardTurned(false, NOW + HUDDLE_MS / 2, only('h3'), only('h3'), STILL)
+  const h3 = actor(sliding.actors, 'h3')
+  const dx = h3.x - actor(rest.actors, 'h3').x
+  expect(dx).not.toBe(0)
+  expect(h3.pose).toBe('idle')
+  const moved = linePixels(sliding)
+  expect(attached(h3, moved)).toBe(true)
+  // Drawn under the next hero along, never over it: the knight's lines go under the black mage.
+  const mage = actor(a.actors, 'h2')
+  expect(pa.some((p) => inFigure(mage, p.x, p.y))).toBe(false)
   // A quarter-second in, the hasted idle pair has turned; the calm one has not.
   expect(actor(at(hasted(), [], NOW + IDLE_FRAME_MS / 2, BOX, HI).actors, 'h1').pose).toBe('idle_b')
   expect(actor(at(wave(), [], NOW + IDLE_FRAME_MS / 2, BOX, HI).actors, 'h1').pose).toBe('idle')
@@ -693,23 +788,38 @@ test('hasted heroes trail a streak in their class colour behind them, and bob tw
   expect(actor(at(hasted(), [], NOW + IDLE_FRAME_MS / 2, BOX, HI).actors, 'e1').pose).toBe('idle')
 })
 
-test('on the compact stage a hasted hero bobs twice as fast and trails no streak', () => {
+test('no speed lines on a fallen hero, in the guard stance, in the hit frame or while camping', () => {
+  const v = hasted()
+  fall('h3')(v)
+  const m = at(v, [], NOW, BOX, HI)
+  expect(actor(m.actors, 'h3').speedLines ?? null).toBe(null)
+  expect(actor(m.actors, 'h1').speedLines).not.toBe(null)
+  const guarded = hasted()
+  for (const h of guarded.heroes) h.guarding = true
+  for (const a of at(guarded, [], NOW, BOX, HI).actors) expect(a.speedLines ?? null).toBe(null)
+  const camping = { ...hasted(), camping: true }
+  for (const a of at(camping, [], NOW, BOX, HI).actors) expect(a.speedLines ?? null).toBe(null)
+  // The struck knight in its hit frame draws none.
+  const struck = at(hastedOne('h1'), slimeHits, NOW + 150, BOX, HI)
+  expect(actor(struck.actors, 'h1').pose).toBe('hit')
+  expect(linePixels(struck)).toEqual([])
+})
+
+test('on the compact stage a hasted hero bobs twice as fast and trails no lines', () => {
   const quarter = NOW + IDLE_FRAME_MS / 2
   const lo = actor(at(hasted(), [], quarter, BOX_COMPACT, COMPACT).actors, 'h1')
   const rest = actor(at(hasted(), [], NOW, BOX_COMPACT, COMPACT).actors, 'h1')
   expect(rest.y - lo.y).toBe(IDLE_BOB_PX)
-  expect(lo.streak ?? null).toBe(null)
-  expect(rest.streak ?? null).toBe(null)
+  expect(lo.speedLines ?? null).toBe(null)
+  expect(rest.speedLines ?? null).toBe(null)
 })
 
-test('under still the streaks draw and the bob stays stopped; once haste ends they are gone', () => {
-  const still = actor(
-    at(hasted(), [], NOW + IDLE_FRAME_MS / 2, BOX, { ...HI, motion: 'still' }).actors,
-    'h1',
-  )
-  expect(still.streak).not.toBe(null)
-  expect(still.pose).toBe('idle')
-  expect(actor(at(hasted(false), [], NOW, BOX, HI).actors, 'h1').streak ?? null).toBe(null)
+test('under still the lines draw static and the bob stays stopped; once haste ends they are gone', () => {
+  const still = at(hastedOne('h1'), [], NOW + HASTE_FRAME_MS, BOX, STILL)
+  expect(actor(still.actors, 'h1').pose).toBe('idle')
+  expect(linePixels(still)).toEqual(linePixels(at(hastedOne('h1'), [], NOW, BOX, HI)))
+  expect(linePixels(still).length).toBeGreaterThan(0)
+  expect(actor(at(hasted(false), [], NOW, BOX, HI).actors, 'h1').speedLines ?? null).toBe(null)
 })
 
 test('guarding heroes hold the derived stance with the bob stopped; the front hero holds the shield, on the compact stage too', () => {

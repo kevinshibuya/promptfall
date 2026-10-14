@@ -289,19 +289,24 @@ export function caseOf(name: Scenario): Case {
       t.observe(wave(), NOW)
       return staging(wave(), t, FULL, NOW)
     }
-    // The reactive events (spec #131). Haste: every hero trails its streak and bobs twice as fast,
-    // a quarter-second in: the heroes in the second half of their bob, the enemies in the first.
+    // The reactive events (spec #131). Haste: every living hero trails its speed lines and bobs
+    // twice as fast, a quarter-second in: the heroes in the second half of their bob, the enemies
+    // in the first. The white mage has fallen and shows none.
     case 'haste': {
       const v = party({ hasted: true })
+      v.heroes = v.heroes.map((h) => (h.id === 'h3' ? { ...h, hp: 0, alive: false } : h))
       t.observe(v, NOW)
       return staging(v, t, FULL, NOW, { now: NOW + HASTE_FRAME_MS })
     }
-    // A mishap 40 ms ago: the goblin scout mid red flash, then tinted until its next hit.
+    // A mishap 40 ms ago enraged the strongest enemy: the bandit captain behind the field rat,
+    // mid red flash, then tinted until its next hit.
     case 'enrage': {
-      t.observe(wave(), NOW - 1000)
-      t.onEffects([{ k: 'enraged', enemyId: 'e1' }], NOW - 40)
-      t.observe(wave(), NOW)
-      return staging(wave(), t, FULL, NOW)
+      const v = boss()
+      v.enemies = [...wave().enemies.filter((e) => e.id === 'e2'), ...v.enemies]
+      t.observe(v, NOW - 1000)
+      t.onEffects([{ k: 'enraged', enemyId: 'e9' }], NOW - 40)
+      t.observe(v, NOW)
+      return staging(v, t, { columns: 120, rows: t.rowsAt(v, NOW) }, NOW)
     }
     // A camp 300 ms ago: the campfire between the lines, two heroes' heals rising green.
     case 'camp': {

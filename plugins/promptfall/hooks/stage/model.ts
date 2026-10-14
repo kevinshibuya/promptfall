@@ -2,7 +2,7 @@ import type { GameView } from '../../types'
 import { encode } from '../sprites/base64'
 import { lighten, opaqueBox, shear, squash, stance } from '../sprites/derive'
 import { SPRITES } from '../sprites/generated'
-import { backdropFor, spriteFor } from '../sprites/index'
+import { backdropFor, decodePixels, spriteFor } from '../sprites/index'
 import type { Sprite, SpriteArt } from '../sprites/types'
 import { zoneAt } from '../vendor/sim.js'
 import { zoneHead } from '../zone-words'
@@ -133,8 +133,11 @@ export type StageActor = {
   rest?: 'idle' | 'guard'
   /** The bob's frame, twice as fast for a hasted hero; null for an actor holding still. */
   bobMs?: number | null
-  /** Haste's speed streak behind a hero at rest, drawn under it; 1.5 only. */
-  streak?: Mark | null
+  /**
+   * Haste's speed lines trailing a hasted hero's back, a pattern for idle A and one for idle B,
+   * drawn under it in those poses; full stage only, and none in the stance or while camping.
+   */
+  speedLines?: readonly [Mark, Mark] | null
   /**
    * Guard's big shield, held by the front living hero on the enemies' side and drawn over it;
    * flashing white while a hit on any guarding hero flashes.
@@ -291,7 +294,7 @@ function mix(rgb: number, to: number, share: number): number {
   return ch(16) | ch(8) | ch(0)
 }
 
-/** A one-colour art from rows of '#' and '.'. */
+/** An art from rows of '.' (clear) and 'K', 'S', 'W', the palette's first three colours. */
 function solid(rows: readonly string[], palette: readonly number[]): SpriteArt {
   const width = rows[0]?.length ?? 0
   const px = new Uint8Array(width * rows.length)
@@ -301,24 +304,86 @@ function solid(rows: readonly string[], palette: readonly number[]): SpriteArt {
   return { width, height: rows.length, palette: [0, ...palette], pixels: encode(px) }
 }
 
-/** Haste's speed streak: two pixels tall, broken toward its tail. */
-const STREAK_ROWS = ['KKKKK.KK', 'KKKKK.KK']
-const streaks = new Map<number, SpriteArt>()
+/**
+ * Haste's speed lines: a pattern per bob frame, each run at its share of the figure's height, from
+ * the row's back out toward the tail, '.' a gap and K, S, W the tint's steps; each step how far
+ * the class colour is mixed toward white, lighter as the line fades.
+ */
+const SPEED_LINES = {
+  tint: [0.45, 0.65, 0.85],
+  patterns: [
+    [
+      { at: 0.3, run: 'KKSSW.W' },
+      { at: 0.5, run: 'KKKSSSW.W.W' },
+      { at: 0.7, run: 'KKSSW' },
+      { at: 0.9, run: 'KKKSSW.W' },
+    ],
+    [
+      { at: 0.3, run: 'KKKSSW.W' },
+      { at: 0.5, run: 'KKSSW.W' },
+      { at: 0.7, run: 'KKKSSSW.W.W' },
+      { at: 0.9, run: 'KKSW' },
+    ],
+  ],
+} as const
+const speedLinesCache = new WeakMap<SpriteArt, Map<number, readonly [Mark, Mark]>>()
 
 /**
- * The streak in `rgb` behind a hero's idle art: a pixel clear of its back (heroes face left, so
- * their back is on the right), on the middle of its figure.
+ * One pattern of the speed lines in `rgb` behind `art`, a hero's idle A or B, from its idle
+ * top-left: each run starts in the first column past the figure's back in its row (heroes face
+ * left, so their back is on the right).
  */
-function streakOf(idle: SpriteArt, rgb: number): Mark | null {
-  const box = opaqueBox(idle)
-  if (!box) return null
-  let art = streaks.get(rgb)
-  if (!art) {
-    art = solid(STREAK_ROWS, [rgb])
-    streaks.set(rgb, art)
+function speedLinesOn(art: SpriteArt, pattern: number, rgb: number): Mark | null {
+  const box = opaqueBox(art)
+  const runs = SPEED_LINES.patterns[pattern]
+  if (!box || !runs) return null
+  const px = decodePixels(art)
+  const lines = runs.map(({ at, run }) => {
+    const y = box.y0 + Math.round(at * (box.y1 - box.y0))
+    // The row's back, mirrored: the first opaque source column is the last drawn one.
+    let back = box.x0
+    while (back < art.width && (px[y * art.width + back] ?? 0) === 0) back++
+    return { y, x: art.width - back, run }
+  })
+  const x0 = Math.min(...lines.map((l) => l.x))
+  const y0 = Math.min(...lines.map((l) => l.y))
+  const width = Math.max(...lines.map((l) => l.x + l.run.length)) - x0
+  const height = Math.max(...lines.map((l) => l.y)) - y0 + 1
+  const rows = Array.from({ length: height }, () => '.'.repeat(width).split(''))
+  for (const l of lines) {
+    const row = rows[l.y - y0]
+    for (let i = 0; i < l.run.length && row; i++) row[l.x - x0 + i] = l.run[i] ?? '.'
   }
-  const mid = Math.round((box.y0 + box.y1 + 1) / 2)
-  return { art, dx: idle.width - box.x0 + 1, dy: mid - 1 }
+  const palette = SPEED_LINES.tint.map((share) => mix(rgb, 0xffffff, share))
+  return {
+    art: solid(
+      rows.map((r) => r.join('')),
+      palette,
+    ),
+    dx: x0,
+    dy: y0,
+  }
+}
+
+/** Haste's speed lines in a class colour behind a hero, for its idle A and its idle B. */
+function speedLinesOf(
+  idle: SpriteArt,
+  idleB: SpriteArt,
+  rgb: number,
+): readonly [Mark, Mark] | null {
+  let byRgb = speedLinesCache.get(idle)
+  if (!byRgb) {
+    byRgb = new Map()
+    speedLinesCache.set(idle, byRgb)
+  }
+  const hit = byRgb.get(rgb)
+  if (hit) return hit
+  const a = speedLinesOn(idle, 0, rgb)
+  const b = speedLinesOn(idleB, 1, rgb)
+  if (!a || !b) return null
+  const pair = [a, b] as const
+  byRgb.set(rgb, pair)
+  return pair
 }
 
 /**
@@ -617,10 +682,11 @@ export function stageAt(
     const dx = huddleDx.get(hero.id)
     const pose = poseOf(hero.id, fallen, rest, bobMs, sliding && dx !== undefined)
     const shown = poses[pose]
-    // Haste's streak is the full stage's: compact, the bob alone. Guard's shield is on both.
-    const streak =
-      !opts.compact && !fallen && hero.hasted
-        ? streakOf(poses.idle.art, CLASS_RGB[hero.cls] ?? 0)
+    // Haste's speed lines are the full stage's (compact, the bob alone), at rest in the idle
+    // pair only: never in the stance, never in camp. Guard's shield is on both stages.
+    const speedLines =
+      !opts.compact && !fallen && hero.hasted && rest === 'idle' && !view.camping
+        ? speedLinesOf(poses.idle.art, poses.idle_b.art, CLASS_RGB[hero.cls] ?? 0)
         : null
     const shield =
       rest === 'guard' && index === front
@@ -664,7 +730,7 @@ export function stageAt(
       poses,
       rest,
       bobMs,
-      streak,
+      speedLines,
       shield,
       huddle: dx === undefined ? null : { dx, share: huddle.share },
     })

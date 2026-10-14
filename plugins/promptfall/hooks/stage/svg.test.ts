@@ -593,21 +593,43 @@ const party = (patch: Partial<GameView['heroes'][number]>): GameView => {
   return v
 }
 
-test('hasted, the idle pair turns on a half-second clock with the streak under it', () => {
-  const hi = svgOf(party({ hasted: true }))
+test('hasted, the idle pair turns on a half-second clock, each frame over its own speed lines', () => {
+  const v = party({ hasted: true })
+  const hi = svgOf(v)
   expect(balanced(hi)).toBe(true)
   expect(hi).toContain(`dur="${(HASTE_FRAME_MS * 2) / 1000}s" repeatCount="indefinite"`)
-  for (const h of wave().heroes) {
-    expect(hi).toContain(`="${colour(CLASS_RGB[h.cls] ?? 0)}"`)
-  }
-  const calm = svgOf(wave())
-  expect(calm).not.toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
-  // Under still the streak draws and nothing bobs.
-  const still = svgOf(party({ hasted: true }), [], NOW, {
-    smil: true,
-    motion: 'still',
+  const t = new StageTimeline()
+  t.observe(v, NOW)
+  const model = stageAt(stagedState(v, WORLD_DEFAULT, t, NOW), t, NOW, BOX, {
+    compact: false,
+    motion: 'full',
   })
-  expect(still).toContain(`="${colour(CLASS_RGB.knight ?? 0)}"`)
+  /** The tints a hero's speed lines draw in. */
+  const tints = (key: string) =>
+    model.actors.find((a) => a.key === key)?.speedLines?.[0].art.palette.slice(1) ?? []
+  for (const h of wave().heroes) {
+    expect(tints(h.id).length, h.id).toBe(3)
+    for (const c of tints(h.id)) expect(hi, h.id).toContain(`="${colour(c)}"`)
+    // The lines are a light tint, not the class colour itself.
+    expect(hi).not.toContain(`="${colour(CLASS_RGB[h.cls] ?? 0)}"`)
+  }
+  // Each pattern rides its own frame of the bob's clock, under the hero.
+  const lines = model.actors.find((a) => a.key === 'h1')?.speedLines
+  if (!lines) throw new Error('no lines')
+  const [a, b] = lines.map((m) => `transform="translate(${m.dx} ${m.dy})"/>`)
+  const idleA =
+    hi.match(/<g><animate attributeName="visibility" values="visible;hidden"[\s\S]*?<\/g>/g) ?? []
+  const idleB =
+    hi.match(
+      /<g visibility="hidden"><animate attributeName="visibility" values="hidden;visible"[\s\S]*?<\/g>/g,
+    ) ?? []
+  expect(idleA.some((g) => g.includes(a ?? '-'))).toBe(true)
+  expect(idleB.some((g) => g.includes(b ?? '-'))).toBe(true)
+  const calm = svgOf(wave())
+  for (const c of tints('h1')) expect(calm).not.toContain(`="${colour(c)}"`)
+  // Under still the first pattern draws and nothing bobs.
+  const still = svgOf(v, [], NOW, { smil: true, motion: 'still' })
+  for (const c of tints('h1')) expect(still).toContain(`="${colour(c)}"`)
   expect(still).not.toContain('repeatCount')
 })
 
