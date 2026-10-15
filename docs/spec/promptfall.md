@@ -542,7 +542,8 @@ market listing fee, 5 percent market sale fee.
   Presence is keyed by account, so a secondary session polling adds nothing. It
   lives in the ledger's memory on every host, the real server too; a restart
   loses it and the next polls rebuild it. The World tab shows the count online
-  and the names in your zone; the Leaderboards pane shows the count per zone.
+  and the names in your zone on its command line; the Leaderboards pane shows
+  the count per zone.
 - Leaderboards: highest zone reached (all time, the running zone, read `T2 Z1`
   past 12) and world boss damage (weekly, reset Monday 00:00 UTC on the server
   clock). Both come from the ledger's own
@@ -556,7 +557,7 @@ market listing fee, 5 percent market sale fee.
   and no lease. The ledger keeps the last 200 messages and serves the last 50 to a
   poll with no chat mark, newer ones only after. Chat messages are not server
   events. Lives in the dialog's Chat tab; the band's World tab shows the latest
-  message as a one-line ticker.
+  message in its chat row, cut with an ellipsis when longer than the row.
 - World boss: spawns on the server clock's 3 hour grid, lives 20 minutes or until
   dead, visible to everyone online with a global HP bar. HP is a per-party base
   times the count online at spawn. Every online account enters boss mode (§4.6)
@@ -1274,16 +1275,31 @@ flags. No second server program, no Postgres, no Redis, no worker.
   when the stage plays their event; the wipe and retreat toasts may lead the
   last hero's fall by at most one cadence. The strip's hero HP trails the state
   and never leads it.
-- World tab rows (phase 3), in the message window: the count online and the
-  names in your zone, you excluded; then the latest chat message as a ticker,
-  or highest zone, kills and wipes when chat is closed or quiet, ending in
-  `world boss is off` when the server's flag has the boss off and the row has
-  room for it. The world boss shows in the enemy window instead. The records
-  row (highest zone, kills, wipes) carries the weekly hunt (§6) after the kills:
-  `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left`, the bar eight cells,
-  dropped before the segment when the row is narrow, and `1 day left` or the
+- World tab rows (phase 3): one tab-rows builder, given the rows it has. In
+  the full band's message window, two fixed rows: the records row, then chat;
+  neither ever displaces the other, and a notice takes the bottom rows as on
+  every tab. Presence sits on the command line after the tabs, dim dots between
+  its parts, `· 13 online · zone 1: Bea, Kit` (you excluded), dropping the
+  names, then the zone, then the count when the tabs, it and `c ▾` overflow the
+  window; the hint is never dropped and the alt keeps presence whole. Its text
+  is plain, dim when the snapshot is stale; `presence is off` or `connecting
+  to the world…` take its place, dim. In the compact band, four rows:
+  presence, the records row, chat and a blank row. Chat is the latest message
+  as `name: text`, cut with an ellipsis when longer than the row (the one cut,
+  as the row is fixed and the Chat tab shows it whole), or a dim `chat is
+  quiet`, `chat is closed` or `chat needs a server`. The world boss shows in
+  the enemy window instead. The records row (highest zone, kills, wipes)
+  carries the weekly hunt (§6) after the kills:
+  `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left`, `1 day left` or the
   hours under a day. With its flag off the row ends in `hunt is off`, or `world
-  boss and hunt are off` with the boss off too, as on the in-process fake.
+  boss and hunt are off` with the boss off too, as on the in-process fake;
+  `world boss is off` with the boss alone off. Its candidates, longest first:
+  the counts shorten (`12.4k / 20k`), then the time and the label (`Hunt
+  casters … 3d`), then the records (`Z9 K184 W90`), then the bar to 4 cells;
+  then the records go, the counts tighten (`12k/20k`) and the bar goes last,
+  then the hunt; the off notice is kept to the end. At 116 columns (30 cells)
+  the row reads `Hunt casters ██░░ 12k/20k 3d`. The bar's `█` and `░` are in
+  the baked font.
 - World boss display (phase 3): in boss mode the enemy window shows the boss
   with the global HP bar and its percentage, its title the time left, on every
   tab. Under 116 columns, where the Party tab is the compact window and has no

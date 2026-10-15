@@ -460,7 +460,8 @@ _Avoid_: log panel, chat box
 
 **Command line**:
 The message window's first row, `▶Party Loot World c ▾`: the band tabs, ▶ on the current one,
-then, while a log is paged back, its footer, and the dim collapse hint.
+on World presence after them, then, while a log is paged back, its footer, and the dim collapse
+hint.
 _Avoid_: tab bar, menu
 
 **Tab window**:

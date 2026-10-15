@@ -407,7 +407,7 @@ const RUN = {
   presentation: { isFullscreen: false, columns: 120 },
 } as const
 
-test('the World tab reads the in-process world: one online, the records under it', async ($, on) => {
+test('the World tab reads the in-process world: one online on the command line, the records row, chat off', async ($, on) => {
   const { data, states, shown } = harness(on)
   settings(data, RASTER)
   // The first-run welcome would take the third row, as every notice does.
@@ -418,14 +418,18 @@ test('the World tab reads the in-process world: one online, the records under it
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
     await ui.press({ key: 'hot-w' })
     const text = await stripText(ui)
-    expect(text).toContain('1 online · zone 1: nobody else here')
-    // Chat needs a server: the records take the row.
-    expect(text).toMatch(/highest zone 1 · kills \d+ · wipes \d+/)
+    // At 120 columns presence on the command line shortens to its count; the alt keeps it whole.
+    expect(text).toContain('1 online')
+    if (surface === 'desktop') expect(text).toContain('1 online · zone 1: nobody else here')
+    // The records row keeps its off notice, and chat says it needs a server under it.
+    const records = text.indexOf('world boss and hunt are off')
+    expect(records).toBeGreaterThan(-1)
+    expect(text.indexOf('chat needs a server')).toBeGreaterThan(records)
     await ui.unmount()
   }
 })
 
-test('the World tab shows who is here and the last chat line, and dims a stale snapshot', async ($, on) => {
+test('the World tab shows who is here on the command line, the records row over the last chat line, and dims a stale snapshot', async ($, on) => {
   const { clock, states, data, shown } = harness(on)
   settings(data, RASTER)
   shown.notice = null
@@ -433,7 +437,8 @@ test('the World tab shows who is here and the last chat line, and dims a stale s
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   await $.command.run({ ...RUN, command: 'promptfall', args: 'server http://test' })
   await clock.advance(1)
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(140, 20) })
+  // 160 columns: the message window has room for the names beside the tabs.
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(160, 20) })
   await ui.press({ key: 'hot-w' })
   const presence = async () => {
     const { text, fg } = cellsOf(await bandRaster(ui))
@@ -442,8 +447,11 @@ test('the World tab shows who is here and the last chat line, and dims a stale s
     return { text, colour: fg[y]?.[x] }
   }
   const first = await presence()
-  expect(first.text.join('\n')).toContain('13 online · zone 1: Ashgrove, Brindle')
-  expect(first.text.join('\n')).toContain('Corvina: gg everyone')
+  const line = first.text.find((t) => t.includes('13 online')) ?? ''
+  expect(line).toMatch(/▶World · 13 online · zone 1: Ashgrove, Brindle +c ▾/)
+  const records = first.text.findIndex((t) => /highest zone 1 · kills \d+ · wipes \d+/.test(t))
+  expect(records).toBeGreaterThan(-1)
+  expect(first.text[records + 1]).toContain('Corvina: gg everyone')
   expect(first.colour).not.toBe(DIM_RGB)
   net.down = true
   await clock.advance(WORLD_STALE_MS)

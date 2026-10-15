@@ -36,7 +36,7 @@ import {
 import { zoneMark } from '../zone-words'
 import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
-import { recordsRow, worldRows } from './world-rows'
+import { type Presence, worldTabRows } from './world-rows'
 
 export type StripInput = {
   view: GameView
@@ -274,14 +274,16 @@ const COLLAPSE_HINT = 'c ▾'
 
 /**
  * The command line `▶Party Loot World … 5-6/61 c ▾` in `n` cells, and where its words sit (cell
- * offsets). The page footer, while the log is paged off its newest rows, sits before the hint when
- * both fit; the hint is never dropped. `n` null: the short form, the hint right after World
- * (compact's footer, which must leave its border).
+ * offsets). On World, presence follows the tabs, `· 13 online · zone 1: Bea, Kit`, its longest
+ * candidate that leaves room for the hint. The page footer, while the log is paged off its newest
+ * rows, sits before the hint when both fit; the hint is never dropped. `n` null: the short form,
+ * the hint right after World (compact's footer, which must leave its border).
  */
 function commandLine(
   tab: BandTab,
   n: number | null,
   footer: string | null = null,
+  presence: Presence | null = null,
 ): { spans: Span[]; at: { hotkey: Hotspot['hotkey']; label: string; x: number }[] } {
   const items: { hotkey: Hotspot['hotkey']; label: string; tab: BandTab }[] = [
     { hotkey: 'p', label: 'Party', tab: 'party' },
@@ -296,6 +298,13 @@ function commandLine(
     spans.push({ cursor: tab === item.tab }, text(item.label))
   }
   const hint = chars(COLLAPSE_HINT).length
+  if (presence && n !== null) {
+    const rgb = presence.dim ? DIM_RGB : TEXT_RGB
+    const fitted = presence.parts
+      .map((parts) => parts.flatMap((p) => [pad(1), text('·', DIM_RGB), pad(1), text(p, rgb)]))
+      .find((p) => width(spans) + width(p) + 1 + hint <= n)
+    if (fitted) spans.push(...fitted)
+  }
   const tail =
     footer !== null && n !== null && width(spans) + 1 + chars(footer).length + 1 + hint <= n
       ? [text(footer), pad(1)]
@@ -373,6 +382,8 @@ type Body = {
   page: Page | null
   /** The window row the `g: back to the fight` row shows on, if it shows. */
   back: number | null
+  /** On World, presence for the command line. */
+  presence?: Presence | null
 }
 
 /**
@@ -387,17 +398,22 @@ function messageBody(input: StripInput, n: number, at: number): Body {
   const notes: Line[] =
     note === null ? [] : wrapSpans([text(note)], n).map((r) => ({ spans: r.spans }))
   if (input.tab === 'world') {
-    const { view, world } = input
-    const [presence, , chat] = worldRows(view, world, at)
-    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n, at)
-    const rows: Line[] = [
-      { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
-      { spans: [text(clip(second, n))] },
-    ]
+    // Two fixed rows, the records row then chat; presence goes to the command line.
+    const world = worldTabRows(input.view, input.world, PAGE_ROWS, n, at)
+    const rows: Line[] = world.rows.map((r) => ({
+      spans: [r.dim ? text(r.text, DIM_RGB) : text(r.text)],
+    }))
+    const presence = world.presence
     if (notes.length >= PAGE_ROWS)
-      return { rows: notes.slice(0, PAGE_ROWS), footer: null, page: null, back: back ? 0 : null }
+      return {
+        rows: notes.slice(0, PAGE_ROWS),
+        footer: null,
+        page: null,
+        back: back ? 0 : null,
+        presence,
+      }
     if (notes[0]) rows[1] = notes[0]
-    return { rows, footer: null, page: null, back: back ? 1 : null }
+    return { rows, footer: null, page: null, back: back ? 1 : null, presence }
   }
   const lines = logLines(input, n, at)
   const texts = lines.map((l) => l.text)
@@ -442,7 +458,7 @@ function messageBody(input: StripInput, n: number, at: number): Body {
 function messageLines(input: StripInput, columns: number, at = input.now): Line[] {
   const n = columns - 4
   const body = messageBody(input, n, at)
-  const cmd = commandLine(input.tab, n, body.footer)
+  const cmd = commandLine(input.tab, n, body.footer, body.presence)
   const rows = body.rows.map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
   while (rows.length < PAGE_ROWS) rows.push({ spans: [] })
   return [{ spans: [pad(1), ...cmd.spans] }, ...rows]
@@ -455,7 +471,7 @@ function messageWindow(
 ): Built & { page: Page | null } {
   const n = columns - 4
   const body = messageBody(input, n, input.now)
-  const cmd = commandLine(input.tab, n, body.footer)
+  const cmd = commandLine(input.tab, n, body.footer, body.presence)
   const lines = messageLines(input, columns)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
@@ -483,8 +499,9 @@ function messageWindow(
     )
     .filter(Boolean)
   const where = body.footer === null ? '' : ` Rows ${body.footer.replace('/', ' of ')}.`
+  const seen = body.presence?.parts[0]?.join(' · ')
   const alt =
-    `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.${where} ${shown.join(' ')}`.trim()
+    `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.${where}${seen ? ` ${seen}.` : ''} ${shown.join(' ')}`.trim()
   return {
     win: { key: 'message', x, columns, rows: STRIP_ROWS, lines, alt },
     hotspots,

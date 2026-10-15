@@ -248,15 +248,24 @@ the message window, with a hotkey to the Account tab.
 
 ## World
 
-**Presence.** The World tab shows how many players are online and the names in your zone, and the
-Leaderboards tab shows who is online by zone. Both name a zone past tier 1 as "T2 Z1" and one
-inside it as today. Without fresh news from the server for 45 seconds, the World tab dims as stale.
+**Presence.** On the band's World tab presence sits on the command line, after the tabs:
+`· 13 online · zone 1: Bea, Kit`, the dots dim. When the tabs, presence and `c ▾` do not fit the
+message window it drops the names, then the zone, then the count; the hint is never dropped, and
+the window's alt text keeps presence whole. With presence off, or before the first snapshot, "presence
+is off" or "connecting to the world…" takes its place, dim. The compact band's World rows open with
+it instead. The Leaderboards tab shows who is online by zone. Both name a zone past tier 1 as
+"T2 Z1" and one inside it as today. Without fresh news from the server for 45 seconds, presence
+dims as stale.
 
 **Chat.** One global channel lives in the pane's Chat tab: a row per message, newest at the
 bottom, the ▶ message whole in the detail window. Enter on a row puts the cursor in the compose
 field; a message is at most 200 characters, posting is rate-limited, and a blocked word refuses
-the message, naming the rule. The band's World tab shows the latest message as a one-line ticker.
-Chat needs a server: the in-process fake (`/promptfall server local`) has it off and says so in place.
+the message, naming the rule. The band's World tab shows the latest message in its second row,
+under the records row: chat never hides the records row, and the records row never hides chat. A
+message longer than the row is cut with an ellipsis, the one cut the band makes, since the row is
+fixed and the Chat tab shows it whole. With no message the row reads "chat is quiet", dim, and
+with chat off "chat is closed". Chat needs a server: the in-process fake (`/promptfall server
+local`) has it off and the row says "chat needs a server".
 
 **Leaderboards.** The Leaderboards tab shows the top 20 by highest zone reached and by world boss
 damage this week, your own rows in gold. The highest zone is the running number, so tier 2's zone 1
@@ -325,7 +334,7 @@ spawn nothing. In the compact layout, with no enemy window, the party window's t
 boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
 needs a server; the in-process fake runs none, and with the boss off the World tab's
-records row says so in place when it has room.
+records row ends in "world boss is off", shortening the records to keep it.
 
 **Rewards.** When the world boss dies or expires, every party that dealt enough damage gets a
 reward, and the top three damage dealers of a kill get one bonus roll each. Each reward toasts as
@@ -335,13 +344,17 @@ reward, and the top three damage dealers of a kill get one bonus roll each. Each
 server's clock: one enemy kind across every zone (casters, brutes, tanks, swifts) or zone bosses,
 in turn from a table, each with a target such as 20,000 casters. The server counts every account's
 kills of that kind as its batches commit, never a bot's, and the World tab's records row shows it
-after the highest zone and the kills, as "Hunt: casters 12,400 / 20,000, 3 days left", with an
-eight-cell bar when the row has room. When the week ends every account that counted at least half
+after the highest zone and the kills, as "Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left".
+A narrower row shortens the counts (`12.4k / 20k`), then the time and the label (`Hunt casters …
+3d`), then the records (`Z9 K184 W90`), then the bar to four cells; then it drops the records,
+tightens the counts (`12k/20k`) and drops the bar last, so the band's World tab at 116 columns
+still reads `Hunt casters ██░░ 12k/20k 3d`. When the week ends every account that counted at least half
 a percent of the target gets one reward rolled at its zone, whether or not the target was reached:
 it toasts "Your share of the hunt: 120 gold and Oak Staff", the combat log says the same, and goods
 with no free slot wait in returns. The next week's hunt opens then. It needs a server and the
 `hunt.enabled` flag, on by default; with it off the records row says "hunt is off" in place, and
-"world boss and hunt are off" with the boss off too, as on the in-process fake.
+"world boss and hunt are off" with the boss off too, as on the in-process fake. The off notices
+outlast the hunt and the records: a narrow row drops those first and ends in the notice.
 
 ## Servers
 
@@ -445,8 +458,9 @@ party's hits land, the boss standing at an empty bar until the server lets it go
 a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
 **The command line.** The message window's first row, `▶Party Loot World c ▾`, is the band's
-tabs with ▶ on the current one. Under it the message window shows the combat log on Party, the
-loot log on Loot and the World rows on World.
+tabs with ▶ on the current one, and on World presence after them. Under it the message window
+shows the combat log on Party, the loot log on Loot, and on World two fixed rows: the records row,
+then chat.
 
 **Paging the logs.** On Party and Loot, `j` pages the message window two rows back toward older
 lines and `k` two rows forward; they do nothing in the compact or collapsed band, and the World

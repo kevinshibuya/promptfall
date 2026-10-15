@@ -1,6 +1,7 @@
 // Builds plugins/promptfall/hooks/windows/glyphs.ts from art/fonts/misaki_gothic_2nd.ttf (grill
 // 1.18): each character's full-width form, 8 × 8 at 8 px per em, placed at rows GLYPH_Y.. of an
-// 8 × 16 cell, plus the hand-drawn ▶ ▼ ▾ of docs/design/ui-remake/transcription.md. A pure
+// 8 × 16 cell, plus the hand-drawn ▶ ▼ ▾ of docs/design/ui-remake/transcription.md and the bar's
+// ░, which the font lacks. A pure
 // function of committed input: `pnpm font:check` fails CI when the committed module is stale.
 //
 // tsx scripts/font.ts
@@ -25,12 +26,16 @@ type Font = {
   }
 }
 
-/** Printable ASCII, then the marks the windows write that ASCII lacks (≤: a buy order's cap). */
+/**
+ * Printable ASCII, then the marks the windows write that ASCII lacks (≤: a buy order's cap; █: the
+ * World tab's hunt bar, filled).
+ */
 export const SET = [
   ...Array.from({ length: 0x7f - 0x20 }, (_, i) => String.fromCharCode(0x20 + i)),
   '·',
   '…',
   '≤',
+  '█',
 ]
 
 /** The font character each baked character is drawn from. */
@@ -47,8 +52,19 @@ const HAND: Record<string, string[]> = {
   '▶': ['..#.....', '..##....', '..###...', '..####..', '..###...', '..##....', '..#.....'],
   '▼': ['#######.', '.#####..', '..###...', '...#....'],
   '▾': ['.#####..', '..###...', '...#....'],
+  // The hunt bar's empty cell: a sparse shade over the type rows █ fills.
+  '░': [
+    '#...#...',
+    '........',
+    '..#...#.',
+    '........',
+    '#...#...',
+    '........',
+    '..#...#.',
+    '........',
+  ],
 }
-const HAND_TOP: Record<string, number> = { '▶': 5, '▼': 6, '▾': 7 }
+const HAND_TOP: Record<string, number> = { '▶': 5, '▼': 6, '▾': 7, '░': 5 }
 
 function handGlyph(ch: string): Uint8Array {
   const out = new Uint8Array(GLYPH_H)

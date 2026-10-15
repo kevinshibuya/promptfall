@@ -5,7 +5,7 @@ import { IN_PROCESS } from '../server'
 import { gates } from '../view'
 import { zoneMark } from '../zone-words'
 import { type ShownBoss, shownBoss } from './boss'
-import { formatCount } from './format'
+import { clip, formatCount } from './format'
 import { formatRemaining, remainingRealMs } from './time'
 
 const BOSS_BAR_CELLS = 8
@@ -21,32 +21,50 @@ function remainingOf(shown: ShownBoss, world: WorldState, now: number): string {
   return formatRemaining(remainingRealMs(shown.boss.endsAt, world.clock, now))
 }
 
-/** `3 days left`, `1 day left`, then `16h left` under a day; empty without a server clock. */
-function daysLeft(hunt: HuntView, world: WorldState, now: number): string {
+/** `, 3 days left`, `, 1 day left`, then `, 16h left` under a day; `3d` or `16h` short; empty without a clock. */
+function timeLeft(hunt: HuntView, world: WorldState, now: number, short: boolean): string {
   if (!world.clock) return ''
   const ms = remainingRealMs(hunt.endsAt, world.clock, now)
   const days = Math.floor(ms / DAY_MS)
+  if (short) return ` ${days >= 1 ? `${days}d` : formatRemaining(ms)}`
   if (days >= 2) return `, ${days} days left`
   if (days === 1) return ', 1 day left'
   return `, ${formatRemaining(ms)} left`
 }
 
-/** The hunt's segment, with its bar or without: `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left`. */
-function huntSegment(hunt: HuntView, world: WorldState, now: number, bar: boolean): string {
+/** 184, `12.4k`, `1.2M`, floored; `tight` drops the decimal: `12k`. */
+function shortCount(n: number, tight = false): string {
+  const [unit, by] = n >= 1_000_000 ? ['M', 1_000_000] : n >= 1000 ? ['k', 1000] : ['', 1]
+  if (by === 1) return String(n)
+  const tenths = Math.floor((n * 10) / by)
+  const whole = Math.floor(tenths / 10)
+  return tight || tenths % 10 === 0 ? `${whole}${unit}` : `${whole}.${tenths % 10}${unit}`
+}
+
+/** How far the hunt's segment is shortened: the counts, then the time and the label, then the bar. */
+type HuntForm = { counts: 'full' | 'short' | 'tight'; short: boolean; bar: number }
+
+/** The hunt's segment, `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left` at its longest. */
+function huntSegment(hunt: HuntView, world: WorldState, now: number, form: HuntForm): string {
   const filled =
-    hunt.target > 0
-      ? Math.min(HUNT_BAR_CELLS, Math.floor((hunt.count * HUNT_BAR_CELLS) / hunt.target))
-      : 0
-  const drawn = bar ? ` ${'█'.repeat(filled)}${'░'.repeat(HUNT_BAR_CELLS - filled)}` : ''
-  return `Hunt: ${hunt.name}${drawn} ${formatCount(hunt.count)} / ${formatCount(hunt.target)}${daysLeft(hunt, world, now)}`
+    hunt.target > 0 ? Math.min(form.bar, Math.floor((hunt.count * form.bar) / hunt.target)) : 0
+  const drawn = form.bar > 0 ? ` ${'█'.repeat(filled)}${'░'.repeat(form.bar - filled)}` : ''
+  const counts =
+    form.counts === 'full'
+      ? `${formatCount(hunt.count)} / ${formatCount(hunt.target)}`
+      : form.counts === 'short'
+        ? `${shortCount(hunt.count)} / ${shortCount(hunt.target)}`
+        : `${shortCount(hunt.count, true)}/${shortCount(hunt.target, true)}`
+  const label = form.short ? `Hunt ${hunt.name}` : `Hunt: ${hunt.name}`
+  return `${label}${drawn} ${counts}${timeLeft(hunt, world, now, form.short)}`
 }
 
 /**
  * The account's records with the week's hunt after the highest zone and the kills, then, with the
- * world boss or the hunt off by the server's flag, a note saying so in place: the World rows'
- * second row when no boss is up, and the strip's World tab's while chat is closed or quiet. In
- * `cells` the note goes first, then the hunt's bar, then the wipes, then the hunt, so the highest
- * zone, the kills and the wipes stay whole.
+ * world boss or the hunt off by the server's flag, a note saying so: the World tab's records row.
+ * In `cells` the hunt's counts shorten first, then its time, then the records (`Z9 K184 W90`),
+ * then the bar to 4 cells; then the records go, then the counts tighten, then the bar, then the
+ * hunt. The note is never dropped while it fits alone.
  */
 export function recordsRow(
   view: GameView,
@@ -56,6 +74,7 @@ export function recordsRow(
 ): string {
   const head = `highest zone ${zoneMark(view.highestZone)} · kills ${view.kills}`
   const tail = `wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  const short = `${zoneMark(view.highestZone, 'Z')} K${shortCount(view.kills)} W${shortCount(view.wipes)}`
   const open = gates(world, view.account)
   const hunt = open.huntOpen ? (world.snapshot?.hunt ?? null) : null
   const note =
@@ -66,45 +85,97 @@ export function recordsRow(
         : !open.huntOpen
           ? 'hunt is off'
           : null
-  const noted = note ? [note] : []
   const candidates: string[][] = []
   if (hunt) {
-    const bar = huntSegment(hunt, world, now, true)
-    const plain = huntSegment(hunt, world, now, false)
+    const seg = (counts: HuntForm['counts'], short: boolean, bar: number) =>
+      huntSegment(hunt, world, now, { counts, short, bar })
     candidates.push(
-      [head, bar, tail, ...noted],
-      [head, bar, tail],
-      [head, plain, tail, ...noted],
-      [head, plain, tail],
-      [head, plain],
+      [head, seg('full', false, HUNT_BAR_CELLS), tail],
+      [head, seg('short', false, HUNT_BAR_CELLS), tail],
+      [head, seg('short', true, HUNT_BAR_CELLS), tail],
+      [short, seg('short', true, HUNT_BAR_CELLS)],
+      [short, seg('short', true, HUNT_BAR_CELLS / 2)],
+      [seg('short', true, HUNT_BAR_CELLS / 2)],
+      [seg('tight', true, HUNT_BAR_CELLS / 2)],
+      [seg('tight', true, 0)],
     )
   }
-  candidates.push([head, tail, ...noted], [head, tail])
-  const rows = candidates.map((parts) => parts.join(' · '))
-  return rows.find((row) => [...row].length <= cells) ?? `${head} · ${tail}`
+  candidates.push([head, tail], [short])
+  const rows = candidates.map((parts) => [...parts, ...(note ? [note] : [])].join(' · '))
+  if (note) rows.push(note)
+  const fits = rows.find((row) => [...row].length <= cells)
+  return fits ?? clip(rows.at(-1) ?? '', cells)
+}
+
+/** One World row: its text and whether it is drawn dim. */
+export type WorldRow = { text: string; dim: boolean }
+
+/**
+ * Presence as the command line fits it: its candidates longest first, each a list of parts the
+ * line separates with a dim `·` (the names, then the zone go), or a gated text alone.
+ */
+export type Presence = { parts: string[][]; dim: boolean }
+
+function presenceOf(view: GameView, world: WorldState): Presence {
+  const open = gates(world, view.account)
+  const snapshot = world.snapshot
+  if (!open.presenceOpen) return { parts: [['presence is off']], dim: true }
+  if (!snapshot) return { parts: [['connecting to the world…']], dim: true }
+  const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
+  const online = `${snapshot.online} online`
+  const zone = zoneMark(view.zone, 'zone ')
+  return {
+    parts: [[online, `${zone}: ${here}`], [online, zone], [online]],
+    dim: world.stale,
+  }
+}
+
+function chatOf(view: GameView, world: WorldState): WorldRow {
+  const last = world.messages.at(-1)
+  if (!gates(world, view.account).chatOpen)
+    return {
+      text: view.account.server === IN_PROCESS ? 'chat needs a server' : 'chat is closed',
+      dim: true,
+    }
+  return last
+    ? { text: `${last.name}: ${last.text}`, dim: false }
+    : { text: 'chat is quiet', dim: true }
+}
+
+/**
+ * The World tab's rows in `rows` rows of `cells` cells. Two, in the full band: the records row,
+ * then chat, with presence for the command line. Four, in the compact band: presence, the records
+ * row, chat and a blank row. A chat message longer than its row is cut with an ellipsis: the row
+ * is fixed, and the pane's Chat tab shows it whole.
+ */
+export function worldTabRows(
+  view: GameView,
+  world: WorldState,
+  rows: 2 | 4,
+  cells: number,
+  now = 0,
+): { rows: WorldRow[]; presence: Presence | null } {
+  const records = { text: recordsRow(view, world, cells, now), dim: false }
+  const said = chatOf(view, world)
+  const chat = { ...said, text: clip(said.text, cells) }
+  const presence = presenceOf(view, world)
+  if (rows === 2) return { rows: [records, chat], presence }
+  const fitted =
+    presence.parts.map((p) => p.join(' · ')).find((t) => [...t].length <= cells) ??
+    clip(presence.parts.at(-1)?.join(' · ') ?? '', cells)
+  return {
+    rows: [{ text: fitted, dim: presence.dim }, records, chat, { text: '', dim: false }],
+    presence: null,
+  }
 }
 
 /**
  * The World tab's three rows: who is around, the account's records or the boss, the chat ticker.
  * `view` is the staged state, so the boss's bar drops as the hits land.
  */
-export function worldRows(
-  view: GameView,
-  world: WorldState,
-  now = 0,
-): { text: string; dim: boolean }[] {
-  const open = gates(world, view.account)
-  const snapshot = world.snapshot
-  let presence: { text: string; dim: boolean }
-  if (!open.presenceOpen) presence = { text: 'presence is off', dim: true }
-  else if (!snapshot) presence = { text: 'connecting to the world…', dim: true }
-  else {
-    const here = snapshot.here.length > 0 ? snapshot.here.join(', ') : 'nobody else here'
-    presence = {
-      text: `${snapshot.online} online · ${zoneMark(view.zone, 'zone ')}: ${here}`,
-      dim: world.stale,
-    }
-  }
+export function worldRows(view: GameView, world: WorldState, now = 0): WorldRow[] {
+  const seen = presenceOf(view, world)
+  const presence = { text: seen.parts[0]?.join(' · ') ?? '', dim: seen.dim }
   const shown = shownBoss(view, world)
   let records = recordsRow(view, world, Number.POSITIVE_INFINITY, now)
   if (shown && shown.boss.hp > 0) {
@@ -116,14 +187,6 @@ export function worldRows(
   } else if (shown) {
     records = `${shown.boss.name} is down · you ${formatCount(shown.dealt)}`
   }
-  const last = world.messages.at(-1)
-  const chat = !open.chatOpen
-    ? {
-        text: view.account.server === IN_PROCESS ? 'chat needs a server' : 'chat is closed',
-        dim: true,
-      }
-    : last
-      ? { text: `${last.name}: ${last.text}`, dim: false }
-      : { text: 'chat is quiet', dim: true }
+  const chat = chatOf(view, world)
   return [presence, { text: records, dim: false }, chat]
 }

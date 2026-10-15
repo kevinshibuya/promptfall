@@ -40,6 +40,21 @@ describe('font', () => {
     expect(glyphs.has('▶') && glyphs.has('▼') && glyphs.has('▾')).toBe(true)
   })
 
+  it('bakes the bar: █ fills the type rows, ░ shades them, so the cells read as one track', () => {
+    const glyphs = buildGlyphs(FONT)
+    const full = rowsOf(glyphs.get('█') ?? new Uint8Array())
+    expect(full.slice(5, 13)).toEqual(Array(8).fill('########'))
+    const shade = rowsOf(glyphs.get('░') ?? new Uint8Array())
+    const lit = shade
+      .slice(5, 13)
+      .join('')
+      .split('')
+      .filter((c) => c === '#').length
+    expect(lit).toBeGreaterThan(0)
+    expect(lit).toBeLessThan(32)
+    expect([...shade.slice(0, 5), ...shade.slice(13)].every((r) => r === '........')).toBe(true)
+  })
+
   it('fails on an outline point off the pixel grid, naming the character', () => {
     const off = {
       unitsPerEm: 2048,

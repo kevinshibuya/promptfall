@@ -699,9 +699,22 @@ export function strip(name: StripScenario): StripInput {
             endsAt: NOW + 660_000,
             yours: 0,
           },
+          // The week's hunt up beside the boss: the World tab's records row draws its bar.
+          hunt: {
+            name: 'casters',
+            target: 20_000,
+            count: 12_400,
+            endsAt: NOW + 3 * 86_400_000 + 5 * 3_600_000,
+            yours: 0,
+          },
+          flags: {
+            ...(WORLD.snapshot?.flags ?? {}),
+            'worldboss.enabled': true,
+            'hunt.enabled': true,
+          },
         },
       }
-      return stripInput(v, { world })
+      return stripInput(v, { world, tab: 'world' })
     }
     case 'strip-low-hp': {
       const v = fallen()

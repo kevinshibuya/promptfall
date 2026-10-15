@@ -706,3 +706,100 @@ test("the footer reads the sim's queue while a kill's refill waits out the disso
   expect(enemy.alt).not.toContain('Road Slime 90 of 90')
   expect(lineText({ spans: enemy.footer ?? [] })).toBe('+2 waiting')
 })
+
+/** strip-world's band with the hunt and the world boss on and Kit's message the newest in chat. */
+function worldTab(patch: Partial<WorldState> = {}, columns = 120): StripInput {
+  const input = strip('strip-world')
+  const snapshot = input.world.snapshot as NonNullable<WorldState['snapshot']>
+  const world: WorldState = {
+    ...input.world,
+    snapshot: {
+      ...snapshot,
+      hunt: {
+        name: 'casters',
+        target: 20_000,
+        count: 12_400,
+        endsAt: input.now + 3 * 86_400_000 + 5 * 3_600_000,
+        yours: 0,
+      },
+      flags: { ...snapshot.flags, 'worldboss.enabled': true, 'hunt.enabled': true },
+    },
+    ...patch,
+  }
+  const view = {
+    ...input.view,
+    account: { ...input.view.account, server: 'https://promptfall.example' },
+  }
+  return { ...input, view, world, columns }
+}
+const messageRows = (i: StripInput) => win(stripScene(i).scene, 'message').lines.map(lineText)
+
+test('the World tab: the records row with the hunt bar, then chat; presence after the tabs', () => {
+  expect(messageRows(worldTab())).toEqual([
+    '  Party  Loot ▶World · 13 online  c ▾',
+    ' Hunt casters ██░░ 12.4k / 20k 3d',
+    ' Kit: anyone farming zone 1?',
+  ])
+  // At 116 the records row still fits the hunt with its bar; presence has no room beside the hint.
+  expect(messageRows(worldTab({}, 116))).toEqual([
+    '  Party  Loot ▶World          c ▾',
+    ' Hunt casters ██░░ 12.4k / 20k 3d',
+    ' Kit: anyone farming zone 1?',
+  ])
+  // Chat quiet: its dim word in row two, the records row unchanged.
+  const quiet = worldTab({ messages: [] })
+  expect(messageRows(quiet)[1]).toBe(' Hunt casters ██░░ 12.4k / 20k 3d')
+  expect(messageRows(quiet)[2]).toBe(' chat is quiet')
+  expect(win(stripScene(quiet).scene, 'message').lines[2]?.spans.at(-1)).toEqual({
+    text: 'chat is quiet',
+    rgb: DIM_RGB,
+  })
+  // A notice takes the bottom row; the records row stays.
+  expect(messageRows({ ...worldTab(), notice: 'Promptfall resynced' }).slice(1)).toEqual([
+    ' Hunt casters ██░░ 12.4k / 20k 3d',
+    ' Promptfall resynced',
+  ])
+})
+
+test('presence on the command line drops the names, then the zone, then the count, keeping the hint', () => {
+  const cmd = (columns: number) => messageRows(worldTab({}, columns))[0]
+  expect(cmd(160)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1: Bea, Kit +c ▾$/)
+  expect(cmd(130)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1 +c ▾$/)
+  expect(cmd(120)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online +c ▾$/)
+  expect(cmd(116)).toMatch(/^ {2}Party {2}Loot ▶World +c ▾$/)
+  // The alt carries it whole at any width.
+  expect(win(stripScene(worldTab({}, 116)).scene, 'message').alt).toContain(
+    '13 online · zone 1: Bea, Kit',
+  )
+  // The collapse hotspot still sits over the hint.
+  const { scene, hotspots } = stripScene(worldTab({}, 160))
+  const message = win(scene, 'message')
+  const c = hotspots.find((h) => h.hotkey === 'c')
+  expect(c?.x).toBe(message.x + message.columns - 2 - 3)
+  // Party and Loot carry no presence.
+  for (const tab of ['party', 'loot'] as const)
+    expect(messageRows({ ...worldTab({}, 160), tab })[0]).not.toContain('online')
+})
+
+test('presence reads plain with dim separators, all dim when stale, and the gated texts take its place', () => {
+  const spans = (i: StripInput) => win(stripScene(i).scene, 'message').lines[0]?.spans ?? []
+  const colourOf = (i: StripInput, t: string) => spans(i).find((s) => 'text' in s && s.text === t)
+  const fresh = worldTab({}, 160)
+  expect(colourOf(fresh, '13 online')).toEqual({ text: '13 online', rgb: 0xf0f0e8 })
+  expect(colourOf(fresh, '·')).toEqual({ text: '·', rgb: DIM_RGB })
+  expect(colourOf(worldTab({ stale: true }, 160), '13 online')).toEqual({
+    text: '13 online',
+    rgb: DIM_RGB,
+  })
+  const off = worldTab({}, 160)
+  const flags = { ...(off.world.snapshot?.flags ?? {}), 'presence.enabled': false }
+  const gated = {
+    ...off,
+    world: {
+      ...off.world,
+      snapshot: { ...(off.world.snapshot as NonNullable<WorldState['snapshot']>), flags },
+    },
+  }
+  expect(messageRows(gated)[0]).toMatch(/▶World · presence is off +c ▾$/)
+  expect(colourOf(gated, 'presence is off')).toEqual({ text: 'presence is off', rgb: DIM_RGB })
+})
