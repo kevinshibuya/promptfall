@@ -657,10 +657,17 @@ test("the debug log has the engine's row grant at each layout", async ($, on) =>
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 15) })
   await ui.unmount()
+  // The same layout drawn again logs nothing more; a new one logs its line.
+  const again = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 15) })
+  await again.unmount()
+  const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
+  await short.unmount()
   const lines = logged.filter((l) => l.text.startsWith('band layout'))
-  expect(lines.length).toBeGreaterThan(0)
   expect(lines.every((l) => l.to === 'debug')).toBe(true)
-  expect(lines.at(-1)?.text).toBe('band layout: maxRows 15, bodyColumns 120: full, 10 stage rows')
+  expect(lines.map((l) => l.text)).toEqual([
+    'band layout: maxRows 15, bodyColumns 120: full, 10 stage rows',
+    'band layout: maxRows 12, bodyColumns 120: compact, 4 stage rows',
+  ])
 })
 
 test('110 columns is compact with the front enemy in the party window; 99 or 5 rows is one row', async ($, on) => {
