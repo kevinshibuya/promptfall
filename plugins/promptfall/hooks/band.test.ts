@@ -17,7 +17,16 @@ import { shownBoss, worldRows } from './ui/band'
 import { approveAs, Ledger } from './vendor/ledger.js'
 import { MemoryKeyValue, type WorldSnapshot } from './vendor/protocol.js'
 import { createInitialState } from './vendor/sim.js'
-import { CELL_H, CELL_W, DIM_RGB, STRIP_ROWS, STRIP_SVG_MAX_CHARS } from './windows/tuning'
+import {
+  CELL_H,
+  CELL_W,
+  DIM_RGB,
+  DOWN_RGB,
+  GAUGE_FULL_RGB,
+  STRIP_ROWS,
+  STRIP_SVG_MAX_CHARS,
+  WARN_RGB,
+} from './windows/tuning'
 import { WORLD_STALE_MS } from './world'
 
 const SURFACES = ['terminal', 'desktop'] as const
@@ -239,7 +248,7 @@ describe('the raster band, read only', () => {
   })
 })
 
-test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so', async ($, on) => {
+test('the hotkeys switch tabs and collapse; f flips the tactics and the purse says so', async ($, on) => {
   const { data, states, clock } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -259,13 +268,13 @@ test('the hotkeys switch tabs and collapse; f toggles farm and the purse says so
     await ui.unmount()
   }
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  expect(await stripText(ui)).toContain('Push on')
+  expect(await stripText(ui)).toContain('f: Next zone')
   await ui.press({ key: 'hot-f' })
   await clock.advance(1)
   expect((states.get('view') as GameView).farm).toBe(true)
   await ui.unmount()
   const after = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
-  expect(await stripText(after)).toContain('Farm here')
+  expect(await stripText(after)).toContain('f: Stay here')
   await after.unmount()
 })
 
@@ -294,11 +303,11 @@ test('g shows and binds only while the party camps, and pressing it breaks camp'
   await after.unmount()
 })
 
-test('the sandbox purse says Sandbox where the tactics sit; farming puts Farm on its title', async ($, on) => {
+test('the sandbox purse shows the tactics; the message window is titled Sandbox', async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const purse = async (sandbox: boolean, farm: boolean, surface: 'terminal' | 'desktop') => {
+  const strip = async (sandbox: boolean, farm: boolean, surface: 'terminal' | 'desktop') => {
     const base = wave()
     shown.view = { ...base, farm, account: { ...base.account, sandbox } }
     const ui = await $.ui.mount({ plugin: 'promptfall', surface, ...band(120, 20) })
@@ -306,19 +315,84 @@ test('the sandbox purse says Sandbox where the tactics sit; farming puts Farm on
     await ui.unmount()
     return text
   }
-  const still = await purse(true, false, 'terminal')
-  expect(still).toContain('Sandbox')
-  expect(still).not.toContain('Push on')
-  expect(still).not.toContain('Farm')
-  const farming = await purse(true, true, 'terminal')
-  expect(farming).toContain('Sandbox')
-  expect(farming).toContain('Farm')
-  expect(farming).not.toContain('Farm here')
-  expect(await purse(true, false, 'desktop')).toContain('Sandbox')
-  // The real save keeps its tactics line.
-  expect(await purse(false, false, 'terminal')).toContain('Push on')
-  expect(await purse(false, true, 'terminal')).toContain('Farm here')
-  expect(await purse(false, true, 'terminal')).not.toContain('Sandbox')
+  const next = await strip(true, false, 'terminal')
+  expect(next).toContain('Sandbox')
+  expect(next).toContain('f: Next zone')
+  const stay = await strip(true, true, 'terminal')
+  expect(stay).toContain('Sandbox')
+  expect(stay).toContain('f: Stay here')
+  expect(stay).not.toContain('Farm')
+  // The mark sits in the message window's top border, the row over its command line.
+  const lines = stay.split('\n')
+  expect(lines.findIndex((l) => l.includes('Sandbox'))).toBe(
+    lines.findIndex((l) => l.includes('Party')) - 1,
+  )
+  expect(await strip(true, false, 'desktop')).toContain('Sandbox')
+  // The real save has no mark.
+  expect(await strip(false, false, 'terminal')).toContain('f: Next zone')
+  expect(await strip(false, true, 'terminal')).toContain('f: Stay here')
+  expect(await strip(false, true, 'terminal')).not.toContain('Sandbox')
+})
+
+test('the collapsed line runs in colour: the label dim, HP by health, the gold in gold, Sandbox and camping', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  // Collapse once: the prefs hold across mounts.
+  const full = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  await full.press({ key: 'hot-c' })
+  await full.unmount()
+  // The first-run welcome would end the run, as every notice does.
+  shown.notice = null
+  const runs = async (view: GameView) => {
+    shown.view = view
+    const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    // The row's first child is the line: a Text of Text runs.
+    const line = ((await ui.find({ key: 'row-collapsed' }))?.children ?? [])[0] as Node | undefined
+    await ui.unmount()
+    return ((line?.children ?? []) as Node[])
+      .filter((c) => typeof c === 'object')
+      .map((c) => ({
+        text: (c.children ?? []).join(''),
+        ...(c.props?.color === undefined ? {} : { color: c.props.color }),
+        ...(c.props?.dimColor ? { dim: true } : {}),
+      }))
+  }
+  const base = wave()
+  const [a, b, c] = base.heroes
+  if (!a || !b || !c) throw new Error('three heroes')
+  const view: GameView = {
+    ...base,
+    gold: 1240,
+    heroes: [
+      { ...a, hp: a.maxHp },
+      { ...b, hp: Math.floor((b.maxHp - 1) / 4) },
+      { ...c, hp: 0, alive: false },
+    ],
+  }
+  const plain = await runs(view)
+  const said = plain.map((r) => r.text).join('')
+  expect(said).toMatch(/^Promptfall · Z1 w2 · \w\d+ \w\d+ \w0 · 1,240g$/)
+  expect(plain[0]).toEqual({ text: 'Promptfall', dim: true })
+  for (const r of plain.filter((r) => r.text.trim() === '·')) expect(r.dim).toBe(true)
+  const hp = plain.filter((r) => /^\w\d+$/.test(r.text))
+  expect(hp).toHaveLength(3)
+  expect(hp[0]?.color).toBeUndefined()
+  expect(hp[1]?.color).toBe(`#${WARN_RGB.toString(16)}`)
+  expect(hp[2]?.color).toBe(`#${DOWN_RGB.toString(16)}`)
+  expect(plain.find((r) => r.text === '1,240g')?.color).toBe(`#${GAUGE_FULL_RGB.toString(16)}`)
+  expect(said).not.toContain('Sandbox')
+  expect(said).not.toContain('camping')
+  // The sandbox and a camp add their words to the run.
+  const marked = await runs({
+    ...view,
+    camping: true,
+    account: { ...view.account, sandbox: true },
+  })
+  const words = marked.map((r) => r.text).join('')
+  expect(words).toMatch(/^Promptfall · Sandbox · Z1 w2 · camping · /)
+  expect(marked.find((r) => r.text === 'Sandbox')).toBeDefined()
+  expect(marked.find((r) => r.text === 'camping')).toBeDefined()
 })
 
 test('a secondary session shows one row saying so', async ($, on) => {

@@ -35,7 +35,7 @@ one zone at full health and costs nothing else.
 | `/promptfall journal` | Opens it on the Journal and loads the day's goal, the streak and the achievements |
 | `/promptfall off` | Hides the band for this session; the game keeps playing |
 | `/promptfall on` | Brings it back |
-| `/promptfall farm` | Toggles farming: a beaten zone boss restarts the zone instead of advancing |
+| `/promptfall farm` | Flips the tactics between Next zone and Stay here: with Stay here a beaten zone boss restarts the zone instead of advancing |
 | `/promptfall travel <zone>` | Moves the party to a zone it has reached, ending the fight with no drops and no XP |
 | `/promptfall server` | Says which server this machine plays on: the public server, `local`, or a URL |
 | `/promptfall server <url>` | Plays on the HTTP server at `<url>`, for every session on this machine |

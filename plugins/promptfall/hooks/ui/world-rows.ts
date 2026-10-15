@@ -73,7 +73,7 @@ export function recordsRow(
   now = 0,
 ): string {
   const head = `highest zone ${zoneMark(view.highestZone)} · kills ${view.kills}`
-  const tail = `wipes ${view.wipes}${view.farm ? ' · farming' : ''}`
+  const tail = `wipes ${view.wipes}${view.farm ? ' · staying' : ''}`
   const short = `${zoneMark(view.highestZone, 'Z')} K${shortCount(view.kills)} W${shortCount(view.wipes)}`
   const open = gates(world, view.account)
   const hunt = open.huntOpen ? (world.snapshot?.hunt ?? null) : null

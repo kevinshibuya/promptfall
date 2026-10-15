@@ -261,8 +261,11 @@ Checked against Claude Code v2.1.287's mods API.
 - 12 zones, each 10 waves then a zone boss. A wave opens with 1 to 3 enemies
   drawn from the zone's enemy list, all queued at once, and grows by one with
   each tool call made while it is open (§4.1).
-- Clearing the zone boss advances to the next zone unless the farm toggle is on
-  or the party is at the ladder's end, in which case the zone restarts at wave 1.
+- Clearing the zone boss advances to the next zone unless the tactics are Stay
+  here (the state's `farm` flag, set by the `set_farm` event) or the party is at
+  the ladder's end, in which case the zone restarts at wave 1. The tactics'
+  names are Next zone and Stay here wherever the player reads them; `farm` is
+  the flag and the command's verb, never a name the player reads.
 - Wave clear heals every hero 15% and revives fallen heroes at 15%.
 - Party wipe: every hero down. Full heal, encounter and queue cleared, the
   pending party applied, nothing lost. The state counts the wipes in the
@@ -272,7 +275,7 @@ Checked against Claude Code v2.1.287's mods API.
 - Retreat: the third wipe in a zone with no zone boss kill between them. The
   party falls back one zone to wave 1 (in zone 1 it restarts zone 1) and the
   count resets; its effect is a retreat naming the zone fallen to. Boss mode's
-  wipe counts nothing (§4.6), and the farm toggle is unchanged.
+  wipe counts nothing (§4.6), and the tactics are unchanged.
 - Travel (spec #132): the player event `travel`, carrying a running zone,
   moves the party at once to any zone from 1 to the lesser of `highestZone`
   and the ladder's end, every tier's zones the party has reached included. The
@@ -282,7 +285,7 @@ Checked against Claude Code v2.1.287's mods API.
   the encounter and the battle with no drops and no XP (every gauge empty, the
   action queue cleared), sets wave 1, resets the wipe count as any change of
   zone does, applies the pending party (§4.3) and emits `traveled` with from
-  and to. The farm toggle is unchanged. It costs nothing and has no cooldown
+  and to. The tactics are unchanged. It costs nothing and has no cooldown
   beyond its rate bucket (§7). `highestZone` never falls, so a retreat still
   drops the party one zone and a travel takes it straight back: a travel
   undoes a retreat. The Journal's zone pages and `/promptfall travel <zone>`
@@ -304,8 +307,8 @@ Checked against Claude Code v2.1.287's mods API.
   Turn bosses and the world boss keep the single attack.
 - Tiers: zone 12's boss opens tier 2, the same twelve zones again as zones 13
   to 24, and zone 24's boss opens tier 3, zones 25 to 36. The ladder ends at
-  tier 3 for now (`LADDER_END`, 36), where the advance gate farms as the farm
-  toggle does. `zone` stays one running number in the state and on the wire, and
+  tier 3 for now (`LADDER_END`, 36), where the advance gate restarts the zone
+  as Stay here does. `zone` stays one running number in the state and on the wire, and
   `highestZone` with it, so tier 2's zone 1 ranks above tier 1's zone 12. One
   accessor (`zoneAt`) gives a running zone's tier and base zone (1 to 12), and
   every content lookup by zone goes through it, so the content stays twelve
@@ -357,7 +360,7 @@ Checked against Claude Code v2.1.287's mods API.
 
 - Four classes: Knight, Black Mage, White Mage, Archer. Party of three from the
   roster, chosen in the dialog's Heroes tab at any time, applied at the
-  next zone boss kill, wipe or travel (a farm restart and a wipe in zone 1
+  next zone boss kill, wipe or travel (a Stay here restart and a wipe in zone 1
   included), so swaps happen between zones. A pick on a fresh save, before the first kill,
   applies at once.
 - A hero is a template (class, name, portrait) times a rarity times rolled
@@ -941,7 +944,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
   the message window's command line (`▶Party Loot World c ▾`, the `c ▾` dim
-  and the collapse hotspot). `c` collapses, `f` toggles farm, `j` and `k` page
+  and the collapse hotspot). `c` collapses, `f` flips the tactics, `j` and `k` page
   the Party and Loot logs, and `g`, shown and bound only while the view says
   camping, breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
@@ -958,12 +961,20 @@ flags. No second server program, no Postgres, no Redis, no worker.
   boss with its percentage, and while the encounter queue holds N enemies a
   dim `+N waiting` footer cut into its bottom border, the view's `waiting`,
   never staged), the message window (the command line, then two rows of the
-  combat log), the party window (each hero's
+  combat log; titled `Sandbox` on every tab while the account is a sandbox one,
+  untitled otherwise), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
-  fills between ticks and turns gold when full) and the purse window (gold,
-  the tactics, Push on or Farm here, and on its third row `Falls N/3`, the
-  view's `zoneWipes` out of the sim's `RETREAT_AT`, never staged, left out in
-  boss mode).
+  fills between ticks and turns gold when full) and the purse window, 15
+  columns (the gold in `GOLD_RGB`; the tactics, `f: Next zone` or `f: Stay
+  here` with the `f:` dim and the `f` hotspot over the whole row, in and out of
+  the sandbox, the alt text "After the boss: on to the next zone. f: stay and
+  repeat it." or "After the boss: stay and repeat the zone from wave 1. f: move
+  on."; and on its third row `Falls N/3`, the view's `zoneWipes` out of the
+  sim's `RETREAT_AT`, never staged, left out in boss mode). At 116 columns the
+  message window is 34 columns, over its 28-column minimum. The compact
+  window's title is `Z1 · W2 · 17G`, then ` · Stay here` and ` · Sandbox` each
+  when it fits; Next zone adds nothing. The enemy window's title never carries
+  the sandbox.
   While the view says camping the enemy window keeps its title and footer and
   draws its rows blank but for a dim `camping` on the first; the message
   window shows `g: back to the fight` in the row a notice takes, a hotspot as
@@ -1056,7 +1067,14 @@ flags. No second server program, no Postgres, no Redis, no worker.
   line in its border), the window on the right with its
   own top, bottom and right lines serving as the line's, so its title and
   command line stay. The collapsed summary, one line of text with no shell,
-  when `bodyColumns` is under 100 or `maxRows` is under 6. Every tab lays out
+  when `bodyColumns` is under 100 or `maxRows` is under 6: engine text drawn
+  as a run of coloured spans, `Promptfall · Sandbox · Z3 w4 · camping · K184
+  B90 W140 · 1,240g · <notice>`, the label and separators dim, the zone and
+  wave plain, each hero's initial and HP in the party window's health colour
+  (plain, `WARN_RGB` under a quarter, `DOWN_RGB` at 0), the gold in
+  `GOLD_RGB`, the notice plain; `Sandbox` only in the sandbox and `camping`
+  only while the party camps. A secondary session prefixes `playing in another
+  session · `. The run is cut to the row with an ellipsis. Every tab lays out
   alike, the stage on every tab, so the band's height is the terminal's alone.
   On the Svg surfaces: always the full stage, the art
   `clamp(bodyColumns, 116, 160)` pixels wide scaled to the band's width,
@@ -1087,8 +1105,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   victory hold, or its chest's end, whichever is later, plus the step-off),
   and refines it as the draws schedule and
   re-time those motions. The boss's drop reveals before its row leaves, so its
-  words land first and the zone's after. The farming line ("Zone N cleared.")
-  is not held.
+  words land first and the zone's after. The line of a clear while staying
+  ("Zone N cleared.") is not held.
   While a stage is drawn the log holds the held toasts and drains them on the
   stage loop's clock: on a frame loop at the first frame at or after the show
   time, on the desktop's SMIL site at a wake armed for it, and on every
@@ -1237,12 +1255,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   - **Victory**: when a zone boss falls, after its dissolve, every hero holds
     the `victory` pose for 2 seconds (`VICTORY_MS`) and the boss's row is held
     with it, so the backdrop change and the arrival's words move after the hold.
-    When the kill advances the zone (Push on: the `zone_cleared` effect names a
+    When the kill advances the zone (Next zone: the `zone_cleared` effect names a
     higher zone), the party then walks on as a travel does: the step-off over
     `TRAVEL_OFF_MS` once the hold and any chest have both ended, whichever is
     later, the backdrop change as it ends, the step-on over `TRAVEL_ON_MS`. The
     boss's row is held through the step-off, so the arrival's words land at the
-    new zone's first frame. With Farm here the party holds and does not walk.
+    new zone's first frame. With Stay here the party holds and does not walk.
     The pose is a slot: the drawn 1.5× victory frame of the hero's class where
     the manifest has one, its idle where it has none, on every surface, and the
     idle always on the compact stage (ADR 0007, ADR 0018). A turn boss and the world boss get no hold.
@@ -1295,8 +1313,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   as `name: text`, cut with an ellipsis when longer than the row (the one cut,
   as the row is fixed and the Chat tab shows it whole), or a dim `chat is
   quiet`, `chat is closed` or `chat needs a server`. The world boss shows in
-  the enemy window instead. The records row (highest zone, kills, wipes)
-  carries the weekly hunt (§6) after the kills:
+  the enemy window instead. The records row (highest zone, kills, wipes, then
+  `· staying` while the tactics are Stay here) carries the weekly hunt (§6) after the kills:
   `Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left`, `1 day left` or the
   hours under a day. With its flag off the row ends in `hunt is off`, or `world
   boss and hunt are off` with the boss off too, as on the in-process fake;
@@ -1404,7 +1422,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   view exists the pane says Promptfall has not started, and Account still
   offers the reset.
 - `/promptfall off` switches the band off for the session. `/promptfall farm`
-  toggles the farm flag. `/promptfall go` breaks camp as `g` does and answers
+  flips the tactics and answers `Promptfall tactics: Stay here` or
+  `Promptfall tactics: Next zone`. `/promptfall go` breaks camp as `g` does and answers
   "Back to the fight.", or "The party is not camping." when it is not. `/promptfall journal` opens the pane on the Journal.
   `/promptfall travel <zone>` sends `travel` (§4.2) and answers
   "The party travels to zone 3, Marsh of Sighs." or the refusal in words: a
@@ -1487,7 +1506,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
 
   Never toasts: hits, heals, actions, waves cleared, gold ticks, a zone boss or
   turn boss appearing (the stage shows it), a hero falling mid-fight (the stage
-  and the log show it), a party change the player made, a farming clear, a
+  and the log show it), a party change the player made, a clear while staying, a
   common or uncommon drop, a common item vendored, chat, a reactive event (the
   stage and the log show it, and it plays no cue), a travel (the stage and the
   log show it).

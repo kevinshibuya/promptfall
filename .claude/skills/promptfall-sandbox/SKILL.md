@@ -12,7 +12,7 @@ The sandbox is a separate save on the in-process fake where `/promptfall sandbox
 - `PROMPTFALL_SANDBOX=1` in Claude Code's environment turns it on, read through `$.env.get` at session start. Off, the `sandbox` verb is missing from the argument hint and any `/promptfall sandbox …` answers `Sandbox is off. Start Claude Code with PROMPTFALL_SANDBOX=1.`
 - On, the plugin plays the in-process ledger with `sandbox.enabled` and `worldboss.enabled` on and chat off. A stored server URL is ignored; `/promptfall server` answers that the sandbox pins the server.
 - The save lives under the store prefix `promptfall-sandbox:` (books, device token, lease), so the first bootstrap mints its own account and a real session can play beside it. The settings stay under `promptfall:`, shared. The account never links: the Account tab has no Link GitHub row.
-- The purse shows `Sandbox` where the tactics line sits.
+- The message window is titled `Sandbox` on every tab, the collapsed line says `Sandbox`, and the compact band's title adds `· Sandbox` when it fits. The purse shows the tactics as in real play.
 
 ## The verbs
 

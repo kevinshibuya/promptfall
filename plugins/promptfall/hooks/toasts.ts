@@ -212,7 +212,7 @@ const TABLE = {
     tier: 'short',
     cue: 'zone_cleared',
     single: ({ effect }: EffectInput) =>
-      // A farming clear stays in its zone: only an advance is an arrival.
+      // A clear while staying stays in its zone: only an advance is an arrival.
       effect.k === 'zone_cleared' && effect.advancedTo > effect.zone
         ? `The party reached ${zoneWords(effect.advancedTo)}`
         : null,

@@ -708,7 +708,7 @@ describe('wipe', () => {
     expect(r.state.zoneWipes).toBe(0)
   })
 
-  it('a zone boss kill resets the count, farming included', () => {
+  it('a zone boss kill resets the count, Stay here included', () => {
     for (const farm of [false, true]) {
       let s: GameState = { ...createInitialState(5), wave: 11, farm, zoneWipes: 2 }
       s = injectEnemy(s, 'bandit_captain')

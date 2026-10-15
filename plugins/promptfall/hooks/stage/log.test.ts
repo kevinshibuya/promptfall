@@ -498,11 +498,11 @@ test("the zone line is held to the zone's show time and takes its place at relea
   expect(texts(show + 1).at(-1)).toBe(zoneLine)
 })
 
-test('the farming line is not held: it prints with its action', () => {
+test('the clear while staying is not held: it prints with its action', () => {
   const { log, t } = killBoss(1)
-  const farming = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Zone 1 cleared.')
-  expect(farming).toBeDefined()
-  expect(farming?.at ?? Number.POSITIVE_INFINITY).toBeLessThan(t.showAt('i1') ?? 0)
+  const cleared = log.upcoming(NOW - 1, 1e9).find((l) => l.text === 'Zone 1 cleared.')
+  expect(cleared).toBeDefined()
+  expect(cleared?.at ?? Number.POSITIVE_INFINITY).toBeLessThan(t.showAt('i1') ?? 0)
 })
 
 /** A drop toast as toastsFor gives it, waiting for its item. */

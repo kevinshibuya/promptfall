@@ -48,17 +48,18 @@ export const GOLDENS: Record<Scenario, Golden> = {
 }
 
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
-  'strip-rest': {imageHash: "0866da3cc3a7ea82", cellsHash: "b5f1d6c452c3b133", svgHash: "2e8c7de922ae31b4", svgChars: 19921},
-  'strip-boss': {imageHash: "cfeb5b30b0e35cee", cellsHash: "9cc6c16e8fa1cf41", svgHash: "63feddba968049fc", svgChars: 19195},
-  'strip-world-boss': {imageHash: "45db4fbedea15f5e", cellsHash: "a14b13e07e86f1da", svgHash: "da4e592e82ba7bfa", svgChars: 16876},
-  'strip-low-hp': {imageHash: "0118b1adf18718e3", cellsHash: "5cd4890d982b79d8", svgHash: "a82fdd1b32ad1713", svgChars: 19820},
+  'strip-rest': {imageHash: "202a4e02aca31be1", cellsHash: "20a1b26ce8ffabeb", svgHash: "865735e53052ad96", svgChars: 20685},
+  'strip-boss': {imageHash: "3ea303ae115aa7a1", cellsHash: "b74117b997e86981", svgHash: "f29eda1632a4701f", svgChars: 19798},
+  'strip-world-boss': {imageHash: "6ccf578389262970", cellsHash: "c035d47458515a77", svgHash: "d40bf9a7ad9376b6", svgChars: 17075},
+  'strip-low-hp': {imageHash: "d32c49c95810af2d", cellsHash: "b514bc75c46bb0ec", svgHash: "65c2e8ffb8631bec", svgChars: 20584},
   'strip-compact': {imageHash: "d348e86a7eff7471", cellsHash: "b9d4c7afb346939f", svgHash: "8b11e4f8de13c867", svgChars: 10370},
-  'strip-loot': {imageHash: "ea34f1947a2ca258", cellsHash: "97f2d34603b72815", svgHash: "f3d98fceb0b47e40", svgChars: 19336},
-  'strip-world': {imageHash: "e80473c7ce19ce62", cellsHash: "db213fb901bf4ba7", svgHash: "17d6547b076f00e0", svgChars: 18033},
-  'strip-notice': {imageHash: "adba6767a49f369e", cellsHash: "08334e906eeccb03", svgHash: "f4fe67de419f5888", svgChars: 16787},
-  'strip-waiting': {imageHash: "9ef9e54611f39ff5", cellsHash: "c5e60b4f827afc6e", svgHash: "4cd74cd628f85005", svgChars: 20845},
-  'strip-camping': {imageHash: "f03b61a1712597f0", cellsHash: "35bcc5cb2404bb84", svgHash: "940d977d80992269", svgChars: 14915},
+  'strip-loot': {imageHash: "50b04e2ca712cb17", cellsHash: "f2ed1146c4bd2d9d", svgHash: "7448cb6adea84db8", svgChars: 19914},
+  'strip-world': {imageHash: "f50fba179b0fbd84", cellsHash: "4244b790431db5be", svgHash: "5d15fecd1de26923", svgChars: 18231},
+  'strip-notice': {imageHash: "1ddb6976ea0c16bd", cellsHash: "04feb5264ae2c617", svgHash: "f19fe464707f81a3", svgChars: 17463},
+  'strip-waiting': {imageHash: "1b56dc06dc754991", cellsHash: "2d3606fbe477f9e6", svgHash: "a36389f0681fb174", svgChars: 21609},
+  'strip-camping': {imageHash: "9659d5f6d00d85b1", cellsHash: "5961e3a1eed5abc4", svgHash: "56e5557ee0d208e4", svgChars: 15429},
   'strip-compact-camping': {imageHash: "429fd2843eb14dce", cellsHash: "06cd8f08a2590a69", svgHash: "c488e1569ed4a18c", svgChars: 9419},
+  'strip-sandbox': {imageHash: "0e1b63eb886ae0c3", cellsHash: "edc3ecd8571e9b05", svgHash: "ab1c5b4058603d1f", svgChars: 20737},
 }
 
 export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
@@ -89,16 +90,16 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
 }
 
 export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
-  'band-rest': {imageHash: "bce64956aa88a3d6", cellsHash: "4b04b9ea0514065f", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "ac8f040ee9eb763e", stripSvgChars: 20206},
-  'band-wide': {imageHash: "ce18e9285c8582b3", cellsHash: "1600fcba1ed449f1", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "2be3c3c0fb54c1e8", stripSvgChars: 20206},
-  'band-zoomed': {imageHash: "a8d2564a4acbbcf5", cellsHash: "14d66dd561a8c4c3", width: 1280, height: 192, stageSvgHash: "0637cce5a29a7622", stageSvgChars: 22392, stripSvgHash: "041b98a4ddcfd3d6", stripSvgChars: 19480},
-  'band-zoomed-boss': {imageHash: "7a07ab1903d79cdc", cellsHash: "94ce7da26ad3a9f2", width: 1280, height: 240, stageSvgHash: "2af5bed49485425f", stageSvgChars: 22392, stripSvgHash: "041b98a4ddcfd3d6", stripSvgChars: 19480},
-  'band-cropped': {imageHash: "37504ee56e622e7b", cellsHash: "54c0dabf8c021db3", width: 1280, height: 208, stageSvgHash: "29ae33273eb517bb", stageSvgChars: 21462, stripSvgHash: "ac8f040ee9eb763e", stripSvgChars: 20206},
-  'band-compact': {imageHash: "708a2efee53a870a", cellsHash: "7f989f9c633f4a3d", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "ca7f3dc09fa61693", stripSvgChars: 20147},
-  'band-compact-wide': {imageHash: "81bdaa48120e2974", cellsHash: "18e2d08a58195527", width: 1360, height: 96, stageSvgHash: "7f5fc0eb515f32c4", stageSvgChars: 21457, stripSvgHash: "2396b05a3751e005", stripSvgChars: 20206},
-  'band-loot': {imageHash: "ca9671fb76ab6c98", cellsHash: "e21e6dabd7a2c06d", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "7628b326ddcc96ba", stripSvgChars: 19621},
-  'band-world': {imageHash: "9fc0ff16abab2acb", cellsHash: "5185987de47ff0d3", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "21bee34441005050", stripSvgChars: 20817},
-  'band-compact-loot': {imageHash: "b33a974b7104539e", cellsHash: "ec3055a8e1200661", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "b226f71437a5f990", stripSvgChars: 19562},
-  'band-compact-world': {imageHash: "2ea8a5cb1b2cd2b6", cellsHash: "e01e649995c26516", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "5cb4f90ea818965e", stripSvgChars: 17833},
-  'band-waiting': {imageHash: "62948e844417fae2", cellsHash: "1fe6225e5187c77e", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "da3b2562dda64da8", stripSvgChars: 21609},
+  'band-rest': {imageHash: "055d995629e37319", cellsHash: "fe9fc2b9298cfbe3", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "dfdc1882602e0850", stripSvgChars: 20971},
+  'band-wide': {imageHash: "4070a00891cbf6a4", cellsHash: "806faa0714f5ec21", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "c931f32405e996fa", stripSvgChars: 20971},
+  'band-zoomed': {imageHash: "8499dd72525fce1f", cellsHash: "14d66dd561a8c4c3", width: 1280, height: 192, stageSvgHash: "0637cce5a29a7622", stageSvgChars: 22392, stripSvgHash: "6e0b86a0fd17a773", stripSvgChars: 20084},
+  'band-zoomed-boss': {imageHash: "2dccad6ed5eb6e6e", cellsHash: "5fe2288fbae33e12", width: 1280, height: 240, stageSvgHash: "2af5bed49485425f", stageSvgChars: 22392, stripSvgHash: "6e0b86a0fd17a773", stripSvgChars: 20084},
+  'band-cropped': {imageHash: "49dafa4f28f16884", cellsHash: "3b0ea3222930b6b7", width: 1280, height: 208, stageSvgHash: "29ae33273eb517bb", stageSvgChars: 21462, stripSvgHash: "dfdc1882602e0850", stripSvgChars: 20971},
+  'band-compact': {imageHash: "708a2efee53a870a", cellsHash: "7f989f9c633f4a3d", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "557f4723d11573f4", stripSvgChars: 18615},
+  'band-compact-wide': {imageHash: "81bdaa48120e2974", cellsHash: "18e2d08a58195527", width: 1360, height: 96, stageSvgHash: "7f5fc0eb515f32c4", stageSvgChars: 21457, stripSvgHash: "cd70dadb17e8a065", stripSvgChars: 20971},
+  'band-loot': {imageHash: "5e5d519e41d64f9b", cellsHash: "d1356e3b883672d9", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "294d303b54a8fe9d", stripSvgChars: 20200},
+  'band-world': {imageHash: "af8718734c1aad96", cellsHash: "62e44e803ec5d26e", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "d792d9c5d3036db2", stripSvgChars: 21442},
+  'band-compact-loot': {imageHash: "b33a974b7104539e", cellsHash: "ec3055a8e1200661", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "f572a6914e3d75bd", stripSvgChars: 20140},
+  'band-compact-world': {imageHash: "0460c78ae2651131", cellsHash: "a6045b21cf0c832f", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "0379a7c04ec5f08a", stripSvgChars: 18457},
+  'band-waiting': {imageHash: "cc98435f95dd829b", cellsHash: "25771207fcd2bdba", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "e5c7efb47e035607", stripSvgChars: 22374},
 }

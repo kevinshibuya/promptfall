@@ -128,8 +128,8 @@ export const TRAVEL_OFF_MS = 500
 export const TRAVEL_ON_MS = 500
 export const TRAVEL_PX = 12
 /**
- * The party's victory pose after a zone boss's dissolve: with Push on, the party then walks to the
- * next zone as a travel does; with Farm here, it holds and stays.
+ * The party's victory pose after a zone boss's dissolve: with Next zone, the party then walks to the
+ * next zone as a travel does; with Stay here, it holds and stays.
  */
 export const VICTORY_MS = 2000
 export const IDLE_BOB_PX = 1

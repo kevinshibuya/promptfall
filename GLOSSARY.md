@@ -499,9 +499,14 @@ nets, then Set a price (or preset prices where there is no price field).
 _Avoid_: sell panel (the text form it replaced), sell dialog
 
 **Purse**:
-The strip's last window: the gold, the tactics (Push on, or Farm here; `f` toggles) and the
-falls.
+The strip's last window: the gold, the tactics (`f: Next zone` or `f: Stay here`; `f` flips them)
+and the falls.
 _Avoid_: wallet, status window
+
+**Tactics**:
+What the party does after a zone boss: Next zone moves on, Stay here starts the zone again from
+wave 1. `f` and `/promptfall farm` flip them; `farm` is the flag and the verb, never the name.
+_Avoid_: Push on, Farm here, farming
 
 **Combat log**:
 The running account of the encounter, one short line per event (hits, kills, drops, level-ups,

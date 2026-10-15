@@ -113,7 +113,7 @@ export type AccountView = {
   bossOpen: boolean
   huntOpen: boolean
   returns: number
-  /** The sandbox save: the purse says `Sandbox` and the account never links. */
+  /** The sandbox save: the message window is titled `Sandbox` and the account never links. */
   sandbox: boolean
 }
 export type GameView = {

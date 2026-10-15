@@ -15,6 +15,11 @@ export function formatGold(n: number): string {
   return `${formatCount(n)}g`
 }
 
+/** The tactics' names: the sim's farm flag as the player reads it. */
+export function tacticsName(farm: boolean): string {
+  return farm ? 'Stay here' : 'Next zone'
+}
+
 /** Cuts to `width` cells with an ellipsis; never wraps. */
 export function clip(text: string, width: number): string {
   if (width <= 0) return ''

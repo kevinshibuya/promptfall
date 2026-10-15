@@ -34,6 +34,7 @@ import {
   ENEMY_COLUMNS,
   GAUGE_FULL_RGB,
   GAUGE_RGB,
+  GOLD_RGB,
   HP_BAR_RGB,
   PARTY_COLUMNS,
   PURSE_COLUMNS,
@@ -43,7 +44,7 @@ import {
   WARN_RGB,
 } from '../windows/tuning'
 import { zoneMark } from '../zone-words'
-import { clip, formatCount } from './format'
+import { clip, formatCount, tacticsName } from './format'
 import { formatRemaining, remainingRealMs } from './time'
 import { type Presence, worldTabRows } from './world-rows'
 
@@ -101,7 +102,7 @@ const pct = (hp: number, max: number) => (max > 0 ? Math.floor((hp * 100) / max)
 const fill = (hp: number, max: number) => (max > 0 ? Math.floor((hp * GAUGE_FULL) / max) : 0)
 
 /** A hero's text colour: orange under 25% HP, red at 0 (grill 1.13). */
-function heroRgb(h: HeroView): number {
+export function heroRgb(h: HeroView): number {
   if (!h.alive || h.hp <= 0) return DOWN_RGB
   return h.hp * 4 < h.maxHp ? WARN_RGB : TEXT_RGB
 }
@@ -525,10 +526,20 @@ function messageWindow(
     .filter(Boolean)
   const where = body.footer === null ? '' : ` Rows ${body.footer.replace('/', ' of ')}.`
   const seen = body.presence?.parts[0]?.join(' · ')
+  // The sandbox mark: the window's title on every tab, so a sandbox screenshot never reads as real play.
+  const sandbox = input.view.account.sandbox
   const alt =
-    `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.${where}${seen ? ` ${seen}.` : ''} ${shown.join(' ')}`.trim()
+    `${sandbox ? 'Sandbox. ' : ''}${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.${where}${seen ? ` ${seen}.` : ''} ${shown.join(' ')}`.trim()
   return {
-    win: { key: 'message', x, columns, rows: STRIP_ROWS, lines, alt },
+    win: {
+      key: 'message',
+      x,
+      columns,
+      rows: STRIP_ROWS,
+      ...(sandbox ? { title: [text('Sandbox')] } : {}),
+      lines,
+      alt,
+    },
     hotspots,
     slots: [],
     hp: [],
@@ -587,16 +598,20 @@ function partyWindow(input: StripInput, x: number): Built {
   }
 }
 
+/** What each tactic does after the zone boss, and what `f` does, for the purse's alt. */
+const TACTICS_ALT = {
+  next: 'After the boss: on to the next zone. f: stay and repeat it.',
+  stay: 'After the boss: stay and repeat the zone from wave 1. f: move on.',
+}
+
 function purseWindow(input: StripInput, x: number): Built {
   const gold = clip(`${formatCount(input.view.gold)}G`, 9)
-  const tactics = input.view.farm ? 'Farm here' : 'Push on'
-  // The sandbox mark takes the tactics line; farming moves to the title, and `f` still toggles.
-  const sandbox = input.view.account.sandbox
+  const tactics = tacticsName(input.view.farm)
   const lines: Line[] = [
-    { spans: [pad(1), text(gold)] },
-    { spans: [pad(1), text(sandbox ? 'Sandbox' : tactics)] },
+    { spans: [pad(1), text(gold, GOLD_RGB)] },
+    { spans: [pad(1), text('f:', DIM_RGB), pad(1), text(tactics)] },
   ]
-  let alt = `Gold ${formatCount(input.view.gold)}.${sandbox ? ' Sandbox.' : ''} Tactics: ${tactics.toLowerCase()}.`
+  let alt = `Gold ${formatCount(input.view.gold)}. ${input.view.farm ? TACTICS_ALT.stay : TACTICS_ALT.next}`
   // The zone's falls before a retreat; boss mode counts no wipes, so it shows none.
   if (input.view.boss === null) {
     const falls = input.view.zoneWipes
@@ -609,11 +624,11 @@ function purseWindow(input: StripInput, x: number): Built {
       x,
       columns: PURSE_COLUMNS,
       rows: STRIP_ROWS,
-      ...(sandbox && input.view.farm ? { title: [text('Farm')] } : {}),
       lines,
       alt,
     },
-    hotspots: [{ hotkey: 'f', label: tactics, x: x + 2, y: 2, columns: 9 }],
+    // The whole row inside the border.
+    hotspots: [{ hotkey: 'f', label: `f: ${tactics}`, x: x + 1, y: 2, columns: PURSE_COLUMNS - 2 }],
     slots: [],
     hp: [],
   }
@@ -719,7 +734,12 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
         ? 'Boss'
         : `W${view.wave}`
   let title = `Z${view.zone} · ${wave} · ${formatCount(view.gold)}G`
-  if (view.farm && chars(`${title} · Farm`).length <= inner - 3) title = `${title} · Farm`
+  // Stay here, then the sandbox mark, each when it fits; Next zone says nothing.
+  for (const word of [
+    view.farm ? tacticsName(true) : null,
+    view.account.sandbox ? 'Sandbox' : null,
+  ])
+    if (word && chars(`${title} · ${word}`).length <= inner - 3) title = `${title} · ${word}`
   const body = input.tab === 'party' ? compactParty(input, inner) : compactTab(input, inner)
   const cmd = commandLine(input.tab, null)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({

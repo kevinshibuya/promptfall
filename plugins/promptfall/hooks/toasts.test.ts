@@ -270,7 +270,7 @@ for (const [name, effect, expected] of SINGLE) {
 }
 
 const SILENT: [string, Effect][] = [
-  ['a farming clear', { k: 'zone_cleared', zone: 4, advancedTo: 4 }],
+  ['a clear while staying', { k: 'zone_cleared', zone: 4, advancedTo: 4 }],
   ['a common drop', { k: 'drop', item: oakStaff('common') }],
   ['an uncommon drop', { k: 'drop', item: oakStaff('uncommon') }],
   [

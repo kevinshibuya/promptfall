@@ -49,9 +49,9 @@ test('at 120 columns the four windows fill the band; the message window takes th
   const { scene } = stripScene(strip('strip-rest'))
   expect(scene.windows.map((w) => w.key)).toEqual(['enemy', 'message', 'party', 'purse'])
   expect(scene.windows.reduce((n, w) => n + w.columns, 0)).toBe(120)
-  expect(win(scene, 'message').columns).toBe(40)
+  expect(win(scene, 'message').columns).toBe(38)
   expect(win(stripScene({ ...strip('strip-rest'), columns: 116 }).scene, 'message').columns).toBe(
-    36,
+    34,
   )
   // Windows sit side by side, in order.
   for (let i = 1; i < scene.windows.length; i++) {
@@ -154,12 +154,12 @@ test('the welcome notice shows its opt-out first at 120 columns full and at 100 
 
 test('a log line longer than the message window wraps over both rows', () => {
   const input = strip('strip-rest')
-  // full at 110 columns keeps the enemy window: the message window is 30 wide, 26 cells of text.
+  // full at 110 columns keeps the enemy window: the message window is 28 wide, 24 cells of text.
   const later = { ...input, columns: 110, now: input.now + 10_000 }
   const message = win(stripScene(later).scene, 'message')
-  expect(message.columns).toBe(30)
+  expect(message.columns).toBe(28)
   const last = input.log.shown(later.now, 'still').at(-1)?.text ?? ''
-  const rows = wrap(last, 26)
+  const rows = wrap(last, 24)
   expect(rows).toHaveLength(2)
   expect(lineText(message.lines[1]).trim()).toBe(rows[0])
   expect(lineText(message.lines[2]).trim()).toBe(rows[1])
@@ -258,7 +258,7 @@ test('a new line while paged back leaves the window where it is, the oldest trim
   const trimmed = ['L2', 'L3', 'L4', 'L5', 'L6']
   expect(shownRows(lootTab(trimmed, back))).toEqual({ rows: ['L2', 'L3'], footer: '1-2/5' })
   // L6 and a two-row L7 arrive, nothing trimmed: the window has not moved either.
-  const long = 'L7 is a line long enough to wrap over two rows of the window'
+  const long = 'L7 is a line long enough to wrap over two rows'
   const grown = [...five, 'L6', long]
   expect(shownRows(lootTab(grown, back))).toEqual({ rows: ['L2', 'L3'], footer: '2-3/8' })
   // At the newest the window follows the new lines.
@@ -381,9 +381,9 @@ test('a wrapped loot line hangs its later rows under the name', () => {
   }
   const [first, second] = lootRows([long])
   // lineText reads the sprite as no text: its two cells are the gap before the name.
-  expect(lineText({ spans: first ?? [] })).toBe('  Iron Sword (epic), the blade of a')
+  expect(lineText({ spans: first ?? [] })).toBe('  Iron Sword (epic), the blade of')
   expect(first?.[1]).toHaveProperty('art')
-  expect(lineText({ spans: second ?? [] })).toBe('    long forgotten king')
+  expect(lineText({ spans: second ?? [] })).toBe('    a long forgotten king')
 })
 
 test('the Loot tab shows every line the view holds, 40 by paging', () => {
@@ -430,7 +430,7 @@ test('the Party log pages too, and the World tab never does', () => {
 test('a notice is the newest of the paging: its first rows at the newest, k reaches the rest, j the log', () => {
   const notice =
     'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
-  const rows = wrap(notice, 36)
+  const rows = wrap(notice, 34)
   expect(rows).toHaveLength(4)
   const input = { ...strip('strip-rest'), now: strip('strip-rest').now + 10_000, notice }
   const texts = input.log.shown(input.now, 'still').map((l) => l.text)
@@ -465,14 +465,14 @@ test('the command line ends on a dim c ▾, the collapse hotspot over all three 
   const { scene, hotspots } = stripScene(strip('strip-rest'))
   const message = win(scene, 'message')
   const cmd = message.lines[0]
-  // 40 columns: the border and a gap each side leave 36 cells, the hint in the last three.
-  expect(lineText(cmd)).toBe(' ▶Party  Loot  World              c ▾')
+  // 38 columns: the border and a gap each side leave 34 cells, the hint in the last three.
+  expect(lineText(cmd)).toBe(' ▶Party  Loot  World            c ▾')
   const hint = cmd?.spans.at(-1)
   expect(hint).toEqual({ text: 'c ▾', rgb: DIM_RGB })
   expect(hotspots.find((h) => h.hotkey === 'c')).toEqual({
     hotkey: 'c',
     label: 'c ▾',
-    x: message.x + 2 + 33,
+    x: message.x + 2 + 31,
     y: 1,
     columns: 3,
   })
@@ -800,7 +800,7 @@ test('the compact window on World shows presence, the records row, chat and a bl
   expect(world.lines.map((l) => lineText(l).trim())).toEqual([
     '13 online · zone 1: Bea, Kit',
     'Z1 K0 W0 · world boss and hunt are off',
-    'Kit: anyone farming zone 1?',
+    'Kit: anyone grinding zone 1?',
     '',
   ])
   expect(world.alt).toContain('World tab.')
@@ -820,32 +820,93 @@ test('desktop tracks while camping keep the g line and type nothing, as under a 
   }
 })
 
-test("the purse's third row counts the zone's falls; the sandbox keeps Farm, boss mode shows none", () => {
+test("the purse's third row counts the zone's falls; boss mode shows none", () => {
   const rest = strip('strip-rest')
   const purse = (i: StripInput) => stripScene(i)
   const rows = (i: StripInput) => win(purse(i).scene, 'purse').lines.map((l) => lineText(l).trim())
-  expect(rows(rest)).toEqual(['0G', 'Push on', 'Falls 0/3'])
+  expect(rows(rest)).toEqual(['0G', 'f: Next zone', 'Falls 0/3'])
   expect(win(purse(rest).scene, 'purse').alt).toContain('Falls 0 of 3 before a retreat.')
   const two = { ...rest, view: { ...rest.view, zoneWipes: 2, gold: 123_456_789 } }
   expect(rows(two)[2]).toBe('Falls 2/3')
   expect(win(purse(two).scene, 'purse').alt).toContain('Falls 2 of 3 before a retreat.')
-  // Nothing clips: each row fits the purse's inner width less its leading gap.
+  // Nothing clips: each row fits the purse's inner width.
   const p = win(purse(two).scene, 'purse')
+  expect(p.columns).toBe(15)
   for (const l of p.lines) expect([...lineText(l)].length).toBeLessThanOrEqual(p.columns - 2)
-  // The sandbox: Farm keeps the title, Sandbox the tactics row, the falls their own.
-  const sandbox = {
-    ...rest,
-    view: { ...rest.view, farm: true, account: { ...rest.view.account, sandbox: true } },
-  }
-  const s = win(purse(sandbox).scene, 'purse')
-  expect(lineText({ spans: s.title ?? [] })).toBe('Farm')
-  expect(rows(sandbox)).toEqual(['0G', 'Sandbox', 'Falls 0/3'])
-  // The `f` hotspot stays on the tactics row.
-  expect(purse(two).hotspots.find((h) => h.hotkey === 'f')).toMatchObject({ y: 2 })
   // Boss mode counts no wipes: no row, nothing in the alt.
   const boss = strip('strip-world-boss')
   expect(rows(boss)).toHaveLength(2)
   expect(win(purse(boss).scene, 'purse').alt).not.toContain('Falls')
+})
+
+test('the purse reads f: Next zone or f: Stay here, the f: dim, in and out of the sandbox', () => {
+  const rest = strip('strip-rest')
+  const staying = { ...rest, view: { ...rest.view, farm: true } }
+  const sandbox = (i: StripInput) => ({
+    ...i,
+    view: { ...i.view, account: { ...i.view.account, sandbox: true } },
+  })
+  for (const [input, tactic] of [
+    [rest, 'Next zone'],
+    [staying, 'Stay here'],
+    [sandbox(rest), 'Next zone'],
+    [sandbox(staying), 'Stay here'],
+  ] as const) {
+    const { scene, hotspots } = stripScene(input)
+    const p = win(scene, 'purse')
+    expect(lineText(p.lines[1])).toBe(` f: ${tactic}`)
+    expect(p.lines[1]?.spans).toContainEqual({ text: 'f:', rgb: DIM_RGB })
+    expect(p.lines[1]?.spans).toContainEqual({ text: tactic })
+    // No title: the sandbox mark is the message window's.
+    expect(p.title).toBeUndefined()
+    // The hotspot covers the whole row inside the border.
+    expect(hotspots.find((h) => h.hotkey === 'f')).toEqual({
+      hotkey: 'f',
+      label: `f: ${tactic}`,
+      x: p.x + 1,
+      y: 2,
+      columns: p.columns - 2,
+    })
+  }
+  expect(win(stripScene(rest).scene, 'purse').alt).toContain(
+    'After the boss: on to the next zone. f: stay and repeat it.',
+  )
+  expect(win(stripScene(staying).scene, 'purse').alt).toContain(
+    'After the boss: stay and repeat the zone from wave 1. f: move on.',
+  )
+})
+
+test('in the sandbox the message window is titled Sandbox on every tab; the enemy title stays', () => {
+  for (const tab of ['party', 'loot', 'world'] as const) {
+    const input = { ...strip('strip-sandbox'), tab }
+    const { scene } = stripScene(input)
+    expect(lineText({ spans: win(scene, 'message').title ?? [] })).toBe('Sandbox')
+    expect(win(scene, 'message').alt.startsWith('Sandbox.')).toBe(true)
+    expect(lineText({ spans: win(scene, 'enemy').title ?? [] })).toBe('Zone 1 · Wave 2')
+    const real = { ...strip('strip-rest'), tab }
+    expect(win(stripScene(real).scene, 'message').title).toBeUndefined()
+    expect(stripScene(real).scene.alt).not.toContain('Sandbox')
+  }
+})
+
+test('the compact title says Stay here and Sandbox when they fit, never Farm, nothing for Next zone', () => {
+  const titled = (patch: Partial<GameView>, columns = 110) => {
+    const rest = strip('strip-rest')
+    const view = { ...rest.view, ...patch }
+    const scene = stripScene({ ...rest, view, kind: 'compact', columns }).scene
+    return lineText({ spans: win(scene, 'compact').title ?? [] })
+  }
+  const account = strip('strip-rest').view.account
+  expect(titled({})).toMatch(/^Z1 · W2 · \d+G$/)
+  expect(titled({ farm: true })).toMatch(/^Z1 · W2 · \d+G · Stay here$/)
+  expect(titled({ account: { ...account, sandbox: true } })).toMatch(/^Z1 · W2 · \d+G · Sandbox$/)
+  expect(titled({ farm: true, account: { ...account, sandbox: true } })).toMatch(
+    /^Z1 · W2 · \d+G · Stay here · Sandbox$/,
+  )
+  for (const columns of [100, 110, 160])
+    expect(titled({ farm: true, account: { ...account, sandbox: true } }, columns)).not.toContain(
+      'Farm',
+    )
 })
 
 test("the footer reads the sim's queue while a kill's refill waits out the dissolve and the pause", () => {
@@ -904,16 +965,18 @@ function worldTab(patch: Partial<WorldState> = {}, columns = 120): StripInput {
 const messageRows = (i: StripInput) => win(stripScene(i).scene, 'message').lines.map(lineText)
 
 test('the World tab: the records row with the hunt bar, then chat; presence after the tabs', () => {
-  expect(messageRows(worldTab())).toEqual([
+  expect(messageRows(worldTab({}, 122))).toEqual([
     '  Party  Loot ▶World · 13 online  c ▾',
     ' Hunt casters ██░░ 12.4k / 20k 3d',
-    ' Kit: anyone farming zone 1?',
+    ' Kit: anyone grinding zone 1?',
   ])
-  // At 116 the records row still fits the hunt with its bar; presence has no room beside the hint.
+  // At 120 and under, the purse's 15 columns leave presence no room beside the hint.
+  expect(messageRows(worldTab())[0]).toBe('  Party  Loot ▶World            c ▾')
+  // At 116 the records row still fits the hunt with its bar, its counts short.
   expect(messageRows(worldTab({}, 116))).toEqual([
-    '  Party  Loot ▶World          c ▾',
-    ' Hunt casters ██░░ 12.4k / 20k 3d',
-    ' Kit: anyone farming zone 1?',
+    '  Party  Loot ▶World        c ▾',
+    ' Hunt casters ██░░ 12k/20k 3d',
+    ' Kit: anyone grinding zone 1?',
   ])
   // Chat quiet: its dim word in row two, the records row unchanged.
   const quiet = worldTab({ messages: [] })
@@ -934,7 +997,8 @@ test('presence on the command line drops the names, then the zone, then the coun
   const cmd = (columns: number) => messageRows(worldTab({}, columns))[0]
   expect(cmd(160)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1: Bea, Kit +c ▾$/)
   expect(cmd(130)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1 +c ▾$/)
-  expect(cmd(120)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online +c ▾$/)
+  expect(cmd(122)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online +c ▾$/)
+  expect(cmd(120)).toMatch(/^ {2}Party {2}Loot ▶World +c ▾$/)
   expect(cmd(116)).toMatch(/^ {2}Party {2}Loot ▶World +c ▾$/)
   // The alt carries it whole at any width.
   expect(win(stripScene(worldTab({}, 116)).scene, 'message').alt).toContain(

@@ -437,7 +437,7 @@ export function caseOf(name: Scenario): Case {
       t.observe(next, t1 + 10)
       return staging(next, t, { columns: 120, rows: t.rowsAt(next, NOW) }, t1 + 10)
     }
-    // The bandit captain fell with Push on: past the dissolve and the victory hold, at NOW the
+    // The bandit captain fell with Next zone: past the dissolve and the victory hold, at NOW the
     // party is halfway through its step-off, over zone 1's backdrop until it ends.
     case 'boss-kill-travel': {
       const t1 =
@@ -601,6 +601,7 @@ export const STRIP_SCENARIOS = [
   'strip-waiting',
   'strip-camping',
   'strip-compact-camping',
+  'strip-sandbox',
 ] as const
 export type StripScenario = (typeof STRIP_SCENARIOS)[number]
 export type StripGolden = {
@@ -624,7 +625,7 @@ const WORLD: WorldState = {
   },
   fetchedAt: NOW,
   stale: false,
-  messages: [{ id: 1, name: 'Kit', text: 'anyone farming zone 1?', at: NOW - 5000 }],
+  messages: [{ id: 1, name: 'Kit', text: 'anyone grinding zone 1?', at: NOW - 5000 }],
   chatMark: 1,
   clock: { serverNow: NOW, clientNow: NOW, speed: 1 },
   committedDealt: null,
@@ -772,6 +773,11 @@ export function strip(name: StripScenario): StripInput {
       return camping({})
     case 'strip-compact-camping':
       return camping({ kind: 'compact', columns: 110 })
+    // The sandbox save staying in its zone: the message window titled Sandbox, the purse's tactics.
+    case 'strip-sandbox': {
+      const v = wave()
+      return stripInput({ ...v, farm: true, account: { ...v.account, sandbox: true } })
+    }
   }
 }
 

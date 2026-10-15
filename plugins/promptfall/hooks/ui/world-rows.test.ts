@@ -54,6 +54,16 @@ test('the presence row names the running zone as today inside tier 1, by its tie
   )
 })
 
+test('the records row says staying while the tactics are Stay here, nothing for Next zone', () => {
+  const world = worldWith({ 'worldboss.enabled': true })
+  expect(worldRows({ ...wave(), farm: true }, world, NOW)[1]?.text).toBe(
+    'highest zone 1 · kills 0 · wipes 0 · staying',
+  )
+  expect(worldRows({ ...wave(), farm: false }, world, NOW)[1]?.text).toBe(
+    'highest zone 1 · kills 0 · wipes 0',
+  )
+})
+
 test('the World rows say the boss is off in place', () => {
   const view = wave()
   const off = worldRows(view, worldWith({ 'worldboss.enabled': false }), NOW)[1]
@@ -163,14 +173,14 @@ const remote = (view: GameView): GameView => ({
   ...view,
   account: { ...view.account, server: 'https://promptfall.example' },
 })
-const SAY = { id: 1, name: 'Kit', text: 'anyone farming zone 1?', at: NOW - 5000 }
+const SAY = { id: 1, name: 'Kit', text: 'anyone grinding zone 1?', at: NOW - 5000 }
 
 test('the World tab at two rows: the records row, then chat; neither displaces the other', () => {
   const view = remote(wave())
   const live = worldTabRows(view, chatWorld([SAY]), 2, 30, NOW)
   expect(live.rows).toEqual([
     { text: 'Hunt casters ██░░ 12k/20k 3d', dim: false },
-    { text: 'Kit: anyone farming zone 1?', dim: false },
+    { text: 'Kit: anyone grinding zone 1?', dim: false },
   ])
   // Chat quiet, closed, or on the in-process fake: a dim word in row two, row one unchanged.
   const quiet = worldTabRows(view, chatWorld([]), 2, 30, NOW).rows
@@ -221,7 +231,7 @@ test('the World tab at four rows, for the compact band: presence, records, chat,
   expect(rows).toEqual([
     { text: '1 online · zone 1', dim: false },
     { text: 'Hunt casters ██░░ 12k/20k 3d', dim: false },
-    { text: 'Kit: anyone farming zone 1?', dim: false },
+    { text: 'Kit: anyone grinding zone 1?', dim: false },
     { text: '', dim: false },
   ])
 })

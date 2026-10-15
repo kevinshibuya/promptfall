@@ -280,7 +280,7 @@ export class MessageLog {
 
   /**
    * What `e`'s line waits for: a drop's item, an advance's zone cleared, a travel's destination;
-   * a farming clear none.
+   * a clear while staying none.
    */
   private waitOf(e: StageEffect): Wait | null {
     if (e.k === 'drop' || e.k === 'drop_vendored') return { item: e.item.id }

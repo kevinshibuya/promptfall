@@ -23,6 +23,8 @@ export const BAR_BACK_RGB = 0x484840
 /** Graft: the Final Fantasy action gauge, gold when full. */
 export const GAUGE_RGB = 0x58a8f8
 export const GAUGE_FULL_RGB = 0xf8d038
+/** The gold's colour: the purse's amount and the collapsed line's, the full gauge's gold. */
+export const GOLD_RGB = GAUGE_FULL_RGB
 
 /** The frame, measured from the content side of a border cell: field, white line, field margin. */
 export const PAD_PX = 4
@@ -40,7 +42,7 @@ export const COMPACT_WINDOW_ROWS = 6
 export const STRIP_MAX_COLUMNS = 160
 export const ENEMY_COLUMNS = 25
 export const PARTY_COLUMNS = 42
-export const PURSE_COLUMNS = 13
+export const PURSE_COLUMNS = 15
 export const MESSAGE_MIN_COLUMNS = 28
 
 /** Typing: per character, and fast while 2 or more lines wait. */

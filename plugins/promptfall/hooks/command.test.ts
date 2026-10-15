@@ -59,12 +59,16 @@ test('/promptfall heroes opens the pane on the heroes tab', async ($, on) => {
   expect(states.get('dialogTab')).toBe('heroes')
 })
 
-test('/promptfall farm toggles the farm flag', async ($, on) => {
-  const { states } = harness(on)
+test('/promptfall farm flips the tactics and answers in their names', async ($, on) => {
+  const { states, clock } = harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const r = await $.command.run({ ...RUN, command: 'promptfall', args: 'farm' })
-  expect(r.text).toBe('Promptfall farm is on')
+  expect(r.text).toBe('Promptfall tactics: Stay here')
   expect((states.get('view') as { farm: boolean }).farm).toBe(true)
+  await clock.advance(1)
+  const back = await $.command.run({ ...RUN, command: 'promptfall', args: 'farm' })
+  expect(back.text).toBe('Promptfall tactics: Next zone')
+  expect((states.get('view') as { farm: boolean }).farm).toBe(false)
 })
 
 /** A compaction of the main conversation, the party camping: past the grid boss, which would hold it. */

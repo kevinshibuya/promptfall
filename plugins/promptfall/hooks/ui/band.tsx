@@ -28,10 +28,10 @@ import {
   WORLD_DEFAULT,
 } from '../state'
 import { sceneSvg } from '../windows/svg'
-import { STRIP_MAX_COLUMNS } from '../windows/tuning'
+import { GOLD_RGB, STRIP_MAX_COLUMNS, TEXT_RGB } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
-import { PAGE_ROWS, paged, type StripInput, stripScene, stripTracks } from './strip'
+import { heroRgb, PAGE_ROWS, paged, type StripInput, stripScene, stripTracks } from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -44,15 +44,63 @@ const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'u
 const SCROLL_NEWEST: BandScroll = { zone: 0, party: null, loot: null }
 const scrollAtom = atom({ plugin: 'promptfall', key: 'bandScroll' } as const, SCROLL_NEWEST)
 
-/** The one-line form: `Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`. */
-export function collapsedLine(view: GameView, mode: Mode, notice: string | null): string {
+/** A run of the collapsed line: its text, dim, or in a colour. */
+export type Run = { text: string; dim?: boolean; rgb?: number }
+
+/**
+ * The one-line form, `Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`, as a run of coloured spans
+ * cut to `cells`: the label and separators dim, each hero's HP in the party window's health
+ * colour, the gold in gold; `Sandbox` and `camping` as words when they apply.
+ */
+export function collapsedRun(
+  view: GameView,
+  mode: Mode,
+  notice: string | null,
+  cells: number,
+): Run[] {
   const wave = view.wave >= 11 ? 'boss' : `w${view.wave}`
-  const hp = view.heroes.map((h) => `${CLASS_INITIAL[h.cls] ?? '?'}${h.hp}`).join(' ')
-  const parts = ['Promptfall', `Z${view.zone} ${wave}`, hp, formatGold(view.gold)]
-  if (notice) parts.push(notice)
-  const line = parts.join(' · ')
-  return mode === 'secondary' ? `playing in another session · ${line}` : line
+  const sep: Run = { text: ' · ', dim: true }
+  const hp = view.heroes.flatMap((h, i): Run[] => {
+    const rgb = heroRgb(h)
+    const run = {
+      text: `${CLASS_INITIAL[h.cls] ?? '?'}${h.hp}`,
+      ...(rgb === TEXT_RGB ? {} : { rgb }),
+    }
+    return i === 0 ? [run] : [{ text: ' ' }, run]
+  })
+  const parts: Run[][] = [[{ text: 'Promptfall', dim: true }]]
+  if (view.account.sandbox) parts.push([{ text: 'Sandbox' }])
+  parts.push([{ text: `Z${view.zone} ${wave}` }])
+  if (view.camping) parts.push([{ text: 'camping' }])
+  parts.push(hp, [{ text: formatGold(view.gold), rgb: GOLD_RGB }])
+  if (notice) parts.push([{ text: notice }])
+  if (mode === 'secondary') parts.unshift([{ text: 'playing in another session' }])
+  return clipRun(
+    parts.flatMap((p, i) => (i === 0 ? p : [sep, ...p])),
+    cells,
+  )
 }
+
+/** A run cut to `cells`, its last span ending in an ellipsis as `clip` cuts a string. */
+function clipRun(run: readonly Run[], cells: number): Run[] {
+  const total = run.reduce((n, r) => n + [...r.text].length, 0)
+  if (total <= cells) return [...run]
+  const out: Run[] = []
+  let left = cells
+  for (const r of run) {
+    const n = [...r.text].length
+    if (n < left) {
+      out.push(r)
+      left -= n
+      continue
+    }
+    if (left > 0) out.push({ ...r, text: clip(r.text, left) })
+    break
+  }
+  return out
+}
+
+const hex = (rgb: number) => `#${(rgb & 0xffffff).toString(16).padStart(6, '0')}`
 
 export { type ShownBoss, shownBoss } from './boss'
 
@@ -73,7 +121,7 @@ const HOTKEYS = [
   { hotkey: 'l', label: 'loot' },
   { hotkey: 'w', label: 'world' },
   { hotkey: 'c', label: '▾' },
-  { hotkey: 'f', label: 'farm' },
+  { hotkey: 'f', label: 'tactics' },
   // Page the Party and Loot logs: older, newer. They do nothing in the compact band.
   { hotkey: 'j', label: 'older' },
   { hotkey: 'k', label: 'newer' },
@@ -165,7 +213,17 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       return (
         <Box key="band" flexDirection="column">
           <Box key="row-collapsed" flexDirection="row">
-            <Text wrap="truncate">{clip(collapsedLine(view, mode, notice), width - 6)} </Text>
+            <Text wrap="truncate">
+              {collapsedRun(view, mode, notice, width - 6).map((r, i) => (
+                <Text
+                  key={`run-${i}`}
+                  {...(r.dim ? { dimColor: true } : {})}
+                  {...(r.rgb === undefined ? {} : { color: hex(r.rgb) })}
+                >
+                  {r.text}
+                </Text>
+              ))}{' '}
+            </Text>
             <Button
               key="collapse"
               label={prefs.collapsed ? '▸' : '·'}

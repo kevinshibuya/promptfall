@@ -18,7 +18,7 @@ it, never below 1. Its sprite wears its rarity colour, from Common grey to Legen
 **The party and the Heroes tab.** The party is the three heroes on the stage, picked from the
 roster in the pane's Heroes tab. Enter on a hero opens its command window: Party (or Unpick),
 Sell and Dismiss, which asks Yes or No and pays gold. A new pick takes the field at
-the next zone boss kill, wipe, retreat or travel, farm restarts included (on a fresh save,
+the next zone boss kill, wipe, retreat or travel, a Stay here restart included (on a fresh save,
 before the first kill, at once), and the stage draws the party in the list's order. A new save
 starts with one Common hero of each class, three of them already in the party.
 
@@ -65,14 +65,14 @@ Greenmeadow Road to The Unwritten Reach, and then the same twelve again in tier 
 all on the one ladder. The zone's words arrive with the new backdrop: once the boss's chest has
 played and the party has held its victory pose, the party walks off to the right as on a travel,
 the backdrop changes as it goes, and the party walks back on from the left; the combat log's "The
-party reached zone 2" and a toast naming the zone ahead land with the new backdrop. With Farm here
+party reached zone 2" and a toast naming the zone ahead land with the new backdrop. With Stay here
 the party holds its pose and stays. The enemy window shows a boss with its HP
 percentage. Each zone's boss holds more of a fight than the last: zone 1's is as quick as ever,
 zone 12's takes four times as long against its waves, and from zone 7 the waves thicken and pay
 more XP too, so the deeper zones take longer to clear. Zone 12's boss opens tier 2, zones 13 to 24: each zone's own monsters, boss and
 backdrop, ramping on from zone 12's numbers with no wall at the door, stronger with every zone and
 worth more XP and gold, and dropping any base at item tier 5 at zone 12's rarity odds; a boss
-contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36's boss farms. Past tier 1 the arrival toast
+contract there rolls zone 12's odds too. Tier 3, zones 25 to 36, drops at item tier 6. The ladder ends at tier 3 for now, and zone 36 starts again at wave 1 after its boss, whatever the tactics. Past tier 1 the arrival toast
 and the log name the tier in words, "The party reached tier 2, zone 1, Greenmeadow Road", and the
 enemy window's title in the short form that fits it, "T2 Z1 · Wave 3". Inside tier 1 they read as
 before. Each zone boss has one of four moves, the same in every tier: zones 1, 5 and 9 strike
@@ -111,9 +111,12 @@ party is in, a world boss fight, or a zone that is not a number. A session with 
 answers that it is not playing. A retreat still drops the party one zone, and travel can take it
 straight back.
 
-**Tactics.** The purse shows the tactics, Push on or Farm here; `f` on the band or
-`/promptfall farm` flips them. Farming restarts the zone at wave 1 after its boss instead of
-moving on.
+**Tactics.** The tactics say what the party does after a zone boss: Next zone moves on to the next
+zone, Stay here starts the zone again from wave 1. The purse's second row reads `f: Next zone` or
+`f: Stay here`, the `f:` dim, and `f` on the band or `/promptfall farm` flips them, in the sandbox
+as in real play; the purse's alt text says what happens after the boss and what `f` does. While
+the party stays, the World tab's records row ends `· staying` and the compact band's title adds
+`· Stay here` when it fits; Next zone adds nothing.
 
 **Reactive events.** The fight answers what Claude is doing, on the stage and in the combat log, and
 never with a toast or a cue. While Claude works on a prompt the party has Haste: the heroes' gauges
@@ -413,7 +416,14 @@ and cmux (up to 255 columns, past which the terminal shows beside the shell), as
 picture on other terminals (where the line opens over a boss's head rather than cover it), and
 as two stacked vector pictures, the stage's and the strip's, on
 the desktop. The compact band is the same: its small stage and its window inside one line
-on the shell. Only the one-row collapsed band stays plain text.
+on the shell. Only the one-row collapsed band stays engine text.
+
+**The collapsed line.** Collapsed, the band is one line of text in the band's colours:
+`Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`, the game's name and the separators dim, the zone
+and wave plain, each hero's initial and HP in the party window's colour for that HP (plain, orange
+under a quarter, red at 0), the gold in gold, then any notice. It says `Sandbox` after the name in
+the sandbox and `camping` after the wave while the party camps. A secondary session's line starts
+`playing in another session`.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,
 the party on the right, side-on, small against the zone's 1.5× backdrop painting, one per zone, so a boss
@@ -433,9 +443,9 @@ as the backdrop changes. A level-up flashes the hero gold and its gains rise ove
 "+3 atk  +2 def", for just over a second, slower than damage numbers so they can be read; when
 several heroes level at once, each flashes and rises a quarter second after the one before, in
 party order. When a zone boss falls, the party holds a victory pose over the empty ground for
-about two seconds after the boss has dissolved. With Push on it then walks to the next zone as on
+about two seconds after the boss has dissolved. With Next zone it then walks to the next zone as on
 a travel: it steps off once the pose and any chest are over, the backdrop changes, the arrival's
-line and toast land, and it steps on. With Farm here it holds and stays; a turn boss and the world
+line and toast land, and it steps on. With Stay here it holds and stays; a turn boss and the world
 boss get no hold.
 The pose is a slot: on every surface it holds the class's drawn victory frame, the weapon raised,
 and the idle art where a class has none; the compact stage holds the idle.
@@ -448,7 +458,7 @@ them: a charcoal field, a thin white line with cut corners, the game's pixel fon
 come the enemy window (titled with the zone and wave, an HP bar per enemy, and a dim `+4 waiting`
 cut into its bottom line while the wave's queue holds enemies), the message window, the party
 window (each hero's name, level, HP bar and action gauge, the text orange under 25% HP and red at
-0) and the purse (the gold, the tactics or `Sandbox` in the sandbox, and the falls, `Falls 1/3`:
+0) and the purse (the gold in gold, the tactics, `f: Next zone` or `f: Stay here`, and the falls, `Falls 1/3`:
 the zone's wipes out of the three that make a retreat, none in a world boss fight). Both counts
 are the game's as it stands, not the stage's: a fall shows before its blow has played. The compact
 layout has neither the enemy window nor the purse, so it shows neither the queue nor the falls. The
@@ -589,7 +599,7 @@ step's words and gold, oldest first. Toasts follow the game, not the stage, exce
 toast lands at its reveal, as the item rises out of the chest, and a zone arrival's with the new
 backdrop, after the boss's drop toast; either lands at once when no band is drawn.
 A wipe or retreat toast can show up to one cadence before the last hero falls on the stage. A world boss already up when the session first polls toasts its arrival with no cue.
-Routine combat, the reactive events, farming clears and chat never toast, the open pane holds toasts until it closes,
+Routine combat, the reactive events, a clear while staying and chat never toast, the open pane holds toasts until it closes,
 and the session raises two toasts of its own: a first launch's welcome that points at the Heroes tab,
 and the session summary when a session becomes primary after a break (under Primary session).
 
@@ -634,9 +644,10 @@ and a real session can play side by side. The settings (sound, motion, renderer)
 machine's and stay shared. The sandbox account never links to GitHub: the Account tab has no Link
 GitHub row.
 
-**The mark.** The purse says `Sandbox` where the tactics line sits, so a screenshot of the sandbox
-is never mistaken for real play. While farming, the purse is titled `Farm`, and `f` still flips
-the tactics.
+**The mark.** The message window is titled `Sandbox` on every tab while the save is a sandbox one,
+so a screenshot of the sandbox is never mistaken for real play; outside the sandbox it has no
+title. The collapsed line says `Sandbox`, and the compact band's title adds `· Sandbox` when it
+fits. The enemy window's title does not change, and the purse shows the tactics as in real play.
 
 **The verbs.** `/promptfall sandbox <verb>` hands out what play would earn, each answering in one
 line once the grant is in the view; `/promptfall sandbox` alone lists them. `boss <name>` makes a

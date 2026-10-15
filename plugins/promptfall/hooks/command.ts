@@ -24,6 +24,7 @@ import {
   settingCommand,
 } from './state'
 import { PREFIX } from './storage'
+import { tacticsName } from './ui/format'
 import { loadJournal } from './ui/journal'
 import { loadBoards } from './ui/leaderboards'
 import { loadMarket } from './ui/market'
@@ -156,7 +157,7 @@ export function registerCommand(
         return { text: 'Promptfall is not playing in this session' }
       running.apply({ t: 'set_farm', on: !view.farm }, await $.clock.now())
       await running.settled()
-      return { text: `Promptfall farm is ${view.farm ? 'off' : 'on'}` }
+      return { text: `Promptfall tactics: ${tacticsName(!view.farm)}` }
     }
 
     // The band's `g`: the party breaks camp and goes back to the fight.

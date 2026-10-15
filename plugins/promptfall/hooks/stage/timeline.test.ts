@@ -1551,7 +1551,7 @@ test('a zone boss kill that advances walks the party off after the hold and the 
   )
 })
 
-test('a zone boss kill with Farm here holds and does not walk', () => {
+test('a zone boss kill with Stay here holds and does not walk', () => {
   const t = observed(boss())
   t.onEffects([...bossKill(), { k: 'zone_cleared', zone: 1, advancedTo: 1 }], NOW, 2000)
   const faded = NOW + H + LUNGE_MS / 2 + FLASH_MS + DISSOLVE_MS

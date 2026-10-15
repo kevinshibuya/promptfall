@@ -874,7 +874,7 @@ export class StageTimeline {
           continue
         }
         if (effect.k === 'zone_cleared') {
-          // Push on: after the hold the party walks to the next zone, as a travel does. On a stage
+          // Next zone: after the hold the party walks to the next zone, as a travel does. On a stage
           // never drawn there is no boss row to walk on from.
           const boss = this.zoneBoss(effect.zone)
           if (effect.advancedTo > effect.zone && boss !== undefined) this.walking.add(boss)
