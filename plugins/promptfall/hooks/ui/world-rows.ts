@@ -63,8 +63,9 @@ function huntSegment(hunt: HuntView, world: WorldState, now: number, form: HuntF
  * The account's records with the week's hunt after the highest zone and the kills, then, with the
  * world boss or the hunt off by the server's flag, a note saying so: the World tab's records row.
  * In `cells` the hunt's counts shorten first, then its time, then the records (`Z9 K184 W90`),
- * then the bar to 4 cells; then the records go, then the counts tighten, then the bar, then the
- * hunt. The note is never dropped while it fits alone.
+ * then the bar to 4 cells; then the counts tighten and the bar goes to keep the short records;
+ * then the records go and the bar comes back at 4 cells, then the bar goes, then the hunt. The
+ * note is never dropped while it fits alone.
  */
 export function recordsRow(
   view: GameView,
@@ -95,6 +96,7 @@ export function recordsRow(
       [head, seg('short', true, HUNT_BAR_CELLS), tail],
       [short, seg('short', true, HUNT_BAR_CELLS)],
       [short, seg('short', true, HUNT_BAR_CELLS / 2)],
+      [short, seg('tight', true, 0)],
       [seg('short', true, HUNT_BAR_CELLS / 2)],
       [seg('tight', true, HUNT_BAR_CELLS / 2)],
       [seg('tight', true, 0)],

@@ -50,7 +50,7 @@ export const GOLDENS: Record<Scenario, Golden> = {
 export const STRIP_GOLDENS: Record<StripScenario, StripGolden> = {
   'strip-rest': {imageHash: "202a4e02aca31be1", cellsHash: "20a1b26ce8ffabeb", svgHash: "865735e53052ad96", svgChars: 20685},
   'strip-boss': {imageHash: "3ea303ae115aa7a1", cellsHash: "b74117b997e86981", svgHash: "f29eda1632a4701f", svgChars: 19798},
-  'strip-world-boss': {imageHash: "e7e8f5a2af462c6b", cellsHash: "549e90b7ede1288a", svgHash: "3e7ec462ae074c31", svgChars: 17217},
+  'strip-world-boss': {imageHash: "35a368dc05ba4e3e", cellsHash: "0d33ec348712c520", svgHash: "1e9009ceb09706a8", svgChars: 17049},
   'strip-low-hp': {imageHash: "d32c49c95810af2d", cellsHash: "b514bc75c46bb0ec", svgHash: "65c2e8ffb8631bec", svgChars: 20584},
   'strip-compact': {imageHash: "d348e86a7eff7471", cellsHash: "b9d4c7afb346939f", svgHash: "8b11e4f8de13c867", svgChars: 10370},
   'strip-loot': {imageHash: "50b04e2ca712cb17", cellsHash: "f2ed1146c4bd2d9d", svgHash: "7448cb6adea84db8", svgChars: 19914},

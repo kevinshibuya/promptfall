@@ -967,12 +967,14 @@ const messageRows = (i: StripInput) => win(stripScene(i).scene, 'message').lines
 test('the World tab: the records row with the hunt bar, then chat; presence after the tabs', () => {
   expect(messageRows(worldTab({}, 122))).toEqual([
     '  Party  Loot ▶World · 13 online  c ▾',
-    ' Hunt casters ██░░ 12.4k / 20k 3d',
+    ' Z1 K0 W0 · Hunt casters 12k/20k 3d',
     ' Kit: anyone grinding zone 1?',
   ])
   // At 120 and under, the purse's 15 columns leave presence its count alone beside the hint.
   expect(messageRows(worldTab())[0]).toBe('  Party  Loot ▶World · 13       c ▾')
-  // At 116 the records row still fits the hunt with its bar, its counts short.
+  // At 120 the records row keeps the records short and the hunt's counts tight, its bar gone.
+  expect(messageRows(worldTab())[1]).toBe(' Z1 K0 W0 · Hunt casters 12k/20k 3d')
+  // At 116 the records go and the hunt keeps its bar, its counts tight.
   expect(messageRows(worldTab({}, 116))).toEqual([
     '  Party  Loot ▶World · 13   c ▾',
     ' Hunt casters ██░░ 12k/20k 3d',
@@ -980,7 +982,7 @@ test('the World tab: the records row with the hunt bar, then chat; presence afte
   ])
   // Chat quiet: its dim word in row two, the records row unchanged.
   const quiet = worldTab({ messages: [] })
-  expect(messageRows(quiet)[1]).toBe(' Hunt casters ██░░ 12.4k / 20k 3d')
+  expect(messageRows(quiet)[1]).toBe(' Z1 K0 W0 · Hunt casters 12k/20k 3d')
   expect(messageRows(quiet)[2]).toBe(' chat is quiet')
   expect(win(stripScene(quiet).scene, 'message').lines[2]?.spans.at(-1)).toEqual({
     text: 'chat is quiet',
@@ -988,7 +990,7 @@ test('the World tab: the records row with the hunt bar, then chat; presence afte
   })
   // A notice takes the bottom row; the records row stays.
   expect(messageRows({ ...worldTab(), notice: 'Promptfall resynced' }).slice(1)).toEqual([
-    ' Hunt casters ██░░ 12.4k / 20k 3d',
+    ' Z1 K0 W0 · Hunt casters 12k/20k 3d',
     ' Promptfall resynced',
   ])
 })

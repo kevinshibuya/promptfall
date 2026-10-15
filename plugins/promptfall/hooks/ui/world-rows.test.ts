@@ -123,7 +123,9 @@ test("the records row shows the week's hunt after the highest zone and the kills
     [83, 'highest zone 1 · kills 0 · Hunt casters ████░░░░ 12.4k / 20k 3d · wipes 0'],
     [72, 'Z1 K0 W0 · Hunt casters ████░░░░ 12.4k / 20k 3d'],
     [46, 'Z1 K0 W0 · Hunt casters ██░░ 12.4k / 20k 3d'],
-    [42, 'Hunt casters ██░░ 12.4k / 20k 3d'],
+    [42, 'Z1 K0 W0 · Hunt casters 12k/20k 3d'],
+    [34, 'Z1 K0 W0 · Hunt casters 12k/20k 3d'],
+    [33, 'Hunt casters ██░░ 12.4k / 20k 3d'],
     [31, 'Hunt casters ██░░ 12k/20k 3d'],
     [27, 'Hunt casters 12k/20k 3d'],
     [22, 'Z1 K0 W0'],
@@ -248,7 +250,7 @@ test('the records row keeps the off notices at the full band’s narrowest, the 
   // With the hunt on and nothing off: the hunt with its bar at both widths.
   const on = worldWith({ 'worldboss.enabled': true }, HUNT)
   expect(recordsRow(wave(), on, 30, NOW)).toBe('Hunt casters ██░░ 12k/20k 3d')
-  expect(recordsRow(wave(), on, 34, NOW)).toBe('Hunt casters ██░░ 12.4k / 20k 3d')
+  expect(recordsRow(wave(), on, 34, NOW)).toBe('Z1 K0 W0 · Hunt casters 12k/20k 3d')
   // The short records: the zone, the kills and the wipes as letters, a big count in thousands.
   const veteran = { ...wave(), highestZone: 9, kills: 184, wipes: 90 }
   const quiet = worldWith({ 'worldboss.enabled': true })

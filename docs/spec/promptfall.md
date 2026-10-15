@@ -1322,9 +1322,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   `world boss is off` with the boss alone off. Its candidates, longest first:
   the counts shorten (`12.4k / 20k`), then the time and the label (`Hunt
   casters … 3d`), then the records (`Z9 K184 W90`), then the bar to 4 cells;
-  then the records go, the counts tighten (`12k/20k`) and the bar goes last,
-  then the hunt; the off notice is kept to the end. At 116 columns (30 cells)
-  the row reads `Hunt casters ██░░ 12k/20k 3d`. The bar's `█` and `░` are in
+  then the counts tighten (`12k/20k`) and the bar goes to keep the short
+  records; then the records go, the bar back at 4 cells, and the bar goes last,
+  then the hunt; the off notice is kept to the end. At 120 columns (34 cells)
+  the row reads `Z1 K0 W0 · Hunt casters 12k/20k 3d`, at 116 (30 cells) `Hunt
+  casters ██░░ 12k/20k 3d`. The bar's `█` and `░` are in
   the baked font.
 - World boss display (phase 3): in boss mode the enemy window shows the boss
   with the global HP bar and its percentage, its title the time left, on every

@@ -354,9 +354,11 @@ in turn from a table, each with a target such as 20,000 casters. The server coun
 kills of that kind as its batches commit, never a bot's, and the World tab's records row shows it
 after the highest zone and the kills, as "Hunt: casters ████░░░░ 12,400 / 20,000, 3 days left".
 A narrower row shortens the counts (`12.4k / 20k`), then the time and the label (`Hunt casters …
-3d`), then the records (`Z9 K184 W90`), then the bar to four cells; then it drops the records,
-tightens the counts (`12k/20k`) and drops the bar last, so the band's World tab at 116 columns
-still reads `Hunt casters ██░░ 12k/20k 3d`. When the week ends every account that counted at least half
+3d`), then the records (`Z9 K184 W90`), then the bar to four cells; then it tightens the counts
+(`12k/20k`) and drops the bar to keep the short records, so the band's World tab at 120 columns
+reads `Z1 K0 W0 · Hunt casters 12k/20k 3d`; then it drops the records with the bar back at four
+cells and drops the bar last, so at 116 columns it still reads `Hunt casters ██░░ 12k/20k 3d`.
+When the week ends every account that counted at least half
 a percent of the target gets one reward rolled at its zone, whether or not the target was reached:
 it toasts "Your share of the hunt: 120 gold and Oak Staff", the combat log says the same, and goods
 with no free slot wait in returns. The next week's hunt opens then. It needs a server and the
