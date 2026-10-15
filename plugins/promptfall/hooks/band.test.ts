@@ -1129,6 +1129,52 @@ test('j pages the Party log back while it runs; a compact layout puts it at the 
   await ui.unmount()
 })
 
+test('k pages from the window the loop last drew, not the one the band rendered before a new line', async ($, on) => {
+  const { data, clock, blits } = harness(on)
+  settings(data, { ...RASTER, motion: 'still' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const footer = (text: string) => {
+    const m = text.match(/ (\d+)-(\d+)\/(\d+) c ▾/)
+    return m ? { end: Number(m[2]), total: Number(m[3]) } : null
+  }
+  const drawn = () => {
+    const last = blits.flatMap((b) => ('cells' in b ? [b] : [])).at(-1)
+    const cells = cellsOf({ props: { columns: last?.columns, cells: last?.cells }, children: [] })
+    return footer(cells.text.slice(-STRIP_ROWS).join('\n'))
+  }
+  let ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  for (let i = 0; i < 40; i++) {
+    await clock.advance(2_000)
+    await ui.unmount()
+    ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    if ((await stripText(ui)).includes(' hits ')) break
+  }
+  for (let i = 0; i < 10; i++) await clock.advance(2_000)
+  await ui.unmount()
+  ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  await ui.press({ key: 'hot-j' })
+  const rendered = footer(await stripText(ui))
+  expect(rendered, 'paged back one page').not.toBeNull()
+  // The loop reveals the next line through a blit, the band's render left as it was.
+  let shown = null
+  for (let i = 0; i < 200; i++) {
+    await clock.advance(100)
+    shown = drawn()
+    if (shown && shown.total !== rendered?.total) break
+  }
+  expect(shown, 'a blit drew a new line').not.toBeNull()
+  expect(shown?.total, 'the render is older than the blit').not.toBe(rendered?.total)
+  expect(footer(await stripText(ui)), 'the render has not moved').toEqual(rendered)
+  // k moves the window the loop drew two rows newer, the new line still below it.
+  await ui.press({ key: 'hot-k' })
+  const after = footer(await stripText(ui))
+  expect(after, 'k: two rows newer than the blit, not the newest').toEqual({
+    end: (shown?.end ?? 0) + 2,
+    total: shown?.total,
+  })
+  await ui.unmount()
+})
+
 test("Loot and World draw the 17-row stage over the strip at Party's 22 rows; the loop blits the band there", async ($, on) => {
   const { data, blits, clock } = harness(on)
   settings(data, RASTER)

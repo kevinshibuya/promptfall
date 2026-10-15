@@ -836,7 +836,7 @@ function build(raw: StripInput): { scene: Scene; built: Built[]; page: Page | nu
       page: null,
     }
   }
-  const message = columns - ENEMY_COLUMNS - PARTY_COLUMNS - PURSE_COLUMNS
+  const message = messageColumns(columns)
   const built: Built[] = [enemyWindow(input, 0)]
   let x = ENEMY_COLUMNS
   const msg = messageWindow(input, x, message)
@@ -851,6 +851,20 @@ function build(raw: StripInput): { scene: Scene; built: Built[]; page: Page | nu
     built,
     page: msg.page,
   }
+}
+
+/** The full strip's message window: the band's columns less the other three windows'. */
+const messageColumns = (columns: number) => columns - ENEMY_COLUMNS - PARTY_COLUMNS - PURSE_COLUMNS
+
+/**
+ * The message window's page alone, as `stripScene` returns it, for a key press: the loop may have
+ * drawn newer lines since the band rendered, so `j` and `k` page from the log at the press.
+ */
+export function stripPage(raw: StripInput): Page | null {
+  if (raw.kind === 'compact') return null
+  const input = asStaged(raw)
+  const n = messageColumns(Math.min(input.columns, STRIP_MAX_COLUMNS)) - 4
+  return messageBody(input, n, input.now).page
 }
 
 /**

@@ -31,7 +31,15 @@ import { sceneSvg } from '../windows/svg'
 import { GOLD_RGB, STRIP_MAX_COLUMNS, TEXT_RGB } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
-import { heroRgb, PAGE_ROWS, paged, type StripInput, stripScene, stripTracks } from './strip'
+import {
+  heroRgb,
+  PAGE_ROWS,
+  paged,
+  type StripInput,
+  stripPage,
+  stripScene,
+  stripTracks,
+} from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -267,17 +275,19 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       log: handle?.stage.log ?? looseLog,
       scroll,
     }
-    const { scene, page } = stripScene(input)
-    // `j` older, `k` newer, from the page this render drew; nothing without one (compact, World
-    // without a long notice).
+    const { scene } = stripScene(input)
+    // `j` older, `k` newer, from the page at the press: the loop may have revealed lines through
+    // blits since this render. Nothing without a page (compact, World without a long notice).
     const pageBy = (by: number) => {
-      if (!page || kind === 'compact') return
-      const to = paged(page, by)
-      void update($, scrollAtom, (s) => ({
-        ...(s ?? SCROLL_NEWEST),
-        zone: view.zone,
-        [tab]: to,
-      }))
+      if (kind === 'compact') return
+      void $.clock.now().then((at) =>
+        update($, scrollAtom, (s) => {
+          const was = s ?? SCROLL_NEWEST
+          const scroll = was.zone === view.zone ? was[tab] : null
+          const page = stripPage({ ...input, now: at, scroll })
+          return page ? { ...was, zone: view.zone, [tab]: paged(page, by) } : was
+        }),
+      )
     }
 
     const press: Record<(typeof HOTKEYS)[number]['hotkey'], () => void> = {
