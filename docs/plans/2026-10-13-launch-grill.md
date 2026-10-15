@@ -251,20 +251,64 @@ What the build changed (PR #229):
   arcs have not run since the sim bump to 19 (row 9). The GREEN pass is
   `docs/manual-pass/2026-10-14-reactive-revamp.md`.
 
-## 6. Band polish (#173)
+## 6. Band polish (#173, #230)
 
-- The stage stays on every tab; the strip keeps its 5 rows under it, so the band never changes
-  height.
-- **The World tab is three fixed rows:** presence, records (the hunt row and its "off" notices),
-  chat. Neither chat nor the hunt hides the other.
-- Loot rows draw like inventory rows: sprites at text height, a rarity slot glyph if that does not
-  read.
-- Logs page back with two hotkeys, `[` and `]` if the band can bind them else `k` and `j`
-  (**open fact**), a `3/9` footer while scrolled back, snap to newest on a new line unless scrolled
-  back. No line is ever cut: every line wraps in full, no ellipsis in the message window.
-- The `c` hint replaces the bare `▾`; the collapsed line gets the band's colours.
-- Tactics read `Next zone ▸` / `Stay here ↻` with a dim `f` and spelled-out alt text; the sandbox
-  mark moves to the collapsed line and the enemy window's title.
+Grilled 2026-10-14, two rounds. The facts that reshaped the earlier bullets: the message window
+has two text rows under the command line, not three; a band hotkey is one digit or one lowercase
+letter (the engine's Button type), so `[` and `]` are out; the strip is a drawn scene whose rows
+can hold a 16 px sprite, one row tall and two cells wide, blank on the Raster; the collapsed line
+is engine text that takes a colour span by span; the purse has 10 usable cells.
+
+- **The stage stays on every tab**; the strip keeps its 5 rows under it, so the band never changes
+  height. In the compact band, Loot and World swap the window's three hero rows and enemy row for
+  the tab's rows (four drops; presence, records, chat and a spare), stage kept. ADR 0003 and ADR
+  0010 get dated notes; `bare` leaves the terminal layouts.
+- **The World tab:** presence moves to the command line's spare cells, dim, after the tabs
+  (`· 12 online · zone 3: kev, ana`), shortening to its count when narrow; row 1 is the records
+  row with the hunt segment and its off notices; row 2 is chat. Neither hides the other.
+- **Loot rows** draw like inventory rows: every line, drop or sale, leads with its item's 16 px
+  sprite and the name in the rarity colour. On the Raster, where art cells are blank, the two
+  cells carry a rarity-coloured filled mark (**open fact:** which filled glyph the baked font has;
+  one is added if none).
+- **Logs scroll** on Party and Loot: `j` pages back to older rows, `k` forward to newer, a page is
+  the window's two rows. The footer sits at the right end of the command line while scrolled back,
+  in the pane's shape counted in wrapped rows (`5-6/61 ▴`), beside the `c` hint. A new line snaps
+  to newest unless scrolled back. The offset is per tab and resets on a tab switch, on collapse and
+  when a fight ends with a travel. Both logs keep 40 lines (**open fact:** the sim's loot-log cap,
+  raised if under 40). A bounded spike inside the scrolling ticket tries the engine's `ui.scroll`
+  event for the wheel and the page keys; the ticket ships with letters alone if the event does not
+  reach the band or the plugin cannot deny the engine's own offset.
+- **No line is ever cut:** every line wraps in full; at newest the window shows the tail, and `j`
+  reaches a long line's head. A notice and `g: back to the fight` wrap in full and take the bottom
+  rows they need; the log keeps the rest. No ellipsis in the message window; the enemy title's and
+  the purse's clips stay. Spec §10's camping line "newest log line clipped to one row" becomes
+  "the newest log row".
+- **The `c` hint:** a dim `c ▾` replaces the bare `▾` at the command line's right end. The tabs do
+  not show their letters.
+- **The collapsed line** gets colours: each hero's HP in the party window's health colour, gold in
+  the purse's gold, the label and separators dim, the notice as it is. It gains `Sandbox` and
+  `camping`.
+- **Tactics read `f: Next zone` / `f: Stay here`**, the `f` dim, in a purse widened to 15 columns
+  (the message window keeps its 28-cell minimum at 116 columns). Alt text: "After the boss: on to
+  the next zone. f: stay and repeat it." and "After the boss: stay and repeat the zone from wave 1.
+  f: move on." One vocabulary: Next zone and Stay here replace Push on and Farm here everywhere
+  user-facing (glossary, features.md, the records row's `· farming` becomes `· staying`, the
+  compact title's `· Farm` becomes `· Stay here` when it fits); `/promptfall farm` stays as the
+  command verb. The purse's `Farm` title goes.
+- **The sandbox mark** leaves the purse for the message window's title (`Sandbox`, every tab, no
+  row spent), the collapsed line, and the compact band's party title as ` · Sandbox` when it fits.
+  The enemy title stays as it is.
+- **#230, the Raster zooms out:** the Raster crops the sky to the tallest actor as today, then
+  zooms what is left the way the Image does (scene widened, ratio kept, damage numbers mapped
+  through the factor), down to a floor of 8 rows, one tuning constant, compact below. Judged on
+  sight at the pass against a golden; a smear raises the constant. The ticket's first step
+  measures the real `maxRows` at a 46-row Ghostty (about 15 by the four recorded points, so 10
+  stage rows, a 0.59 zoom and heroes about 9 px tall on the Raster). ADR 0010 gets a dated note
+  narrowing its crop paragraph and legibility note to "crop first", ADR 0018 a line, spec §10's
+  Raster paragraph and features.md follow. No new ADR.
+- **Docs:** spec §2 and §10, features.md (Interface, Tactics, the World and Loot tabs, the Sandbox
+  mark), the goldens. Glossary written 2026-10-14: band, collapsed line, compact band, tactics,
+  records row, presence; Strip and Playfield lose "on Loot and World the strip alone".
 
 ## 7. Rerolls (ADR 0016)
 
