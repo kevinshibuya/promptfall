@@ -992,7 +992,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
   World it takes the bottom rows it needs, its first four when it needs more,
   the tab keeping the rows above. The compact band does not page.
   The message window never cuts a line on Party or Loot: each log line wraps
-  over as many rows as it needs, keeping its spans' colours. The log's wrapped
+  over as many rows as it needs, keeping its spans' colours. Its one ellipsis
+  is World's chat row, fixed at one row, which cuts a longer message while the
+  Chat pane shows it whole; the records row clips only as a last resort, when
+  even its shortest candidate overflows. The log's wrapped
   rows, then a notice's (or the camp's `g` row's), are one paging space; at the
   newest the window shows the log's tail, or a notice's first rows. `j` pages
   two rows back and `k` two forward, the offset counted in wrapped rows back
