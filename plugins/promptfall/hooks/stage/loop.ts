@@ -37,9 +37,9 @@ export type StageSite = {
   key: string
   layout: Layout
   /**
-   * The band's box in cells when the band is one picture (the full and compact layouts and Loot
-   * and World, spec #45): each frame composes the stage, if any, and the strip into it, and no strip element
-   * is blitted.
+   * The band's box in cells when the band is one picture (the full and compact layouts on every
+   * tab, spec #45): each frame composes the stage and the strip into it, and no strip element is
+   * blitted.
    */
   band?: Box
   /**
@@ -47,7 +47,7 @@ export type StageSite = {
    * tab's scroll, so every frame draws the page the band drew.
    */
   strip: {
-    kind: 'full' | 'compact' | 'bare'
+    kind: 'full' | 'compact'
     columns: number
     tab: BandTab
     extra: 0 | 1
@@ -198,7 +198,7 @@ export function rasterStage(
 /**
  * The Image band's picture (spec #45): the full stage's 1.5x frame, or compact's 1x one beside its
  * window, and the strip's scene composed into `band` on the windows' grid, the playfield on the
- * shell; on Loot and World (`bare`) the strip alone.
+ * shell, on every tab.
  */
 export function bandFrame(
   view: GameView,
@@ -209,7 +209,6 @@ export function bandFrame(
   band: Box,
   strip: Scene,
 ): { png: string } {
-  if (layout.kind === 'bare') return pngImage(composeBand(band, null, strip), WINDOW_SCALE)
   if (layout.kind === 'collapsed') throw new Error('a collapsed band is text')
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
@@ -221,8 +220,7 @@ export function bandFrame(
 /**
  * The Raster band's cells (#61): the full stage's 1.5x frame, its sky cropped on a short band (ADR
  * 0010), resampled into the stage's cells; or compact's 1x one beside its window; and the strip's
- * scene composed into `band`, the playfield on the shell; on Loot and World (`bare`) the strip
- * alone.
+ * scene composed into `band`, the playfield on the shell, on every tab.
  */
 export function bandCells(
   view: GameView,
@@ -233,7 +231,6 @@ export function bandCells(
   band: Box,
   strip: Scene,
 ): { cells: string } {
-  if (layout.kind === 'bare') return { cells: composeBandCells(band, null, [], strip) }
   if (layout.kind === 'collapsed') throw new Error('a collapsed band is text')
   const model = stageAt(view, timeline, now, layout.box, {
     compact: layout.kind === 'compact',
@@ -322,8 +319,8 @@ export class StageLoop {
   }
 
   /**
-   * The picture the loop last sent to the Image keyed `key` in `layout` on `tab`, or null. Loot
-   * and World share a key and a layout: the tab tells their pictures apart.
+   * The picture the loop last sent to the Image keyed `key` in `layout` on `tab`, or null. Every
+   * tab shares a key and a layout: the tab tells their pictures apart.
    */
   stageSource(key: string, layout: Layout, tab: BandTab): { png: string } | null {
     const last = this.lastStage
@@ -433,7 +430,6 @@ export class StageLoop {
 
     this.timeline.observe(view, now)
     const layout = layoutFor(this.timeline.rowsAt(view, now), site.props, site.surface, {
-      tab: site.strip.tab,
       extra: site.strip.extra,
       minRows: this.timeline.minRowsAt(view, now),
       scalable: site.renderer === 'image',
@@ -444,10 +440,7 @@ export class StageLoop {
       this.io.invalidate()
       return null
     }
-    // On Loot and World neither the stage nor the log shows: only the gauges set the pace.
-    const busy =
-      site.strip.kind !== 'bare' &&
-      (this.timeline.isBusy(now) || (extras?.log.isBusy(now, settings.motion) ?? false))
+    const busy = this.timeline.isBusy(now) || (extras?.log.isBusy(now, settings.motion) ?? false)
     const filling = extras?.gauges.isFilling(view, now) ?? false
     if (site.renderer === 'svg') {
       // The desktop's fallback without SMIL: redraws while a motion is live, nothing at rest.
@@ -476,7 +469,6 @@ export class StageLoop {
     // The band picture draws the strip inside it: a change in the strip alone redraws it.
     const band = site.band && scene ? { box: site.band, scene, json: JSON.stringify(scene) } : null
 
-    const box = layout.box
     const cells = cellsOf(layout)
     // A band site with no strip to compose draws nothing: the stage alone is not the band's size.
     // A site without a band (the loop's own tests) draws the stage alone.
@@ -493,8 +485,7 @@ export class StageLoop {
       }
       const settled = settings.motion === 'still' && !this.timeline.isBusy(now)
       const same = band === null || this.sent.get('band') === band.json
-      // With no stage in it (Loot and World) the band is its strip: it redraws when that changes.
-      const skip = box ? settled && !this.wasBusy && actors === this.lastActors && same : same
+      const skip = settled && !this.wasBusy && actors === this.lastActors && same
       this.wasBusy = this.timeline.isBusy(now)
       if (!skip) {
         const frame = !band

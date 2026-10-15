@@ -20,7 +20,7 @@ import { test } from './testing'
 import { unzlibSync } from './vendor/fflate.js'
 import { approveAs, Ledger } from './vendor/ledger.js'
 import { content, createInitialState, hashState, TICK_MS } from './vendor/sim.js'
-import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB, STRIP_ROWS } from './windows/tuning'
+import { BORDER_RGB, CELL_H, CELL_W, FIELD_RGB } from './windows/tuning'
 
 test('/promptfall off hides the band but the game keeps playing', async ($, on) => {
   const { states, clock } = harness(on)
@@ -854,7 +854,7 @@ describe('in play, the Raster band read at 165, 160 by 16 and 110 columns, one b
 // The whole band's picture, composed and encoded at full size: more than the default budget.
 for (const renderer of ['image', 'raster'] as const) {
   test(
-    `in play, switching tabs keeps the band one element on the shell (${renderer})`,
+    `in play, switching tabs keeps the band one element on the shell at one height (${renderer})`,
     { timeoutMs: 15_000 },
     async ($, on) => {
       await sandboxOn(on, $, {
@@ -865,8 +865,8 @@ for (const renderer of ['image', 'raster'] as const) {
       const type = renderer === 'image' ? 'Image' : 'Raster'
       for (const [key, rows] of [
         ['hot-p', 22],
-        ['hot-l', STRIP_ROWS],
-        ['hot-w', STRIP_ROWS],
+        ['hot-l', 22],
+        ['hot-w', 22],
         ['hot-p', 22],
       ] as const) {
         await ui.press({ key })

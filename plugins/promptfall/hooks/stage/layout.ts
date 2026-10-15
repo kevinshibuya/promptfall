@@ -1,5 +1,4 @@
 import type { RenderSurface } from 'claude-code'
-import type { BandTab } from '../../types'
 import { COMPACT_WINDOW_ROWS, STRIP_ROWS } from '../windows/tuning'
 import {
   COMPACT_STAGE_COLUMNS,
@@ -25,13 +24,13 @@ export type Layout =
    */
   | { kind: 'full'; box: Box; cells?: Box; bandRows: number }
   | { kind: 'compact'; box: Box; bandRows: number }
-  | { kind: 'bare'; box: null; bandRows: number }
   | { kind: 'collapsed'; box: null; bandRows: 1 }
 
 /**
  * `rows` is timeline.rowsAt(view, now): the stage's height for what is on it. The window strip
- * goes under the stage (full), beside the compact stage (compact, COMPACT_WINDOW_ROWS), or alone
- * on Loot and World (bare). `extra` is the hotkey row of rung (c) where the renderer needs one.
+ * goes under the stage (full) or beside the compact stage (compact, COMPACT_WINDOW_ROWS), on every
+ * tab: the layout takes no tab, so the band's height is the terminal's alone and switching tabs
+ * never moves it. `extra` is the hotkey row of rung (c) where the renderer needs one.
  * A `scalable` renderer (the Image) draws the whole stage zoomed out into a short band; the
  * Raster crops the sky down to `minRows` (timeline.minRowsAt, the tallest actor), then zooms the
  * cropped scene out down to RASTER_MIN_ROWS, then goes compact (ADR 0010, #230).
@@ -41,19 +40,12 @@ export function layoutFor(
   rows: number,
   props: { bodyColumns: number; maxRows: number },
   surface: RenderSurface,
-  opts: { tab: BandTab; extra: 0 | 1; minRows?: number; scalable?: boolean },
+  opts: { extra: 0 | 1; minRows?: number; scalable?: boolean },
 ): Layout {
   const minRows = opts.minRows ?? STAGE_MIN_ROWS
-  const party = opts.tab === 'party'
   if (surface !== 'terminal') {
-    if (!party) return { kind: 'bare', box: null, bandRows: STRIP_ROWS + opts.extra }
     const columns = Math.min(Math.max(props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
     return { kind: 'full', box: { columns, rows }, bandRows: rows + STRIP_ROWS + opts.extra }
-  }
-  if (!party) {
-    if (props.bodyColumns >= MIN_COLUMNS && props.maxRows >= STRIP_ROWS + opts.extra)
-      return { kind: 'bare', box: null, bandRows: STRIP_ROWS + opts.extra }
-    return { kind: 'collapsed', box: null, bandRows: 1 }
   }
   if (props.bodyColumns >= FULL_MIN_COLUMNS && props.maxRows >= rows + STRIP_ROWS + opts.extra) {
     const columns = Math.min(props.bodyColumns, STAGE_MAX_COLUMNS)

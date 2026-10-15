@@ -50,3 +50,9 @@ into the rows left, down to 4, and the desktop scales the Svg. The Raster cannot
 the sky down to the tallest actor on the stage (8 rows for the party, 12 with a turn boss, 17 with
 a zone or world boss), then falls to compact. The compact and collapsed escapes, and the cell
 thresholds, stand.
+
+## Note (2026-10-15, spec #234)
+
+The stage stays on every tab: Loot and World lay out as Party does, the stage over the 5-row
+strip, cropped, zoomed or compact by the same rules. The consequence above that switching tabs
+changes the band's height no longer holds; the band's height is the terminal's alone.

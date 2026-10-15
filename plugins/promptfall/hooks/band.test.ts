@@ -1031,42 +1031,103 @@ test('j pages the Party log back while it runs; a compact layout puts it at the 
   await ui.unmount()
 })
 
-test('Loot and World are the strip alone on the shell: 5 rows, no stage; the loop blits the band there', async ($, on) => {
+test("Loot and World draw the 17-row stage over the strip at Party's 22 rows; the loop blits the band there", async ($, on) => {
   const { data, blits, clock } = harness(on)
   settings(data, RASTER)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
-  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 30) })
+  expect(await height(ui), 'party').toBe(22)
   for (const key of ['hot-l', 'hot-w']) {
     await ui.press({ key })
-    expect(await ui.find({ key: 'stage' })).toBeUndefined()
-    expect(await height(ui)).toBe(5)
+    expect(await height(ui), key).toBe(22)
+    expect(await stageRowsOf(ui), key).toBe(17)
   }
-  // Ticks keep changing the party window: the band, the strip alone, blits; the stage never does.
+  // Ticks keep changing the stage and the strip: the band blits whole, never a part of it.
   const before = blits.length
   await clock.advance(20_000)
   const later = blits.slice(before)
-  expect(later.some((b) => b.key === bandKey({ columns: 120, rows: 5 }))).toBe(true)
+  expect(later.some((b) => b.key === bandKey({ columns: 120, rows: 22 }))).toBe(true)
   expect(later.some((b) => b.key === 'stage' || b.key === 'strip')).toBe(false)
   await ui.unmount()
 })
 
-test('on the desktop the World tab draws the strip Svg alone, its hotkeys hidden', async ($, on) => {
+test('in a short or narrow band Loot and World crop, zoom or go compact as Party does', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const mount = (columns: number, maxRows: number) =>
+    $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(columns, maxRows) })
+  for (const tab of ['loot', 'world'] as const) {
+    shown.view = wave()
+    const pick = await mount(120, 30)
+    await pick.press({ key: `hot-${tab[0]}` })
+    await pick.unmount()
+    // A wave in 16 rows: the sky cropped to the 11 rows above the strip.
+    const cropped = await mount(120, 16)
+    expect(await height(cropped), `${tab}: cropped`).toBe(16)
+    expect(await stageRowsOf(cropped), `${tab}: cropped`).toBe(11)
+    await cropped.unmount()
+    // A boss keeps its 17 rows whole on every tab: in 15 it zooms into the 10 left, in 12 compact.
+    shown.view = boss()
+    const zoomed = await mount(120, 15)
+    expect(await stageRowsOf(zoomed), `${tab}: zoomed`).toBe(10)
+    await zoomed.unmount()
+    const under = await mount(120, 12)
+    expect(await height(under), `${tab}: compact under the floor`).toBe(6)
+    await under.unmount()
+    // Under 100 columns or 6 rows, the one-row band.
+    for (const [columns, maxRows] of [
+      [99, 20],
+      [120, 5],
+    ] as const) {
+      const small = await mount(columns, maxRows)
+      expect(await rows(small), `${tab}: ${columns} x ${maxRows}`).toHaveLength(1)
+      await small.unmount()
+    }
+  }
+})
+
+test('the compact band shows the newest four loot rows on Loot, presence, records, chat and a blank row on World; j and k do nothing', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.view = { ...wave(), loot: lootLines(7) }
+  shown.notice = null
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(110, 20) })
+  const window = async () => cellsOf(await bandRaster(ui)).text.map((r) => r.slice(52))
+  await ui.press({ key: 'hot-l' })
+  expect(await height(ui), 'loot').toBe(6)
+  expect(paging((await window()).join('\n')), 'loot').toEqual({ footer: null, rows: [4, 5, 6, 7] })
+  for (const key of ['hot-j', 'hot-k', 'hot-j']) await ui.press({ key })
+  expect(paging((await window()).join('\n')), 'loot after j and k').toEqual({
+    footer: null,
+    rows: [4, 5, 6, 7],
+  })
+  await ui.press({ key: 'hot-w' })
+  expect(await height(ui), 'world').toBe(6)
+  const world = await window()
+  expect(world[1], 'presence').toContain('1 online · zone 1: nobody else here')
+  expect(world[2], 'records').toContain('world boss and hunt are off')
+  expect(world[3], 'chat').toContain('chat needs a server')
+  expect(world[4]?.replace(/│/g, '').trim(), 'the blank row').toBe('')
+  await ui.unmount()
+})
+
+test('on the desktop the World tab draws the stage Svg over the strip Svg as Party does, its hotkeys hidden', async ($, on) => {
   harness(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
   const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'desktop', ...band(120, 20) })
+  const party = await svgs(ui)
   await ui.press({ key: 'hot-w' })
-  expect(await ui.find({ key: 'row-stage' })).toBeUndefined()
-  const { strip } = await svgs(ui)
+  const { stage, strip } = await svgs(ui)
+  expect(stage?.type).toBe('Svg')
+  expect(String(stage?.props.source)).toBe(String(party.stage?.props.source))
   expect(strip?.type).toBe('Svg')
   expect(String(strip?.props.alt)).toContain('World tab')
-  // The strip is the whole playfield: the shell under it, the line all round, 2 pixels in from
-  // each side and over the windows' top and bottom lines.
-  const t = String(strip?.props.source)
-  expect(t).toMatch(/^<svg [^>]*viewBox="0 0 960 80" width="1920" height="160"/)
-  expect(t).toContain('</defs><rect width="960" height="80" fill="#303028"/>')
-  expect(t).toMatch(
-    /<path fill="#303028" fill-rule="evenodd" d="M0 0H960V80H0ZM3 10H957V11H958V69H957V70H3V69H2V11H3Z"\/><path fill="#f0f0e8" fill-rule="evenodd" d="M3 10H957V11H958V69H957V70H3V69H2V11H3ZM4 12V68H956V12Z"\/><\/svg>$/,
-  )
+  // The strip sits under the stage: the line closes round its bottom, as Party's does.
+  const line = (doc: unknown) => String(doc).match(/<path fill="#f0f0e8"[^>]*\/><\/svg>$/)?.[0]
+  expect(line(strip?.props.source)).toBeDefined()
+  expect(line(strip?.props.source)).toBe(line(party.strip?.props.source))
   expect(await ui.find({ key: 'row-hotkeys' })).toBeUndefined()
   expect(await ui.find({ key: 'hotkeys' })).toBeDefined()
   await ui.unmount()

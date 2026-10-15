@@ -49,3 +49,9 @@ own lines, and he wants one shared edge over them.
   real cell ratio cannot be read from inside the plugin, so the residue is accepted.
 - Switching tabs never flashes terminal background: the shell is the band's field on every tab
   and layout, except the one-line collapsed summary, which stays text.
+
+## Note (2026-10-15, spec #234)
+
+The stage stays on every tab: Loot and World draw the stage with the strip beneath it as the
+playfield, as Party does, no longer the strip alone, and compact draws its small stage beside the
+tab's window rows. One picture, at one height, on every tab.

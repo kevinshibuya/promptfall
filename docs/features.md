@@ -334,7 +334,7 @@ of that session that does. The in-process server deletes the same way.
 minutes or until it dies, and every online party fights it at once. Meanwhile the party is in
 boss mode: the boss stands alone on the stage, the enemy window shows its global HP bar,
 percentage and time left, the bar dropping as the party's hits land, waves pause and tool calls
-spawn nothing. In the compact layout, with no enemy window, the party window's title carries the
+spawn nothing. In the compact layout, with no enemy window, the compact window's title carries the
 boss's time left. A wipe in boss mode empties
 every gauge and heals the party in place with no retreat, and the boss itself drops nothing. It
 needs a server; the in-process fake runs none, and with the boss off the World tab's
@@ -382,9 +382,9 @@ pauses and the band asks for an update instead of being refused in silence.
 
 **The band.** The game draws in a band above the prompt with three tabs, Party, Loot and World,
 on the letter hotkeys `p`, `l` and `w`, and `c` collapses it; the command line shows the key as a
-dim `c ▾` at its right end. The Party tab is the stage over the
-strip; Loot and World are the strip alone. The Party tab is 22 rows in every fight, the 17-row
-stage over the 5-row strip, and never more than Claude Code gives it. A half-block terminal
+dim `c ▾` at its right end. The Party, Loot and World tabs all show the stage over the strip, so
+switching tabs changes the picture and never the band's height: 22 rows in every fight and on
+every tab, the 17-row stage over the 5-row strip, and never more than Claude Code gives it. A half-block terminal
 shows the same scene as the terminals that draw images and the desktop, with the same art, frames,
 marks and timing, at fewer pixels: about two thirds of them, the heroes and enemies the same size
 on screen as there, and damage numbers drawn as text. `/promptfall renderer raster` and `/promptfall
@@ -393,8 +393,10 @@ zooms the whole scene out to fit and the desktop scales it; a half-block termina
 first, down to the tallest actor on the stage, then zooms what is left out the same way, so a
 boss fight still shows the whole boss, down to a floor of 8 stage rows, under which a figure in
 so few half-block rows would be a smear. Past that, or on terminals 100 to
-115 columns wide, the band drops to a compact stage beside one party window, then to a single row
-under 100 columns. It never hides itself while Claude asks for a permission or a question; it
+115 columns wide, the band drops to a compact stage beside one window, then to a single row
+under 100 columns. The compact window shows the tab's four rows: on Party the three heroes and the
+front enemy, on Loot the newest four loot rows, on World who is online, the records row, chat and
+a blank row; a notice takes the last row, and `j` and `k` do not page there. It never hides itself while Claude asks for a permission or a question; it
 lays out at whatever size the rows left to it allow. In the terminal, though, Claude Code draws
 the prompt in the band's place and stops drawing the band until the answer, so the party is not on
 screen while a prompt waits (an engine finding, seen live on 2.1.299). The band comes back at the
@@ -402,7 +404,7 @@ answer.
 
 **The playfield on the shell.** The band is one picture. A flat charcoal shell, the windows' own
 field, fills the band's whole box, and on it sits the playfield: at most 160 columns wide and
-centred, the stage with the strip beneath it on Party and the strip alone on Loot and World,
+centred, the stage with the strip beneath it on every tab,
 edged by one white line with cut corners like the windows'. On a wide terminal the shell fills
 the margins, and on a short one the zoomed-out stage and the strip still sit inside the line, so
 the terminal's background never shows through the band (Ghostty and cmux keep the picture's
@@ -410,7 +412,7 @@ shape, so a sliver of terminal can show just above and below it). It draws as on
 and cmux (up to 255 columns, past which the terminal shows beside the shell), as one half-block
 picture on other terminals (where the line opens over a boss's head rather than cover it), and
 as two stacked vector pictures, the stage's and the strip's, on
-the desktop. The compact band is the same: its small stage and its party window inside one line
+the desktop. The compact band is the same: its small stage and its window inside one line
 on the shell. Only the one-row collapsed band stays plain text.
 
 **The stage.** The stage is the animated battle in pixel art: the encounter's enemies on the left,

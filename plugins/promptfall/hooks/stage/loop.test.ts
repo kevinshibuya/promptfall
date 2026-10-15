@@ -58,7 +58,6 @@ function site(
     requestId: 'band-1',
     key: 'stage',
     layout: layoutFor(t.rowsAt(view, 0), props, surface, {
-      tab: 'party',
       extra,
       minRows: t.minRowsAt(view, 0),
       scalable: renderer === 'image',
@@ -218,7 +217,7 @@ test('the last stage picture the loop sent is there for a redraw of the same sit
     sent && 'source' in sent ? sent.source : null,
   )
   expect(h.loop.stageSource('stage-130x8', s.layout, 'party')).toBe(null)
-  // Another tab under the same key and layout (Loot and World share both) is another picture.
+  // Another tab under the same key and layout (every tab shares both) is another picture.
   expect(h.loop.stageSource('stage-120x8', s.layout, 'world')).toBe(null)
 })
 
@@ -295,7 +294,6 @@ test('a short band blits the cells it shows: the stage cropped to its bottom row
   const t = new StageTimeline()
   t.observe(wave(), 0)
   const layout = layoutFor(17, { bodyColumns: 120, maxRows: 16 }, 'terminal', {
-    tab: 'party',
     extra: 0,
   })
   const image = stageFrame(wave(), t, 0, layout, 'image', 'full')
@@ -405,7 +403,7 @@ test('a desktop svg site at 95 × 12 keeps running through a zone boss', async (
   const rows = h.timeline.rowsAt(boss(), await clock.now())
   h.loop.mount({
     ...site('svg', boss(), props, 'desktop'),
-    layout: layoutFor(rows, props, 'desktop', { tab: 'party', extra: 1 }),
+    layout: layoutFor(rows, props, 'desktop', { extra: 1 }),
   })
   // On a terminal 95 × 12 is the one-row band: a tick that ignored the surface would stop the site.
   h.timeline.onEffects(hit, await clock.now())
@@ -510,23 +508,14 @@ test('with only a gauge filling the loop re-arms at the gauge rate, capped by th
   expect(Math.max(...gaps)).toBeLessThanOrEqual(GAUGE_FRAME_MS)
 })
 
-/** The World tab's band site (spec #45): the strip alone, drawn as one picture at the band key. */
+/** The World tab's band site (spec #45): the stage over the strip, one picture at the band key. */
 function worldSite(renderer: StageSite['renderer'] = 'image'): StageSite {
-  const layout = layoutFor(0, PROPS, 'terminal', { tab: 'world', extra: 0 })
-  const band = { columns: PROPS.bodyColumns, rows: layout.bandRows }
-  return {
-    requestId: 'band-1',
-    key: bandKey(band),
-    layout,
-    band,
-    renderer,
-    props: PROPS,
-    surface: 'terminal',
-    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0, scroll: null },
-  }
+  const party = site(renderer)
+  const band = { columns: PROPS.bodyColumns, rows: party.layout.bandRows }
+  return { ...party, key: bandKey(band), band, strip: { ...party.strip, tab: 'world' } }
 }
 
-test('a bare band site (World) blits the band, 5 rows, and no stage; a boss arriving is not a layout change', async () => {
+test("a World band site blits the band at Party's 22 rows, the 17-row stage over the strip; a boss arriving is not a layout change", async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.state.strip = extras()
@@ -537,30 +526,32 @@ test('a bare band site (World) blits the band, 5 rows, and no stage; a boss arri
   h.state.view = v
   await clock.advance(IDLE_FRAME_MS * 2)
   expect(h.blits.length).toBeGreaterThanOrEqual(1)
-  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
+  for (const b of h.blits) expect(b).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
   const first = h.blits[0]
   if (!first || !('source' in first) || !first.source || !('png' in first.source))
     throw new Error('expected a PNG source')
-  expect(pngSize(first.source)).toEqual([960, 80])
+  expect(pngSize(first.source)).toEqual([960, 352])
   h.state.view = boss()
   await clock.advance(IDLE_FRAME_MS * 3)
   expect(h.invalidations).toHaveLength(0)
 })
 
-test('a bare band site redraws only when its strip changes, whatever the motion setting', async () => {
+test('a World band site at rest under motion still redraws only when its strip changes', async () => {
   const clock = fakeClock()
   const h = harness(clock)
   h.state.strip = extras()
+  h.state.settings = { ...SETTINGS_DEFAULT, motion: 'still' }
   h.loop.mount(worldSite('raster'))
   await clock.advance(5_000)
   expect(h.blits).toHaveLength(1)
-  expect(cellText(h.blits[0] as UiBlitArgs)[0]).toMatch(/^╭─+┬/)
+  // The stage's 17 rows, then the strip's top line where the stage meets it.
+  expect(cellText(h.blits[0] as UiBlitArgs)[17]).toMatch(/^├/)
   const v = wave()
   v.gold = 1240
   h.state.view = v
   await clock.advance(IDLE_FRAME_MS * 2)
   expect(h.blits).toHaveLength(2)
-  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x5', columns: 120, rows: 5 })
+  expect(h.blits.at(-1)).toMatchObject({ key: 'band-120x22', columns: 120, rows: 22 })
 })
 
 test("a Loot band site redraws at a reveal's show time, not at the next rest frame", async () => {
@@ -604,12 +595,11 @@ function pngSize(source: { png: string }): [number, number] {
 test('the Image stage: full at scale 1.5 upscaled 4 times, compact at 1 upscaled 6 times', () => {
   const t = new StageTimeline()
   t.observe(wave(), 0)
-  const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
+  const full = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { extra: 0 })
   const image = stageFrame(wave(), t, 0, full, 'image', 'full')
   if (!('source' in image)) throw new Error('expected an Image source')
   expect(pngSize(image.source)).toEqual([720, 204])
   const narrow = layoutFor(t.rowsAt(wave(), 0), { bodyColumns: 105, maxRows: 30 }, 'terminal', {
-    tab: 'party',
     extra: 0,
   })
   expect(narrow.kind).toBe('compact')
@@ -832,7 +822,7 @@ function bounds(f: Frame, ground: Frame): [number, number, number, number] {
 test("the Raster stage stands each actor in the 1x stage's box, a 24-pixel hero 16 pixels tall", () => {
   const t = new StageTimeline()
   t.observe(wave(), 0)
-  const layout = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { tab: 'party', extra: 0 })
+  const layout = layoutFor(t.rowsAt(wave(), 0), PROPS, 'terminal', { extra: 0 })
   if (!layout.box) throw new Error('expected a full stage')
   const box = layout.box
   const hires = stageAt(wave(), t, 0, box, { compact: false, motion: 'still' })
@@ -881,9 +871,8 @@ test("a short Raster band shows the full stage's bottom rows, three scene pixels
   const t = new StageTimeline()
   t.observe(wave(), 0)
   const rows = t.rowsAt(wave(), 0)
-  const full = layoutFor(rows, PROPS, 'terminal', { tab: 'party', extra: 0 })
+  const full = layoutFor(rows, PROPS, 'terminal', { extra: 0 })
   const short = layoutFor(rows, { bodyColumns: 120, maxRows: 16 }, 'terminal', {
-    tab: 'party',
     extra: 0,
   })
   expect(short).toMatchObject({ kind: 'full', cells: { columns: 120, rows: 11 } })
@@ -907,7 +896,6 @@ test('a Raster boss in a short band: the whole scene resampled into the cells, i
   t.observe(boss(), 0)
   const props = { bodyColumns: 144, maxRows: 15 }
   const layout = layoutFor(t.rowsAt(boss(), 0), props, 'terminal', {
-    tab: 'party',
     extra: 0,
     minRows: t.minRowsAt(boss(), 0),
   })

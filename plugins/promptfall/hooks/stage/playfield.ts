@@ -1,6 +1,6 @@
 // The band as one picture (ADR 0011): the shell over the band's whole box, the playfield centred
-// on it, the stage above the strip inside one window line; compact's stage beside its window; on
-// Loot and World the strip alone. Pure; the Image path draws its bitmap,
+// on it, the stage above the strip inside one window line, on every tab; compact's stage beside its
+// window. Pure; the Image path draws its bitmap,
 // the Raster draws the same placement in cells, the Svg path reuses its placement.
 import { encode } from '../sprites/base64'
 import { windowFrame } from '../windows/image'
@@ -170,9 +170,9 @@ function drawStrip(band: Frame, scene: Scene, x0: number, y0: number): void {
  * The line: BORDER_PX white with cut corners, the shell outside it. With shell beside the
  * playfield it sits just outside it; where the playfield meets the band's edge it sits over the
  * stage's outermost art pixel (the top, a side) and over the strip's own outer line (the bottom),
- * so no stage row or column is spent on it (ADR 0010). With no stage on top (Loot and World,
- * compact) its top sits over the strip windows' top lines, as its bottom does over their bottom
- * ones.
+ * so no stage row or column is spent on it (ADR 0010). With no stage on top (compact, or no
+ * stage passed) its top sits over the strip windows' top lines, as its bottom does over their
+ * bottom ones.
  */
 function drawLine(
   band: Frame,
@@ -235,7 +235,7 @@ function drawLine(
  * `band`, and on it the playfield, `stage` (a 1.5x frame) in the rows the strip leaves above
  * `strip`, inside the line. Compact's `stage` (a 1x frame) sits beside its window, which is
  * drawn over the line: the line meets the window's own and its title and command tabs break it.
- * Loot and World pass no stage: the playfield is the strip alone. Every pixel is opaque.
+ * With no stage the playfield is the strip alone. Every pixel is opaque.
  */
 export function composeBand(band: Box, stage: Frame | null, strip: Scene): Frame {
   const width = band.columns * CELL_W
@@ -297,7 +297,7 @@ export function svgFit(
  * behind everything it draws, and `over`, the shell outside the line and the line, drawn last.
  * The stage's share (`top`) is the line's top and sides, open at its bottom edge; the strip's
  * (`bottom`) the sides from its top edge down to the bottom line, over the outer windows' own.
- * On Loot and World the strip Svg is the whole playfield (`both`): the line all round, its top
+ * A strip Svg that is the whole playfield (`both`) has the line all round, its top
  * over the windows' top lines. The line sits where `composeBand` draws it when the playfield
  * fills the band: 2 pixels wide, LINE_IN from each side, LINE_IN from the top over a stage and
  * LINE_IN_STRIP over a strip, LINE_IN_STRIP from the bottom, corners cut.
@@ -390,8 +390,8 @@ export function headsOf(art: Frame): boolean[] {
 /**
  * The band as Raster cells, `band` columns by rows, base64: the shell's cells, and on them the
  * playfield at `playfieldOf`, `stage` (the stage's pixels in its cells, a column and half a row
- * each: the 1.5x scene resampled, its sky cropped on a short band) above `strip`, or compact's beside its window, inside one line; Loot and World pass
- * no stage. The line takes the shell's margin when it is two cells or more a side; under that it
+ * each: the 1.5x scene resampled, its sky cropped on a short band) above `strip`, or compact's beside its window, inside one line, or no
+ * stage. The line takes the shell's margin when it is two cells or more a side; under that it
  * sits over the playfield's outermost columns, so 160 to 163 columns draw like 160. Its top row is
  * over the stage's top row, or the strip's own top line with no stage, and its bottom row over the
  * strip's own bottom line, each window side meeting it. Over compact's window the line is the

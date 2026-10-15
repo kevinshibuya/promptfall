@@ -437,13 +437,12 @@ _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
 **Strip**:
 The row of windows under the stage: the enemy window, the message window, the party window and
-the purse. Beside the compact stage it is one party window; on Loot and World it is the band.
+the purse, on every tab. Beside the compact stage it is one window showing the tab's rows.
 _Avoid_: HUD, status bar, party line (the text row it replaced)
 
 **Playfield**:
-What a band tab draws, set into the shell: on Party the stage with the strip beneath it, on Loot
-and World the strip alone. One width, centred, edged by one window line, so the stage and the
-strip read as one picture.
+What a band tab draws, set into the shell: the stage with the strip beneath it, on every tab. One
+width, centred, edged by one window line, so the stage and the strip read as one picture.
 _Avoid_: frame (a sprite's drawing), game area, viewport, screen
 
 **Shell**:

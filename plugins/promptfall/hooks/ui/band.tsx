@@ -129,7 +129,6 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     const toNewest = () => update($, scrollAtom, () => SCROLL_NEWEST)
 
     const tab = prefs.bandTab
-    const party = tab === 'party'
     const timeline = handle?.stage.timeline ?? looseTimeline
     // Hotkeys need Buttons on screen (spike sheet): hidden in a zero-width Box on terminals and
     // the desktop (rung a′), a row of their own on VS Code and mobile, untested there (rung c).
@@ -141,10 +140,11 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
     // While the probe is pending, the verdict the last session recorded, else the half-block
     // rules: from the second session on the band keeps its height when the probe lands.
     const laidOut = rendererNow === 'unknown' ? (settings.probed ?? 'raster') : rendererNow
-    const layout = layoutFor(party ? timeline.rowsAt(view, now) : 0, e.props, e.surface, {
-      tab,
+    // The stage on every tab: the band's height never moves with the tab, and the loop, which
+    // lays out the same way, never finds a layout of its own to redraw for.
+    const layout = layoutFor(timeline.rowsAt(view, now), e.props, e.surface, {
       extra,
-      minRows: party ? timeline.minRowsAt(view, now) : undefined,
+      minRows: timeline.minRowsAt(view, now),
       scalable: laidOut === 'image',
     })
     // The engine's row grant at each layout, read at the manual pass to tune RASTER_MIN_ROWS
@@ -182,8 +182,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       )
     }
 
-    // The window strip: under the stage, beside the compact stage, or alone on Loot and World.
-    const kind = layout.kind === 'full' ? 'full' : layout.kind === 'compact' ? 'compact' : 'bare'
+    // The window strip: under the stage, or beside the compact stage.
+    const kind = layout.kind === 'compact' ? 'compact' : 'full'
     // The log tabs' scroll holds while the band is full in the zone it was set in; a compact
     // layout or a zone change puts it back at the newest.
     const scrolled = (await read($, scrollAtom)) ?? SCROLL_NEWEST
@@ -259,11 +259,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       </Box>
     )
 
-    // The Party tab's full layout is one picture on the terminal (spec #45): the stage and the
+    // The full layout is one picture on the terminal (spec #45), on every tab: the stage and the
     // strip composed on the shell, the band's box up to the host's widest element, centred past it.
     // An Image on the terminals that draw pictures, a Raster of cells on half-block ones (#61).
-    // Loot and World are the strip alone on the same shell, the playfield as wide and centred;
-    // compact is its small stage beside its window inside one line (#64).
+    // Compact is its small stage beside its window inside one line (#64).
     const picture =
       rendererNow === 'image' && 'Image' in els
         ? { renderer: 'image' as const, max: IMAGE_MAX_COLUMNS }
@@ -275,7 +274,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       // An Image the loop found laid out as its alt takes a new key, so it is mounted afresh.
       const key = bandKey(box) + (picture.renderer === 'image' ? (loop?.remountKey() ?? '') : '')
       // The stage and its alt draw the staged state, as everywhere else.
-      const shown = layout.box ? stagedState(view, world, timeline, now) : view
+      const shown = stagedState(view, world, timeline, now)
       let element = null
       if (picture.renderer === 'raster' && 'Raster' in els) {
         const { Raster } = els
@@ -294,7 +293,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
             source={source}
             columns={box.columns}
             rows={box.rows}
-            alt={party ? `${altText(shown)}\n${scene.alt}` : scene.alt}
+            alt={`${altText(shown)}\n${scene.alt}`}
           />
         )
       }
@@ -364,7 +363,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
           source={sceneSvg(scene, tracks, {
             smil: SVG_SMIL,
             width: Math.round(e.props.bodyColumns * DESKTOP_COLUMN_PX_CEILING),
-            band: party ? 'bottom' : 'both',
+            band: 'bottom',
           })}
           alt={scene.alt}
           isInteractive={SVG_INTERACTIVE}

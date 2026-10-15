@@ -24,16 +24,17 @@ Name: Promptfall. Plugin name `promptfall`, slash command `/promptfall`, npm sco
 
 ## 2. Non-negotiables
 
-- The game never gets in the way of the work. The band on the Party tab is 22
-  rows in every fight, the 17-row stage over the 5-row window strip (ADR 0010),
-  and never takes more than the engine's `maxRows`. A shorter band shows the
+- The game never gets in the way of the work. The band is 22 rows in every
+  fight and on every tab, the stage on every tab: the 17-row stage over the
+  5-row window strip (ADR 0010), so switching tabs never moves its height, and
+  it never takes more than the engine's `maxRows`. A shorter band shows the
   whole stage smaller where it can (the Image zooms out, the Svg scales) and
   crops the Raster's sky down to the tallest actor on the stage; past that it
   drops to a 6-row compact band, as it does at 100 to 115 columns, collapses to
   1 row under 100 columns or 6 rows, and switches off per session with one
   command. It stays up while Claude asks for a permission or a question, at
-  the layout the rows it is given allow. Loot and World are the strip
-  alone, 5 rows. VS Code and mobile add a row of hotkeys.
+  the layout the rows it is given allow, the same on every tab. VS Code and
+  mobile add a row of hotkeys.
 - No real money anywhere. Gold is the only currency. No cash-out, no purchases.
 - The server is the ledger. The client renders and predicts; it never decides a
   drop. Every drop, trade and hero exists because the server rolled it or
@@ -945,7 +946,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   camping, breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
   zero-width Box; VS Code and mobile show them as a row under the strip.
-- Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010), the
+- Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010) and on
+  every tab, the
   encounter's enemies on the left and the party on the right, side-on, small
   against the zone's backdrop painting, bottom-anchored and centred (ADR 0009),
   so a zone or world boss lands at its full size; the compact stage and a zone
@@ -970,8 +972,12 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the front enemy. A notice wins its row in both. Goldens `strip-camping` and
   `strip-compact-camping` pin them.
   Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
-  and red at 0. Loot and World are the strip alone: the message window shows
-  the loot log, or the World rows.
+  and red at 0. Loot and World keep the stage and the same strip under it:
+  the message window shows the loot log, or the World rows. The compact
+  window beside the small stage shows the tab's four rows: on Party the three
+  heroes and the front enemy, on Loot the newest four loot rows, on World
+  presence, the records row, chat and a blank row. A notice takes the last
+  row on every tab; the compact band does not page.
   The message window never cuts a line on Party or Loot: each log line wraps
   over as many rows as it needs, keeping its spans' colours. The log's wrapped
   rows, then a notice's (or the camp's `g` row's), are one paging space; at the
@@ -987,14 +993,14 @@ flags. No second server program, no Postgres, no Redis, no worker.
   takes its bottom rows. The strip input carries the tab's scroll, so the
   loop's frames and the desktop's tracks draw the page the band drew. While `hasSurvey` the band stays up at
   the layout its rows allow and the stage keeps playing. The band is
-  22 rows and never changes height for a fight.
+  22 rows and never changes height for a fight or a tab.
 - The band as one picture (ADR 0011): a playfield on a shell. The shell is the
   windows' charcoal, flat, with no decoration, and fills every cell of the
   band's box that the playfield does not cover: the side margins past 160
   columns and any rows the layout leaves. The playfield is `min(columns, 160)`
-  wide, every row of the band, centred: on Party the stage with the strip
+  wide, every row of the band, centred: on every tab the stage with the strip
   beneath it, the stage's bottom edge on the windows' top lines with no shell
-  between; on Loot and World the strip alone, at the same width and centre.
+  between.
   One line goes around it, the strip windows' white line with cut corners. On
   a band wider than the playfield the line sits in the shell's margin; where
   the playfield meets the band's edge it sits over the stage's outermost pixel
@@ -1027,7 +1033,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   131,072-character cap. Each is the band's width and draws its share of the
   shell (a rect behind its art) and the line (a path over it): the stage's the
   top and sides, the strip's the sides and the bottom, so stacked they read as
-  one picture; on Loot and World the strip's Svg draws the whole line. One art
+  one picture, on every tab. One art
   geometry for all, in cells on terminals and scaled on the Svg surfaces (ADR
   0004). While the renderer probe is pending the band lays out with the
   verdict the last session recorded, the half-block rules before any, its
@@ -1046,12 +1052,13 @@ flags. No second server program, no Postgres, no Redis, no worker.
   figure scaled into the Raster's half-block rows is a smear (#230). Compact,
   when the full band does
   not fit or `bodyColumns` is 100 to 115: one 6-row picture, the 4-row stage
-  (sprites downsampled) beside one party window (three hero rows, the front
-  enemy, the command line in its border), the window on the right with its
+  (sprites downsampled) beside one window (the tab's four rows, the command
+  line in its border), the window on the right with its
   own top, bottom and right lines serving as the line's, so its title and
   command line stay. The collapsed summary, one line of text with no shell,
-  when `bodyColumns` is under 100 or `maxRows` is under 6. Loot and World are
-  5 rows. On the Svg surfaces: always the full stage, the art
+  when `bodyColumns` is under 100 or `maxRows` is under 6. Every tab lays out
+  alike, the stage on every tab, so the band's height is the terminal's alone.
+  On the Svg surfaces: always the full stage, the art
   `clamp(bodyColumns, 116, 160)` pixels wide scaled to the band's width,
   17 rows whatever `maxRows` says, scaled down where it would pass the rows the surface shows whole once the
   strip and the hotkey row are counted (the desktop scrolls the rest), and
@@ -1101,7 +1108,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   bob at 2, nothing while the band is hidden or collapsed. On terminals the
   loop draws the band's picture, the stage frame with the current strip, so a
   change in the strip alone (a log line typing out, a gauge filling) redraws
-  it; on Loot and World it draws the strip alone. The combat log types out each action's line
+  it, on every tab. The combat log types out each action's line
   as the stage plays it, in Dragon Quest's words ("Aldric hits Wood Goblin for
   12.", "Wood Goblin is defeated!"), whole lines under Motion still; hit lines
   more than a tick behind are dropped, never kills, drops, level-ups, deaths or
@@ -1302,7 +1309,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the baked font.
 - World boss display (phase 3): in boss mode the enemy window shows the boss
   with the global HP bar and its percentage, its title the time left, on every
-  tab. Under 116 columns, where the Party tab is the compact window and has no
+  tab. Under 116 columns, where the band is the compact window and has no
   enemy window, the compact window's title carries `World boss` and the time
   left in the wave's place. Between polls the bar shows the last polled HP less
   the damage this party has landed since the poll's baseline, so it drops as

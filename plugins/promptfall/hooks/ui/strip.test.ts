@@ -60,10 +60,12 @@ test('at 120 columns the four windows fill the band; the message window takes th
   }
 })
 
-test('Loot and World drop the enemy window under 116 columns; a wide band lays out in 160', () => {
-  const bare = stripScene({ ...strip('strip-loot'), columns: 110 }).scene
-  expect(bare.windows.map((w) => w.key)).toEqual(['message', 'party', 'purse'])
-  expect(bare.windows.reduce((n, w) => n + w.columns, 0)).toBe(110)
+test('Loot and World lay out the four windows as Party does; a wide band lays out in 160', () => {
+  for (const name of ['strip-loot', 'strip-world'] as const) {
+    const { scene } = stripScene({ ...strip(name), columns: 116 })
+    expect(scene.windows.map((w) => w.key)).toEqual(['enemy', 'message', 'party', 'purse'])
+    expect(scene.windows.reduce((n, w) => n + w.columns, 0)).toBe(116)
+  }
   expect(stripScene({ ...strip('strip-rest'), columns: 250 }).scene.columns).toBe(160)
 })
 
@@ -752,6 +754,59 @@ test('the compact window shows a dim camping for the front enemy; a notice wins 
   for (const e of input.view.enemies) expect(allText(compact)).not.toContain(e.name)
   const noticed = win(stripScene({ ...input, notice: 'Promptfall resynced' }).scene, 'compact')
   expect(lineText(noticed.lines[3]).trim()).toBe('Promptfall resynced')
+})
+
+test('the compact window on Loot shows the newest four loot rows, each led by its sprite; a notice takes the last row', () => {
+  const input = strip('strip-loot')
+  const [first, ...rest] = input.view.loot
+  if (!first) throw new Error('no loot')
+  const more = [1, 2].map((i) => ({ ...first, text: `Loot ${i}`, name: `Loot ${i}`, rest: '' }))
+  const view = { ...input.view, loot: [...more, first, ...rest] }
+  const compact = (patch: Partial<StripInput>) =>
+    win(stripScene({ ...input, view, kind: 'compact', columns: 110, ...patch }).scene, 'compact')
+  const loot = compact({})
+  expect(loot.lines.map((l) => lineText(l).trim())).toEqual([
+    'Loot 2',
+    'Kestrel joined (uncommon)',
+    'Iron Sword (epic)',
+    'Silk Robe sold for 3g',
+  ])
+  // Each row leads with its sprite, marked on the Raster, then its name in the rarity's colour.
+  expect(loot.lines[2]?.spans.some((s) => 'art' in s)).toBe(true)
+  expect(loot.lines[2]?.spans.find((s) => 'text' in s && s.text === 'Iron Sword')).toEqual({
+    text: 'Iron Sword',
+    rgb: RARITY_RGB.epic,
+  })
+  expect(loot.alt).toContain('Loot tab.')
+  const noticed = compact({ notice: 'Promptfall resynced' })
+  expect(noticed.lines.map((l) => lineText(l).trim())).toEqual([
+    'Kestrel joined (uncommon)',
+    'Iron Sword (epic)',
+    'Silk Robe sold for 3g',
+    'Promptfall resynced',
+  ])
+  const none = compact({ view: { ...view, loot: [] } })
+  expect(lineText(none.lines[0]).trim()).toBe('No loot yet')
+  // The command line and the title stay as on Party.
+  expect(lineText({ spans: loot.footer ?? [] })).toBe(' Party ▶Loot  World c ▾')
+  expect(lineText({ spans: loot.title ?? [] })).toBe(
+    lineText({ spans: compact({ tab: 'party' }).title ?? [] }),
+  )
+})
+
+test('the compact window on World shows presence, the records row, chat and a blank row a notice takes', () => {
+  const input = { ...strip('strip-world'), kind: 'compact' as const, columns: 110 }
+  const world = win(stripScene(input).scene, 'compact')
+  expect(world.lines.map((l) => lineText(l).trim())).toEqual([
+    '13 online · zone 1: Bea, Kit',
+    'Z1 K0 W0 · world boss and hunt are off',
+    'Kit: anyone farming zone 1?',
+    '',
+  ])
+  expect(world.alt).toContain('World tab.')
+  const noticed = win(stripScene({ ...input, notice: 'Promptfall resynced' }).scene, 'compact')
+  expect(lineText(noticed.lines[3]).trim()).toBe('Promptfall resynced')
+  expect(lineText(noticed.lines[0])).toBe(lineText(world.lines[0]))
 })
 
 test('desktop tracks while camping keep the g line and type nothing, as under a notice', () => {

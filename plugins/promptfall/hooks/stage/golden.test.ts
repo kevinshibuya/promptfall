@@ -274,13 +274,6 @@ for (const name of BAND_SCENARIOS) {
     const width = `width="${box.columns * DESKTOP_COLUMN_PX_CEILING}"`
     expect(svg.strip).toMatch(new RegExp(`^<svg [^>]*${width}`))
     expect(svg.strip.length).toBeLessThanOrEqual(STRIP_SVG_MAX_CHARS)
-    if (svg.stage === null) {
-      // Loot and World: the strip's Svg is the whole band, the shell under it and the line all
-      // round, its tracks inside.
-      expect(svg.strip).toMatch(/<\/defs><rect [^>]*\/>.*<animate.*<path fill="#303028"/)
-      expect(svg.strip).toMatch(/<path fill="#f0f0e8" fill-rule="evenodd" d="[^"]*Z"\/><\/svg>$/)
-      return
-    }
     expect(svg.stage).toMatch(new RegExp(`^<svg [^>]*${width}`))
     // One grid for both: the same viewBox width, so the line's sides meet.
     const gridOf = (doc: string) => doc.match(/viewBox="0 0 (\d+) /)?.[1]

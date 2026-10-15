@@ -96,7 +96,9 @@ export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
   'band-cropped': {imageHash: "37504ee56e622e7b", cellsHash: "54c0dabf8c021db3", width: 1280, height: 208, stageSvgHash: "29ae33273eb517bb", stageSvgChars: 21462, stripSvgHash: "ac8f040ee9eb763e", stripSvgChars: 20206},
   'band-compact': {imageHash: "708a2efee53a870a", cellsHash: "7f989f9c633f4a3d", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "ca7f3dc09fa61693", stripSvgChars: 20147},
   'band-compact-wide': {imageHash: "81bdaa48120e2974", cellsHash: "18e2d08a58195527", width: 1360, height: 96, stageSvgHash: "7f5fc0eb515f32c4", stageSvgChars: 21457, stripSvgHash: "2396b05a3751e005", stripSvgChars: 20206},
-  'band-loot': {imageHash: "569dcdf4dfee4bc9", cellsHash: "50c9899ff3eab9fd", width: 1280, height: 80, stripSvgHash: "700bc108bbdfed23", stripSvgChars: 19674},
-  'band-world': {imageHash: "1115ccf874df9084", cellsHash: "108af0333b2daa7a", width: 1320, height: 80, stripSvgHash: "d571e611afb56a95", stripSvgChars: 20870},
+  'band-loot': {imageHash: "ca9671fb76ab6c98", cellsHash: "e21e6dabd7a2c06d", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "7628b326ddcc96ba", stripSvgChars: 19621},
+  'band-world': {imageHash: "9fc0ff16abab2acb", cellsHash: "5185987de47ff0d3", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "21bee34441005050", stripSvgChars: 20817},
+  'band-compact-loot': {imageHash: "b33a974b7104539e", cellsHash: "ec3055a8e1200661", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "b226f71437a5f990", stripSvgChars: 19562},
+  'band-compact-world': {imageHash: "2ea8a5cb1b2cd2b6", cellsHash: "e01e649995c26516", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "5cb4f90ea818965e", stripSvgChars: 17833},
   'band-waiting': {imageHash: "62948e844417fae2", cellsHash: "1fe6225e5187c77e", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "da3b2562dda64da8", stripSvgChars: 21609},
 }

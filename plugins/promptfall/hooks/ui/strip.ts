@@ -1,5 +1,5 @@
 // The band's window strip (grill 1.7, 1.13, 1.15, 1.16): the enemy, message, party and purse
-// windows under the stage, or the one party window beside the compact stage. Pure: the view,
+// windows under the stage, or one window beside the compact stage, on every tab. Pure: the view,
 // the stage timeline, the gauge tracker and the log in, a scene out; the encoders draw it.
 import type {
   BandTab,
@@ -51,8 +51,8 @@ export type StripInput = {
   view: GameView
   world: WorldState
   tab: BandTab
-  /** full: under the stage; compact: the party window beside the compact stage; bare: Loot/World. */
-  kind: 'full' | 'compact' | 'bare'
+  /** full: the four windows under the stage; compact: one window beside the compact stage. */
+  kind: 'full' | 'compact'
   columns: number
   now: number
   notice: string | null
@@ -82,7 +82,6 @@ type Slots = {
 type HpSlot = { id: string; line: number; span: number }
 type Built = { win: Win; hotspots: Hotspot[]; slots: Slots[]; hp: HpSlot[] }
 
-const FULL_MIN = 116
 /** The message window's row while the party camps, in the row a notice takes: `g` breaks camp. */
 const BACK_TO_FIGHT = 'g: back to the fight'
 /** The enemy window's first row and the compact window's front enemy while the party camps. */
@@ -340,6 +339,9 @@ function lootLead(l: LootView, rgb: number): Span[] {
   return [art, pad(1)]
 }
 
+/** The Loot tab's one row before the first drop. */
+const NO_LOOT = 'No loot yet'
+
 /** A log line as the message window pages it: its text, and its rows wrapped to the window. */
 type LogRows = { text: string; rows: Line[] }
 
@@ -442,7 +444,7 @@ function messageBody(input: StripInput, n: number, at: number): Body {
   const texts = lines.map((l) => l.text)
   const log: Line[] =
     input.tab === 'loot' && lines.length === 0
-      ? [{ spans: [text('No loot yet', DIM_RGB)] }]
+      ? [{ spans: [text(NO_LOOT, DIM_RGB)] }]
       : lines.flatMap((l) => l.rows)
   const total = log.length + notes.length
   if (total <= PAGE_ROWS) {
@@ -617,19 +619,15 @@ function purseWindow(input: StripInput, x: number): Built {
   }
 }
 
-function compactWindow(input: StripInput, x: number, columns: number): Built {
+/** The compact window's rows inside its border, beside the small stage. */
+const COMPACT_ROWS = 4
+
+/** The compact window's rows, the desktop's slots in them, and what they say for the alt. */
+type CompactRows = { lines: Line[]; slots: Slots[]; hp: HpSlot[]; alt: string }
+
+/** Party's compact rows: the three heroes, then the front enemy, `camping`, or a notice. */
+function compactParty(input: StripInput, inner: number): CompactRows {
   const { view } = input
-  const inner = columns - 2
-  // Under 116 columns there is no enemy window: the world boss's time left takes the wave's place.
-  const left = worldBossLeft(input)
-  const wave =
-    left !== null
-      ? `World boss${left ? ` ${left}` : ''}`
-      : view.wave >= 11
-        ? 'Boss'
-        : `W${view.wave}`
-  let title = `Z${view.zone} · ${wave} · ${formatCount(view.gold)}G`
-  if (view.farm && chars(`${title} · Farm`).length <= inner - 3) title = `${title} · Farm`
   const acting = input.timeline.acting(input.now)
   const lines: Line[] = []
   const slots: Slots[] = []
@@ -666,6 +664,63 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     lines[3] = { spans: [pad(1), ...enemyRow(front, Math.min(inner - 2, 27))] }
     bars.push({ id: front.id, line: 3, span: 1 + ENEMY_BAR_SPAN })
   }
+  const field = view.camping
+    ? ' Camping.'
+    : front
+      ? ` Front enemy ${front.name} ${front.hp} of ${front.maxHp} HP.`
+      : ''
+  const alt = `Party: ${view.heroes.map((h) => heroAlt(input, h)).join('; ')}.${field}`
+  return { lines, slots, hp: bars, alt }
+}
+
+/**
+ * Loot's and World's compact rows, from the rows the message window builds: the newest loot rows,
+ * or presence, the records row, chat and a blank row. A notice takes the last row; nothing pages.
+ */
+function compactTab(input: StripInput, inner: number): CompactRows {
+  const n = inner - 2
+  const keep = input.notice ? COMPACT_ROWS - 1 : COMPACT_ROWS
+  let rows: Line[]
+  if (input.tab === 'world') {
+    rows = worldTabRows(input.view, input.world, COMPACT_ROWS, n, input.now)
+      .rows.slice(0, keep)
+      .map((r) => ({ spans: r.text ? [r.dim ? text(r.text, DIM_RGB) : text(r.text)] : [] }))
+  } else {
+    const lines = logLines(input, n, input.now)
+    rows =
+      lines.length === 0
+        ? [{ spans: [text(NO_LOOT, DIM_RGB)] }]
+        : lines.flatMap((l) => l.rows).slice(-keep)
+  }
+  const lines: Line[] = rows.map((r) => ({ spans: [pad(1), ...r.spans] }))
+  while (lines.length < keep) lines.push({ spans: [] })
+  if (input.notice) lines.push({ spans: [pad(1), text(clip(input.notice, n))] })
+  const said = lines
+    .map((l) =>
+      l.spans
+        .map((s) => ('text' in s ? s.text : ''))
+        .join('')
+        .trim(),
+    )
+    .filter(Boolean)
+  const tab = `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.`
+  return { lines, slots: [], hp: [], alt: `${tab} ${said.join(' ')}`.trim() }
+}
+
+function compactWindow(input: StripInput, x: number, columns: number): Built {
+  const { view } = input
+  const inner = columns - 2
+  // Under 116 columns there is no enemy window: the world boss's time left takes the wave's place.
+  const left = worldBossLeft(input)
+  const wave =
+    left !== null
+      ? `World boss${left ? ` ${left}` : ''}`
+      : view.wave >= 11
+        ? 'Boss'
+        : `W${view.wave}`
+  let title = `Z${view.zone} · ${wave} · ${formatCount(view.gold)}G`
+  if (view.farm && chars(`${title} · Farm`).length <= inner - 3) title = `${title} · Farm`
+  const body = input.tab === 'party' ? compactParty(input, inner) : compactTab(input, inner)
   const cmd = commandLine(input.tab, null)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
@@ -675,12 +730,7 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     columns: c.hotkey === 'c' ? chars(c.label).length : chars(c.label).length + 1,
   }))
   hotspots.push({ hotkey: 'f', label: title, x: x + 2, y: 0, columns: chars(title).length })
-  const field = view.camping
-    ? ' Camping.'
-    : front
-      ? ` Front enemy ${front.name} ${front.hp} of ${front.maxHp} HP.`
-      : ''
-  const alt = `${title}. Party: ${view.heroes.map((h) => heroAlt(input, h)).join('; ')}.${field}`
+  const alt = `${title}. ${body.alt}`
   return {
     win: {
       key: 'compact',
@@ -689,12 +739,12 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
       rows: COMPACT_WINDOW_ROWS,
       title: [text(title)],
       footer: cmd.spans,
-      lines,
+      lines: body.lines,
       alt,
     },
     hotspots,
-    slots,
-    hp: bars,
+    slots: body.slots,
+    hp: body.hp,
   }
 }
 
@@ -724,14 +774,9 @@ function build(raw: StripInput): { scene: Scene; built: Built[]; page: Page | nu
       page: null,
     }
   }
-  const withEnemy = input.kind === 'full' || columns >= FULL_MIN
-  const message = columns - (withEnemy ? ENEMY_COLUMNS : 0) - PARTY_COLUMNS - PURSE_COLUMNS
-  const built: Built[] = []
-  let x = 0
-  if (withEnemy) {
-    built.push(enemyWindow(input, x))
-    x += ENEMY_COLUMNS
-  }
+  const message = columns - ENEMY_COLUMNS - PARTY_COLUMNS - PURSE_COLUMNS
+  const built: Built[] = [enemyWindow(input, 0)]
+  let x = ENEMY_COLUMNS
   const msg = messageWindow(input, x, message)
   built.push(msg)
   x += message

@@ -66,3 +66,9 @@ to leave behind. The zoomed-out view is the one he wants, whatever the band's he
 - Damage numbers over the Raster's cropped rows: one drawn above the crop is clamped into the
   box's top row.
 - Every stage golden is 17 rows; the `rest` scenario's frame is 180 × 51 at 1.5×.
+
+## Note (2026-10-15, spec #234)
+
+The stage stays on every tab. The 22-row band, the crop to the tallest actor, the zoom to the
+floor and the compact escape apply on Loot and World as on Party, and the band and the loop lay
+out the stage rows on every tab alike, so the band's height never moves with the tab.

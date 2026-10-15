@@ -231,7 +231,7 @@ export function sceneSvg(
   const height = Math.round((opts.width * H) / W)
   const live = opts.smil ? tracks : []
   // The band's strip Svg (spec #45): the shell under its windows, the line's sides and bottom over,
-  // all round on Loot and World, the grid filling its box so a rounded height leaves no sliver
+  // or all round (`both`), the grid filling its box so a rounded height leaves no sliver
   // without shell.
   const shell = opts.band ? svgFrame(W, H, opts.band) : { under: '', over: '' }
   const head = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${opts.width}" height="${height}" shape-rendering="crispEdges"${opts.band ? ' preserveAspectRatio="none"' : ''}>`
