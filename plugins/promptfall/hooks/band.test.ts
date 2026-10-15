@@ -431,9 +431,7 @@ test('the World tab reads the in-process world: one online on the command line, 
 
 test('the World tab shows who is here on the command line, the records row over the last chat line, and dims a stale snapshot', async ($, on) => {
   const { clock, states, data, shown } = harness(on)
-  // Motion still: the stage is on World too, and a band redrawn at every bob through the stale
-  // wait would outrun the hook budget.
-  settings(data, { ...RASTER, motion: 'still' })
+  settings(data, RASTER)
   shown.notice = null
   const net = remoteWorld(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -455,9 +453,13 @@ test('the World tab shows who is here on the command line, the records row over 
   expect(records).toBeGreaterThan(-1)
   expect(first.text[records + 1]).toContain('Corvina: gg everyone')
   expect(first.colour).not.toBe(DIM_RGB)
+  // Folded through the stale wait: the stage is on World too, and a band redrawn at every gauge
+  // frame for 45 s outruns the hook budget under a loaded suite. Unfolded, it reads the snapshot.
+  await ui.press({ key: 'hot-c' })
   net.down = true
   await clock.advance(WORLD_STALE_MS)
   expect((states.get('world') as WorldState).stale).toBe(true)
+  await ui.press({ key: 'collapse' })
   expect((await presence()).colour).toBe(DIM_RGB)
   await ui.unmount()
 })
