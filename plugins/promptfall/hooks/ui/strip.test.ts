@@ -1,4 +1,9 @@
 import { expect, test } from 'claude-code/testing'
+
+const fail = (): never => {
+  throw new Error('no page')
+}
+
 import type { GameView, WorldState } from '../../types'
 import { boss, wave, worldBoss } from '../stage/fixtures'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
@@ -8,7 +13,15 @@ import { DISSOLVE_MS, FLASH_MS, VICTORY_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DIM_RGB, DOWN_RGB, WARN_RGB } from '../windows/tuning'
-import { type StripInput, stripScene, stripTracks, wrap } from './strip'
+import {
+  PAGE_ROWS,
+  paged,
+  type StripInput,
+  stripScene,
+  stripTracks,
+  wrap,
+  wrapSpans,
+} from './strip'
 import { worldRows } from './world-rows'
 
 const win = (scene: Scene, key: string) => scene.windows.find((w) => w.key === key) as Win
@@ -114,12 +127,16 @@ test('a hero under 25% HP draws in WARN_RGB, one at 0 in DOWN_RGB', () => {
   expect(colours).toContain(DOWN_RGB)
 })
 
-test('a notice replaces the third message row, on Loot too', () => {
+test('a notice wraps in full over the rows it needs, on Loot too', () => {
   const { scene } = stripScene(strip('strip-notice'))
-  expect(lineText(win(scene, 'message').lines[2])).toContain('Promptfall: server unreachable')
+  const message = win(scene, 'message')
+  expect(message.lines.slice(1).map((l) => lineText(l).trim())).toEqual([
+    'Promptfall: server unreachable,',
+    'retrying',
+  ])
 })
 
-test('the welcome notice shows its opt-out whole at 120 columns full and at 100 compact', () => {
+test('the welcome notice shows its opt-out first at 120 columns full and at 100 compact', () => {
   const notice =
     'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
   for (const [kind, columns] of [
@@ -145,6 +162,189 @@ test('a log line longer than the message window wraps over both rows', () => {
   expect(lineText(message.lines[2]).trim()).toBe(rows[1])
 })
 
+test("the wrap keeps each span's colour across the rows it breaks into", () => {
+  const rows = wrapSpans(
+    [
+      { text: 'Epic drop:', rgb: 0xa040f0 },
+      { text: ' Sword of the Long Night.', rgb: 0x58d858 },
+    ],
+    12,
+  )
+  expect(rows.map((r) => r.spans)).toEqual([
+    [{ text: 'Epic drop:', rgb: 0xa040f0 }],
+    [{ text: 'Sword of the', rgb: 0x58d858 }],
+    [{ text: 'Long Night.', rgb: 0x58d858 }],
+  ])
+  // Each row's first character, counted over the line's text: the space a break eats is skipped.
+  expect(rows.map((r) => r.from)).toEqual([0, 11, 24])
+  // A row that joins two spans keeps both colours; a word longer than a row is cut, not dropped.
+  expect(
+    wrapSpans(
+      [
+        { text: 'Rare', rgb: 1 },
+        { text: ' drop', rgb: 2 },
+      ],
+      20,
+    )[0]?.spans,
+  ).toEqual([
+    { text: 'Rare', rgb: 1 },
+    { text: ' drop', rgb: 2 },
+  ])
+  expect(wrapSpans([{ text: 'Promptwyrmling' }], 6).map((r) => r.spans)).toEqual([
+    [{ text: 'Prompt' }],
+    [{ text: 'wyrmli' }],
+    [{ text: 'ng' }],
+  ])
+  // A span that is not text (an art span) rides in its row whole.
+  const art = { gap: 2 }
+  expect(wrapSpans([art, { text: ' Silk Robe' }], 20)[0]?.spans).toEqual([
+    art,
+    { text: ' Silk Robe' },
+  ])
+})
+
+/** Loot lines of these texts, oldest first. */
+const lootOf = (texts: readonly string[]): GameView['loot'] =>
+  texts.map((text) => ({ text, rarity: 'common', kind: 'drop' as const, itemId: null }))
+/** The Loot tab over these lines, scrolled as given. */
+const lootTab = (texts: readonly string[], scroll: StripInput['scroll'] = null): StripInput => {
+  const input = strip('strip-loot')
+  return { ...input, view: { ...input.view, loot: lootOf(texts) }, scroll }
+}
+/** The message window's two rows, trimmed, and the command line's footer before the hint. */
+const shownRows = (i: StripInput) => {
+  const message = win(stripScene(i).scene, 'message')
+  const cmd = lineText(message.lines[0])
+  return {
+    rows: message.lines.slice(1).map((l) => lineText(l).trim()),
+    footer: cmd.match(/ (\d+-\d+\/\d+) c ▾$/)?.[1] ?? null,
+  }
+}
+
+test('j pages the Loot tab back two rows and k forward; the footer reads the rows shown, none at the newest', () => {
+  expect(PAGE_ROWS).toBe(2)
+  const five = ['L1', 'L2', 'L3', 'L4', 'L5']
+  const newest = lootTab(five)
+  expect(shownRows(newest)).toEqual({ rows: ['L4', 'L5'], footer: null })
+  const back = paged(stripScene(newest).page ?? fail(), PAGE_ROWS)
+  expect(back.rows).toBe(2)
+  expect(shownRows(lootTab(five, back))).toEqual({ rows: ['L2', 'L3'], footer: '2-3/5' })
+  // Past the oldest the page clamps to the first two rows.
+  const oldest = paged(stripScene(lootTab(five, back)).page ?? fail(), PAGE_ROWS)
+  expect(shownRows(lootTab(five, oldest))).toEqual({ rows: ['L1', 'L2'], footer: '1-2/5' })
+  // k comes back, and at the newest the footer goes.
+  const forward = paged(stripScene(lootTab(five, oldest)).page ?? fail(), -PAGE_ROWS)
+  expect(shownRows(lootTab(five, forward))).toEqual({ rows: ['L3', 'L4'], footer: '3-4/5' })
+  const home = paged(stripScene(lootTab(five, forward)).page ?? fail(), -2 * PAGE_ROWS)
+  expect(home.rows).toBe(0)
+  expect(shownRows(lootTab(five, home))).toEqual({ rows: ['L4', 'L5'], footer: null })
+})
+
+test('a new line while paged back leaves the window where it is, the oldest trimmed or not; at the newest it follows', () => {
+  const five = ['L1', 'L2', 'L3', 'L4', 'L5']
+  const back = paged(stripScene(lootTab(five)).page ?? fail(), PAGE_ROWS)
+  // L6 arrives and L1 is trimmed: the window still shows L2 and L3.
+  const trimmed = ['L2', 'L3', 'L4', 'L5', 'L6']
+  expect(shownRows(lootTab(trimmed, back))).toEqual({ rows: ['L2', 'L3'], footer: '1-2/5' })
+  // L6 and a two-row L7 arrive, nothing trimmed: the window has not moved either.
+  const long = 'L7 is a line long enough to wrap over two rows of the window'
+  const grown = [...five, 'L6', long]
+  expect(shownRows(lootTab(grown, back))).toEqual({ rows: ['L2', 'L3'], footer: '2-3/8' })
+  // At the newest the window follows the new lines.
+  const home = paged(stripScene(lootTab(five)).page ?? fail(), 0)
+  expect(shownRows(lootTab(trimmed, home)).rows).toEqual(['L5', 'L6'])
+})
+
+test('no line is cut: a line longer than two rows shows its tail at the newest and its head paged back', () => {
+  // At 120 columns the message window holds 36 cells of text a row.
+  const long = 'Inventory full: Ancient Runed Greatsword of the Endless Night vendored for 1,240G.'
+  const rows = wrap(long, 36)
+  expect(rows).toHaveLength(3)
+  const newest = lootTab([long])
+  expect(shownRows(newest)).toEqual({ rows: rows.slice(1), footer: null })
+  const back = paged(stripScene(newest).page ?? fail(), PAGE_ROWS)
+  expect(shownRows(lootTab([long], back))).toEqual({ rows: rows.slice(0, 2), footer: '1-2/3' })
+  // No ellipsis anywhere in the message window, on either log tab, on any page.
+  const lines = Array.from({ length: 40 }, (_, i) => `${i}: ${long}`)
+  for (const tab of ['party', 'loot'] as const) {
+    // The Party log's long line is the camp's.
+    const camp = strip('strip-camping')
+    let input: StripInput =
+      tab === 'loot' ? lootTab(lines) : { ...camp, now: camp.now + 10_000, columns: 110 }
+    for (let page = 0; page < 70; page++) {
+      const { scene, page: at } = stripScene(input)
+      expect(allText(win(scene, 'message')), `${tab} page ${page}`).not.toContain('…')
+      input = { ...input, scroll: paged(at ?? fail(), PAGE_ROWS) }
+    }
+  }
+})
+
+test('the Loot tab shows every line the view holds, 40 by paging', () => {
+  const lines = Array.from({ length: 40 }, (_, i) => `Drop ${i + 1}`)
+  let input = lootTab(lines)
+  const seen = new Set<string>()
+  for (let i = 0; i < 20; i++) {
+    for (const row of shownRows(input).rows) seen.add(row)
+    input = { ...input, scroll: paged(stripScene(input).page ?? fail(), PAGE_ROWS) }
+  }
+  expect(seen.size).toBe(40)
+  expect(shownRows(input).footer).toBe('1-2/40')
+})
+
+test('the footer drops when the tabs, it and the hint do not fit the message window; the hint stays', () => {
+  const five = ['L1', 'L2', 'L3', 'L4', 'L5']
+  const back = paged(stripScene(lootTab(five)).page ?? fail(), PAGE_ROWS)
+  // full at 110 columns keeps the enemy window: the message window's 26 cells hold no footer.
+  const narrow = { ...lootTab(five, back), kind: 'full' as const, columns: 110 }
+  const message = win(stripScene(narrow).scene, 'message')
+  expect(lineText(message.lines[0])).toMatch(/World +c ▾$/)
+  expect(shownRows(narrow).rows).toEqual(['L2', 'L3'])
+})
+
+test('the Party log pages too, and the World tab never does', () => {
+  // The scenario's log, all three lines shown, one row each.
+  const input = {
+    ...strip('strip-rest'),
+    now: strip('strip-rest').now + 10_000,
+    motion: 'still' as const,
+  }
+  const texts = input.log.shown(input.now, 'still').map((l) => l.text)
+  expect(shownRows(input)).toEqual({ rows: texts.slice(1), footer: null })
+  const back = paged(stripScene(input).page ?? fail(), PAGE_ROWS)
+  expect(shownRows({ ...input, scroll: back })).toEqual({
+    rows: texts.slice(0, 2),
+    footer: '1-2/3',
+  })
+  expect(stripScene({ ...input, tab: 'world' }).page).toBeNull()
+  // The compact band has no message window to page.
+  expect(stripScene({ ...input, kind: 'compact', columns: 110 }).page).toBeNull()
+})
+
+test('a notice is the newest of the paging: its first rows at the newest, k reaches the rest, j the log', () => {
+  const notice =
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
+  const rows = wrap(notice, 36)
+  expect(rows).toHaveLength(4)
+  const input = { ...strip('strip-rest'), now: strip('strip-rest').now + 10_000, notice }
+  const texts = input.log.shown(input.now, 'still').map((l) => l.text)
+  // Three log rows, then the notice's four: the window at the notice's first two, more after.
+  expect(shownRows(input)).toEqual({ rows: rows.slice(0, 2), footer: '4-5/7' })
+  const page = stripScene(input).page ?? fail()
+  expect(shownRows({ ...input, scroll: paged(page, -PAGE_ROWS) })).toEqual({
+    rows: rows.slice(2),
+    footer: null,
+  })
+  expect(shownRows({ ...input, scroll: paged(page, PAGE_ROWS) })).toEqual({
+    rows: texts.slice(1),
+    footer: '2-3/7',
+  })
+  // A notice of one row takes the bottom row under the newest log row, as before.
+  expect(shownRows({ ...input, notice: 'Promptfall resynced' })).toEqual({
+    rows: [texts[2], 'Promptfall resynced'],
+    footer: null,
+  })
+})
+
 test('hotspots cover the command line words and the tactics', () => {
   const { scene, hotspots } = stripScene(strip('strip-rest'))
   const message = win(scene, 'message')
@@ -152,6 +352,27 @@ test('hotspots cover the command line words and the tactics', () => {
   const party = hotspots.find((h) => h.hotkey === 'p')
   expect(party?.y).toBe(1)
   expect(party && party.x >= message.x && party.x < message.x + message.columns).toBe(true)
+})
+
+test('the command line ends on a dim c ▾, the collapse hotspot over all three cells', () => {
+  const { scene, hotspots } = stripScene(strip('strip-rest'))
+  const message = win(scene, 'message')
+  const cmd = message.lines[0]
+  // 40 columns: the border and a gap each side leave 36 cells, the hint in the last three.
+  expect(lineText(cmd)).toBe(' ▶Party  Loot  World              c ▾')
+  const hint = cmd?.spans.at(-1)
+  expect(hint).toEqual({ text: 'c ▾', rgb: DIM_RGB })
+  expect(hotspots.find((h) => h.hotkey === 'c')).toEqual({
+    hotkey: 'c',
+    label: 'c ▾',
+    x: message.x + 2 + 33,
+    y: 1,
+    columns: 3,
+  })
+  // The compact window's command line, in its bottom border, ends on it too.
+  const compact = win(stripScene(strip('strip-compact')).scene, 'compact')
+  expect(lineText({ spans: compact.footer ?? [] })).toBe('▶Party  Loot  World c ▾')
+  expect(compact.footer?.at(-1)).toEqual({ text: 'c ▾', rgb: DIM_RGB })
 })
 
 test('the alt names every hero’s HP and gauge', () => {
@@ -162,10 +383,15 @@ test('the alt names every hero’s HP and gauge', () => {
   expect(scene.alt).toContain('gauge full')
 })
 
-test('every character a strip scene holds has a glyph, on every tab and with a notice', () => {
-  for (const name of STRIP_SCENARIOS) {
+test('every character a strip scene holds has a glyph, on every tab, with a notice and paged back', () => {
+  const paging = lootTab(['L1', 'L2', 'L3', 'L4', 'L5'], { rows: 2, lines: [] })
+  expect(shownRows(paging).footer).toBe('2-3/5')
+  for (const [name, input] of [
+    ...STRIP_SCENARIOS.map((name) => [name, strip(name)] as const),
+    ['paged', paging] as const,
+  ]) {
     for (const tab of ['party', 'loot', 'world'] as const) {
-      const { scene } = stripScene({ ...strip(name), tab })
+      const { scene } = stripScene({ ...input, tab })
       for (const w of scene.windows)
         for (const ch of Array.from(allText(w)))
           expect(glyph(ch) !== null, `${name} ${tab} ${JSON.stringify(ch)}`).toBe(true)
@@ -173,18 +399,24 @@ test('every character a strip scene holds has a glyph, on every tab and with a n
   }
 })
 
-test('desktop tracks: the line typing at render goes on from where it is; a notice or motion still types nothing', () => {
+test('desktop tracks: the line typing at render goes on from where it is; a notice, motion still or a page back types nothing', () => {
   const input = strip('strip-rest')
   const lines = (i: StripInput) =>
     stripTracks(i, 3000).find((t): t is Extract<Track, { kind: 'lines' }> => t.kind === 'lines')
   const first = lines(input)?.frames[0]
   expect(first?.at).toBe(0)
   expect(first?.typing?.from ?? 0).toBeGreaterThan(1)
+  // Paged back, the typing line is out of the window: the frames keep the page and type nothing.
+  const back = { ...input, scroll: paged(stripScene(input).page ?? fail(), PAGE_ROWS) }
+  expect(back.scroll.rows).toBeGreaterThan(0)
   for (const i of [
     { ...input, notice: 'Promptfall resynced' },
     { ...input, motion: 'still' as const },
+    back,
   ])
     expect(lines(i)?.frames.every((f) => f.typing === undefined) ?? true).toBe(true)
+  const shown = win(stripScene(back).scene, 'message').lines.map(lineText)
+  for (const f of lines(back)?.frames ?? []) expect(f.lines.map(lineText)).toEqual(shown)
 })
 
 test('a hero-joined loot line drops the glyph the font lacks', () => {
@@ -379,8 +611,8 @@ test('camping puts g: back to the fight under the newest log line, a hotspot; a 
   const input = strip('strip-camping')
   const { scene, hotspots } = stripScene(input)
   const message = win(scene, 'message')
-  // The newest line whole on one row, clipped: the camp's own line.
-  expect(lineText(message.lines[1]).trim()).toBe('The party makes camp while Claude g…')
+  // The newest log row: the camp's own line wraps, and its last row shows above the camp's.
+  expect(lineText(message.lines[1]).trim()).toBe('gathers its thoughts.')
   expect(lineText(message.lines[2]).trim()).toBe('g: back to the fight')
   expect(hotspots.find((h) => h.hotkey === 'g')).toEqual({
     hotkey: 'g',

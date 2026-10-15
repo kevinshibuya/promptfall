@@ -938,9 +938,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
 ## 10. Client structure
 
 - Band tabs on letter hotkeys: `p` Party, `l` Loot log, `w` World, drawn as
-  the message window's command line (`▶Party Loot World ▾`). `c` collapses, `f`
-  toggles farm, and `g`, shown and bound only while the view says camping,
-  breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
+  the message window's command line (`▶Party Loot World c ▾`, the `c ▾` dim
+  and the collapse hotspot). `c` collapses, `f` toggles farm, `j` and `k` page
+  the Party and Loot logs, and `g`, shown and bound only while the view says
+  camping, breaks camp. Hotkeys fire only while the band holds the keyboard (ctrl+x tab
   or a click). On terminals and the desktop their Buttons sit out of view in a
   zero-width Box; VS Code and mobile show them as a row under the strip.
 - Party tab (phase 4): the stage, 17 rows in every fight (ADR 0010), the
@@ -953,7 +954,7 @@ flags. No second server program, no Postgres, no Redis, no worker.
   `T2 Z1 · Wave 3` past tier 1, one row per enemy with an HP bar, a
   boss with its percentage, and while the encounter queue holds N enemies a
   dim `+N waiting` footer cut into its bottom border, the view's `waiting`,
-  never staged), the message window (the command line, then the
+  never staged), the message window (the command line, then two rows of the
   combat log), the party window (each hero's
   name and level with ▶ while it acts, HP with a bar, and an action gauge that
   fills between ticks and turns gold when full) and the purse window (gold,
@@ -963,13 +964,27 @@ flags. No second server program, no Postgres, no Redis, no worker.
   While the view says camping the enemy window keeps its title and footer and
   draws its rows blank but for a dim `camping` on the first; the message
   window shows `g: back to the fight` in the row a notice takes, a hotspot as
-  `f` is, under the newest log line clipped to one row, and the desktop's
+  `f` is, under the newest log row, and the desktop's
   track types nothing; the compact window shows the dim `camping` in place of
   the front enemy. A notice wins its row in both. Goldens `strip-camping` and
   `strip-compact-camping` pin them.
   Both lines are in the windows' alt text. A hero's text turns orange under 25% HP
   and red at 0. Loot and World are the strip alone: the message window shows
-  the last two drops, or the World rows. While `hasSurvey` the band stays up at
+  the loot log, or the World rows.
+  The message window never cuts a line on Party or Loot: each log line wraps
+  over as many rows as it needs, keeping its spans' colours. The log's wrapped
+  rows, then a notice's (or the camp's `g` row's), are one paging space; at the
+  newest the window shows the log's tail, or a notice's first rows. `j` pages
+  two rows back and `k` two forward, the offset counted in wrapped rows back
+  from the newest, held in a per-session scroll state keyed by tab and never
+  saved with the prefs. A new line while paged back leaves the window where it
+  is; at the newest it follows. A tab switch, a collapse, a compact layout and
+  a zone change put it back at the newest. While the window is off the paging
+  space's last row the command line's right end shows `5-6/61` before `c ▾`,
+  dropped when the tabs, it and the hint overflow the window. The Loot tab
+  reaches 40 lines (the sim keeps 50). The World tab never pages; a notice
+  takes its bottom rows. The strip input carries the tab's scroll, so the
+  loop's frames and the desktop's tracks draw the page the band drew. While `hasSurvey` the band stays up at
   the layout its rows allow and the stage keeps playing. The band is
   22 rows and never changes height for a fight.
 - The band as one picture (ADR 0011): a playfield on a shell. The shell is the

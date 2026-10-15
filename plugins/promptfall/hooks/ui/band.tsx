@@ -1,5 +1,5 @@
 import { atom, type On, read, update } from 'claude-code'
-import type { GameView, Mode, Prefs, Settings, WorldState } from '../../types'
+import type { BandScroll, GameView, Mode, Prefs, Settings, WorldState } from '../../types'
 import type { GameHandle } from '../engine'
 import { GaugeTrack } from '../stage/gauges'
 import { cellsOf, layoutFor } from '../stage/layout'
@@ -31,7 +31,7 @@ import { sceneSvg } from '../windows/svg'
 import { STRIP_MAX_COLUMNS } from '../windows/tuning'
 import { CLASS_INITIAL, clip, formatGold } from './format'
 import { armProbe, PROBE_B, probeElement, probeVerdict } from './probe'
-import { type StripInput, stripScene, stripTracks } from './strip'
+import { PAGE_ROWS, paged, type StripInput, stripScene, stripTracks } from './strip'
 
 const viewAtom = atom({ plugin: 'promptfall', key: 'view' } as const, null)
 const prefsAtom = atom({ plugin: 'promptfall', key: 'prefs' } as const, PREFS_DEFAULT)
@@ -40,6 +40,9 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
+/** At the newest on both log tabs: the scroll every reset goes back to. */
+const SCROLL_NEWEST: BandScroll = { zone: 0, party: null, loot: null }
+const scrollAtom = atom({ plugin: 'promptfall', key: 'bandScroll' } as const, SCROLL_NEWEST)
 
 /** The one-line form: `Promptfall · Z3 w4 · K184 B90 W140 · 1,240g`. */
 export function collapsedLine(view: GameView, mode: Mode, notice: string | null): string {
@@ -71,6 +74,9 @@ const HOTKEYS = [
   { hotkey: 'w', label: 'world' },
   { hotkey: 'c', label: '▾' },
   { hotkey: 'f', label: 'farm' },
+  // Page the Party and Loot logs: older, newer. They do nothing in the compact band.
+  { hotkey: 'j', label: 'older' },
+  { hotkey: 'k', label: 'newer' },
   // Shown and bound only while the party camps.
   { hotkey: 'g', label: 'go' },
 ] as const
@@ -119,6 +125,8 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
 
     const setPrefs = (patch: Partial<Prefs>) =>
       update($, prefsAtom, (p) => ({ ...(p ?? PREFS_DEFAULT), ...patch }))
+    // A tab switch and a collapse put both logs back at the newest.
+    const toNewest = () => update($, scrollAtom, () => SCROLL_NEWEST)
 
     const tab = prefs.bandTab
     const party = tab === 'party'
@@ -164,7 +172,10 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
               hotkey="c"
               plain
               dimColor
-              onPress={() => setPrefs({ collapsed: !prefs.collapsed })}
+              onPress={() => {
+                void toNewest()
+                void setPrefs({ collapsed: !prefs.collapsed })
+              }}
             />
           </Box>
         </Box>
@@ -173,6 +184,15 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
 
     // The window strip: under the stage, beside the compact stage, or alone on Loot and World.
     const kind = layout.kind === 'full' ? 'full' : layout.kind === 'compact' ? 'compact' : 'bare'
+    // The log tabs' scroll holds while the band is full in the zone it was set in; a compact
+    // layout or a zone change puts it back at the newest.
+    const scrolled = (await read($, scrollAtom)) ?? SCROLL_NEWEST
+    const logTab = tab === 'party' || tab === 'loot' ? tab : null
+    const held = kind !== 'compact' && scrolled.zone === view.zone
+    // Written after the render, as the probe's verdict is: this render already draws the newest.
+    if (!held && (scrolled.party !== null || scrolled.loot !== null))
+      $.clock.after(0, () => void toNewest())
+    const scroll = held && logTab ? scrolled[logTab] : null
     const stripColumns = terminal
       ? Math.min(width, STRIP_MAX_COLUMNS)
       : Math.min(Math.max(e.props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
@@ -188,14 +208,27 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       timeline,
       gauges: handle?.stage.gauges ?? looseGauges,
       log: handle?.stage.log ?? looseLog,
+      scroll,
     }
-    const { scene } = stripScene(input)
+    const { scene, page } = stripScene(input)
+    // `j` older, `k` newer, from the page this render drew; nothing without one (compact, World).
+    const pageBy = (by: number) => {
+      if (!page || !logTab || kind === 'compact') return
+      const to = paged(page, by)
+      void update($, scrollAtom, (s) => ({
+        ...(s ?? SCROLL_NEWEST),
+        zone: view.zone,
+        [logTab]: to,
+      }))
+    }
 
     const press: Record<(typeof HOTKEYS)[number]['hotkey'], () => void> = {
-      p: () => void setPrefs({ bandTab: 'party' }),
-      l: () => void setPrefs({ bandTab: 'loot' }),
-      w: () => void setPrefs({ bandTab: 'world' }),
-      c: () => void setPrefs({ collapsed: true }),
+      p: () => void toNewest().then(() => setPrefs({ bandTab: 'party' })),
+      l: () => void toNewest().then(() => setPrefs({ bandTab: 'loot' })),
+      w: () => void toNewest().then(() => setPrefs({ bandTab: 'world' })),
+      c: () => void toNewest().then(() => setPrefs({ collapsed: true })),
+      j: () => pageBy(PAGE_ROWS),
+      k: () => pageBy(-PAGE_ROWS),
       f: () => {
         // The path `/promptfall farm` takes (hooks/command.ts).
         if (handle?.canApply()) handle.apply({ t: 'set_farm', on: !view.farm }, now)
@@ -273,7 +306,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         renderer: picture.renderer,
         props: e.props,
         surface: e.surface,
-        strip: { kind, columns: stripColumns, tab, extra },
+        strip: { kind, columns: stripColumns, tab, extra, scroll },
       })
       return (
         <Box key="band" flexDirection="column">
@@ -379,7 +412,7 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
         renderer: SVG_SMIL ? 'smil' : 'svg',
         props: e.props,
         surface: e.surface,
-        strip: { kind, columns: stripColumns, tab, extra },
+        strip: { kind, columns: stripColumns, tab, extra, scroll },
       })
     } else {
       loop?.mount(null)

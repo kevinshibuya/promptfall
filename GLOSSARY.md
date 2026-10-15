@@ -459,7 +459,8 @@ question a Yes/No asks, a refusal.
 _Avoid_: log panel, chat box
 
 **Command line**:
-The message window's first row, `▶Party Loot World ▾`: the band tabs, ▶ on the current one.
+The message window's first row, `▶Party Loot World c ▾`: the band tabs, ▶ on the current one,
+then, while a log is paged back, its footer, and the dim collapse hint.
 _Avoid_: tab bar, menu
 
 **Tab window**:

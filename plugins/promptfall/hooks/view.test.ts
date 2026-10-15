@@ -32,6 +32,23 @@ test('a Loot row carries its item and its kind; a hero contract sold off is a ma
   expect(view.loot[2]?.text).toBe('Hero contract sold for 90g')
 })
 
+test('the Loot tab gets the newest 40 of the 50 lines the sim keeps', () => {
+  const state = {
+    ...createInitialState(1),
+    lootLog: Array.from({ length: 50 }, (_, i) => ({
+      k: 'item',
+      itemId: `i${i}`,
+      base: 'silk_robe',
+      rarity: 'common',
+      vendoredFor: null,
+    })),
+  } as never
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  expect(view.loot).toHaveLength(40)
+  expect(view.loot[0]?.itemId).toBe('i10')
+  expect(view.loot.at(-1)?.itemId).toBe('i49')
+})
+
 test("a listing reads an item's affixes at its tier", () => {
   const listing: Listing = {
     id: 'l1',

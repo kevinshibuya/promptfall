@@ -26,7 +26,8 @@ import {
   zoneAt,
 } from './vendor/sim.js'
 
-const LOOT_LINES = 12
+/** The Loot tab's lines, each reached by paging; the sim keeps 50. */
+const LOOT_LINES = 40
 
 export function heroName(template: string, epithet: string): string {
   const name = content.heroTemplates[template]?.name ?? template

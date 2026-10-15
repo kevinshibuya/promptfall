@@ -4,7 +4,7 @@
 // SMIL plays the motion, the loop draws nothing: it wakes only for the next held toast's show time.
 // The loop's shape follows claude-toons (MIT; see NOTICE.md).
 import type { RenderSurface, Timer, UiBlitArgs, UiBlitResult } from 'claude-code'
-import type { BandTab, GameView, Settings, WorldState } from '../../types'
+import type { BandTab, GameView, LogScroll, Settings, WorldState } from '../../types'
 import { WORLD_DEFAULT } from '../state'
 import { stripScene } from '../ui/strip'
 import type { Scene } from '../windows/kit'
@@ -42,8 +42,17 @@ export type StageSite = {
    * is blitted.
    */
   band?: Box
-  /** The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row. */
-  strip: { kind: 'full' | 'compact' | 'bare'; columns: number; tab: BandTab; extra: 0 | 1 }
+  /**
+   * The window strip the band drew: its kind, its columns, the tab, rung (c)'s extra row, and the
+   * tab's scroll, so every frame draws the page the band drew.
+   */
+  strip: {
+    kind: 'full' | 'compact' | 'bare'
+    columns: number
+    tab: BandTab
+    extra: 0 | 1
+    scroll: LogScroll | null
+  }
   /** `smil`: the desktop's stage, which SMIL plays; the loop draws no frame for it. */
   renderer: 'raster' | 'image' | 'svg' | 'smil'
   /** The band's props the layout came from, so a tick can tell when it no longer holds. */
@@ -120,6 +129,7 @@ function same(a: StageSite, b: StageSite): boolean {
     a.strip.columns === b.strip.columns &&
     a.strip.tab === b.strip.tab &&
     a.strip.extra === b.strip.extra &&
+    JSON.stringify(a.strip.scroll) === JSON.stringify(b.strip.scroll) &&
     a.props.bodyColumns === b.props.bodyColumns &&
     a.props.maxRows === b.props.maxRows &&
     a.surface === b.surface
@@ -460,6 +470,7 @@ export class StageLoop {
           timeline: this.timeline,
           gauges: extras.gauges,
           log: extras.log,
+          scroll: site.strip.scroll,
         }).scene
       : null
     // The band picture draws the strip inside it: a change in the strip alone redraws it.

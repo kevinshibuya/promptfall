@@ -885,6 +885,141 @@ describe('a zone boss on the desktop, read only', () => {
   })
 })
 
+/** Loot lines `Loot line 1` to `Loot line n`, one row each in the message window. */
+const lootLines = (n: number, from = 1): GameView['loot'] =>
+  Array.from({ length: n }, (_, i) => ({
+    text: `Loot line ${from + i}`,
+    rarity: 'common',
+    kind: 'drop' as const,
+    itemId: null,
+  }))
+
+/** The message window's footer before the hint, and the loot lines its rows show. */
+function paging(text: string) {
+  return {
+    footer: text.match(/ (\d+-\d+\/\d+) c ▾/)?.[1] ?? null,
+    rows: [...text.matchAll(/Loot line (\d+)/g)].map((m) => Number(m[1])),
+  }
+}
+
+test('j and k page the Loot tab two rows at a time, the footer says where; the page survives the next blit', async ($, on) => {
+  const { data, shown, clock, blits } = harness(on)
+  settings(data, RASTER)
+  shown.view = { ...wave(), loot: lootLines(5) }
+  shown.notice = null
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  await ui.press({ key: 'hot-l' })
+  expect(paging(await stripText(ui))).toEqual({ footer: null, rows: [4, 5] })
+  await ui.press({ key: 'hot-j' })
+  expect(paging(await stripText(ui))).toEqual({ footer: '2-3/5', rows: [2, 3] })
+  await ui.press({ key: 'hot-j' })
+  expect(paging(await stripText(ui))).toEqual({ footer: '1-2/5', rows: [1, 2] })
+  await ui.press({ key: 'hot-k' })
+  expect(paging(await stripText(ui))).toEqual({ footer: '3-4/5', rows: [3, 4] })
+  // The loop's next blit draws the same page, not the newest.
+  const before = blits.length
+  await clock.advance(6_000)
+  const last = blits
+    .slice(before)
+    .flatMap((b) => ('cells' in b ? [b] : []))
+    .at(-1)
+  expect(last).toBeDefined()
+  const cells = cellsOf({ props: { columns: last?.columns, cells: last?.cells }, children: [] })
+  expect(paging(cells.text.slice(-STRIP_ROWS).join('\n'))).toEqual({
+    footer: '3-4/5',
+    rows: [3, 4],
+  })
+  await ui.unmount()
+  // A new line, the oldest trimmed, leaves the window where it was.
+  shown.view = { ...wave(), loot: lootLines(5, 2) }
+  const later = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(paging(await stripText(later))).toEqual({ footer: '2-3/5', rows: [3, 4] })
+  await later.press({ key: 'hot-k' })
+  expect(paging(await stripText(later))).toEqual({ footer: null, rows: [5, 6] })
+  // At the newest the window follows the next line.
+  shown.view = { ...wave(), loot: lootLines(5, 3) }
+  await later.unmount()
+  const next = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(paging(await stripText(next))).toEqual({ footer: null, rows: [6, 7] })
+  await next.unmount()
+})
+
+test('a tab switch, c and a zone change put the log back at the newest', async ($, on) => {
+  const { data, shown, clock } = harness(on)
+  settings(data, RASTER)
+  shown.view = { ...wave(), loot: lootLines(5) }
+  shown.notice = null
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const mount = () => $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  const ui = await mount()
+  await ui.press({ key: 'hot-l' })
+  const newest = { footer: null, rows: [4, 5] }
+  const back = { footer: '2-3/5', rows: [2, 3] }
+  await ui.press({ key: 'hot-j' })
+  expect(paging(await stripText(ui)), 'paged').toEqual(back)
+  await ui.press({ key: 'hot-w' })
+  await ui.press({ key: 'hot-l' })
+  expect(paging(await stripText(ui)), 'a tab switch').toEqual(newest)
+  await ui.press({ key: 'hot-j' })
+  await ui.press({ key: 'hot-c' })
+  await ui.press({ key: 'collapse' })
+  expect(paging(await stripText(ui)), 'c').toEqual(newest)
+  await ui.press({ key: 'hot-j' })
+  expect(paging(await stripText(ui)), 'paged again').toEqual(back)
+  await ui.unmount()
+  // Travel: the view's zone changes, and stays at the newest coming back.
+  shown.view = { ...wave(), zone: 2, loot: lootLines(5) }
+  const moved = await mount()
+  expect(paging(await stripText(moved)), 'a zone change').toEqual(newest)
+  // The reset is written just after the render that saw the change.
+  await clock.advance(1)
+  await moved.unmount()
+  shown.view = { ...wave(), loot: lootLines(5) }
+  const home = await mount()
+  expect(paging(await stripText(home)), 'back in zone 1').toEqual(newest)
+  await home.unmount()
+})
+
+test('j pages the Party log back while it runs; a compact layout puts it at the newest and pages nothing; World never pages', async ($, on) => {
+  const { data, clock } = harness(on)
+  settings(data, { ...RASTER, motion: 'still' })
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const footer = (text: string) => text.match(/ (\d+)-(\d+)\/(\d+) c ▾/)
+  let ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  for (let i = 0; i < 40; i++) {
+    await clock.advance(2_000)
+    await ui.unmount()
+    ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+    if ((await stripText(ui)).includes(' hits ')) break
+  }
+  // Enough of the fight for a page back: the window ends two rows above the newest.
+  for (let i = 0; i < 10; i++) await clock.advance(2_000)
+  await ui.unmount()
+  ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(footer(await stripText(ui)), 'Party at the newest').toBeNull()
+  await ui.press({ key: 'hot-j' })
+  const at = footer(await stripText(ui))
+  expect(at, 'Party paged back').not.toBeNull()
+  expect(Number(at?.[3]) - Number(at?.[2])).toBe(2)
+  await ui.unmount()
+  // 110 columns lays out compact: j and k do nothing there, and the full band is back at the newest.
+  const compact = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(110, 20) })
+  expect(await height(compact), 'compact').toBe(6)
+  expect(await compact.find({ key: 'hot-j' }), 'compact: j bound').toBeDefined()
+  await compact.press({ key: 'hot-j' })
+  await compact.press({ key: 'hot-k' })
+  // The reset is written just after the render that laid out compact.
+  await clock.advance(1)
+  await compact.unmount()
+  ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  expect(footer(await stripText(ui)), 'back from compact at the newest').toBeNull()
+  await ui.press({ key: 'hot-w' })
+  await ui.press({ key: 'hot-j' })
+  expect(footer(await stripText(ui)), 'World never pages').toBeNull()
+  await ui.unmount()
+})
+
 test('Loot and World are the strip alone on the shell: 5 rows, no stage; the loop blits the band there', async ($, on) => {
   const { data, blits, clock } = harness(on)
   settings(data, RASTER)

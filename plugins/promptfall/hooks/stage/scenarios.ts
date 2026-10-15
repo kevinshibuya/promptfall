@@ -668,6 +668,7 @@ function stripInput(
     columns: 120,
     now: NOW,
     notice: null,
+    scroll: null,
     motion: 'full',
     timeline,
     gauges,

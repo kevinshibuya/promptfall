@@ -1,7 +1,7 @@
 // The band's window strip (grill 1.7, 1.13, 1.15, 1.16): the enemy, message, party and purse
 // windows under the stage, or the one party window beside the compact stage. Pure: the view,
 // the stage timeline, the gauge tracker and the log in, a scene out; the encoders draw it.
-import type { BandTab, GameView, HeroView, Settings, WorldState } from '../../types'
+import type { BandTab, GameView, HeroView, LogScroll, Settings, WorldState } from '../../types'
 import type { GaugeTrack } from '../stage/gauges'
 import type { MessageLog } from '../stage/log'
 import { landingsWithin, stagedState } from '../stage/staged'
@@ -50,7 +50,9 @@ export type StripInput = {
   motion: Settings['motion']
   timeline: StageTimeline
   gauges: GaugeTrack
-  log: MessageLog
+  log: Pick<MessageLog, 'shown' | 'typing' | 'upcoming'>
+  /** The current tab's scroll on Party and Loot; null, or another tab's, at the newest. */
+  scroll: LogScroll | null
 }
 
 export type Hotspot = {
@@ -96,29 +98,82 @@ function heroRgb(h: HeroView): number {
   return h.hp * 4 < h.maxHp ? WARN_RGB : TEXT_RGB
 }
 
-/** Word-wrapped rows of at most `n` cells; a word longer than a row is cut. */
-export function wrap(line: string, n: number): string[] {
-  const rows: string[] = []
-  let row = ''
-  for (const word of line.split(' ')) {
-    let w = word
-    while (chars(w).length > n) {
-      if (row) {
-        rows.push(row)
-        row = ''
-      }
-      rows.push(chars(w).slice(0, n).join(''))
-      w = chars(w).slice(n).join('')
+/** A character of a line's text with its colour and its index in the text, or a span laid whole. */
+type Unit = { ch: string; rgb?: number; at: number } | { span: Span; at: number }
+const cellsOf = (units: readonly Unit[]) =>
+  units.reduce((n, u) => n + ('ch' in u ? 1 : spanCells(u.span)), 0)
+
+/** A wrapped row's spans, and `from`, the line's text characters before its first one. */
+export type WrappedRow = { spans: Span[]; from: number }
+
+/**
+ * Word-wrapped rows of at most `n` cells, each span keeping its colour on every row it reaches;
+ * a word longer than a row is cut, and a span that is not text (an art span) is never split.
+ */
+export function wrapSpans(spans: readonly Span[], n: number): WrappedRow[] {
+  const words: Unit[][] = [[]]
+  /** The space before each word but the first: the break between two words, coloured. */
+  const spaces: (Unit | null)[] = [null]
+  let at = 0
+  for (const s of spans) {
+    if (!('text' in s)) {
+      words[words.length - 1]?.push({ span: s, at })
+      continue
     }
-    if (!row) row = w
-    else if (chars(row).length + 1 + chars(w).length <= n) row = `${row} ${w}`
-    else {
-      rows.push(row)
-      row = w
+    for (const ch of chars(s.text)) {
+      const u: Unit = s.rgb === undefined ? { ch, at } : { ch, rgb: s.rgb, at }
+      at += 1
+      if (ch === ' ') {
+        words.push([])
+        spaces.push(u)
+      } else words[words.length - 1]?.push(u)
     }
   }
-  if (row) rows.push(row)
-  return rows
+  const rows: Unit[][] = []
+  let row: Unit[] = []
+  for (const [i, word] of words.entries()) {
+    let w = word
+    while (cellsOf(w) > n && w.length > 1) {
+      if (row.length > 0) {
+        rows.push(row)
+        row = []
+      }
+      let k = 0
+      while (k < w.length - 1 && cellsOf(w.slice(0, k + 1)) <= n) k += 1
+      rows.push(w.slice(0, Math.max(1, k)))
+      w = w.slice(Math.max(1, k))
+    }
+    const space = spaces[i]
+    if (row.length === 0) row = [...w]
+    else if (space && cellsOf(row) + 1 + cellsOf(w) <= n) row = [...row, space, ...w]
+    else {
+      rows.push(row)
+      row = [...w]
+    }
+  }
+  if (row.length > 0) rows.push(row)
+  return rows.map((units) => {
+    const out: Span[] = []
+    for (const u of units) {
+      if ('span' in u) {
+        out.push(u.span)
+        continue
+      }
+      const last = out.at(-1)
+      if (last && 'text' in last && last.rgb === u.rgb)
+        out[out.length - 1] = { ...last, text: last.text + u.ch }
+      else out.push(u.rgb === undefined ? { text: u.ch } : { text: u.ch, rgb: u.rgb })
+    }
+    const first = units.find((u) => 'ch' in u) ?? units[0]
+    return { spans: out, from: first?.at ?? 0 }
+  })
+}
+
+/** Word-wrapped rows of at most `n` cells; a word longer than a row is cut. */
+export function wrap(line: string, n: number): string[] {
+  return wrapSpans([{ text: line }], n).map((r) =>
+    r.spans.map((s) => ('text' in s ? s.text : '')).join(''),
+  )
 }
 
 /**
@@ -214,13 +269,19 @@ function enemyWindow(input: StripInput, x: number): Built {
   }
 }
 
+/** The collapse hint at the command line's right end: the key, then the mark. */
+const COLLAPSE_HINT = 'c ▾'
+
 /**
- * The command line `▶Party Loot World … ▾` in `n` cells, and where its words sit (cell offsets).
- * `n` null: the short form, `▾` right after World (compact's footer, which must leave its border).
+ * The command line `▶Party Loot World … 5-6/61 c ▾` in `n` cells, and where its words sit (cell
+ * offsets). The page footer, while the log is paged off its newest rows, sits before the hint when
+ * both fit; the hint is never dropped. `n` null: the short form, the hint right after World
+ * (compact's footer, which must leave its border).
  */
 function commandLine(
   tab: BandTab,
   n: number | null,
+  footer: string | null = null,
 ): { spans: Span[]; at: { hotkey: Hotspot['hotkey']; label: string; x: number }[] } {
   const items: { hotkey: Hotspot['hotkey']; label: string; tab: BandTab }[] = [
     { hotkey: 'p', label: 'Party', tab: 'party' },
@@ -234,94 +295,182 @@ function commandLine(
     at.push({ hotkey: item.hotkey, label: item.label, x: width(spans) })
     spans.push({ cursor: tab === item.tab }, text(item.label))
   }
-  spans.push(pad(n === null ? 1 : Math.max(1, n - width(spans) - 1) - 1))
-  at.push({ hotkey: 'c', label: '▾', x: width(spans) })
-  spans.push(text('▾'))
+  const hint = chars(COLLAPSE_HINT).length
+  const tail =
+    footer !== null && n !== null && width(spans) + 1 + chars(footer).length + 1 + hint <= n
+      ? [text(footer), pad(1)]
+      : []
+  spans.push(pad(n === null ? 1 : Math.max(1, n - width(spans) - width(tail) - hint)), ...tail)
+  at.push({ hotkey: 'c', label: COLLAPSE_HINT, x: width(spans) })
+  spans.push(text(COLLAPSE_HINT, DIM_RGB))
   return { spans, at }
 }
 
-/** The tab's two rows under the command line, each a Line, in `n` cells. */
-function tabRows(input: StripInput, n: number, at = input.now): Line[] {
-  const { view, world, tab } = input
-  if (tab === 'loot') {
-    const loot = view.loot.slice(-2)
-    if (loot.length === 0) return [{ spans: [text(padTo('No loot yet', n), DIM_RGB)] }]
+/** A log line as the message window pages it: its text, and its rows wrapped to the window. */
+type LogRows = { text: string; rows: Line[] }
+
+/** The log tab's lines in `n` cells, oldest first, each wrapped in full; the newest typing. */
+function logLines(input: StripInput, n: number, at: number): LogRows[] {
+  if (input.tab === 'loot') {
     // A loot line opens with its glyph; the font lacks the hero ones (♞ ✶ ✚ ➶): drop those.
     const shown = (t: string) => {
       const [first, second] = chars(t)
       const bare = first && drawable(first) === '?' && first !== '?' && second === ' '
       return bare ? chars(t).slice(2).join('') : t
     }
-    return loot.map((l) => ({
-      spans: [text(padTo(clip(shown(l.text), n), n), RARITY_RGB[l.rarity] ?? TEXT_RGB)],
+    return input.view.loot.map((l) => ({
+      text: l.text,
+      rows: wrapSpans([text(shown(l.text), RARITY_RGB[l.rarity] ?? TEXT_RGB)], n).map((r) => ({
+        spans: r.spans,
+      })),
     }))
   }
-  if (tab === 'world') {
-    const [presence, , chat] = worldRows(view, world, at)
-    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n, at)
-    return [
-      { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
-      { spans: [text(clip(second, n))] },
-    ]
+  return input.log.shown(at, input.motion).map((l) => ({
+    text: l.text,
+    rows: wrapSpans([text(l.text, l.rgb)], n).map((r) => {
+      const len = r.spans.reduce((k, s) => k + ('text' in s ? chars(s.text).length : 0), 0)
+      const reveal = Math.max(0, Math.min(len, l.revealed - r.from))
+      return { spans: r.spans, ...(reveal < len ? { reveal } : {}) }
+    }),
+  }))
+}
+
+/** Rows a page of the message window moves: its two text rows. */
+export const PAGE_ROWS = 2
+
+/**
+ * Where the message window stands on a log tab, what `j` and `k` page from: `offset` rows back
+ * from the newest position, between `min` (a notice's last rows) and `max` (the oldest rows), and
+ * the tab's line texts it was read against.
+ */
+export type Page = { offset: number; min: number; max: number; lines: readonly string[] }
+
+/** The scroll `by` rows from `page`, older for a positive `by`: `j` is PAGE_ROWS, `k` its negative. */
+export function paged(page: Page, by: number): LogScroll {
+  return { rows: Math.max(page.min, Math.min(page.max, page.offset + by)), lines: page.lines }
+}
+
+/** Lines at the end of `now` that came after `before`'s newest: how far its window was pushed back. */
+function newSince(before: readonly string[], now: readonly string[]): number {
+  for (let k = 0; k < now.length; k++) {
+    const n = Math.min(now.length - k, before.length)
+    if (n === 0) break
+    let same = true
+    for (let i = 1; i <= n && same; i++)
+      same = now[now.length - k - i] === before[before.length - i]
+    if (same) return k
   }
-  // Party: the log's newest two rows, a long line wrapped over both, the newest typing.
-  const rows: Line[] = []
-  for (const l of input.log.shown(at, input.motion)) {
-    let left = l.revealed
-    for (const row of wrap(l.text, n)) {
-      const len = chars(row).length
-      const reveal = Math.max(0, Math.min(len, left))
-      left -= len + 1
-      rows.push({ spans: [text(row, l.rgb)], ...(reveal < len ? { reveal } : {}) })
-    }
-  }
-  return rows.slice(-2)
+  return 0
 }
 
 /** Whether the message window shows `g: back to the fight`: camping, and no notice holds its row. */
 const backToFight = (input: StripInput) => input.view.camping && !input.notice
 
-/** The Party tab's newest log line on one row, clipped, still typing as it was. */
-function newestRow(input: StripInput, n: number, at: number): Line {
-  const l = input.log.shown(at, input.motion).at(-1)
-  if (!l) return { spans: [] }
-  const row = clip(l.text, n)
-  const reveal = Math.max(0, Math.min(chars(row).length, l.revealed))
-  return { spans: [text(row, l.rgb)], ...(reveal < chars(row).length ? { reveal } : {}) }
+/** The message window's two rows, the footer while paged off the newest, and its page. */
+type Body = {
+  rows: Line[]
+  footer: string | null
+  page: Page | null
+  /** The window row the `g: back to the fight` row shows on, if it shows. */
+  back: number | null
+}
+
+/**
+ * The rows under the command line in `n` cells. On Party and Loot the log's rows, every line
+ * wrapped in full, then a notice's (or the camp's `g` row's), are one paging space: at the newest
+ * the window shows the log's tail, or a notice's first rows, and the scroll pages it back. World
+ * never pages: a notice takes its bottom rows.
+ */
+function messageBody(input: StripInput, n: number, at: number): Body {
+  const back = backToFight(input)
+  const note = input.notice ?? (back ? BACK_TO_FIGHT : null)
+  const notes: Line[] =
+    note === null ? [] : wrapSpans([text(note)], n).map((r) => ({ spans: r.spans }))
+  if (input.tab === 'world') {
+    const { view, world } = input
+    const [presence, , chat] = worldRows(view, world, at)
+    const second = chat && !chat.dim ? chat.text : recordsRow(view, world, n, at)
+    const rows: Line[] = [
+      { spans: [text(clip(presence?.text ?? '', n), presence?.dim ? DIM_RGB : TEXT_RGB)] },
+      { spans: [text(clip(second, n))] },
+    ]
+    if (notes.length >= PAGE_ROWS)
+      return { rows: notes.slice(0, PAGE_ROWS), footer: null, page: null, back: back ? 0 : null }
+    if (notes[0]) rows[1] = notes[0]
+    return { rows, footer: null, page: null, back: back ? 1 : null }
+  }
+  const lines = logLines(input, n, at)
+  const texts = lines.map((l) => l.text)
+  const log: Line[] =
+    input.tab === 'loot' && lines.length === 0
+      ? [{ spans: [text('No loot yet', DIM_RGB)] }]
+      : lines.flatMap((l) => l.rows)
+  const total = log.length + notes.length
+  if (total <= PAGE_ROWS) {
+    const blank = Array.from({ length: notes.length > 0 ? PAGE_ROWS - total : 0 }, () => ({
+      spans: [],
+    }))
+    return {
+      rows: [...log, ...blank, ...notes],
+      footer: null,
+      page: { offset: 0, min: 0, max: 0, lines: texts },
+      back: back ? log.length + blank.length : null,
+    }
+  }
+  // Rows back from the newest position; a scroll set back from the newest is pushed back by the
+  // rows of every line since, so the window stays on what it showed.
+  const scroll = input.scroll
+  let offset = scroll?.rows ?? 0
+  if (scroll && scroll.rows > 0) {
+    const k = newSince(scroll.lines, texts)
+    offset += lines.slice(lines.length - k).reduce((r, l) => r + l.rows.length, 0)
+  }
+  const newest = log.length + Math.min(PAGE_ROWS, notes.length)
+  const min = newest - total
+  const max = newest - PAGE_ROWS
+  offset = Math.max(min, Math.min(max, offset))
+  const end = newest - offset
+  const noteAt = log.length - (end - PAGE_ROWS)
+  return {
+    rows: [...log, ...notes].slice(end - PAGE_ROWS, end),
+    footer: end < total ? `${end - 1}-${end}/${total}` : null,
+    page: { offset, min, max, lines: texts },
+    back: back && noteAt >= 0 && noteAt < PAGE_ROWS ? noteAt : null,
+  }
 }
 
 function messageLines(input: StripInput, columns: number, at = input.now): Line[] {
-  const inner = columns - 2
-  const n = inner - 2
-  const cmd = commandLine(input.tab, n)
-  const back = backToFight(input)
-  // Camping on the Party tab: the newest line whole above the camp's row, not a wrapped tail.
-  const tab = back && input.tab === 'party' ? [newestRow(input, n, at)] : tabRows(input, n, at)
-  const rows = tab.map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
-  while (rows.length < 2) rows.push({ spans: [] })
-  if (input.notice) rows[1] = { spans: [pad(1), text(clip(input.notice, n))] }
-  else if (back) rows[1] = { spans: [pad(1), text(clip(BACK_TO_FIGHT, n))] }
+  const n = columns - 4
+  const body = messageBody(input, n, at)
+  const cmd = commandLine(input.tab, n, body.footer)
+  const rows = body.rows.map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
+  while (rows.length < PAGE_ROWS) rows.push({ spans: [] })
   return [{ spans: [pad(1), ...cmd.spans] }, ...rows]
 }
 
-function messageWindow(input: StripInput, x: number, columns: number): Built {
+function messageWindow(
+  input: StripInput,
+  x: number,
+  columns: number,
+): Built & { page: Page | null } {
   const n = columns - 4
-  const cmd = commandLine(input.tab, n)
+  const body = messageBody(input, n, input.now)
+  const cmd = commandLine(input.tab, n, body.footer)
   const lines = messageLines(input, columns)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
     label: c.label,
     x: x + 2 + c.x,
     y: 1,
-    columns: c.hotkey === 'c' ? 1 : chars(c.label).length + 1,
+    columns: c.hotkey === 'c' ? chars(c.label).length : chars(c.label).length + 1,
   }))
-  // The row a notice takes, the window's third line, under the top border.
-  if (backToFight(input))
+  // The camp's row, under the command line where it shows: the top border, then the command line.
+  if (body.back !== null)
     hotspots.push({
       hotkey: 'g',
       label: BACK_TO_FIGHT,
       x: x + 2,
-      y: 3,
+      y: 2 + body.back,
       columns: Math.min(n, chars(BACK_TO_FIGHT).length),
     })
   const shown = lines
@@ -333,12 +482,15 @@ function messageWindow(input: StripInput, x: number, columns: number): Built {
         .trim(),
     )
     .filter(Boolean)
-  const alt = `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab. ${shown.join(' ')}`.trim()
+  const where = body.footer === null ? '' : ` Rows ${body.footer.replace('/', ' of ')}.`
+  const alt =
+    `${input.tab[0]?.toUpperCase()}${input.tab.slice(1)} tab.${where} ${shown.join(' ')}`.trim()
   return {
     win: { key: 'message', x, columns, rows: STRIP_ROWS, lines, alt },
     hotspots,
     slots: [],
     hp: [],
+    page: body.page,
   }
 }
 
@@ -480,7 +632,7 @@ function compactWindow(input: StripInput, x: number, columns: number): Built {
     label: c.label,
     x: x + 2 + c.x,
     y: COMPACT_WINDOW_ROWS - 1,
-    columns: c.hotkey === 'c' ? 1 : chars(c.label).length + 1,
+    columns: c.hotkey === 'c' ? chars(c.label).length : chars(c.label).length + 1,
   }))
   hotspots.push({ hotkey: 'f', label: title, x: x + 2, y: 0, columns: chars(title).length })
   const field = view.camping
@@ -515,7 +667,7 @@ function asStaged(input: StripInput): StripInput {
   return { ...input, view: stagedState(input.view, input.world, input.timeline, input.now) }
 }
 
-function build(raw: StripInput): { scene: Scene; built: Built[] } {
+function build(raw: StripInput): { scene: Scene; built: Built[]; page: Page | null } {
   const input = asStaged(raw)
   const columns = Math.min(input.columns, STRIP_MAX_COLUMNS)
   if (input.kind === 'compact') {
@@ -529,6 +681,7 @@ function build(raw: StripInput): { scene: Scene; built: Built[] } {
         alt: w.win.alt,
       },
       built: [w],
+      page: null,
     }
   }
   const withEnemy = input.kind === 'full' || columns >= FULL_MIN
@@ -539,7 +692,8 @@ function build(raw: StripInput): { scene: Scene; built: Built[] } {
     built.push(enemyWindow(input, x))
     x += ENEMY_COLUMNS
   }
-  built.push(messageWindow(input, x, message))
+  const msg = messageWindow(input, x, message)
+  built.push(msg)
   x += message
   built.push(partyWindow(input, x))
   x += PARTY_COLUMNS
@@ -548,17 +702,26 @@ function build(raw: StripInput): { scene: Scene; built: Built[] } {
   return {
     scene: { columns, rows: STRIP_ROWS, windows, alt: windows.map((w) => w.alt).join(' ') },
     built,
+    page: msg.page,
   }
 }
 
-export function stripScene(input: StripInput): { scene: Scene; hotspots: readonly Hotspot[] } {
-  const { scene, built } = build(input)
-  return { scene, hotspots: built.flatMap((b) => b.hotspots) }
+/**
+ * The strip's scene and hotspots, and on Party and Loot the message window's page: where the
+ * window stands over the rows the strip wrapped at its width, for `j` and `k` to page from.
+ */
+export function stripScene(input: StripInput): {
+  scene: Scene
+  hotspots: readonly Hotspot[]
+  page: Page | null
+} {
+  const { scene, built, page } = build(input)
+  return { scene, hotspots: built.flatMap((b) => b.hotspots), page }
 }
 
 /** The desktop's motion over the next `horizonMs`: HP bars, gauges, the ▶, the message window's lines. */
 export function stripTracks(input: StripInput, horizonMs: number): Track[] {
-  const { built } = build(input)
+  const { built, page } = build(input)
   const tracks: Track[] = []
   const now = input.now
   const actions = input.timeline.actions()
@@ -622,15 +785,15 @@ export function stripTracks(input: StripInput, horizonMs: number): Track[] {
         })
     }
     if (b.win.key === 'message' && input.tab === 'party') {
-      // A notice or the camp's row holds the typing row, and motion still shows lines whole: no
-      // typing then.
-      const types = input.motion !== 'still' && !input.notice && !input.view.camping
+      // A notice or the camp's row holds the typing row, motion still shows lines whole, and paged
+      // back the typing line is out of the window: no typing then.
+      const types =
+        input.motion !== 'still' && !input.notice && !input.view.camping && !page?.offset
       const width = b.win.columns - 4
       const lastRow = (text: string, revealed: number) => {
         // Cells of the line's last row already shown: its leading gap, then what typed into it.
-        const rows = wrap(text, width)
-        const before = rows.slice(0, -1).reduce((k, r) => k + chars(r).length + 1, 0)
-        return 1 + Math.max(0, revealed - before)
+        const last = wrapSpans([{ text }], width).at(-1)
+        return 1 + Math.max(0, revealed - (last?.from ?? 0))
       }
       const frames: Extract<Track, { kind: 'lines' }>['frames'][number][] = []
       const current = input.log.typing(now, input.motion)

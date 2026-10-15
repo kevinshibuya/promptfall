@@ -66,7 +66,7 @@ function site(
     renderer,
     props,
     surface,
-    strip: { kind: 'full', columns: props.bodyColumns, tab: 'party', extra },
+    strip: { kind: 'full', columns: props.bodyColumns, tab: 'party', extra, scroll: null },
   }
 }
 
@@ -522,7 +522,7 @@ function worldSite(renderer: StageSite['renderer'] = 'image'): StageSite {
     renderer,
     props: PROPS,
     surface: 'terminal',
-    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0 },
+    strip: { kind: 'bare', columns: 120, tab: 'world', extra: 0, scroll: null },
   }
 }
 

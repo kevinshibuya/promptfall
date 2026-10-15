@@ -140,6 +140,13 @@ export type GameView = {
   guarantees: GuaranteesView
 }
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
+/**
+ * A log tab's scroll (spec #234): `rows` wrapped rows back from the newest, 0 at the newest, set
+ * against `lines`, the tab's line texts then, so the lines since push it back and the window stays.
+ */
+export type LogScroll = { rows: number; lines: readonly string[] }
+/** The band's scroll on its two log tabs and the zone it was set in; never saved with the prefs. */
+export type BandScroll = { zone: number; party: LogScroll | null; loot: LogScroll | null }
 
 /** One integer per rarity. */
 export type RarityCountsView = Record<RarityName, number>
@@ -362,6 +369,8 @@ declare module 'claude-code' {
     promptfall: {
       view: GameView | null
       prefs: Prefs
+      /** Per session, never stored, owned by ui/band.tsx. */
+      bandScroll: BandScroll
       mode: Mode
       dialogTab: DialogTab
       notice: string | null

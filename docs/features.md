@@ -133,7 +133,7 @@ engine's precompute or a subagent's own: every hero heals half its HP and the fa
 as at a rest, and the log says "The party makes camp while Claude gathers its thoughts." The fight
 pauses. The enemies walk off the stage with their HP kept, the party huddles at a campfire with the
 bob stopped, the enemy window's rows go blank but a dim `camping`, the message window shows
-`g: back to the fight` under the newest log line, and the compact window shows `camping` for the
+`g: back to the fight` under the newest log row, and the compact window shows `camping` for the
 front enemy. Every gauge, enemy and queued enemy holds until the party breaks camp: at the next
 prompt or tool call, a travel, a world boss appearing, the session ending, or `g` on the band or
 `/promptfall go`. Then the fire goes out, the heroes step back to their slots, the same enemies walk
@@ -175,8 +175,8 @@ band ever drew it, still leaves its chest, on the ground of the lowest free slot
 sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
 the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
 the reveal: they land together once the item has risen, not at the kill, while sales and
-purchases show at once. The Loot tab shows the last two rows, drops and sales alike, coloured by
-rarity.
+purchases show at once. The Loot tab shows the newest drops and sales, coloured by rarity, and
+pages back through the last 40 with `j` and `k`.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its
@@ -364,7 +364,8 @@ pauses and the band asks for an update instead of being refused in silence.
 ## Interface
 
 **The band.** The game draws in a band above the prompt with three tabs, Party, Loot and World,
-on the letter hotkeys `p`, `l` and `w`, and `c` collapses it. The Party tab is the stage over the
+on the letter hotkeys `p`, `l` and `w`, and `c` collapses it; the command line shows the key as a
+dim `c ▾` at its right end. The Party tab is the stage over the
 strip; Loot and World are the strip alone. The Party tab is 22 rows in every fight, the 17-row
 stage over the 5-row strip, and never more than Claude Code gives it. A half-block terminal
 shows the same scene as the terminals that draw images and the desktop, with the same art, frames,
@@ -443,9 +444,21 @@ zone only then, so a zone boss dies against its own painting, and the world boss
 party's hits land, the boss standing at an empty bar until the server lets it go. On the desktop, which redraws once
 a tick, the HP bars drop at the moment each hit lands, as the action gauges fill between redraws.
 
-**The command line.** The message window's first row, `▶Party Loot World ▾`, is the band's tabs
-with ▶ on the current one. Under it the message window shows the combat log on Party, the last
-two drops on Loot and the World rows on World.
+**The command line.** The message window's first row, `▶Party Loot World c ▾`, is the band's
+tabs with ▶ on the current one. Under it the message window shows the combat log on Party, the
+loot log on Loot and the World rows on World.
+
+**Paging the logs.** On Party and Loot, `j` pages the message window two rows back toward older
+lines and `k` two rows forward; they do nothing in the compact or collapsed band, and the World
+tab never pages. While paged back the command line's right end shows a footer in the pane's
+shape, `5-6/61`, the rows shown out of the log's rows, before `c ▾`; at the newest there is none,
+and a narrow message window drops the footer and keeps the hint. A new line while paged back
+leaves the window where it is; at the newest the window follows the new lines. A tab switch, `c`,
+a compact layout and a travel to another zone put the window back at the newest. No line is ever
+cut with an ellipsis: every log line wraps over the rows it needs, the newest position shows the
+tail, and `j` reaches a long line's head. A notice, or the camp's `g: back to the fight`, wraps in
+full and is the newest of the paging: with one up the window shows its first rows, the footer
+says when there is more, `k` pages on through it and `j` back into the log.
 
 **The pane.** `/promptfall` opens the pane on nine tabs: Inventory, Heroes, Market, Orders,
 Account, Odds, Journal, Chat and Leaderboards, named in a tab window with each hotkey letter in gold. Each
