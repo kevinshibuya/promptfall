@@ -487,10 +487,14 @@ function messageBody(input: StripInput, n: number, at: number): Body {
   }
 }
 
-function messageLines(input: StripInput, columns: number, at = input.now): Line[] {
-  const n = columns - 4
-  const body = messageBody(input, n, at)
-  const cmd = commandLine(input.tab, n, body.footer, body.presence)
+/** The message window's lines: the command line, then the body's rows; the body at `at` unless given. */
+function messageLines(
+  input: StripInput,
+  columns: number,
+  at = input.now,
+  body = messageBody(input, columns - 4, at),
+): Line[] {
+  const cmd = commandLine(input.tab, columns - 4, body.footer, body.presence)
   const rows = body.rows.map((l) => ({ ...l, spans: [pad(1), ...l.spans] }))
   while (rows.length < PAGE_ROWS) rows.push({ spans: [] })
   return [{ spans: [pad(1), ...cmd.spans] }, ...rows]
@@ -504,7 +508,7 @@ function messageWindow(
   const n = columns - 4
   const body = messageBody(input, n, input.now)
   const cmd = commandLine(input.tab, n, body.footer, body.presence)
-  const lines = messageLines(input, columns)
+  const lines = messageLines(input, columns, input.now, body)
   const hotspots: Hotspot[] = cmd.at.map((c) => ({
     hotkey: c.hotkey,
     label: c.label,
