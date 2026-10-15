@@ -24,7 +24,7 @@ changed in the decisions above. A `/to-spec` for the next section reads this tab
 | 3 | #179 waves | #179 | #204, #205 | `afk run 179`, started 2026-10-14 | #206, merged 2026-10-14 as `f08a125` | merged |
 | 4 | One stage | #209 | #210, #211, #212, #213, #214, #215, #216 | `afk run 209`, started 2026-10-14, stopped during #213 and resumed once | #218, merged 2026-10-14 as `6618f4e` | merged |
 | 5 | Reactive revamp | #221 | #222, #223, #224, #225, #226, #227, #228 | `afk run 221`, started 2026-10-14 | #229, merged 2026-10-14 as `16f7a0e` | merged |
-| 6 | Band polish | #234 | #173, #230 | | | not started |
+| 6 | Band polish | #234 | #235, #236, #237, #238, #239, #240, #241 | | | not started |
 | 7 | Rerolls | | | | | not started |
 | 8 | Market rules | | | | | not started |
 | 9 | Closing arc ticket | | | | | not started |
