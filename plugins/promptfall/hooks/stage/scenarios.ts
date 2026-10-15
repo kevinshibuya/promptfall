@@ -725,9 +725,35 @@ export function strip(name: StripScenario): StripInput {
       return stripInput(wave(), { kind: 'compact', columns: 110 })
     case 'strip-loot': {
       const v = wave()
+      // A hero joining off the page, then a drop and a sale: each row leads with its sprite.
       v.loot = [
-        { text: '/ Iron Sword (epic)', rarity: 'epic', kind: 'drop', itemId: 'loot1' },
-        { text: '[ Silk Robe (rare)', rarity: 'rare', kind: 'drop', itemId: 'loot2' },
+        {
+          text: '➶ Kestrel joined (uncommon)',
+          rarity: 'uncommon',
+          kind: 'market',
+          itemId: null,
+          lead: { kind: 'hero', key: 'archer' },
+          name: 'Kestrel',
+          rest: ' joined (uncommon)',
+        },
+        {
+          text: '/ Iron Sword (epic)',
+          rarity: 'epic',
+          kind: 'drop',
+          itemId: 'loot1',
+          lead: { kind: 'item', key: 'iron_sword' },
+          name: 'Iron Sword',
+          rest: ' (epic)',
+        },
+        {
+          text: 'Silk Robe sold for 3g',
+          rarity: 'rare',
+          kind: 'vendored',
+          itemId: 'loot2',
+          lead: { kind: 'item', key: 'silk_robe' },
+          name: 'Silk Robe',
+          rest: ' sold for 3g',
+        },
       ]
       return stripInput(v, { kind: 'bare', tab: 'loot' })
     }

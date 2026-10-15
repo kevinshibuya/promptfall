@@ -30,6 +30,45 @@ test('a Loot row carries its item and its kind; a hero contract sold off is a ma
     { kind: 'market', itemId: 'i3' },
   ])
   expect(view.loot[2]?.text).toBe('Hero contract sold for 90g')
+  expect(view.loot[2]?.lead).toBeNull()
+})
+
+test('a Loot row leads with its item or its hero, then the name, then the rest of the line', () => {
+  const state = {
+    ...createInitialState(1),
+    lootLog: [
+      { k: 'item', itemId: 'i1', base: 'silk_robe', rarity: 'rare', vendoredFor: null },
+      { k: 'item', itemId: 'i2', base: 'silk_robe', rarity: 'common', vendoredFor: 3 },
+      { k: 'hero', heroId: 'h9', template: 'archer_1', rarity: 'epic', via: 'tavern' },
+      {
+        k: 'trade',
+        what: 'bought',
+        kind: 'item',
+        base: 'steel_longsword',
+        rarity: 'rare',
+        gold: 40,
+      },
+      { k: 'trade', what: 'sold', kind: 'hero', base: 'knight_1', rarity: 'rare', gold: 90 },
+      { k: 'reward', base: 'steel_longsword', rarity: 'epic', gold: 45 },
+    ],
+  } as never
+  const view = toGameView(state, 'a1', false, toAccountView(null, null, 'in-process', 0))
+  expect(view.loot.map(({ lead, name, rest }) => ({ lead, name, rest }))).toEqual([
+    { lead: { kind: 'item', key: 'silk_robe' }, name: 'Silk Robe', rest: ' (rare)' },
+    { lead: { kind: 'item', key: 'silk_robe' }, name: 'Silk Robe', rest: ' sold for 3g' },
+    { lead: { kind: 'hero', key: 'archer' }, name: 'Kestrel', rest: ' joined (epic)' },
+    {
+      lead: { kind: 'item', key: 'steel_longsword' },
+      name: 'Steel Longsword',
+      rest: ' bought for 40g',
+    },
+    { lead: { kind: 'hero', key: 'knight' }, name: 'Aldric', rest: ' sold for 90g' },
+    {
+      lead: { kind: 'item', key: 'steel_longsword' },
+      name: 'Steel Longsword',
+      rest: ', boss reward (+45g)',
+    },
+  ])
 })
 
 test('the Loot tab gets the newest 40 of the 50 lines the sim keeps', () => {

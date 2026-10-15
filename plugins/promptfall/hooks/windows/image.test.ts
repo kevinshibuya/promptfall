@@ -142,6 +142,19 @@ test('an art span draws the fitted sprite at its cell, index 0 left as field', (
   expect(at(f, 17, 16)).toBe(FIELD_RGB)
 })
 
+test("an art span's Raster mark leaves the Image's picture as it was", () => {
+  const art = testArt(16, 16, [[0, 0]])
+  const plain = windowFrame(win({ columns: 6, rows: 3, lines: [{ spans: [{ gap: 1 }, { art }] }] }))
+  const marked = windowFrame(
+    win({
+      columns: 6,
+      rows: 3,
+      lines: [{ spans: [{ gap: 1 }, { art, mark: { ch: '█', rgb: 0x3080e8 } }] }],
+    }),
+  )
+  expect(marked.rgba).toEqual(plain.rgba)
+})
+
 test('windowSource encodes a window once: the same content answers the same source', () => {
   const a = windowSource(win({ title: [{ text: 'Party' }] }))
   const b = windowSource(win({ title: [{ text: 'Party' }] }))

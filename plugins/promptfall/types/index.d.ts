@@ -50,8 +50,22 @@ export type EnemyView = {
  * or anything else (a trade, a recruit, a boss's reward), which never waits.
  */
 export type LootKind = 'drop' | 'vendored' | 'market'
-/** A Loot row. `itemId` is the dropped item's id, the key to its chest; null for a row of no item. */
-export type LootView = { text: string; rarity: string; kind: LootKind; itemId: string | null }
+/** The sprite a Loot row leads with: an item's base, or a hero's class. */
+export type LootLead = { kind: 'item' | 'hero'; key: string }
+/**
+ * A Loot row. `itemId` is the dropped item's id, the key to its chest; null for a row of no item.
+ * The band draws `lead`'s sprite (a blank gap when null), `name` in the rarity's colour, then `rest`;
+ * `text` is the whole line in words.
+ */
+export type LootView = {
+  text: string
+  rarity: string
+  kind: LootKind
+  itemId: string | null
+  lead: LootLead | null
+  name: string
+  rest: string
+}
 export type AffixRollView = { value: number; min: number; max: number }
 export type ItemView = {
   id: string

@@ -13,7 +13,10 @@ export type Span =
   | { bar: number; cells: number; rgb: number } // bar: fill 0..10000 over `cells` cells, BAR_BACK_RGB behind
   | { cursor: boolean } // one cell: ▶ when true, blank when false
   | { gap: number } // blank cells
-  | { art: SpriteArt } // ART_CELLS cells: the sprite fitted into 16 × 16 px; raster draws two blank cells
+  | { art: SpriteArt; mark?: Mark } // ART_CELLS cells: the sprite fitted into 16 × 16 px; raster draws two blank cells, or the mark
+
+/** What the Raster draws in an art span's cells in place of the sprite; the pixel encoders ignore it. */
+export type Mark = { ch: string; rgb: number }
 
 export type Line = {
   spans: readonly Span[]
@@ -126,7 +129,7 @@ export type Placed = { x: number; span: number } & (
   | { kind: 'text'; text: string; rgb: number }
   | { kind: 'bar'; cells: number; fill: number; rgb: number }
   | { kind: 'cursor' }
-  | { kind: 'art'; art: SpriteArt }
+  | { kind: 'art'; art: SpriteArt; mark?: Mark }
 )
 
 /** One string per character (code point), so a character is one cell. */
@@ -167,7 +170,14 @@ export function placeLine(spans: readonly Span[], width: number, reveal?: number
     } else if ('cursor' in span) {
       if (span.cursor) out.push({ x, span: i, kind: 'cursor' })
     } else if ('art' in span) {
-      if (room >= ART_CELLS) out.push({ x, span: i, kind: 'art', art: span.art })
+      if (room >= ART_CELLS)
+        out.push({
+          x,
+          span: i,
+          kind: 'art',
+          art: span.art,
+          ...(span.mark ? { mark: span.mark } : {}),
+        })
     }
     x += spanCells(span)
   }

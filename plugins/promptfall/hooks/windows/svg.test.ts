@@ -187,3 +187,10 @@ test('an art span draws the fitted sprite at its cell', () => {
     '<g transform="translate(8 18)"><path fill="#e83830" d="M0 0h1v1h-1z"/></g>',
   )
 })
+
+test("an art span's Raster mark leaves the Svg as it was", () => {
+  const art = testArt(48, 34, [[0, 0]])
+  const svgOf = (spans: Line['spans']) =>
+    sceneSvg({ columns: 10, rows: 3, windows: [win({ lines: [{ spans }] })], alt: '' }, [], opts)
+  expect(svgOf([{ art, mark: { ch: '█', rgb: 0x3080e8 } }])).toBe(svgOf([{ art }]))
+})

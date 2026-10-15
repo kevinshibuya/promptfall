@@ -85,3 +85,14 @@ test('an art span draws two blank cells', () => {
   const g = cells({ columns: 10, rows: 3, windows: [win({ lines: [line] })], alt: '' })
   expect(text(g[1])).toBe('│A  B    │')
 })
+
+test("an art span's mark draws its glyph in the art's two cells, in its colour", () => {
+  const art = testArt(16, 16, [[0, 0]])
+  const line = { spans: [{ text: 'A' }, { art, mark: { ch: '█', rgb: 0x3080e8 } }, { text: 'B' }] }
+  const g = cells({ columns: 10, rows: 3, windows: [win({ lines: [line] })], alt: '' })
+  expect(text(g[1])).toBe('│A██B    │')
+  expect(g[1]?.slice(2, 4)).toEqual([
+    { ch: '█', fg: 0x3080e8, bg: FIELD_RGB },
+    { ch: '█', fg: 0x3080e8, bg: FIELD_RGB },
+  ])
+})

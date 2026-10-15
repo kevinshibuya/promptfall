@@ -399,10 +399,42 @@ test('a drop row waits for its reveal; a market row never does', () => {
   )
   const show = t.showAt('i1') ?? 0
   // The old sword's chest is long gone: no chest on the timeline holds it.
-  const old = { text: 'old sword', rarity: 'common', kind: 'drop', itemId: 'i0' } as const
-  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
-  const staff = { text: 'staff sold', rarity: 'rare', kind: 'vendored', itemId: 'i2' } as const
-  const bought = { text: 'bought ring', rarity: 'rare', kind: 'market', itemId: null } as const
+  const old = {
+    text: 'old sword',
+    rarity: 'common',
+    kind: 'drop',
+    itemId: 'i0',
+    lead: null,
+    name: 'old sword',
+    rest: '',
+  } as const
+  const robe = {
+    text: 'robe',
+    rarity: 'rare',
+    kind: 'drop',
+    itemId: 'i1',
+    lead: null,
+    name: 'robe',
+    rest: '',
+  } as const
+  const staff = {
+    text: 'staff sold',
+    rarity: 'rare',
+    kind: 'vendored',
+    itemId: 'i2',
+    lead: null,
+    name: 'staff sold',
+    rest: '',
+  } as const
+  const bought = {
+    text: 'bought ring',
+    rarity: 'rare',
+    kind: 'market',
+    itemId: null,
+    lead: null,
+    name: 'bought ring',
+    rest: '',
+  } as const
   const view: GameView = { ...wave(), loot: [old, robe, staff, bought], lastDrop: bought }
   const rows = (now: number) => stagedState(view, WORLD_DEFAULT, t, now).loot.map((l) => l.text)
   expect(rows(show - 1)).toEqual(['old sword', 'bought ring'])
@@ -430,12 +462,23 @@ test('a row waits for its own reveal: a contract sale beside a boss drop shows a
   t.observe(wave(), NOW - 1)
   t.onEffects([{ k: 'drop', item: lootItem('i1') }], NOW)
   const show = t.showAt('i1') ?? 0
-  const robe = { text: 'robe', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
+  const robe = {
+    text: 'robe',
+    rarity: 'rare',
+    kind: 'drop',
+    itemId: 'i1',
+    lead: null,
+    name: 'robe',
+    rest: '',
+  } as const
   const contract = {
     text: 'Hero contract sold for 90g',
     rarity: 'rare',
     kind: 'market',
     itemId: 'hero9',
+    lead: null,
+    name: 'Hero contract',
+    rest: ' sold for 90g',
   } as const
   const view: GameView = { ...wave(), loot: [robe, contract], lastDrop: contract }
   const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
@@ -467,8 +510,24 @@ test("a lone drop that reveals before a queued kill's chest shows first", () => 
   const show1 = t.showAt('i1') ?? 0
   const show2 = t.showAt('i2') ?? 0
   expect(show2).toBeLessThan(show1)
-  const first = { text: 'first', rarity: 'rare', kind: 'drop', itemId: 'i1' } as const
-  const second = { text: 'second', rarity: 'rare', kind: 'drop', itemId: 'i2' } as const
+  const first = {
+    text: 'first',
+    rarity: 'rare',
+    kind: 'drop',
+    itemId: 'i1',
+    lead: null,
+    name: 'first',
+    rest: '',
+  } as const
+  const second = {
+    text: 'second',
+    rarity: 'rare',
+    kind: 'drop',
+    itemId: 'i2',
+    lead: null,
+    name: 'second',
+    rest: '',
+  } as const
   const view: GameView = { ...wave(), loot: [first, second], lastDrop: second }
   const staged = (now: number) => stagedState(view, WORLD_DEFAULT, t, now)
   expect(staged(show2 - 1).loot).toEqual([])

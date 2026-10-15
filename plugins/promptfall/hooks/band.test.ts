@@ -900,6 +900,9 @@ const lootLines = (n: number, from = 1): GameView['loot'] =>
     rarity: 'common',
     kind: 'drop' as const,
     itemId: null,
+    lead: null,
+    name: `Loot line ${from + i}`,
+    rest: '',
   }))
 
 /** The message window's footer before the hint, and the loot lines its rows show. */

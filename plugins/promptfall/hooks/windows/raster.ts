@@ -4,7 +4,7 @@
 import { encode } from '../sprites/base64'
 import { CLEAR } from '../stage/raster'
 import { chars, drawable, placeLine, type Scene, type Span, spanCells, type Win } from './kit'
-import { BAR_BACK_RGB, BORDER_RGB, FIELD_RGB } from './tuning'
+import { ART_CELLS, BAR_BACK_RGB, BORDER_RGB, FIELD_RGB } from './tuning'
 
 const BOX = { tl: '╭', tr: '╮', bl: '╰', br: '╯', h: '─', v: '│' }
 const BAR = '▬'
@@ -36,6 +36,11 @@ function lay(
       for (let i = 0; i < p.cells; i++) {
         const cell = row[x + i]
         if (cell) Object.assign(cell, { ch: BAR, fg: i < filled ? p.rgb : BAR_BACK_RGB })
+      }
+    } else if (p.kind === 'art' && p.mark) {
+      for (let i = 0; i < ART_CELLS; i++) {
+        const cell = row[x + i]
+        if (cell) Object.assign(cell, { ch: drawable(p.mark.ch), fg: p.mark.rgb })
       }
     }
   }

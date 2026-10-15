@@ -5,11 +5,12 @@ const fail = (): never => {
 }
 
 import type { GameView, WorldState } from '../../types'
+import { spriteFor } from '../sprites/index'
 import { boss, wave, worldBoss } from '../stage/fixtures'
 import { STRIP_SCENARIOS, strip } from '../stage/scenarios'
 import { stagedState } from '../stage/staged'
 import { StageTimeline } from '../stage/timeline'
-import { DISSOLVE_MS, FLASH_MS, VICTORY_MS, WAVE_GAP_MS } from '../stage/tuning'
+import { DISSOLVE_MS, FLASH_MS, RARITY_RGB, VICTORY_MS, WAVE_GAP_MS } from '../stage/tuning'
 import { glyph } from '../windows/glyphs'
 import type { Line, Scene, Track, Win } from '../windows/kit'
 import { DIM_RGB, DOWN_RGB, WARN_RGB } from '../windows/tuning'
@@ -41,7 +42,7 @@ const lineText = (l: Line | undefined) =>
     .join('')
 const allText = (w: Win) =>
   [...(w.title ?? []), ...(w.footer ?? []), ...w.lines.flatMap((l) => l.spans)]
-    .map((s) => ('text' in s ? s.text : ''))
+    .map((s) => ('text' in s ? s.text : 'art' in s ? (s.mark?.ch ?? '') : ''))
     .join('')
 
 test('at 120 columns the four windows fill the band; the message window takes the rest', () => {
@@ -203,9 +204,17 @@ test("the wrap keeps each span's colour across the rows it breaks into", () => {
   ])
 })
 
-/** Loot lines of these texts, oldest first. */
+/** Loot lines of these texts, oldest first, each with no lead: its name the text. */
 const lootOf = (texts: readonly string[]): GameView['loot'] =>
-  texts.map((text) => ({ text, rarity: 'common', kind: 'drop' as const, itemId: null }))
+  texts.map((text) => ({
+    text,
+    rarity: 'common',
+    kind: 'drop' as const,
+    itemId: null,
+    lead: null,
+    name: text,
+    rest: '',
+  }))
 /** The Loot tab over these lines, scrolled as given. */
 const lootTab = (texts: readonly string[], scroll: StripInput['scroll'] = null): StripInput => {
   const input = strip('strip-loot')
@@ -258,7 +267,8 @@ test('a new line while paged back leaves the window where it is, the oldest trim
 test('no line is cut: a line longer than two rows shows its tail at the newest and its head paged back', () => {
   // At 120 columns the message window holds 36 cells of text a row.
   const long = 'Inventory full: Ancient Runed Greatsword of the Endless Night vendored for 1,240G.'
-  const rows = wrap(long, 36)
+  // A loot row's lead takes three of them; its text wraps in the rest.
+  const rows = wrap(long, 33)
   expect(rows).toHaveLength(3)
   const newest = lootTab([long])
   expect(shownRows(newest)).toEqual({ rows: rows.slice(1), footer: null })
@@ -277,6 +287,101 @@ test('no line is cut: a line longer than two rows shows its tail at the newest a
       input = { ...input, scroll: paged(at ?? fail(), PAGE_ROWS) }
     }
   }
+})
+
+/** A drop, a sale, a hero joining and a contract sold, oldest first. */
+const leads: GameView['loot'] = [
+  {
+    text: '/ Iron Sword (epic)',
+    rarity: 'epic',
+    kind: 'drop',
+    itemId: 'i1',
+    lead: { kind: 'item', key: 'iron_sword' },
+    name: 'Iron Sword',
+    rest: ' (epic)',
+  },
+  {
+    text: 'Silk Robe sold for 3g',
+    rarity: 'rare',
+    kind: 'vendored',
+    itemId: 'i2',
+    lead: { kind: 'item', key: 'silk_robe' },
+    name: 'Silk Robe',
+    rest: ' sold for 3g',
+  },
+  {
+    text: '➶ Kestrel joined (uncommon)',
+    rarity: 'uncommon',
+    kind: 'market',
+    itemId: null,
+    lead: { kind: 'hero', key: 'archer' },
+    name: 'Kestrel',
+    rest: ' joined (uncommon)',
+  },
+  {
+    text: 'Hero contract sold for 90g',
+    rarity: 'common',
+    kind: 'market',
+    itemId: null,
+    lead: null,
+    name: 'Hero contract',
+    rest: ' sold for 90g',
+  },
+]
+/** The message window's two rows' spans on the Loot tab over these lines. */
+const lootRows = (lines: GameView['loot']) => {
+  const input = strip('strip-loot')
+  return win(stripScene({ ...input, view: { ...input.view, loot: lines } }).scene, 'message')
+    .lines.slice(1)
+    .map((l) => l.spans)
+}
+
+test('a loot row leads with its item’s sprite, then its name in the rarity colour, then the rest', () => {
+  const [drop, sale] = lootRows(leads.slice(0, 2))
+  expect(drop).toEqual([
+    { gap: 1 },
+    { art: spriteFor('item', 'iron_sword').full, mark: { ch: '█', rgb: RARITY_RGB.epic } },
+    { gap: 1 },
+    { text: 'Iron Sword', rgb: RARITY_RGB.epic },
+    { text: ' (epic)' },
+  ])
+  expect(sale).toEqual([
+    { gap: 1 },
+    { art: spriteFor('item', 'silk_robe').full, mark: { ch: '█', rgb: RARITY_RGB.rare } },
+    { gap: 1 },
+    { text: 'Silk Robe', rgb: RARITY_RGB.rare },
+    { text: ' sold for 3g' },
+  ])
+})
+
+test('a hero line leads with the hero’s class sprite; a line with neither with a blank gap', () => {
+  const [hero, contract] = lootRows(leads.slice(2))
+  expect(hero).toEqual([
+    { gap: 1 },
+    { art: spriteFor('hero', 'archer').full, mark: { ch: '█', rgb: RARITY_RGB.uncommon } },
+    { gap: 1 },
+    { text: 'Kestrel', rgb: RARITY_RGB.uncommon },
+    { text: ' joined (uncommon)' },
+  ])
+  expect(contract).toEqual([
+    { gap: 1 },
+    { gap: 2 },
+    { gap: 1 },
+    { text: 'Hero contract', rgb: RARITY_RGB.common },
+    { text: ' sold for 90g' },
+  ])
+})
+
+test('a wrapped loot line hangs its later rows under the name', () => {
+  const long = {
+    ...(leads[0] as GameView['loot'][number]),
+    rest: ' (epic), the blade of a long forgotten king',
+  }
+  const [first, second] = lootRows([long])
+  // lineText reads the sprite as no text: its two cells are the gap before the name.
+  expect(lineText({ spans: first ?? [] })).toBe('  Iron Sword (epic), the blade of a')
+  expect(first?.[1]).toHaveProperty('art')
+  expect(lineText({ spans: second ?? [] })).toBe('    long forgotten king')
 })
 
 test('the Loot tab shows every line the view holds, 40 by paging', () => {
@@ -424,12 +529,21 @@ test('a hero-joined loot line drops the glyph the font lacks', () => {
   const view = {
     ...input.view,
     loot: [
-      { text: '♞ Aldric joined (rare)', rarity: 'rare', kind: 'market' as const, itemId: null },
+      {
+        text: '♞ Aldric joined (rare)',
+        rarity: 'rare',
+        kind: 'market' as const,
+        itemId: null,
+        lead: { kind: 'hero' as const, key: 'knight' },
+        name: 'Aldric',
+        rest: ' joined (rare)',
+      },
     ],
   }
   const { scene } = stripScene({ ...input, view })
   const message = win(scene, 'message')
   expect(lineText(message.lines[1]).trim()).toBe('Aldric joined (rare)')
+  expect(allText(message)).not.toContain('♞')
 })
 
 /** `actor` acts at `now` and hits `target` for `amount`; answers the hit's impact. */

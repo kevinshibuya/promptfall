@@ -573,7 +573,17 @@ test("a Loot band site redraws at a reveal's show time, not at the next rest fra
   h.timeline.onEffects([{ k: 'drop', item: { ...robe, tradeableAt: null } as never }], t0)
   const show = h.timeline.showAt('i1') ?? 0
   const v = wave()
-  v.loot = [{ text: '[ Silk Robe (rare)', rarity: 'rare', kind: 'drop', itemId: 'i1' }]
+  v.loot = [
+    {
+      text: '[ Silk Robe (rare)',
+      rarity: 'rare',
+      kind: 'drop',
+      itemId: 'i1',
+      lead: { kind: 'item', key: 'silk_robe' },
+      name: 'Silk Robe',
+      rest: ' (rare)',
+    },
+  ]
   h.state.view = v
   const site = worldSite('raster')
   h.loop.mount({ ...site, strip: { ...site.strip, tab: 'loot' } })

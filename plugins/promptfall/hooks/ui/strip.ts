@@ -1,7 +1,16 @@
 // The band's window strip (grill 1.7, 1.13, 1.15, 1.16): the enemy, message, party and purse
 // windows under the stage, or the one party window beside the compact stage. Pure: the view,
 // the stage timeline, the gauge tracker and the log in, a scene out; the encoders draw it.
-import type { BandTab, GameView, HeroView, LogScroll, Settings, WorldState } from '../../types'
+import type {
+  BandTab,
+  GameView,
+  HeroView,
+  LogScroll,
+  LootView,
+  Settings,
+  WorldState,
+} from '../../types'
+import { spriteFor } from '../sprites/index'
 import type { GaugeTrack } from '../stage/gauges'
 import type { MessageLog } from '../stage/log'
 import { landingsWithin, stagedState } from '../stage/staged'
@@ -10,7 +19,6 @@ import { COMPACT_STAGE_COLUMNS, RARITY_RGB } from '../stage/tuning'
 import { GAUGE_FULL, RETREAT_AT } from '../vendor/sim.js'
 import {
   chars,
-  drawable,
   type Line,
   type Scene,
   type Span,
@@ -19,6 +27,7 @@ import {
   type Win,
 } from '../windows/kit'
 import {
+  ART_CELLS,
   COMPACT_WINDOW_ROWS,
   DIM_RGB,
   DOWN_RGB,
@@ -315,24 +324,38 @@ function commandLine(
   return { spans, at }
 }
 
+/** The cells a loot row's lead takes: the sprite and the gap after it, as an inventory row's. */
+const LEAD_CELLS = ART_CELLS + 1
+/** What the Raster draws in a loot row's sprite cells, in the rarity's colour. */
+const LOOT_MARK = '█'
+
+/**
+ * A loot row's lead: the item's sprite or the hero's class sprite, marked on the Raster with a
+ * block in the rarity's colour, or a blank gap; then the gap before the name.
+ */
+function lootLead(l: LootView, rgb: number): Span[] {
+  const art: Span = l.lead
+    ? { art: spriteFor(l.lead.kind, l.lead.key).full, mark: { ch: LOOT_MARK, rgb } }
+    : pad(ART_CELLS)
+  return [art, pad(1)]
+}
+
 /** A log line as the message window pages it: its text, and its rows wrapped to the window. */
 type LogRows = { text: string; rows: Line[] }
 
 /** The log tab's lines in `n` cells, oldest first, each wrapped in full; the newest typing. */
 function logLines(input: StripInput, n: number, at: number): LogRows[] {
   if (input.tab === 'loot') {
-    // A loot line opens with its glyph; the font lacks the hero ones (♞ ✶ ✚ ➶): drop those.
-    const shown = (t: string) => {
-      const [first, second] = chars(t)
-      const bare = first && drawable(first) === '?' && first !== '?' && second === ' '
-      return bare ? chars(t).slice(2).join('') : t
-    }
-    return input.view.loot.map((l) => ({
-      text: l.text,
-      rows: wrapSpans([text(shown(l.text), RARITY_RGB[l.rarity] ?? TEXT_RGB)], n).map((r) => ({
-        spans: r.spans,
-      })),
-    }))
+    return input.view.loot.map((l) => {
+      const rgb = RARITY_RGB[l.rarity] ?? TEXT_RGB
+      const rows = wrapSpans([text(l.name, rgb), ...(l.rest ? [text(l.rest)] : [])], n - LEAD_CELLS)
+      return {
+        text: l.text,
+        rows: rows.map((r, i) => ({
+          spans: [...(i === 0 ? lootLead(l, rgb) : [pad(LEAD_CELLS)]), ...r.spans],
+        })),
+      }
+    })
   }
   return input.log.shown(at, input.motion).map((l) => ({
     text: l.text,

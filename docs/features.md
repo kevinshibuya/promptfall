@@ -175,8 +175,12 @@ band ever drew it, still leaves its chest, on the ground of the lowest free slot
 sandbox item is the drop of the front monster, struck down for it. The combat log's drop line,
 the Loot tab's row and a Rare or better drop's toast and cue are each a held line that waits for
 the reveal: they land together once the item has risen, not at the kill, while sales and
-purchases show at once. The Loot tab shows the newest drops and sales, coloured by rarity, and
-pages back through the last 40 with `j` and `k`.
+purchases show at once. The Loot tab shows the newest drops and sales and pages back through the
+last 40 with `j` and `k`. Each row reads like an inventory row: it leads with the item's or hero's
+art (the item's sprite for a drop, a sale or a trade, the hero's class sprite for a hero joining
+or traded, a blank gap for a hero contract sold), then the name in its rarity colour, then the
+rest of the line, its later rows hung under the name. On the Raster, which draws no pictures, the
+art's two cells show a block in the rarity colour.
 
 **Inventory.** The pane's Inventory tab lists the items, each with its icon where the surface
 draws pictures, and the detail window shows the ▶ item's stats and affixes. Enter opens its

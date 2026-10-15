@@ -5,6 +5,7 @@ import type {
   HeroView,
   ItemView,
   ListingView,
+  LootLead,
   LootView,
   OrderView,
   RosterHeroView,
@@ -109,6 +110,12 @@ export function orderView(order: Order): OrderView {
   }
 }
 
+const itemLead = (base: string): LootLead => ({ kind: 'item', key: base })
+const heroLead = (template: string): LootLead => ({
+  kind: 'hero',
+  key: content.heroTemplates[template]?.cls ?? template,
+})
+
 function lootLine(entry: LootEntry): LootView {
   if (entry.k === 'hero') {
     const glyph = content.heroTemplates[entry.template]?.glyph ?? '@'
@@ -118,6 +125,9 @@ function lootLine(entry: LootEntry): LootView {
       rarity: entry.rarity,
       kind: 'market',
       itemId: null,
+      lead: heroLead(entry.template),
+      name,
+      rest: ` joined (${entry.rarity})`,
     }
   }
   if (entry.k === 'reward') {
@@ -127,13 +137,24 @@ function lootLine(entry: LootEntry): LootView {
       rarity: entry.rarity,
       kind: 'market',
       itemId: null,
+      lead: itemLead(entry.base),
+      name,
+      rest: `, boss reward (+${entry.gold}g)`,
     }
   }
   if (entry.k === 'trade') {
     const name = tradeName(entry.kind, entry.base)
     const text =
       entry.what === 'returned' ? `${name} returned` : `${entry.what} ${name} for ${entry.gold}g`
-    return { text, rarity: entry.rarity, kind: 'market', itemId: null }
+    return {
+      text,
+      rarity: entry.rarity,
+      kind: 'market',
+      itemId: null,
+      lead: entry.kind === 'hero' ? heroLead(entry.base) : itemLead(entry.base),
+      name,
+      rest: entry.what === 'returned' ? ' returned' : ` ${entry.what} for ${entry.gold}g`,
+    }
   }
   const base = content.itemBases[entry.base]
   const name = entry.base === 'contract' ? 'Hero contract' : (base?.name ?? entry.base)
@@ -144,6 +165,10 @@ function lootLine(entry: LootEntry): LootView {
       // A hero contract a full roster sells never had a chest: nothing waits for it.
       kind: entry.base === 'contract' ? 'market' : 'vendored',
       itemId: entry.itemId,
+      // A contract has no item art: its row leads with a blank gap.
+      lead: entry.base === 'contract' ? null : itemLead(entry.base),
+      name,
+      rest: ` sold for ${entry.vendoredFor}g`,
     }
   }
   return {
@@ -151,6 +176,9 @@ function lootLine(entry: LootEntry): LootView {
     rarity: entry.rarity,
     kind: 'drop',
     itemId: entry.itemId,
+    lead: itemLead(entry.base),
+    name,
+    rest: ` (${entry.rarity})`,
   }
 }
 
