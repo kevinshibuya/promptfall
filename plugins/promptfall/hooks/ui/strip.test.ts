@@ -408,6 +408,23 @@ test('the footer drops when the tabs, it and the hint do not fit the message win
   expect(shownRows(narrow).rows).toEqual(['L2', 'L3'])
 })
 
+test('a narrow message window shortens the footer to 37/40, then /40, before it drops it', () => {
+  const lines = Array.from({ length: 40 }, (_, i) => `Drop ${i + 1}`)
+  const back = paged(stripScene(lootTab(lines)).page ?? fail(), PAGE_ROWS)
+  const cmd = (columns: number) =>
+    lineText(win(stripScene({ ...lootTab(lines, back), columns }).scene, 'message').lines[0])
+  expect(cmd(120)).toMatch(/World +37-38\/40 c ▾$/)
+  // At 116 the tabs, `37-38/40` and the hint overflow the window's 30 cells.
+  expect(cmd(116)).toMatch(/World +37\/40 c ▾$/)
+  expect(shownRows({ ...lootTab(lines, back), columns: 116 }).rows).toEqual(['Drop 37', 'Drop 38'])
+  expect(cmd(114)).toMatch(/World +\/40 c ▾$/)
+  expect(cmd(110)).toMatch(/World +c ▾$/)
+  // The alt says the rows in full at any width.
+  expect(win(stripScene({ ...lootTab(lines, back), columns: 116 }).scene, 'message').alt).toContain(
+    'Rows 37-38 of 40.',
+  )
+})
+
 test('the Party log pages too, and the World tab never does', () => {
   // The scenario's log, all three lines shown, one row each.
   const input = {

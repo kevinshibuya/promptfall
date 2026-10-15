@@ -999,7 +999,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   is; at the newest it follows. A tab switch, a collapse, a compact layout and
   a zone change put it back at the newest. While the window is off the paging
   space's last row the command line's right end shows `5-6/61` before `c ▾`,
-  dropped when the tabs, it and the hint overflow the window. The Loot tab
+  shortened to `5/61`, then `/61`, and dropped only when the tabs, its
+  shortest form and the hint overflow the window. The Loot tab
   reaches 40 lines (the sim keeps 50). The World tab never pages; a notice
   takes its bottom rows. The strip input carries the tab's scroll, so the
   loop's frames and the desktop's tracks draw the page the band drew. While `hasSurvey` the band stays up at

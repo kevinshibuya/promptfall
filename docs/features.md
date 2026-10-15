@@ -485,7 +485,8 @@ then chat.
 lines and `k` two rows forward; they do nothing in the compact or collapsed band, and the World
 tab never pages. While paged back the command line's right end shows a footer in the pane's
 shape, `5-6/61`, the rows shown out of the log's rows, before `c ▾`; at the newest there is none,
-and a narrow message window drops the footer and keeps the hint. A new line while paged back
+and a narrow message window shortens the footer to `5/61`, then `/61`, before it drops it, and
+always keeps the hint. A new line while paged back
 leaves the window where it is; at the newest the window follows the new lines. A tab switch, `c`,
 a compact layout and a travel to another zone put the window back at the newest. No line is ever
 cut with an ellipsis: every log line wraps over the rows it needs, the newest position shows the

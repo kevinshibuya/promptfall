@@ -285,13 +285,13 @@ const COLLAPSE_HINT = 'c ▾'
  * The command line `▶Party Loot World … 5-6/61 c ▾` in `n` cells, and where its words sit (cell
  * offsets). On World, presence follows the tabs, `· 13 online · zone 1: Bea, Kit`, its longest
  * candidate that leaves room for the hint. The page footer, while the log is paged off its newest
- * rows, sits before the hint when both fit; the hint is never dropped. `n` null: the short form,
- * the hint right after World (compact's footer, which must leave its border).
+ * rows, sits before the hint in its longest form that fits; the hint is never dropped. `n` null:
+ * the short form, the hint right after World (compact's footer, which must leave its border).
  */
 function commandLine(
   tab: BandTab,
   n: number | null,
-  footer: string | null = null,
+  footer: readonly string[] = [],
   presence: Presence | null = null,
 ): { spans: Span[]; at: { hotkey: Hotspot['hotkey']; label: string; x: number }[] } {
   const items: { hotkey: Hotspot['hotkey']; label: string; tab: BandTab }[] = [
@@ -314,10 +314,9 @@ function commandLine(
       .find((p) => width(spans) + width(p) + 1 + hint <= n)
     if (fitted) spans.push(...fitted)
   }
-  const tail =
-    footer !== null && n !== null && width(spans) + 1 + chars(footer).length + 1 + hint <= n
-      ? [text(footer), pad(1)]
-      : []
+  const fits =
+    n === null ? undefined : footer.find((f) => width(spans) + 1 + chars(f).length + 1 + hint <= n)
+  const tail = fits === undefined ? [] : [text(fits), pad(1)]
   spans.push(pad(n === null ? 1 : Math.max(1, n - width(spans) - width(tail) - hint)), ...tail)
   at.push({ hotkey: 'c', label: COLLAPSE_HINT, x: width(spans) })
   spans.push(text(COLLAPSE_HINT, DIM_RGB))
@@ -401,10 +400,17 @@ function newSince(before: readonly string[], now: readonly string[]): number {
 /** Whether the message window shows `g: back to the fight`: camping, and no notice holds its row. */
 const backToFight = (input: StripInput) => input.view.camping && !input.notice
 
-/** The message window's two rows, the footer while paged off the newest, and its page. */
+/**
+ * The footer's forms while the window is off the paging space's last row, `end` its last row
+ * shown: `37-38/40`, then `37/40`, then `/40`, for the command line to fit the longest.
+ */
+const footerForms = (end: number, total: number): string[] =>
+  end < total ? [`${end - 1}-${end}/${total}`, `${end - 1}/${total}`, `/${total}`] : []
+
+/** The message window's two rows, the footer's forms while paged off the newest, and its page. */
 type Body = {
   rows: Line[]
-  footer: string | null
+  footer: string[]
   page: Page | null
   /** The window row the `g: back to the fight` row shows on, if it shows. */
   back: number | null
@@ -433,13 +439,13 @@ function messageBody(input: StripInput, n: number, at: number): Body {
     if (notes.length >= PAGE_ROWS)
       return {
         rows: notes.slice(0, PAGE_ROWS),
-        footer: null,
+        footer: [],
         page: null,
         back: back ? 0 : null,
         presence,
       }
     if (notes[0]) rows[1] = notes[0]
-    return { rows, footer: null, page: null, back: back ? 1 : null, presence }
+    return { rows, footer: [], page: null, back: back ? 1 : null, presence }
   }
   const lines = logLines(input, n, at)
   const texts = lines.map((l) => l.text)
@@ -454,7 +460,7 @@ function messageBody(input: StripInput, n: number, at: number): Body {
     }))
     return {
       rows: [...log, ...blank, ...notes],
-      footer: null,
+      footer: [],
       page: { offset: 0, min: 0, max: 0, lines: texts },
       back: back ? log.length + blank.length : null,
     }
@@ -475,7 +481,7 @@ function messageBody(input: StripInput, n: number, at: number): Body {
   const noteAt = log.length - (end - PAGE_ROWS)
   return {
     rows: [...log, ...notes].slice(end - PAGE_ROWS, end),
-    footer: end < total ? `${end - 1}-${end}/${total}` : null,
+    footer: footerForms(end, total),
     page: { offset, min, max, lines: texts },
     back: back && noteAt >= 0 && noteAt < PAGE_ROWS ? noteAt : null,
   }
@@ -524,7 +530,8 @@ function messageWindow(
         .trim(),
     )
     .filter(Boolean)
-  const where = body.footer === null ? '' : ` Rows ${body.footer.replace('/', ' of ')}.`
+  const full = body.footer[0]
+  const where = full === undefined ? '' : ` Rows ${full.replace('/', ' of ')}.`
   const seen = body.presence?.parts[0]?.join(' · ')
   // The sandbox mark: the window's title on every tab, so a sandbox screenshot never reads as real play.
   const sandbox = input.view.account.sandbox
