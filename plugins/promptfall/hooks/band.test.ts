@@ -1070,7 +1070,27 @@ test('a tab switch, c and a zone change put the log back at the newest', async (
   await home.unmount()
 })
 
-test('j pages the Party log back while it runs; a compact layout puts it at the newest and pages nothing; World never pages', async ($, on) => {
+test('on World a notice longer than the window pages: k on through it, j back to its first rows', async ($, on) => {
+  const { data, shown } = harness(on)
+  settings(data, RASTER)
+  shown.notice =
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 20) })
+  await ui.press({ key: 'hot-w' })
+  const first = await stripText(ui)
+  expect(first, 'its first rows, the footer saying there is more').toMatch(/ 1-2\/4 c ▾/)
+  expect(first).toContain('Sound on;')
+  await ui.press({ key: 'hot-k' })
+  const last = await stripText(ui)
+  expect(last, 'k: its last rows, no footer').not.toMatch(/\/4 c ▾/)
+  expect(last).toContain('party.')
+  await ui.press({ key: 'hot-j' })
+  expect(await stripText(ui), 'j: its first rows again').toMatch(/ 1-2\/4 c ▾/)
+  await ui.unmount()
+})
+
+test('j pages the Party log back while it runs; a compact layout puts it at the newest and pages nothing; World without a notice never pages', async ($, on) => {
   const { data, clock } = harness(on)
   settings(data, { ...RASTER, motion: 'still' })
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
@@ -1105,7 +1125,7 @@ test('j pages the Party log back while it runs; a compact layout puts it at the 
   expect(footer(await stripText(ui)), 'back from compact at the newest').toBeNull()
   await ui.press({ key: 'hot-w' })
   await ui.press({ key: 'hot-j' })
-  expect(footer(await stripText(ui)), 'World never pages').toBeNull()
+  expect(footer(await stripText(ui)), 'World without a notice never pages').toBeNull()
   await ui.unmount()
 })
 

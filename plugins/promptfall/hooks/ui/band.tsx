@@ -40,8 +40,8 @@ const noticeAtom = atom({ plugin: 'promptfall', key: 'notice' } as const, null)
 const worldAtom = atom({ plugin: 'promptfall', key: 'world' } as const, WORLD_DEFAULT)
 const settingsAtom = atom({ plugin: 'promptfall', key: 'settings' } as const, SETTINGS_DEFAULT)
 const rendererAtom = atom({ plugin: 'promptfall', key: 'renderer' } as const, 'unknown')
-/** At the newest on both log tabs: the scroll every reset goes back to. */
-const SCROLL_NEWEST: BandScroll = { zone: 0, party: null, loot: null }
+/** At the newest on every tab: the scroll every reset goes back to. */
+const SCROLL_NEWEST: BandScroll = { zone: 0, party: null, loot: null, world: null }
 const scrollAtom = atom({ plugin: 'promptfall', key: 'bandScroll' } as const, SCROLL_NEWEST)
 
 /** A run of the collapsed line: its text, dim, or in a colour. */
@@ -242,15 +242,14 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
 
     // The window strip: under the stage, or beside the compact stage.
     const kind = layout.kind === 'compact' ? 'compact' : 'full'
-    // The log tabs' scroll holds while the band is full in the zone it was set in; a compact
-    // layout or a zone change puts it back at the newest.
+    // The tabs' scroll holds while the band is full in the zone it was set in; a compact layout
+    // or a zone change puts it back at the newest.
     const scrolled = (await read($, scrollAtom)) ?? SCROLL_NEWEST
-    const logTab = tab === 'party' || tab === 'loot' ? tab : null
     const held = kind !== 'compact' && scrolled.zone === view.zone
     // Written after the render, as the probe's verdict is: this render already draws the newest.
-    if (!held && (scrolled.party !== null || scrolled.loot !== null))
+    if (!held && (scrolled.party !== null || scrolled.loot !== null || scrolled.world !== null))
       $.clock.after(0, () => void toNewest())
-    const scroll = held && logTab ? scrolled[logTab] : null
+    const scroll = held ? scrolled[tab] : null
     const stripColumns = terminal
       ? Math.min(width, STRIP_MAX_COLUMNS)
       : Math.min(Math.max(e.props.bodyColumns, FULL_MIN_COLUMNS), STAGE_MAX_COLUMNS)
@@ -269,14 +268,15 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       scroll,
     }
     const { scene, page } = stripScene(input)
-    // `j` older, `k` newer, from the page this render drew; nothing without one (compact, World).
+    // `j` older, `k` newer, from the page this render drew; nothing without one (compact, World
+    // without a long notice).
     const pageBy = (by: number) => {
-      if (!page || !logTab || kind === 'compact') return
+      if (!page || kind === 'compact') return
       const to = paged(page, by)
       void update($, scrollAtom, (s) => ({
         ...(s ?? SCROLL_NEWEST),
         zone: view.zone,
-        [logTab]: to,
+        [tab]: to,
       }))
     }
 

@@ -152,6 +152,47 @@ test('the welcome notice shows its opt-out first at 120 columns full and at 100 
   }
 })
 
+test('the whole welcome notice reads on World by paging, and in the compact window on Loot and World', () => {
+  const notice =
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
+  const words = (rows: readonly string[]) => rows.join(' ').replace(/\s+/g, ' ').trim()
+  // World at 120: the notice's four rows page as on Party and Loot, its first two at the newest.
+  const world = { ...strip('strip-world'), notice }
+  const rows = wrap(notice, 34)
+  expect(rows).toHaveLength(4)
+  const message = win(stripScene(world).scene, 'message')
+  expect(lineText(message.lines[0])).toMatch(/▶World · 13 +1-2\/4 c ▾$/)
+  expect(message.lines.slice(1).map((l) => lineText(l).trim())).toEqual(rows.slice(0, 2))
+  const page = stripScene(world).page ?? fail()
+  const on = win(stripScene({ ...world, scroll: paged(page, -PAGE_ROWS) }).scene, 'message')
+  expect(lineText(on.lines[0])).toMatch(/▶World · 13 +c ▾$/)
+  const rest = on.lines.slice(1).map((l) => lineText(l).trim())
+  expect(rest).toEqual(rows.slice(2))
+  expect(words([...rows.slice(0, 2), ...rest])).toBe(notice)
+  // j from the notice's first rows stays there: World has no log behind it.
+  expect(paged(page, PAGE_ROWS).rows).toBe(0)
+  // The compact window wraps the notice into its bottom rows, never cut; Loot and World give it
+  // every row it needs, the tab keeping the rows above.
+  for (const columns of [100, 110])
+    for (const tab of ['loot', 'world'] as const) {
+      const input = { ...strip('strip-world'), tab, kind: 'compact' as const, columns, notice }
+      const compact = win(stripScene(input).scene, 'compact')
+      const n = columns - 52 - 4
+      const wrapped = wrap(notice, n)
+      expect(compact.lines).toHaveLength(4)
+      const shown = compact.lines.slice(4 - wrapped.length).map((l) => lineText(l).trim())
+      expect(shown, `${tab} at ${columns}`).toEqual(wrapped)
+      expect(allText(compact)).not.toContain('…')
+    }
+  // On Party the heroes keep their rows: the notice's first row, whole words, no ellipsis.
+  const party = win(
+    stripScene({ ...strip('strip-rest'), kind: 'compact', columns: 100, notice }).scene,
+    'compact',
+  )
+  expect(lineText(party.lines[3]).trim()).toBe(wrap(notice, 44)[0])
+  expect(allText(party)).not.toContain('…')
+})
+
 test('a log line longer than the message window wraps over both rows', () => {
   const input = strip('strip-rest')
   // full at 110 columns keeps the enemy window: the message window is 28 wide, 24 cells of text.
@@ -447,7 +488,7 @@ test('a narrow message window shortens the footer to 37/40, then /40, before it 
   )
 })
 
-test('the Party log pages too, and the World tab never does', () => {
+test('the Party log pages too, and the World tab does not without a long notice', () => {
   // The scenario's log, all three lines shown, one row each.
   const input = {
     ...strip('strip-rest'),

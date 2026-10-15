@@ -61,7 +61,7 @@ export type StripInput = {
   timeline: StageTimeline
   gauges: GaugeTrack
   log: Pick<MessageLog, 'shown' | 'typing' | 'upcoming'>
-  /** The current tab's scroll on Party and Loot; null, or another tab's, at the newest. */
+  /** The current tab's scroll: Party's and Loot's log, World's long notice; null at the newest. */
   scroll: LogScroll | null
 }
 
@@ -284,8 +284,9 @@ const COLLAPSE_HINT = 'c ▾'
 /**
  * The command line `▶Party Loot World … 5-6/61 c ▾` in `n` cells, and where its words sit (cell
  * offsets). On World, presence follows the tabs, `· 13 online · zone 1: Bea, Kit`, its longest
- * candidate that leaves room for the hint. The page footer, while the log is paged off its newest
- * rows, sits before the hint in its longest form that fits; the hint is never dropped. `n` null:
+ * candidate that leaves room for the hint and the footer's shortest form, else for the hint alone.
+ * The page footer, while the window is off the paging space's last row, sits before the hint in
+ * its longest form that fits; the hint is never dropped. `n` null:
  * the short form, the hint right after World (compact's footer, which must leave its border).
  */
 function commandLine(
@@ -309,9 +310,14 @@ function commandLine(
   const hint = chars(COLLAPSE_HINT).length
   if (presence && n !== null) {
     const rgb = presence.dim ? DIM_RGB : TEXT_RGB
-    const fitted = presence.parts
-      .map((parts) => parts.flatMap((p) => [pad(1), text('·', DIM_RGB), pad(1), text(p, rgb)]))
-      .find((p) => width(spans) + width(p) + 1 + hint <= n)
+    const shortest = footer.at(-1)
+    const room = shortest === undefined ? 0 : 1 + chars(shortest).length
+    const candidates = presence.parts.map((parts) =>
+      parts.flatMap((p) => [pad(1), text('·', DIM_RGB), pad(1), text(p, rgb)]),
+    )
+    const fitted =
+      candidates.find((p) => width(spans) + width(p) + room + 1 + hint <= n) ??
+      candidates.find((p) => width(spans) + width(p) + 1 + hint <= n)
     if (fitted) spans.push(...fitted)
   }
   const fits =
@@ -431,8 +437,9 @@ type Body = {
 /**
  * The rows under the command line in `n` cells. On Party and Loot the log's rows, every line
  * wrapped in full, then a notice's (or the camp's `g` row's), are one paging space: at the newest
- * the window shows the log's tail, or a notice's first rows, and the scroll pages it back. World
- * never pages: a notice takes its bottom rows.
+ * the window shows the log's tail, or a notice's first rows, and the scroll pages it back. On
+ * World a notice takes the bottom row, or both rows and the paging space when it needs two or more:
+ * its first rows at the newest, the scroll paging on through it.
  */
 function messageBody(input: StripInput, n: number, at: number): Body {
   const back = backToFight(input)
@@ -446,14 +453,19 @@ function messageBody(input: StripInput, n: number, at: number): Body {
       spans: [r.dim ? text(r.text, DIM_RGB) : text(r.text)],
     }))
     const presence = world.presence
-    if (notes.length >= PAGE_ROWS)
+    if (notes.length >= PAGE_ROWS) {
+      // No log behind it: the offset runs from 0, its first rows, to its last rows.
+      const min = PAGE_ROWS - notes.length
+      const offset = Math.max(min, Math.min(0, input.scroll?.rows ?? 0))
+      const end = PAGE_ROWS - offset
       return {
-        rows: notes.slice(0, PAGE_ROWS),
-        footer: [],
-        page: null,
-        back: back ? 0 : null,
+        rows: notes.slice(end - PAGE_ROWS, end),
+        footer: footerForms(end, notes.length),
+        page: { offset, min, max: 0, lines: [], notes: notes.length },
+        back: back && offset === 0 ? 0 : null,
         presence,
       }
+    }
     if (notes[0]) rows[1] = notes[0]
     return { rows, footer: [], page: null, back: back ? 1 : null, presence }
   }
@@ -697,7 +709,9 @@ function compactParty(input: StripInput, inner: number): CompactRows {
     lines.push({ spans })
   }
   const front = view.camping ? undefined : enemies(input)[0]
-  if (input.notice) lines[3] = { spans: [pad(1), text(clip(input.notice, inner - 2))] }
+  // The heroes keep their rows: a notice takes the front enemy's, its first row, never cut.
+  const note = input.notice ? wrap(input.notice, inner - 2)[0] : undefined
+  if (note !== undefined) lines[3] = { spans: [pad(1), text(note)] }
   else if (view.camping) lines[3] = { spans: [pad(1), text(CAMPING, DIM_RGB)] }
   else if (front) {
     lines[3] = { spans: [pad(1), ...enemyRow(front, Math.min(inner - 2, 27))] }
@@ -714,26 +728,30 @@ function compactParty(input: StripInput, inner: number): CompactRows {
 
 /**
  * Loot's and World's compact rows, from the rows the message window builds: the newest loot rows,
- * or presence, the records row, chat and a blank row. A notice takes the last row; nothing pages.
+ * or presence, the records row, chat and a blank row. A notice wraps into the bottom rows it
+ * needs, its first four when it needs more, the tab keeping the rows above; nothing pages.
  */
 function compactTab(input: StripInput, inner: number): CompactRows {
   const n = inner - 2
-  const keep = input.notice ? COMPACT_ROWS - 1 : COMPACT_ROWS
+  const notes = input.notice ? wrap(input.notice, n).slice(0, COMPACT_ROWS) : []
+  const keep = COMPACT_ROWS - notes.length
   let rows: Line[]
   if (input.tab === 'world') {
-    rows = worldTabRows(input.view, input.world, COMPACT_ROWS, n, input.now)
-      .rows.slice(0, keep)
-      .map((r) => ({ spans: r.text ? [r.dim ? text(r.text, DIM_RGB) : text(r.text)] : [] }))
+    rows = worldTabRows(input.view, input.world, COMPACT_ROWS, n, input.now).rows.map((r) => ({
+      spans: r.text ? [r.dim ? text(r.text, DIM_RGB) : text(r.text)] : [],
+    }))
   } else {
     const lines = logLines(input, n, input.now)
     rows =
       lines.length === 0
         ? [{ spans: [text(NO_LOOT, DIM_RGB)] }]
-        : lines.flatMap((l) => l.rows).slice(-keep)
+        : lines.flatMap((l) => l.rows).slice(-COMPACT_ROWS)
+    // The newest rows the notice leaves, at the top.
+    rows = rows.slice(Math.max(0, rows.length - keep))
   }
-  const lines: Line[] = rows.map((r) => ({ spans: [pad(1), ...r.spans] }))
+  const lines: Line[] = rows.slice(0, keep).map((r) => ({ spans: [pad(1), ...r.spans] }))
   while (lines.length < keep) lines.push({ spans: [] })
-  if (input.notice) lines.push({ spans: [pad(1), text(clip(input.notice, n))] })
+  for (const note of notes) lines.push({ spans: [pad(1), text(note)] })
   const said = lines
     .map((l) =>
       l.spans
@@ -836,8 +854,9 @@ function build(raw: StripInput): { scene: Scene; built: Built[]; page: Page | nu
 }
 
 /**
- * The strip's scene and hotspots, and on Party and Loot the message window's page: where the
- * window stands over the rows the strip wrapped at its width, for `j` and `k` to page from.
+ * The strip's scene and hotspots, and on Party and Loot, or World with a long notice, the message
+ * window's page: where the window stands over the rows the strip wrapped at its width, for `j` and
+ * `k` to page from.
  */
 export function stripScene(input: StripInput): {
   scene: Scene

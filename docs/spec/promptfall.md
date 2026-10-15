@@ -987,8 +987,10 @@ flags. No second server program, no Postgres, no Redis, no worker.
   the message window shows the loot log, or the World rows. The compact
   window beside the small stage shows the tab's four rows: on Party the three
   heroes and the front enemy, on Loot the newest four loot rows, on World
-  presence, the records row, chat and a blank row. A notice takes the last
-  row on every tab; the compact band does not page.
+  presence, the records row, chat and a blank row. A notice wraps, never cut:
+  on Party it takes the front enemy's row, its first row shown; on Loot and
+  World it takes the bottom rows it needs, its first four when it needs more,
+  the tab keeping the rows above. The compact band does not page.
   The message window never cuts a line on Party or Loot: each log line wraps
   over as many rows as it needs, keeping its spans' colours. The log's wrapped
   rows, then a notice's (or the camp's `g` row's), are one paging space; at the
@@ -1001,8 +1003,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   space's last row the command line's right end shows `5-6/61` before `c ▾`,
   shortened to `5/61`, then `/61`, and dropped only when the tabs, its
   shortest form and the hint overflow the window. The Loot tab
-  reaches 40 lines (the sim keeps 50). The World tab never pages; a notice
-  takes its bottom rows. The strip input carries the tab's scroll, so the
+  reaches 40 lines (the sim keeps 50). On World a one-row notice takes the
+  bottom row; a longer one takes both rows and pages as on Party and Loot, its
+  first rows at the newest and `k` on through it, with nothing behind it for
+  `j`; presence then leaves room for the footer's shortest form, keeping at
+  least its count. The strip input carries the tab's scroll, so the
   loop's frames and the desktop's tracks draw the page the band drew. While `hasSurvey` the band stays up at
   the layout its rows allow and the stage keeps playing. The band is
   22 rows and never changes height for a fight or a tab.

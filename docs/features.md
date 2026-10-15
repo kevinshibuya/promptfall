@@ -402,7 +402,9 @@ so few half-block rows would be a smear. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one window, then to a single row
 under 100 columns. The compact window shows the tab's four rows: on Party the three heroes and the
 front enemy, on Loot the newest four loot rows, on World who is online, the records row, chat and
-a blank row; a notice takes the last row, and `j` and `k` do not page there. It never hides itself while Claude asks for a permission or a question; it
+a blank row. A notice wraps there, never cut: on Party it takes the front enemy's row, showing its
+first row; on Loot and World it takes the bottom rows it needs, up to all four. `j` and `k` do not
+page there. It never hides itself while Claude asks for a permission or a question; it
 lays out at whatever size the rows left to it allow. In the terminal, though, Claude Code draws
 the prompt in the band's place and stops drawing the band until the answer, so the party is not on
 screen while a prompt waits (an engine finding, seen live on 2.1.299). The band comes back at the
@@ -482,8 +484,10 @@ shows the combat log on Party, the loot log on Loot, and on World two fixed rows
 then chat.
 
 **Paging the logs.** On Party and Loot, `j` pages the message window two rows back toward older
-lines and `k` two rows forward; they do nothing in the compact or collapsed band, and the World
-tab never pages. While paged back the command line's right end shows a footer in the pane's
+lines and `k` two rows forward; they do nothing in the compact or collapsed band. On World they
+page only a notice longer than the window's two rows: it takes both, its first rows at the newest
+with the footer saying there is more, and `k` pages on through it. While paged back the command
+line's right end shows a footer in the pane's
 shape, `5-6/61`, the rows shown out of the log's rows, before `c ▾`; at the newest there is none,
 and a narrow message window shortens the footer to `5/61`, then `/61`, before it drops it, and
 always keeps the hint. A new line, or a notice coming or going, while paged back leaves the

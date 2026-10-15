@@ -160,8 +160,16 @@ export type Prefs = { collapsed: boolean; bandTab: BandTab }
  * since and a notice come or gone push it back and the window stays.
  */
 export type LogScroll = { rows: number; lines: readonly string[]; notes: number }
-/** The band's scroll on its two log tabs and the zone it was set in; never saved with the prefs. */
-export type BandScroll = { zone: number; party: LogScroll | null; loot: LogScroll | null }
+/**
+ * The band's scroll on its two log tabs and on World's long notice, and the zone it was set in;
+ * never saved with the prefs.
+ */
+export type BandScroll = {
+  zone: number
+  party: LogScroll | null
+  loot: LogScroll | null
+  world: LogScroll | null
+}
 
 /** One integer per rarity. */
 export type RarityCountsView = Record<RarityName, number>
