@@ -112,7 +112,8 @@ export type WorldRow = { text: string; dim: boolean }
 
 /**
  * Presence as the command line fits it: its candidates longest first, each a list of parts the
- * line separates with a dim `·` (the names, then the zone go), or a gated text alone.
+ * line separates with a dim `·` (the names, then the zone, then `online` go, the count stays), or
+ * a gated text alone.
  */
 export type Presence = { parts: string[][]; dim: boolean }
 
@@ -125,7 +126,7 @@ function presenceOf(view: GameView, world: WorldState): Presence {
   const online = `${snapshot.online} online`
   const zone = zoneMark(view.zone, 'zone ')
   return {
-    parts: [[online, `${zone}: ${here}`], [online, zone], [online]],
+    parts: [[online, `${zone}: ${here}`], [online, zone], [online], [String(snapshot.online)]],
     dim: world.stale,
   }
 }

@@ -257,9 +257,10 @@ the message window, with a hotkey to the Account tab.
 
 **Presence.** On the band's World tab presence sits on the command line, after the tabs:
 `· 13 online · zone 1: Bea, Kit`, the dots dim. When the tabs, presence and `c ▾` do not fit the
-message window it drops the names, then the zone, then the count; the hint is never dropped, and
-the window's alt text keeps presence whole. With presence off, or before the first snapshot, "presence
-is off" or "connecting to the world…" takes its place, dim. The compact band's World rows open with
+message window it drops the names, then the zone, then the word "online", down to the count alone,
+`· 13`; the hint is never dropped, and the window's alt text keeps presence whole. With presence
+off, or before the first snapshot, "presence is off" or "connecting to the world…" takes its place,
+dim. The compact band's World rows open with
 it instead. The Leaderboards tab shows who is online by zone. Both name a zone past tier 1 as
 "T2 Z1" and one inside it as today. Without fresh news from the server for 45 seconds, presence
 dims as stale.

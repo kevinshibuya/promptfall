@@ -1305,8 +1305,9 @@ flags. No second server program, no Postgres, no Redis, no worker.
   neither ever displaces the other, and a notice takes the bottom rows as on
   every tab. Presence sits on the command line after the tabs, dim dots between
   its parts, `· 13 online · zone 1: Bea, Kit` (you excluded), dropping the
-  names, then the zone, then the count when the tabs, it and `c ▾` overflow the
-  window; the hint is never dropped and the alt keeps presence whole. Its text
+  names, then the zone, then `online` when the tabs, it and `c ▾` overflow the
+  window, down to the count alone, `· 13`; the hint is never dropped and the
+  alt keeps presence whole. Its text
   is plain, dim when the snapshot is stale; `presence is off` or `connecting
   to the world…` take its place, dim. In the compact band, four rows:
   presence, the records row, chat and a blank row. Chat is the latest message

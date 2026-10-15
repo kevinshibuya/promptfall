@@ -970,11 +970,11 @@ test('the World tab: the records row with the hunt bar, then chat; presence afte
     ' Hunt casters ██░░ 12.4k / 20k 3d',
     ' Kit: anyone grinding zone 1?',
   ])
-  // At 120 and under, the purse's 15 columns leave presence no room beside the hint.
-  expect(messageRows(worldTab())[0]).toBe('  Party  Loot ▶World            c ▾')
+  // At 120 and under, the purse's 15 columns leave presence its count alone beside the hint.
+  expect(messageRows(worldTab())[0]).toBe('  Party  Loot ▶World · 13       c ▾')
   // At 116 the records row still fits the hunt with its bar, its counts short.
   expect(messageRows(worldTab({}, 116))).toEqual([
-    '  Party  Loot ▶World        c ▾',
+    '  Party  Loot ▶World · 13   c ▾',
     ' Hunt casters ██░░ 12k/20k 3d',
     ' Kit: anyone grinding zone 1?',
   ])
@@ -993,13 +993,13 @@ test('the World tab: the records row with the hunt bar, then chat; presence afte
   ])
 })
 
-test('presence on the command line drops the names, then the zone, then the count, keeping the hint', () => {
+test('presence on the command line drops the names, then the zone, then online, keeping the count and the hint', () => {
   const cmd = (columns: number) => messageRows(worldTab({}, columns))[0]
   expect(cmd(160)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1: Bea, Kit +c ▾$/)
   expect(cmd(130)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online · zone 1 +c ▾$/)
   expect(cmd(122)).toMatch(/^ {2}Party {2}Loot ▶World · 13 online +c ▾$/)
-  expect(cmd(120)).toMatch(/^ {2}Party {2}Loot ▶World +c ▾$/)
-  expect(cmd(116)).toMatch(/^ {2}Party {2}Loot ▶World +c ▾$/)
+  expect(cmd(120)).toMatch(/^ {2}Party {2}Loot ▶World · 13 +c ▾$/)
+  expect(cmd(116)).toMatch(/^ {2}Party {2}Loot ▶World · 13 +c ▾$/)
   // The alt carries it whole at any width.
   expect(win(stripScene(worldTab({}, 116)).scene, 'message').alt).toContain(
     '13 online · zone 1: Bea, Kit',

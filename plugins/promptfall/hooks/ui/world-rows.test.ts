@@ -200,13 +200,13 @@ test('the World tab at two rows: the records row, then chat; neither displaces t
   expect(cut).toEqual({ text: 'Kit: has anyone found the iro…', dim: false })
 })
 
-test('at two rows presence is for the command line: the names, then the zone, then the count', () => {
+test('at two rows presence is for the command line: the names, then the zone, then online go', () => {
   const quiet = chatWorld([])
   const snapshot = quiet.snapshot as NonNullable<WorldState['snapshot']>
   const world = { ...quiet, snapshot: { ...snapshot, online: 13, here: ['Bea', 'Kit'] } }
   const { presence } = worldTabRows(wave(), world, 2, 30, NOW)
   expect(presence).toEqual({
-    parts: [['13 online', 'zone 1: Bea, Kit'], ['13 online', 'zone 1'], ['13 online']],
+    parts: [['13 online', 'zone 1: Bea, Kit'], ['13 online', 'zone 1'], ['13 online'], ['13']],
     dim: false,
   })
   expect(worldTabRows(wave(), { ...world, stale: true }, 2, 30, NOW).presence?.dim).toBe(true)
