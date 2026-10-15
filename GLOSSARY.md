@@ -353,9 +353,15 @@ _Avoid_: bestiary tab, collection, codex, trophies
 
 ### Presentation
 
+**Band**:
+The game's picture above the prompt: the stage over the strip, on three tabs, Party, Loot and
+World, at one height whatever the tab. It is the plugin's own site in Claude Code; the pane is
+the other.
+_Avoid_: widget, overlay, HUD, status area
+
 **Stage**:
-The animated battle scene in the band's Party tab: the encounter's enemies on the left, the
-party on the right, side-on. Drawn on every surface, in whatever pixels the surface has;
+The animated battle scene at the top of the band, on every tab: the encounter's enemies on the
+left, the party on the right, side-on. Drawn on every surface, in whatever pixels the surface has;
 glyph rows are never the stage's fallback.
 _Avoid_: scene, arena, battlefield, viewport
 
@@ -437,13 +443,12 @@ _Avoid_: panel, card, frame, box, dialog (the pane as a whole)
 
 **Strip**:
 The row of windows under the stage: the enemy window, the message window, the party window and
-the purse. Beside the compact stage it is one party window; on Loot and World it is the band.
+the purse, under the stage on every tab. Beside the compact stage it is one party window.
 _Avoid_: HUD, status bar, party line (the text row it replaced)
 
 **Playfield**:
-What a band tab draws, set into the shell: on Party the stage with the strip beneath it, on Loot
-and World the strip alone. One width, centred, edged by one window line, so the stage and the
-strip read as one picture.
+What a band tab draws, set into the shell: the stage with the strip beneath it. One width,
+centred, edged by one window line, so the stage and the strip read as one picture.
 _Avoid_: frame (a sprite's drawing), game area, viewport, screen
 
 **Shell**:
@@ -452,15 +457,38 @@ and whatever rows the prompt leaves. The band is the shell with the playfield on
 never shows through.
 _Avoid_: frame, bezel, border, background, chrome
 
+**Compact band**:
+The band where the full one does not fit: the stage small beside one window that carries the
+command line, the party and the front enemy, or the current tab's rows. Still the band's one
+height for that terminal.
+_Avoid_: mini band, small mode, reduced band
+
+**Collapsed line**:
+The band folded to one text row by hand (`c`) or where even the compact band does not fit: the
+zone and wave, each hero's HP in its health colour, the gold, and the sandbox and camp marks.
+_Avoid_: summary line, status line, minimised band
+
 **Message window**:
-The strip's middle window: the command line on top, then the combat log, the latest drops or
-the World rows, by tab. In the pane, the two-line window at the foot: what the keys do, the
-question a Yes/No asks, a refusal.
+The strip's middle window: the command line on top, then two rows: the combat log, the drops or
+the World rows, by tab; its title says `Sandbox` in the sandbox. In the pane, the two-line
+window at the foot: what the keys do, the question a Yes/No asks, a refusal.
 _Avoid_: log panel, chat box
 
 **Command line**:
-The message window's first row, `▶Party Loot World ▾`: the band tabs, ▶ on the current one.
+The message window's first row: the band tabs, ▶ on the current one, and the collapse key at its
+right end; on World the presence, and a page footer while the log is scrolled back.
 _Avoid_: tab bar, menu
+
+**Presence**:
+Who is online now: the count, and the names in your zone. On the World tab's command line, dim
+once stale.
+_Avoid_: online list, who's here, roster (that is the party)
+
+**Records row**:
+The World tab's first row: the account's highest zone, kills and wipes, with the weekly hunt's
+progress and the notices for a hunt or world boss that is off. Chat has the row under it and
+never displaces it.
+_Avoid_: stats row, hunt row, ticker (that is chat)
 
 **Tab window**:
 The pane's top window: the nine tab labels, ▶ on the current one, each hotkey letter gold.
@@ -498,9 +526,13 @@ nets, then Set a price (or preset prices where there is no price field).
 _Avoid_: sell panel (the text form it replaced), sell dialog
 
 **Purse**:
-The strip's last window: the gold, the tactics (Push on, or Farm here; `f` toggles) and the
-falls.
+The strip's last window: the gold, the tactics with their key, and the falls.
 _Avoid_: wallet, status window
+
+**Tactics**:
+What the party does after a zone's boss: **Next zone** moves on, **Stay here** restarts the zone at
+wave 1. `f` on the band or `/promptfall farm` flips them; `farm` is the command's verb only.
+_Avoid_: Push on, Farm here, farming (say staying), strategy, mode
 
 **Combat log**:
 The running account of the encounter, one short line per event (hits, kills, drops, level-ups,
