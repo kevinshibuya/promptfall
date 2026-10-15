@@ -375,13 +375,23 @@ export const PAGE_ROWS = 2
 /**
  * Where the message window stands on a log tab, what `j` and `k` page from: `offset` rows back
  * from the newest position, between `min` (a notice's last rows) and `max` (the oldest rows), and
- * the tab's line texts it was read against.
+ * the tab's line texts and the notice's row count it was read against.
  */
-export type Page = { offset: number; min: number; max: number; lines: readonly string[] }
+export type Page = {
+  offset: number
+  min: number
+  max: number
+  lines: readonly string[]
+  notes: number
+}
 
 /** The scroll `by` rows from `page`, older for a positive `by`: `j` is PAGE_ROWS, `k` its negative. */
 export function paged(page: Page, by: number): LogScroll {
-  return { rows: Math.max(page.min, Math.min(page.max, page.offset + by)), lines: page.lines }
+  return {
+    rows: Math.max(page.min, Math.min(page.max, page.offset + by)),
+    lines: page.lines,
+    notes: page.notes,
+  }
 }
 
 /** Lines at the end of `now` that came after `before`'s newest: how far its window was pushed back. */
@@ -461,19 +471,22 @@ function messageBody(input: StripInput, n: number, at: number): Body {
     return {
       rows: [...log, ...blank, ...notes],
       footer: [],
-      page: { offset: 0, min: 0, max: 0, lines: texts },
+      page: { offset: 0, min: 0, max: 0, lines: texts, notes: notes.length },
       back: back ? log.length + blank.length : null,
     }
   }
   // Rows back from the newest position; a scroll set back from the newest is pushed back by the
-  // rows of every line since, so the window stays on what it showed.
+  // rows of every line since, and by the rows a notice come or gone adds to the newest position,
+  // so the window stays on what it showed.
   const scroll = input.scroll
+  const noted = Math.min(PAGE_ROWS, notes.length)
   let offset = scroll?.rows ?? 0
   if (scroll && scroll.rows > 0) {
     const k = newSince(scroll.lines, texts)
     offset += lines.slice(lines.length - k).reduce((r, l) => r + l.rows.length, 0)
+    offset += noted - Math.min(PAGE_ROWS, scroll.notes)
   }
-  const newest = log.length + Math.min(PAGE_ROWS, notes.length)
+  const newest = log.length + noted
   const min = newest - total
   const max = newest - PAGE_ROWS
   offset = Math.max(min, Math.min(max, offset))
@@ -482,7 +495,7 @@ function messageBody(input: StripInput, n: number, at: number): Body {
   return {
     rows: [...log, ...notes].slice(end - PAGE_ROWS, end),
     footer: footerForms(end, total),
-    page: { offset, min, max, lines: texts },
+    page: { offset, min, max, lines: texts, notes: notes.length },
     back: back && noteAt >= 0 && noteAt < PAGE_ROWS ? noteAt : null,
   }
 }

@@ -995,8 +995,8 @@ flags. No second server program, no Postgres, no Redis, no worker.
   newest the window shows the log's tail, or a notice's first rows. `j` pages
   two rows back and `k` two forward, the offset counted in wrapped rows back
   from the newest, held in a per-session scroll state keyed by tab and never
-  saved with the prefs. A new line while paged back leaves the window where it
-  is; at the newest it follows. A tab switch, a collapse, a compact layout and
+  saved with the prefs. A new line, or a notice coming or going, while paged
+  back leaves the window where it is; at the newest it follows. A tab switch, a collapse, a compact layout and
   a zone change put it back at the newest. While the window is off the paging
   space's last row the command line's right end shows `5-6/61` before `c ▾`,
   shortened to `5/61`, then `/61`, and dropped only when the tabs, its

@@ -156,9 +156,10 @@ export type GameView = {
 export type Prefs = { collapsed: boolean; bandTab: BandTab }
 /**
  * A log tab's scroll (spec #234): `rows` wrapped rows back from the newest, 0 at the newest, set
- * against `lines`, the tab's line texts then, so the lines since push it back and the window stays.
+ * against `lines`, the tab's line texts then, and `notes`, the notice's rows then, so the lines
+ * since and a notice come or gone push it back and the window stays.
  */
-export type LogScroll = { rows: number; lines: readonly string[] }
+export type LogScroll = { rows: number; lines: readonly string[]; notes: number }
 /** The band's scroll on its two log tabs and the zone it was set in; never saved with the prefs. */
 export type BandScroll = { zone: number; party: LogScroll | null; loot: LogScroll | null }
 

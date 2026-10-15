@@ -266,6 +266,28 @@ test('a new line while paged back leaves the window where it is, the oldest trim
   expect(shownRows(lootTab(trimmed, home)).rows).toEqual(['L5', 'L6'])
 })
 
+test('a notice coming or going while paged back leaves the window where it is', () => {
+  const five = ['L1', 'L2', 'L3', 'L4', 'L5']
+  const notice =
+    'Sound on; /promptfall sound off silences it. Welcome to Promptfall. /promptfall heroes to meet your party.'
+  const back = paged(stripScene(lootTab(five)).page ?? fail(), PAGE_ROWS)
+  expect(shownRows(lootTab(five, back))).toEqual({ rows: ['L2', 'L3'], footer: '2-3/5' })
+  // A four-row notice arrives: the window stays on L2 and L3, the notice's rows counted after.
+  expect(shownRows({ ...lootTab(five, back), notice })).toEqual({
+    rows: ['L2', 'L3'],
+    footer: '2-3/9',
+  })
+  expect(shownRows({ ...lootTab(five, back), notice: 'Promptfall resynced' })).toEqual({
+    rows: ['L2', 'L3'],
+    footer: '2-3/6',
+  })
+  // Paged back from under the notice to L4 and L5, the notice going leaves them shown.
+  const noticed = { ...lootTab(five), notice }
+  const under = paged(stripScene(noticed).page ?? fail(), PAGE_ROWS)
+  expect(shownRows({ ...noticed, scroll: under })).toEqual({ rows: ['L4', 'L5'], footer: '4-5/9' })
+  expect(shownRows(lootTab(five, under)).rows).toEqual(['L4', 'L5'])
+})
+
 test('no line is cut: a line longer than two rows shows its tail at the newest and its head paged back', () => {
   // At 120 columns the message window holds 36 cells of text a row.
   const long = 'Inventory full: Ancient Runed Greatsword of the Endless Night vendored for 1,240G.'
@@ -508,7 +530,7 @@ test('the alt names every hero’s HP and gauge', () => {
 })
 
 test('every character a strip scene holds has a glyph, on every tab, with a notice and paged back', () => {
-  const paging = lootTab(['L1', 'L2', 'L3', 'L4', 'L5'], { rows: 2, lines: [] })
+  const paging = lootTab(['L1', 'L2', 'L3', 'L4', 'L5'], { rows: 2, lines: [], notes: 0 })
   expect(shownRows(paging).footer).toBe('2-3/5')
   for (const [name, input] of [
     ...STRIP_SCENARIOS.map((name) => [name, strip(name)] as const),
