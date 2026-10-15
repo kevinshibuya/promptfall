@@ -77,11 +77,11 @@ test('the World rows say the boss is off in place', () => {
   const both = { ...view, account: { ...view.account, bossOpen: true, huntOpen: true } }
   expect(worldRows(both, before, NOW)[1]?.text).toBe('highest zone 1 · kills 0 · wipes 0')
   // The strip's World tab draws the same row while chat is closed, when the row has room for it.
+  // The full strip is 116 columns or more, the enemy window always in it (the stage on every tab).
   const input = strip('strip-world')
   const world = worldWith({ 'worldboss.enabled': false })
   const shown = (columns: number, w = world) =>
     messageText(stripScene({ ...input, world: w, columns }).scene)
-  expect(shown(114)).toContain('highest zone 1 · kills 0 · wipes 0 · world boss is off')
   expect(shown(140)).toContain('highest zone 1 · kills 0 · wipes 0 · world boss is off')
   // At 120 the enemy window leaves 36 cells: the records shortened, the note kept.
   expect(shown(120)).toContain('Z1 K0 W0 · world boss is off')

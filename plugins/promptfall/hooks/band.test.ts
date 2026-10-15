@@ -431,7 +431,9 @@ test('the World tab reads the in-process world: one online on the command line, 
 
 test('the World tab shows who is here on the command line, the records row over the last chat line, and dims a stale snapshot', async ($, on) => {
   const { clock, states, data, shown } = harness(on)
-  settings(data, RASTER)
+  // Motion still: the stage is on World too, and a band redrawn at every bob through the stale
+  // wait would outrun the hook budget.
+  settings(data, { ...RASTER, motion: 'still' })
   shown.notice = null
   const net = remoteWorld(on)
   await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
