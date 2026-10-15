@@ -1024,9 +1024,11 @@ flags. No second server program, no Postgres, no Redis, no worker.
   Raster crops the scene to the stage's bottom rows, three scene pixels a
   row, the sky cut, and resamples that, down to the tallest actor on it
   (8 rows for the party, 12 with a turn boss, 17 with a zone or world boss,
-  held through a departed boss's dissolve) (ADR 0010). It does not zoom out:
-  at 8 rows it has 16 pixels of height, and a 24-pixel figure scaled into
-  them is a smear. Compact, when the full band does
+  held through a departed boss's dissolve) (ADR 0010). Under that it zooms
+  the cropped scene out into the rows left as the Image does, widened so it
+  still spans the playfield, down to `RASTER_MIN_ROWS` (8): under it a
+  figure scaled into the Raster's half-block rows is a smear (#230). Compact,
+  when the full band does
   not fit or `bodyColumns` is 100 to 115: one 6-row picture, the 4-row stage
   (sprites downsampled) beside one party window (three hero rows, the front
   enemy, the command line in its border), the window on the right with its

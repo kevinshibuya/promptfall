@@ -1,5 +1,5 @@
 // Writes plugins/promptfall/hooks/stage/goldens/: the golden hashes of each stage scenario, and an
-// .svg and a Raster .png of each for eyeballing. Run it only when a scenario's drawing is meant to change, and say
+// .svg and a Raster .png of each stage and band scenario for eyeballing. Run it only when a scenario's drawing is meant to change, and say
 // so in the commit message: `tsx scripts/stage-goldens.ts`.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -112,6 +112,8 @@ for (const name of BAND_SCENARIOS) {
   writeFileSync(join(OUT, `${name}.svg`), `${bandSvgOf(input)}\n`)
   writeFileSync(join(OUT, `${name}.desktop.svg`), `${bandDesktopSvgOf(input)}\n`)
   png(name, bandPicture(input))
+  // The Raster's band as the terminal draws it, laid out as play lays it out.
+  png(`${name}.raster`, cellsPicture(input.cells, input.rasterBox.columns), 1)
 }
 lines.push('}', '')
 writeFileSync(join(OUT, 'index.ts'), lines.join('\n'))

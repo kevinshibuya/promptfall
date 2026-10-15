@@ -23,6 +23,14 @@ band still keeps the crop: the scene is cropped to the rows shown, three scene p
 then resampled. The reason is legibility: at 8 rows the Raster has 16 pixels of height, and a
 24-pixel figure scaled into them is a smear._
 
+_#230 (2026-10-14): on the Raster the crop comes first and the zoom follows, to a floor. A band
+too short for the tallest actor no longer goes compact at once: the cropped scene (that actor's
+rows) zooms out into the rows left, widened so it still spans the playfield, the Image's way,
+down to `RASTER_MIN_ROWS` (8), and only under that goes compact. The legibility note above
+narrows to that floor: a wave's crop is already 8 rows, so a wave never zooms, and a boss zoomed
+into 8 to 16 rows was judged better than the compact band in a large terminal that grants the
+band fewer than 22 rows (a 46-row Ghostty). The floor is tuned on sight; a smear raises it._
+
 Kevin asked for both on 2026-10-08, playing with the backdrops in: the boss fights showed the
 whole painting and he wanted that view all the time, with the units small so a boss's size lands;
 and a long prompt had shrunk the stage to a strip, which he did not want, "even if it means
@@ -49,7 +57,7 @@ to leave behind. The zoomed-out view is the one he wants, whatever the band's he
 - The band on the Party tab is 22 rows (17 and the 5-row strip) in every fight, from 13 at rest
   before; the terminal needs 22 rows of `maxRows` to show it at full size. Under that the Image
   and the desktop show it smaller, whole; the Raster shows its bottom rows down to the tallest
-  actor, then compact.
+  actor, then that actor's rows zoomed out down to 8 (#230), then compact.
   ADR 0003's "the band is 10 rows at rest and up to 19 in a boss fight" and its amendment read 22
   always now.
 - The backdrop shows whole at rest. The review artifact's rest views are drawn at 17 rows.

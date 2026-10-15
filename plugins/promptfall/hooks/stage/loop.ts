@@ -168,7 +168,8 @@ function shown(model: StageModel, layout: Layout, frame: Frame): Frame {
 /**
  * The Raster's stage: the scene's rows shown (three scene pixels a cell row at 1.5), its numbers
  * moved up with them (one clamped to the top stays visible), resampled into the cells' pixels, the
- * numbers mapped through the same factor (`intoCells`).
+ * numbers mapped through the same factor (`intoCells`). A zoomed layout's cells are smaller than
+ * its scene each way, so the one resample is the zoom too (#230).
  */
 export function rasterStage(
   model: StageModel,
@@ -177,7 +178,7 @@ export function rasterStage(
   const scene = shown(model, layout, composeFrame(model, { numbers: false }))
   const cut = Math.ceil(model.box.rows * 2 * model.scale) - scene.height
   const moved = cut > 0 ? model.numbers.map((n) => ({ ...n, y: n.y - cut })) : model.numbers
-  const cells = { columns: model.box.columns, rows: scene.height / (2 * model.scale) }
+  const cells = cellsOf(layout) ?? model.box
   const { frame, numbers } = intoCells(scene, moved, cells)
   // The actors alone, cropped and resampled the same: where their art reaches the top cell row.
   const art = shown(model, layout, composeFrame({ ...model, backdrop: null }, { numbers: false }))

@@ -76,6 +76,8 @@ const HOTKEYS = [
 ] as const
 
 export function registerBand(on: On, game: () => GameHandle | null): void {
+  /** The layout line last sent to the debug log: a render at the same layout sends none. */
+  let loggedLayout = ''
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const view = await read($, viewAtom)
     const mode = await read($, modeAtom)
@@ -137,6 +139,16 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       minRows: party ? timeline.minRowsAt(view, now) : undefined,
       scalable: laidOut === 'image',
     })
+    // The engine's row grant at each layout, read at the manual pass to tune RASTER_MIN_ROWS
+    // (#230): once a layout, not once a render.
+    const stageRows = cellsOf(layout)?.rows
+    const layoutLine =
+      `band layout: maxRows ${e.props.maxRows}, bodyColumns ${e.props.bodyColumns}: ${layout.kind}` +
+      (stageRows === undefined ? '' : `, ${stageRows} stage rows`)
+    if (layoutLine !== loggedLayout) {
+      loggedLayout = layoutLine
+      $.ui.log(layoutLine, { to: 'debug' })
+    }
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
 

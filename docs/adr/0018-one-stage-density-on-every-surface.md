@@ -22,6 +22,9 @@ fits, the picture drops the idle pair and the hit filter before any drawn frame.
 art set retires. The compact stage and the list windows keep their 1× idle sprites, and the
 Raster keeps drawing damage numbers as text cells for legibility.
 
+The Raster zooms by rows too: a boss too tall for the band's rows is its cropped scene resampled
+into the rows left, the Image's zoom-out, down to an 8-row floor (ADR 0010's #230 note).
+
 ADR 0006's reason still holds: a half-block cell shows one pixel per column, so the Raster
 cannot show the 1.5× art at 1:1 inside the band's cells. The trade is accepted: on the Raster
 the pixels are fewer, and the frames, effects and timing are the same.

@@ -34,7 +34,7 @@ import { boss, empty, fallen, wave, worldBoss } from './fixtures'
 import { GaugeTrack } from './gauges'
 import { fnv1a64 } from './hash'
 import { encodeImage, pngImage } from './image'
-import { type Box, type Layout, layoutFor } from './layout'
+import { type Box, layoutFor } from './layout'
 import { MessageLog } from './log'
 import { bandCells } from './loop'
 import { type StageModel, stageAt } from './model'
@@ -748,9 +748,29 @@ function camping(patch: Partial<StripInput>): StripInput {
 }
 
 /**
+ * The band's line characters the strip's font lacks, as the arms a terminal draws from the cell's
+ * middle: left, right, up, down. `▬` is a gauge's bar.
+ */
+const LINE_ARMS: Readonly<Record<string, readonly [boolean, boolean, boolean, boolean]>> = {
+  '─': [true, true, false, false],
+  '│': [false, false, true, true],
+  '╭': [false, true, false, true],
+  '╮': [true, false, false, true],
+  '╰': [false, true, true, false],
+  '╯': [true, false, true, false],
+  '├': [false, true, true, true],
+  '┤': [true, false, true, true],
+  '┬': [true, true, false, true],
+  '┴': [true, true, true, false],
+  '┼': [true, true, true, true],
+}
+const BAR = '▬'
+
+/**
  * Raster cells as the terminal shows them, for eyeballing: each cell CELL_W × CELL_H pixels, a
- * half block its two halves, any other character its background under its glyph in the strip's
- * font; the terminal's default colour transparent.
+ * half block its two halves, a line character its arms and a bar its middle rows, any other
+ * character its background under its glyph in the strip's font; the terminal's default colour
+ * transparent.
  */
 export function cellsPicture(cells: string, columns: number): Frame {
   const bytes = decode(cells)
@@ -779,7 +799,22 @@ export function cellsPicture(cells: string, columns: number): Frame {
       }
       fill(x0, y0, CELL_H, bg)
       if (ch === 0x20) continue
-      const glyph = glyphFor(String.fromCodePoint(ch))
+      const char = String.fromCodePoint(ch)
+      const arms = LINE_ARMS[char]
+      if (arms || char === BAR) {
+        const [mx, my] = [CELL_W / 2, CELL_H / 2]
+        for (let gy = 0; gy < CELL_H; gy++) {
+          for (let gx = 0; gx < CELL_W; gx++) {
+            const on = arms
+              ? (gy === my && ((arms[0] && gx <= mx) || (arms[1] && gx >= mx))) ||
+                (gx === mx && ((arms[2] && gy <= my) || (arms[3] && gy >= my)))
+              : gy >= my - 2 && gy <= my + 1
+            if (on) put(x0 + gx, y0 + gy, fg)
+          }
+        }
+        continue
+      }
+      const glyph = glyphFor(char)
       for (let gy = 0; gy < CELL_H; gy++) {
         for (let gx = 0; gx < CELL_W; gx++) {
           if ((glyph[gy] ?? 0) & (0x80 >> gx)) put(x0 + gx, y0 + gy, fg)
@@ -1097,6 +1132,8 @@ export const BAND_SCENARIOS = [
   'band-rest',
   'band-wide',
   'band-zoomed',
+  'band-zoomed-boss',
+  'band-cropped',
   'band-compact',
   'band-compact-wide',
   'band-loot',
@@ -1117,14 +1154,16 @@ export type BandGolden = {
 }
 /**
  * What the band composer takes: the band's box, the stage's 1.5x frame (none on Loot and World),
- * the strip's scene; the Raster's band at the same box, as cells; and the desktop's band at the
- * same size, its stage Svg and strip Svg.
+ * the strip's scene; the Raster's band as cells, laid out as play lays it out, in `rasterBox` (the
+ * same box, or compact's where the Raster goes compact under its zoom's floor); and the desktop's
+ * band at the same size, its stage Svg and strip Svg.
  */
 export type BandInput = {
   box: Box
   stage: Frame | null
   strip: Scene
   cells: string
+  rasterBox: Box
   svg: { stage: string | null; strip: string }
 }
 
@@ -1146,23 +1185,40 @@ function bandInput(view: GameView, input: StripInput, columns: number, maxRows: 
   const playfield = Math.min(columns, STAGE_MAX_COLUMNS)
   const box = { columns, rows: layout.bandRows }
   const scene = stripScene({ ...input, columns: playfield }).scene
-  // The Raster does not zoom out into a short band: it shows the stage's bottom rows at the same
-  // box, resampled (ADR 0010). A boss needs all 17, so in play a 12-row band goes compact on the
-  // Raster; the zoomed scenario's cells pin the crop at that box all the same.
-  const room = box.rows - scene.rows
-  const raster: Layout = {
-    kind: 'full',
-    box: { columns: playfield, rows },
-    ...(room < rows ? { cells: { columns: playfield, rows: room } } : {}),
-    bandRows: box.rows,
-  }
   return {
     box,
     stage: composeFrame(model, { numbers: true }),
     strip: scene,
-    cells: bandCells(view, t, NOW, raster, 'full', box, scene).cells,
+    ...rasterBand(view, t, input, columns, maxRows),
     svg: bandSvgs(view, t, input, columns, maxRows),
   }
+}
+
+/**
+ * The Raster's band at `columns` × `maxRows`, laid out as band.tsx lays it out: the sky cropped,
+ * then the scene zoomed out down to the floor, then compact (#230).
+ */
+function rasterBand(
+  view: GameView,
+  t: StageTimeline,
+  input: StripInput,
+  columns: number,
+  maxRows: number,
+): { cells: string; rasterBox: Box } {
+  const layout = layoutFor(t.rowsAt(view, NOW), { bodyColumns: columns, maxRows }, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    minRows: t.minRowsAt(view, NOW),
+  })
+  if (!layout.box) throw new Error(`a ${columns} × ${maxRows} Raster band has no stage`)
+  const compact = layout.kind === 'compact'
+  const rasterBox = { columns, rows: layout.bandRows }
+  const scene = stripScene({
+    ...input,
+    kind: compact ? 'compact' : 'full',
+    columns: Math.min(columns, compact ? STRIP_MAX_COLUMNS : STAGE_MAX_COLUMNS),
+  }).scene
+  return { cells: bandCells(view, t, NOW, layout, 'full', rasterBox, scene).cells, rasterBox }
 }
 
 /** The desktop's band at `columns` × `maxRows`: its stage Svg and its strip Svg, as band.tsx draws them. */
@@ -1216,7 +1272,7 @@ function compactInput(view: GameView, input: StripInput, columns: number, maxRow
     box,
     stage: composeFrame(model, { numbers: true }),
     strip: scene,
-    cells: bandCells(view, t, NOW, layout, 'full', box, scene).cells,
+    ...rasterBand(view, t, input, columns, maxRows),
     svg: bandSvgs(view, t, { ...input, kind: 'full' }, columns, box.rows),
   }
 }
@@ -1241,6 +1297,7 @@ function bareInput(input: StripInput, columns: number): BandInput {
     stage: null,
     strip: scene,
     cells: bandCells(input.view, input.timeline, NOW, terminal, 'full', box, scene).cells,
+    rasterBox: box,
     svg: {
       stage: null,
       strip: sceneSvg(stripScene(desktop).scene, stripTracks(desktop, 3000), {
@@ -1260,9 +1317,18 @@ export function band(name: BandScenario): BandInput {
     // Two columns of shell on the left, three on the right, the line in them.
     case 'band-wide':
       return bandInput(wave(), strip('strip-rest'), 165, 22)
-    // A boss under a tall prompt: 12 rows, so the widened scene shrinks into the 7 left.
+    // A boss under a tall prompt: 12 rows, so the Image's widened scene shrinks into the 7 left,
+    // and the Raster, under its 8-row floor, goes compact.
     case 'band-zoomed':
       return bandInput(boss(), strip('strip-boss'), 160, 12)
+    // A zone boss on a 15-row band: 10 rows left, under its 17, so the Raster zooms the whole
+    // scene out into them as the Image does (#230).
+    case 'band-zoomed-boss':
+      return bandInput(boss(), strip('strip-boss'), 160, 15)
+    // A wave on a 13-row band: the Raster crops the sky to the 8 rows left at full size; the Image
+    // zooms out.
+    case 'band-cropped':
+      return bandInput(wave(), strip('strip-rest'), 160, 13)
     // Compact at 110 columns, as strip-compact: the stage's 52 columns, the window's 58.
     case 'band-compact':
       return compactInput(wave(), strip('strip-compact'), 110)

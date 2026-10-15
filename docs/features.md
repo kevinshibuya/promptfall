@@ -371,9 +371,10 @@ shows the same scene as the terminals that draw images and the desktop, with the
 marks and timing, at fewer pixels: about two thirds of them, the heroes and enemies the same size
 on screen as there, and damage numbers drawn as text. `/promptfall renderer raster` and `/promptfall
 renderer image` switch one terminal between the two. With fewer rows a terminal that draws images
-zooms the whole scene out to fit and the desktop scales it; a half-block terminal crops the sky,
-down to the tallest actor on the stage, since a figure zoomed out into so few half-block rows
-would be a smear. Past that, or on terminals 100 to
+zooms the whole scene out to fit and the desktop scales it; a half-block terminal crops the sky
+first, down to the tallest actor on the stage, then zooms what is left out the same way, so a
+boss fight still shows the whole boss, down to a floor of 8 stage rows, under which a figure in
+so few half-block rows would be a smear. Past that, or on terminals 100 to
 115 columns wide, the band drops to a compact stage beside one party window, then to a single row
 under 100 columns. It never hides itself while Claude asks for a permission or a question; it
 lays out at whatever size the rows left to it allow. In the terminal, though, Claude Code draws
