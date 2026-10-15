@@ -91,7 +91,9 @@ export const PANE_GOLDENS: Record<PaneScenario, PaneGolden> = {
 export const BAND_GOLDENS: Record<BandScenario, BandGolden> = {
   'band-rest': {imageHash: "6114a9b8b4557e18", cellsHash: "7929b380c7b61d21", width: 1280, height: 352, stageSvgHash: "a299f9a41d84ca69", stageSvgChars: 21457, stripSvgHash: "163105eb53144fd8", stripSvgChars: 20110},
   'band-wide': {imageHash: "c9a97aa82bb4aa3a", cellsHash: "d9aa194ae2e9756f", width: 1320, height: 352, stageSvgHash: "e288582c351c0cbd", stageSvgChars: 21457, stripSvgHash: "586e26ff2434986a", stripSvgChars: 20110},
-  'band-zoomed': {imageHash: "844f40957e581719", cellsHash: "916995cfb586d9fc", width: 1280, height: 192, stageSvgHash: "0637cce5a29a7622", stageSvgChars: 22392, stripSvgHash: "939fa46fd9595b8a", stripSvgChars: 19384},
+  'band-zoomed': {imageHash: "844f40957e581719", cellsHash: "67eda441bc9baab5", width: 1280, height: 192, stageSvgHash: "0637cce5a29a7622", stageSvgChars: 22392, stripSvgHash: "939fa46fd9595b8a", stripSvgChars: 19384},
+  'band-zoomed-boss': {imageHash: "c4a6cf743c64c3b0", cellsHash: "ec44e4f3172a0060", width: 1280, height: 240, stageSvgHash: "2af5bed49485425f", stageSvgChars: 22392, stripSvgHash: "939fa46fd9595b8a", stripSvgChars: 19384},
+  'band-cropped': {imageHash: "a1925fd91810f65d", cellsHash: "f4f663c01aef4aad", width: 1280, height: 208, stageSvgHash: "29ae33273eb517bb", stageSvgChars: 21462, stripSvgHash: "163105eb53144fd8", stripSvgChars: 20110},
   'band-compact': {imageHash: "a6591e2905a1a2e6", cellsHash: "c4439c6f02807563", width: 880, height: 96, stageSvgHash: "b41ddd511f47c984", stageSvgChars: 21466, stripSvgHash: "491c9c5d82cdb89d", stripSvgChars: 20051},
   'band-compact-wide': {imageHash: "c4d7d9ec18a4430e", cellsHash: "d0088c0a37704401", width: 1360, height: 96, stageSvgHash: "7f5fc0eb515f32c4", stageSvgChars: 21457, stripSvgHash: "6681bec9cb878c47", stripSvgChars: 20110},
   'band-loot': {imageHash: "1a090545116e9579", cellsHash: "c0b34a4a1729a131", width: 1280, height: 80, stripSvgHash: "647127010dcc6cc1", stripSvgChars: 17273},

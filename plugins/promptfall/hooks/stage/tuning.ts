@@ -12,6 +12,11 @@ export const STAGE_MIN_ROWS = 8
 /** The crop's floor with a turn boss (36 px at 1.5x, 24 at 1x) and with a zone or world boss (51, 34). */
 export const TURN_BOSS_MIN_ROWS = 12
 export const BOSS_MIN_ROWS = 17
+/**
+ * The Raster's zoom floor: a boss too tall for the band's rows zooms the cropped scene into them,
+ * down to this many, and under it the band goes compact (#230). Raise it if the zoom smears.
+ */
+export const RASTER_MIN_ROWS = 8
 export const COMPACT_STAGE_ROWS = 4
 export const COMPACT_STAGE_COLUMNS = 52
 export const FULL_MIN_COLUMNS = 116

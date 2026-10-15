@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
-import { cellsOf, imageScaleFor, layoutFor } from './layout'
-import { IMAGE_MAX_SIDE, IMAGE_SCALE } from './tuning'
+import { type Box, cellsOf, imageScaleFor, layoutFor } from './layout'
+import { IMAGE_MAX_SIDE, IMAGE_SCALE, RASTER_MIN_ROWS, STAGE_MIN_ROWS } from './tuning'
 
 const PARTY = { tab: 'party', extra: 0 } as const
 
@@ -72,17 +72,11 @@ test('a Raster stage too tall for the band keeps its size and shows its bottom r
   expect(layoutFor(17, { bodyColumns: 115, maxRows: 20 }, 'terminal', PARTY).kind).toBe('compact')
 })
 
-test('an Image stage too tall for the band zooms the whole scene out; the Raster crop stops at the tallest actor', () => {
-  const boss = { tab: 'party', extra: 0, minRows: 17 } as const
-  // A boss on a 16-row band: 11 rows left, under the boss's 17. The Raster does not zoom out.
-  expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', boss).kind).toBe('compact')
-  // The Image never crops: at rest on the same band it zooms out just the same.
+test('an Image stage too tall for the band zooms the whole scene out and never crops', () => {
+  const boss = { tab: 'party', extra: 0, minRows: 17, scalable: true } as const
+  // The Image never crops: at rest on a 16-row band it zooms out just as with a boss.
   expect(
-    layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', {
-      ...boss,
-      minRows: 8,
-      scalable: true,
-    }),
+    layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', { ...boss, minRows: 8 }),
   ).toMatchObject({
     kind: 'full',
     box: { columns: 223, rows: 17 },
@@ -90,26 +84,77 @@ test('an Image stage too tall for the band zooms the whole scene out; the Raster
   })
   // The Image widens the scene to 223 columns, which 11 rows of it span at the band's 144,
   // so nothing is cropped and the boss stays whole.
-  expect(
-    layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', { ...boss, scalable: true }),
-  ).toEqual({
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 16 }, 'terminal', boss)).toEqual({
     kind: 'full',
     box: { columns: 223, rows: 17 },
     cells: { columns: 144, rows: 11 },
     bandRows: 16,
   })
-  // A turn boss (12 rows) on a 17-row Raster band: 12 rows left meet its floor, so it is cropped.
-  expect(
-    layoutFor(17, { bodyColumns: 144, maxRows: 17 }, 'terminal', { ...boss, minRows: 12 }),
-  ).toEqual({
+  // Under the compact stage's 4 rows the Image is compact too.
+  expect(layoutFor(17, { bodyColumns: 144, maxRows: 8 }, 'terminal', boss).kind).toBe('compact')
+})
+
+test(`the Raster crops the sky to the tallest actor, then zooms down to ${RASTER_MIN_ROWS} rows, then is compact (#230)`, () => {
+  const at = (maxRows: number, minRows: number) =>
+    layoutFor(17, { bodyColumns: 144, maxRows }, 'terminal', { tab: 'party', extra: 0, minRows })
+  // A zone or world boss on a 15-row band: 10 rows left, under its 17. The whole 17-row scene,
+  // widened to 245 columns so its ratio holds, zooms into the 10 rows at the band's 144.
+  expect(at(15, 17)).toEqual({
+    kind: 'full',
+    box: { columns: 245, rows: 17 },
+    cells: { columns: 144, rows: 10 },
+    bandRows: 15,
+  })
+  // On a 13-row band the 8 rows left are the floor: still zoomed.
+  expect(at(13, 17)).toEqual({
+    kind: 'full',
+    box: { columns: 306, rows: 17 },
+    cells: { columns: 144, rows: 8 },
+    bandRows: 13,
+  })
+  // Under the floor, compact.
+  expect(at(12, 17).kind).toBe('compact')
+  // A turn boss on a 17-row band: 12 rows left meet its height, so it is cropped at full size.
+  expect(at(17, 12)).toEqual({
     kind: 'full',
     box: { columns: 144, rows: 17 },
     cells: { columns: 144, rows: 12 },
     bandRows: 17,
   })
-  // Under the compact stage's 4 rows the Image is compact too.
+  // With 8 to 11 rows left it crops to its 12 and zooms the rest: the box is the cropped scene.
+  expect(at(15, 12)).toEqual({
+    kind: 'full',
+    box: { columns: 173, rows: 12 },
+    cells: { columns: 144, rows: 10 },
+    bandRows: 15,
+  })
+  expect(at(13, 12)).toMatchObject({ box: { rows: 12 }, cells: { columns: 144, rows: 8 } })
+  expect(at(12, 12).kind).toBe('compact')
+  // A wave fight's crop floor is the zoom's: it crops at full size down to 8 and never zooms.
+  expect(at(13, STAGE_MIN_ROWS)).toEqual({
+    kind: 'full',
+    box: { columns: 144, rows: 17 },
+    cells: { columns: 144, rows: 8 },
+    bandRows: 13,
+  })
+  expect(at(12, STAGE_MIN_ROWS).kind).toBe('compact')
+  // Every zoom keeps the scene's ratio: the cells are the box scaled by one factor.
+  for (const maxRows of [13, 14, 15, 16, 17, 18, 19, 20, 21]) {
+    for (const minRows of [12, 17]) {
+      const layout = at(maxRows, minRows)
+      if (layout.kind !== 'full' || !layout.cells || layout.cells.columns === layout.box.columns)
+        continue
+      const ratio = (b: Box) => b.columns / b.rows
+      expect(Math.abs(ratio(layout.cells) / ratio(layout.box) - 1)).toBeLessThan(0.01)
+    }
+  }
+  // Too narrow for the full stage, compact as before.
   expect(
-    layoutFor(17, { bodyColumns: 144, maxRows: 8 }, 'terminal', { ...boss, scalable: true }).kind,
+    layoutFor(17, { bodyColumns: 115, maxRows: 15 }, 'terminal', {
+      tab: 'party',
+      extra: 0,
+      minRows: 17,
+    }).kind,
   ).toBe('compact')
 })
 

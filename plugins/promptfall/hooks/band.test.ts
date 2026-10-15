@@ -606,7 +606,7 @@ for (const [name, view, rowsOf] of [
   })
 }
 
-test("a short band shows the stage's bottom rows at full size; under the tallest actor, compact", async ($, on) => {
+test("a short band shows the stage's bottom rows at full size; a boss zooms out to the floor, then compact", async ($, on) => {
   const { data, shown } = harness(on)
   settings(data, RASTER)
   shown.view = wave()
@@ -617,11 +617,20 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   expect((await bandRaster(ui))?.props.columns).toBe(120)
   expect(await stageRowsOf(ui)).toBe(11)
   await ui.unmount()
-  // A boss needs all 17: the Raster does not zoom out into a short band, so the same band is compact.
+  // A boss needs all 17: the whole scene zooms into the same 11 rows (#230), the band's height kept.
   shown.view = boss()
   const withBoss = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 16) })
-  expect(await height(withBoss)).toBe(6)
+  expect(await height(withBoss)).toBe(16)
+  expect((await bandRaster(withBoss))?.props.columns).toBe(120)
+  expect(await stageRowsOf(withBoss)).toBe(11)
   await withBoss.unmount()
+  // 13 rows leave the zoom's 8-row floor; 12 leave 7, under it: compact.
+  const floor = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 13) })
+  expect(await stageRowsOf(floor)).toBe(8)
+  await floor.unmount()
+  const under = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
+  expect(await height(under)).toBe(6)
+  await under.unmount()
   shown.view = wave()
   // 12 rows: 7 left, under the actors' 8: compact.
   const short = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 12) })
@@ -634,6 +643,24 @@ test("a short band shows the stage's bottom rows at full size; under the tallest
   const top = cellsOf(compact).text[0] ?? ''
   expect([top[0], top[52], top[119]]).toEqual(['╭', '┬', '╮'])
   await short.unmount()
+})
+
+test("the debug log has the engine's row grant at each layout", async ($, on) => {
+  const { data, shown } = harness(on)
+  const logged: { text: string; to: string }[] = []
+  on('ui.log', (_$, e, next) => {
+    logged.push({ text: e.text, to: e.to })
+    return next(e)
+  })
+  settings(data, RASTER)
+  shown.view = boss()
+  await $.session.start({ cwd: '/repo', surface: 'terminal', isInteractive: true })
+  const ui = await $.ui.mount({ plugin: 'promptfall', surface: 'terminal', ...band(120, 15) })
+  await ui.unmount()
+  const lines = logged.filter((l) => l.text.startsWith('band layout'))
+  expect(lines.length).toBeGreaterThan(0)
+  expect(lines.every((l) => l.to === 'debug')).toBe(true)
+  expect(lines.at(-1)?.text).toBe('band layout: maxRows 15, bodyColumns 120: full, 10 stage rows')
 })
 
 test('110 columns is compact with the front enemy in the party window; 99 or 5 rows is one row', async ($, on) => {

@@ -57,7 +57,12 @@ function site(
   return {
     requestId: 'band-1',
     key: 'stage',
-    layout: layoutFor(t.rowsAt(view, 0), props, surface, { tab: 'party', extra }),
+    layout: layoutFor(t.rowsAt(view, 0), props, surface, {
+      tab: 'party',
+      extra,
+      minRows: t.minRowsAt(view, 0),
+      scalable: renderer === 'image',
+    }),
     renderer,
     props,
     surface,
@@ -696,6 +701,20 @@ test('a Raster band under a short band blits the stage rows shown, the line arou
   expect([text[0]?.[0], text[11]?.[0], text[15]?.[0]]).toEqual(['╭', '├', '╰'])
 })
 
+test('a Raster band with a boss in 15 rows blits the zoomed stage in 10, the line around them (#230)', async () => {
+  const clock = fakeClock()
+  const h = harness(clock)
+  h.state.strip = extras()
+  h.state.view = boss()
+  h.loop.mount(bandSite({ bodyColumns: 120, maxRows: 15 }, boss(), 'raster'))
+  await clock.advance(IDLE_FRAME_MS)
+  expect(h.invalidations).toHaveLength(0)
+  const last = h.blits.at(-1) as UiBlitArgs
+  expect(last).toMatchObject({ key: 'band-120x15', columns: 120, rows: 15 })
+  const text = cellText(last)
+  expect([text[0]?.[0], text[10]?.[0], text[14]?.[0]]).toEqual(['╭', '├', '╰'])
+})
+
 /**
  * A SMIL loop over a holder in memory: toasts wait for the times in `shows`, `release` takes those
  * due as the log does, `view` takes `readMs`, and `onNext` runs inside each `nextRelease`.
@@ -871,4 +890,50 @@ test("a short Raster band shows the full stage's bottom rows, three scene pixels
   const words = new Uint32Array(cells.buffer, cells.byteOffset, cells.length / 4)
   // Scene column 30 is cell column 20; the number was 18 scene rows above the crop.
   expect(words[20 * 3]).toBe(0x39)
+})
+
+test('a Raster boss in a short band: the whole scene resampled into the cells, its numbers and heads through the same factor (#230)', () => {
+  const t = new StageTimeline()
+  t.observe(boss(), 0)
+  const props = { bodyColumns: 144, maxRows: 15 }
+  const layout = layoutFor(t.rowsAt(boss(), 0), props, 'terminal', {
+    tab: 'party',
+    extra: 0,
+    minRows: t.minRowsAt(boss(), 0),
+  })
+  expect(layout).toMatchObject({
+    box: { columns: 245, rows: 17 },
+    cells: { columns: 144, rows: 10 },
+  })
+  if (layout.kind !== 'full') throw new Error('expected a full stage')
+  const scene = stageAt(boss(), t, 0, layout.box, { compact: false, motion: 'still' })
+  const model = { ...scene, numbers: [{ text: '9', x: 184, y: 30, rgb: 0xffffff }] }
+  const { frame, numbers, heads } = rasterStage(model, layout)
+  // 10 rows of half-blocks across the band's 144 columns.
+  expect([frame.width, frame.height]).toEqual([144, 20])
+  // The whole scene, 368 by 51 pixels, scaled by about 0.39 each way, so nothing is cropped.
+  const full = composeFrame(model, { numbers: false })
+  expect([full.width, full.height]).toEqual([368, 51])
+  expect(Math.abs((numbers[0]?.x ?? 0) - 184 * (144 / 368))).toBeLessThan(1e-9)
+  expect(Math.abs((numbers[0]?.y ?? 0) - 30 * (20 / 51))).toBeLessThan(1e-9)
+  const cells = decode(encodeRaster(frame, numbers))
+  const words = new Uint32Array(cells.buffer, cells.byteOffset, cells.length / 4)
+  // Scene pixel (184, 30) is cell (72, 5): the number lands where its figure is drawn.
+  expect(words[(5 * 144 + 72) * 3]).toBe(0x39)
+  // A number on the boss's middle lands on the boss's zoomed pixels.
+  const big = scene.actors.find((a) => a.key === 'e9')
+  if (!big) throw new Error('expected the zone boss on stage')
+  const mid = { x: big.x + big.art.width / 2, y: big.y + big.art.height / 2 }
+  const onBoss = rasterStage(
+    { ...scene, backdrop: null, actors: [big], numbers: [{ text: '9', ...mid, rgb: 0xffffff }] },
+    layout,
+  )
+  const n = onBoss.numbers[0]
+  if (!n) throw new Error('expected the number')
+  const at = (Math.floor(n.y) * 144 + Math.floor(n.x)) * 4
+  // Above the ground strip, so the only art there is the boss's.
+  expect(n.y).toBeLessThan(16)
+  expect(onBoss.frame.rgba[at + 3]).toBe(255)
+  // The heads the line opens over are read off the zoomed art: one flag a cell column.
+  expect(heads).toHaveLength(144)
 })
