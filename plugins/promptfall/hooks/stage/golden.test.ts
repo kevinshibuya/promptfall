@@ -263,9 +263,10 @@ for (const name of BAND_SCENARIOS) {
   test(`band golden: ${name}`, () => {
     expect(bandGoldenOf(built(name))).toEqual(BAND_GOLDENS[name])
   })
-  test(`band ${name}: the Raster's cells are the band's box and fit the colour pair budget`, () => {
+  test(`band ${name}: the Raster's cells are its band's box and fit the colour pair budget`, () => {
     const input = built(name)
-    expect(decode(input.cells).length).toBe(input.box.columns * input.box.rows * 12)
+    expect(input.rasterBox.columns).toBe(input.box.columns)
+    expect(decode(input.cells).length).toBe(input.rasterBox.columns * input.rasterBox.rows * 12)
     expect(rasterPairs(input.cells)).toBeLessThanOrEqual(RASTER_MAX_PAIRS)
   })
   test(`band ${name}: the desktop's stage and strip Svgs are each the band's width and under their caps`, () => {
@@ -292,6 +293,36 @@ for (const name of BAND_SCENARIOS) {
     expect(svg.stage.length).toBeLessThan(SVG_MAX_CHARS)
   })
 }
+
+test('the band scenarios lay the Raster out as play does: crop, then zoom to the floor, then compact (#230)', () => {
+  /** The band Raster's rows as text. */
+  const text = (input: ReturnType<typeof band>) => {
+    const bytes = decode(input.cells)
+    const words = new Uint32Array(bytes.buffer, bytes.byteOffset, bytes.length / 4)
+    const { columns, rows } = input.rasterBox
+    return Array.from({ length: rows }, (_, y) =>
+      Array.from({ length: columns }, (_, x) =>
+        String.fromCodePoint(words[(y * columns + x) * 3] ?? 32),
+      ).join(''),
+    )
+  }
+  const stageRows = (input: ReturnType<typeof band>) =>
+    text(input).findIndex((row) => row.startsWith('├'))
+  // A zone boss in 15 rows: the whole scene zoomed into the 10 above the strip.
+  const zoomed = built('band-zoomed-boss')
+  expect(zoomed.rasterBox).toEqual({ columns: 160, rows: 15 })
+  expect(stageRows(zoomed)).toBe(10)
+  // A wave in 13 rows: the sky cropped to the 8 rows left, at full size.
+  const cropped = built('band-cropped')
+  expect(cropped.rasterBox).toEqual({ columns: 160, rows: 13 })
+  expect(stageRows(cropped)).toBe(8)
+  // A boss in 12 rows leaves 7, under the floor: the Raster's band is compact, 6 rows, while the
+  // Image zooms into the 7.
+  const under = built('band-zoomed')
+  expect(under.box).toEqual({ columns: 160, rows: 12 })
+  expect(under.rasterBox).toEqual({ columns: 160, rows: 6 })
+  expect(text(under)[0]?.[52]).toBe('┬')
+})
 
 test('the band at 255 × 22 on the 8 by 16 grid is 2040 pixels wide and its PNG fits the host', () => {
   // The rest band's strip, and a stage frame of noise: no run for deflate to find but the 16/3

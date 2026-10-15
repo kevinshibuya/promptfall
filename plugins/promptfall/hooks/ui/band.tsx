@@ -137,6 +137,13 @@ export function registerBand(on: On, game: () => GameHandle | null): void {
       minRows: party ? timeline.minRowsAt(view, now) : undefined,
       scalable: laidOut === 'image',
     })
+    // The engine's row grant, read at the manual pass to tune RASTER_MIN_ROWS (#230).
+    const stageRows = cellsOf(layout)?.rows
+    $.ui.log(
+      `band layout: maxRows ${e.props.maxRows}, bodyColumns ${e.props.bodyColumns}: ${layout.kind}` +
+        (stageRows === undefined ? '' : `, ${stageRows} stage rows`),
+      { to: 'debug' },
+    )
     // On a terminal, layoutFor collapses when the band does not fit; the Svg surfaces never do.
     const collapsed = prefs.collapsed || mode !== 'primary' || layout.kind === 'collapsed'
 
