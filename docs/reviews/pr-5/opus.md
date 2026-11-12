@@ -152,5 +152,5 @@
 - `--boss-in` is tested only through `bossInRebase`. The CLI wiring (the rebased `persisted`, the startup line) is covered only by the plan's devserve acceptance check.
 - The band test renders wide, so it never exercises label truncation (finding 5).
 
-Files: `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/docs/manual-pass/phase-3.md`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/packages/protocol/src/contract/suite.ts`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/packages/ledger/src/world.ts`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/packages/ledger/src/boss.ts`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/hooks/ui/band.tsx`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/hooks/world.ts`, `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/README.md`
+Files: `docs/manual-pass/phase-3.md`, `packages/protocol/src/contract/suite.ts`, `packages/ledger/src/world.ts`, `packages/ledger/src/boss.ts`, `plugins/promptfall/hooks/ui/band.tsx`, `plugins/promptfall/hooks/world.ts`, `plugins/promptfall/README.md`
 

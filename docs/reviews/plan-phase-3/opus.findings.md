@@ -1,6 +1,6 @@
 # Phase 3 plan review, reviewer on Opus
 
-Target: `/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/docs/plans/2026-10-03-promptfall-phase-3.md` at `2143237`. I read it against the grill record, the spec, the two cloud prompts, the phase 2 plan, the code on `feat/phase-3` and the engine d.ts. `pnpm typecheck` is green on the current tree. I checked the damage and bot claims by running the sim from scratch scripts in my scratchpad. Nothing in the repo was edited.
+Target: `docs/plans/2026-10-03-promptfall-phase-3.md` at `2143237`. I read it against the grill record, the spec, the two cloud prompts, the phase 2 plan, the code on `feat/phase-3` and the engine d.ts. `pnpm typecheck` is green on the current tree. I checked the damage and bot claims by running the sim from scratch scripts in my scratchpad. Nothing in the repo was edited.
 
 Verdict: not ready for task 1. There is one blocker (an interface the contract suite cannot reach). Eleven majors cluster in the world boss ledger logic, the contract rules 33 to 36, the boss HP working and the client flag gates.
 

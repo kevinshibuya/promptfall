@@ -6,8 +6,8 @@
 // tsx native.ts sheet.png outdir COLSxROWS row WxH colours names
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { blank, medianCut, nearest, readPng, writePng, type Rgba } from '/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/scripts/png'
-import { isKey, mainRun } from '/Users/luizarazzera/keki/dev/personal_projects/tbh-cc-mod/scripts/slice-sheet'
+import { blank, medianCut, nearest, readPng, writePng, type Rgba } from '../../../scripts/png'
+import { isKey, mainRun } from '../../../scripts/slice-sheet'
 const [sheetP, out, grid, rowS, size, colS, namesS] = process.argv.slice(2)
 const [cols, rows] = grid!.split('x').map(Number) as [number, number]
 const [TW, TH] = size!.split('x').map(Number) as [number, number]
