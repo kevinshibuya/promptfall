@@ -2,7 +2,7 @@
 
 An idle fantasy RPG that runs inside Claude Code as a plugin, where a party of three heroes fights above the prompt while Claude works.
 
-**Status: work in progress.** The solo game, the market, chat, leaderboards, the world boss and the self-hosted server work today, in a soft launch for an invited wave of players. The public listing, hero skills, the challenge tower and PvP do not exist yet ([roadmap](docs/roadmap.md)).
+**Status: work in progress.** The solo game, the market, chat, leaderboards, the world boss and the self-hosted server are built and tested. The public server is offline at the moment, so today the game runs on the in-process server or on one you host. The public listing, hero skills, the challenge tower and PvP do not exist yet ([roadmap](docs/roadmap.md)).
 
 ![The band above the Claude Code prompt: the knight strikes the Goblin Scout, the goblin hits back, the black mage throws a fireball at the Field Rat and the white mage bursts the Road Slime, then the party returns to rest](docs/readme/band-loop.webp)
 
@@ -85,7 +85,13 @@ In a Claude Code session:
 /plugin install promptfall@promptfall
 ```
 
-Expect: a band above the prompt with the party on the stage. `/promptfall server local` plays offline on the in-process server instead, with no chat and no world boss. Not run here: these are interactive Claude Code commands.
+The public server is offline at the moment, so switch to the in-process one:
+
+```
+/promptfall server local
+```
+
+Expect: a band above the prompt with the party on the stage, playing offline with no chat and no world boss. Not run here: these are interactive Claude Code commands.
 
 ### Develop
 
