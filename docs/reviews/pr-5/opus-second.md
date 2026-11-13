@@ -134,4 +134,4 @@
 - **`--boss-in`'s CLI wiring is untested.** The rebased `persisted`, the startup-line seconds and the startup flush are covered only by the manual pass.
 - **Plugin tests unverified by this leg** (see "What I ran").
 
-Files: `~/keki/dev/personal_projects/tbh-cc-mod/docs/plans/2026-10-03-promptfall-phase-3.md`, `~/keki/dev/personal_projects/tbh-cc-mod/packages/ledger/src/world.ts`, `~/keki/dev/personal_projects/tbh-cc-mod/packages/ledger/src/boss.ts`, `~/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/README.md`, `~/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/hooks/ui/band.tsx`, `~/keki/dev/personal_projects/tbh-cc-mod/plugins/promptfall/hooks/world.ts`
+Files: `docs/plans/2026-10-03-promptfall-phase-3.md`, `packages/ledger/src/world.ts`, `packages/ledger/src/boss.ts`, `plugins/promptfall/README.md`, `plugins/promptfall/hooks/ui/band.tsx`, `plugins/promptfall/hooks/world.ts`
